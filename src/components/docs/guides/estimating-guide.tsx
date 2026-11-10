@@ -583,8 +583,27 @@ export function EstimatingGuide() {
           ask for it (Get link / Open) or the first time the estimate is emailed, and every later
           copy, open, or send reuses that same URL instead of minting a fresh one &mdash; so a link
           you texted a client last week and the one in this week&rsquo;s reminder email land on the
-          same page. A link is good for <strong>30 days</strong>; after it expires (or the client
-          accepts through it) the next request creates a new one.
+          same page. A link is good for <strong>30 days</strong>, or until the end of the
+          estimate&rsquo;s <strong>Valid until</strong> date if that is later &mdash; and re-sending or
+          copying the link extends an existing one the same way. After it expires (or the client
+          accepts through it) the next request creates a new one. Once a client has accepted, their
+          link <strong>never expires</strong>: it stays viewable read-only as their record of what
+          they signed, and is where they pay a deposit that is still due.
+        </p>
+        <p>
+          The link only offers <strong>Accept</strong> while the estimate is in Sent, unchanged since
+          it was sent, and within Valid until. If you have moved it back to Draft/Quote or edited it
+          after sending, the client sees &ldquo;This proposal is being updated&rdquo; instead of the
+          signing form; if it is Lost, &ldquo;no longer open for acceptance&rdquo;. If it was
+          accepted another way (in the client portal, or by your office), the link shows it as
+          accepted.
+        </p>
+        <p>
+          <strong>The signature is permanent.</strong> When a client accepts through the link, their
+          typed name, drawn signature, IP address, browser, the time, and the version number they
+          signed are recorded on the link and locked &mdash; nobody, including your admins, can edit
+          them afterwards. Every acceptance (and the link&rsquo;s creation, expiry changes and
+          retirement) is written to the estimate&rsquo;s <strong>History</strong>.
         </p>
         <p>
           When you email an estimate, the subject line shows names and merge fields as plain text
@@ -658,9 +677,11 @@ export function EstimatingGuide() {
       <Section id="deposits" title="Taking a deposit on acceptance">
         <p>
           Set <strong>Deposit Required</strong> on the estimate header and the client is asked for it
-          as part of accepting the proposal, before the acceptance is recorded. If the client
-          unticks lines or picks a cheaper option so the accepted total comes in below the deposit,
-          the deposit is capped at the accepted total rather than blocking acceptance.
+          as part of accepting the proposal, before the acceptance is recorded. A deposit is never
+          more than what the client is accepting: on a Good/Better/Best proposal it is capped at the{" "}
+          <em>package they picked</em> (the figure on the page is exactly what the card is charged),
+          and if they untick lines so the accepted total comes in below the deposit, it is capped at
+          the accepted total rather than blocking acceptance.
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -678,14 +699,26 @@ export function EstimatingGuide() {
           </li>
           <li>
             <strong>The manual methods</strong> (check, cash, ACH, credit card, other) do not charge
-            anything. They only record that the client says they&rsquo;re sending it, so you know to
-            expect it &mdash; and reconcile it as a normal payment when it lands.
+            anything. They only record that the client <em>says</em> they&rsquo;re sending it: the
+            estimate shows an amber &ldquo;<strong>Client says they&rsquo;ll pay $X by check</strong>&rdquo;
+            badge &mdash; never the green Collected badge, which is only for money actually received.
+            A promise never counts as a deposit anywhere, so the client can still pay online later.
+            Record it as a normal payment when it lands.
           </li>
           <li>
             <strong>Skip for now</strong> accepts the proposal with no deposit at all. A deposit never
-            blocks acceptance.
+            blocks acceptance. But the deposit is still <strong>shown as due</strong>: on the
+            client&rsquo;s accepted proposal page (with Pay by card / bank transfer buttons when online
+            payment is set up) and on their client-portal Estimates page. You and the sales rep get an{" "}
+            <strong>Accepted without deposit</strong> notification and email so someone follows up.
           </li>
         </ul>
+        <p>
+          <strong>Accepting in the client portal</strong> works the same way: the signing dialog says a
+          deposit is due, accepting doesn&rsquo;t wait for it, and the estimate then shows{" "}
+          &ldquo;Deposit due&rdquo; with a <strong>Pay online</strong> link (the proposal link) when one
+          has been sent. Staff are notified exactly as for a skipped deposit.
+        </p>
         <Callout>
           <strong>A card deposit becomes a prepayment, not an invoice payment.</strong> It&rsquo;s
           taken at acceptance, before any invoice for the work exists, so there is nothing to apply it
@@ -693,6 +726,17 @@ export function EstimatingGuide() {
           <strong>Prepayments</strong> figure on their record (not Credits &mdash; that line is for
           overpayments and goodwill credits). If you refund it before it&rsquo;s used, the refund
           comes out of the unapplied amount and no invoice is touched.
+        </Callout>
+        <Callout>
+          <strong>A deposit is reserved for its estimate.</strong> It can only be applied to invoices
+          for that estimate &mdash; the estimate itself, the job or project converted from it, or a
+          contract made from it. It isn&rsquo;t offered on the client&rsquo;s other invoices, and an
+          automatic card or bank charge on another invoice never spends it. The estimate shows a blue
+          &ldquo;<em>$X reserved for this estimate</em>&rdquo; badge while it&rsquo;s unused. If the
+          estimate is then marked <strong>Lost</strong> with the deposit still unused, a red banner on
+          the estimate prompts you to <strong>refund it</strong> (Accounting &rarr; Payments) or{" "}
+          <strong>Release to general credit</strong>, after which it can pay any of the client&rsquo;s
+          invoices.
         </Callout>
         <p>
           <strong>Using it on the first invoice is a manual step</strong> &mdash; nothing is applied
@@ -731,7 +775,7 @@ export function EstimatingGuide() {
         <p>
           <strong>If the deposit fails</strong> &mdash; a returned bank transfer (insufficient funds,
           closed account, a mistyped routing number) or a declined card &mdash; the proposal{" "}
-          <em>stays accepted</em>. Only the money failed; nothing needs signing again. Three things
+          <em>stays accepted</em>. Only the money failed; nothing needs signing again. Four things
           happen:
         </p>
         <ol className="list-decimal space-y-2 pl-5">
@@ -740,6 +784,11 @@ export function EstimatingGuide() {
             and the bank&rsquo;s own reason on hover. That reason is the useful part &mdash;
             &ldquo;insufficient funds&rdquo; means ask them to try again, &ldquo;account
             closed&rdquo; means pick up the phone.
+          </li>
+          <li>
+            The client is emailed that their deposit didn&rsquo;t go through, with the reason and a{" "}
+            <strong>Pay deposit</strong> button back to their proposal link (unless their address has
+            hard-bounced). The email is listed in the estimate&rsquo;s email history.
           </li>
           <li>
             You&rsquo;re notified &mdash; a <strong>Deposit failed</strong> bell notification and an
@@ -761,9 +810,8 @@ export function EstimatingGuide() {
         <Callout>
           The link closes again the moment a deposit is recorded, so it only ever allows one attempt
           at a time. This is worth knowing before you chase someone: they very likely can just pay it
-          from the same link you already sent, and don&rsquo;t need a new one. That holds even after
-          the link&rsquo;s normal 30 days: a bank debit can be returned weeks later, and the retry
-          screen still opens.
+          from the same link you already sent, and don&rsquo;t need a new one. An accepted link never
+          expires, so this holds however late the bank returns the debit.
         </Callout>
         <Callout>
           <strong>Paid, but not accepted.</strong> The card is charged just before the acceptance is

@@ -145,7 +145,14 @@ export interface ProposalData {
   expired?: boolean;
   notes: string | null;
   stage: string;
+  /** Whether the accept form may be shown: stage 'sent', not accepted, not
+   *  edited since it was sent, not past Valid until. */
+  actionable?: boolean;
+  /** Why the accept form is not shown (null while actionable). */
+  closedReason?: "accepted" | "updating" | "closed" | "expired" | null;
   alreadyAccepted: boolean;
+  /** Accepted another way (client portal, or by the office) — not via this link. */
+  acceptedElsewhere?: boolean;
   acceptedAt: string | null;
   acceptedByName: string | null;
 
@@ -175,6 +182,15 @@ export interface ProposalData {
   displaySettings: DisplaySettings;
   depositRequiredCents: number;
   depositCollectedCents: number;
+  /** A required deposit still owed on an ACCEPTED proposal: nothing collected
+   *  and nothing clearing. 0 when nothing is due. */
+  depositDueCents?: number;
+  /** A deposit submitted but not yet settled (an ACH debit clearing). */
+  depositPendingCents?: number | null;
+  depositPendingMethod?: "card" | "us_bank_account" | null;
+  /** What the client SAID they'd send ("I'll pay by check") — not money. */
+  depositPromisedCents?: number | null;
+  depositPromisedMethod?: string | null;
   /** Set when the last deposit attempt was declined or returned by the bank.
    *  Non-null with depositCollectedCents 0 re-opens the link for a retry. */
   depositFailedCents: number | null;

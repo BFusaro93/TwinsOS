@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   // Load all invoices to validate same client and not voided
   const { data: invoices, error: fetchErr } = await supabase
     .from("crm_invoices")
-    .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents, discount_cents, locked")
+    .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents, discount_cents, locked, project_id, contract_id, estimate_id")
     .in("id", allIds)
     .eq("org_id", orgId)
     .is("deleted_at", null);
@@ -61,6 +61,22 @@ export async function POST(request: Request) {
   const clientIds = new Set(inv.map((i) => i.client_id));
   if (clientIds.size > 1) {
     return NextResponse.json({ error: "All invoices must belong to the same client" }, { status: 422 });
+  }
+
+  // One merged invoice bills one project / contract / estimate (crm_merge_invoices
+  // re-checks this under row locks). Merging across projects moved one project's
+  // billing onto another's invoice, so the project tabs and the WIP report disagreed.
+  for (const [col, label] of [
+    ["project_id", "projects"],
+    ["contract_id", "contracts"],
+    ["estimate_id", "estimates"],
+  ] as const) {
+    if (new Set(inv.map((i) => i[col] ?? null)).size > 1) {
+      return NextResponse.json(
+        { error: `These invoices belong to different ${label} (or only some belong to one). Only invoices for the same ${label.slice(0, -1)} can be merged.` },
+        { status: 422 }
+      );
+    }
   }
 
   const voidedIds = inv.filter((i) => i.status === "void").map((i) => i.id);

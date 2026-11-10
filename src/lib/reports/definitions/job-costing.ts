@@ -169,9 +169,10 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
     ],
     notes: [
       "% Complete is cost-to-date ÷ EAC (estimated cost at completion) — not the manual progress field on the project.",
-      "Cost to Date counts purchase orders actually placed (ordered, partly or fully received, after their share of the PO discount, tax and shipping), direct items and subcontract costs. POs still requested or awaiting approval and open requisitions show under Committed (Not Yet Ordered) and don't move % complete. Cost to Date + Committed is the project's total on the Projects list.",
+      "Cost to Date = materials & other + labor + overhead. Materials & other counts purchase orders actually placed (ordered, partly or fully received, after their share of the PO discount, tax and shipping), direct items and subcontract costs. POs still requested or awaiting approval and open requisitions show under Committed (Not Yet Ordered) and don't move % complete. Materials & other + Committed is the project's total on the Projects list.",
+      "Labor = crew hours on the project's completed visits (actual hours, else clock in/out, else start/end time, less breaks, × crew size) plus any hours entered on the project, × the project's Loaded Labor Rate (LLR). Overhead = (materials & other + labor) × the overhead share the estimate's cost was built with (its overhead ÷ its direct cost) — the same way the EAC includes overhead. A project with no linked estimate carries no overhead.",
       "Over/(Under) Billed is billed to date minus earned revenue. Positive means billings are ahead of the work (healthy); negative means the work is ahead of billing (you're financing the job).",
-      "EAC is seeded from the linked estimate when a job is converted, then re-forecastable on the project — projects with no EAC set show 0% complete.",
+      "EAC is seeded from the linked estimate when a job is converted, then re-forecastable on the project — projects with no EAC set show 0% complete. An add-on estimate converted into an existing project adds its cost to the EAC (and its price to the contract) as an approved change order.",
     ],
     analysis: (params) => ({
       dataset: "rpt_projects_wip",

@@ -41,8 +41,7 @@ import { useProjects } from "@/lib/hooks/use-projects";
 import { usePhotoJobs } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useClientSearch } from "@/lib/hooks/use-clients";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import { useInvoices } from "@/lib/hooks/use-invoices";
-import { useEstimates } from "@/lib/hooks/use-estimates";
+import { useInvoiceSearch, useEstimateSearch } from "@/lib/hooks/use-global-search";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
 import {
   WO_STATUS_LABELS,
@@ -144,8 +143,11 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
     { statuses: ["lead"], limit: 20 },
     showFullSearch && showLeads && clientTerm.length > 0,
   );
-  const { data: invoices = [] } = useInvoices();
-  const { data: estimates = [] } = useEstimates();
+  // Invoices and estimates are searched server-side too (limit 20 each) —
+  // this used to download every invoice (with line items) and every estimate
+  // in the org on first open. Each query is off while its group is hidden.
+  const { data: invoices = [] } = useInvoiceSearch(clientTerm, showFullSearch && showInvoices);
+  const { data: estimates = [] } = useEstimateSearch(clientTerm, showFullSearch && showEstimates);
 
   // Only surface stocked and project materials in search (maintenance_parts are already in Parts)
   const catalogProducts = allProducts.filter(
@@ -226,23 +228,27 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
 
         {showFullSearch && showInvoices && invoices.length > 0 && (
           <CommandGroup heading="Invoices">
-            {invoices.map((inv) => (
+            {invoices.map((inv) => {
+              // A draft has no number yet — show "Draft invoice", never "INV-null".
+              const invLabel = inv.invoiceNumber != null ? `INV-${inv.invoiceNumber}` : "Draft invoice";
+              return (
               <CommandItem
                 key={inv.id}
-                value={`INV-${inv.invoiceNumber} ${inv.clientName ?? ""} invoice`}
+                value={`${invLabel} ${inv.clientName ?? ""} invoice ${query}`}
                 onSelect={() => go(`/crm/accounting/invoices?open=${inv.id}`)}
                 className="flex items-center gap-3"
               >
                 <Receipt className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium">INV-{inv.invoiceNumber}</span>
+                  <span className="truncate text-sm font-medium">{invLabel}</span>
                   {inv.clientName && (
                     <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{inv.clientName}</span>
                   )}
                 </div>
                 <StatusBadge variant={inv.status as Parameters<typeof StatusBadge>[0]["variant"]} label={inv.status} />
               </CommandItem>
-            ))}
+              );
+            })}
           </CommandGroup>
         )}
 
@@ -250,23 +256,27 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
 
         {showFullSearch && showEstimates && estimates.length > 0 && (
           <CommandGroup heading="Estimates">
-            {estimates.map((est) => (
+            {estimates.map((est) => {
+              const estLabel = est.estimateNumber != null ? `EST-${est.estimateNumber}` : "Estimate";
+              const sub = [est.clientName, est.description].filter(Boolean).join(" · ");
+              return (
               <CommandItem
                 key={est.id}
-                value={`EST-${est.estimateNumber} ${est.clientName ?? ""} estimate`}
+                value={`${estLabel} ${est.clientName ?? ""} ${est.description ?? ""} estimate ${query}`}
                 onSelect={() => go(`/crm/estimates/${est.id}`)}
                 className="flex items-center gap-3"
               >
                 <ClipboardList className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium">EST-{est.estimateNumber}</span>
-                  {est.clientName && (
-                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{est.clientName}</span>
+                  <span className="truncate text-sm font-medium">{estLabel}</span>
+                  {sub && (
+                    <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{sub}</span>
                   )}
                 </div>
                 <StatusBadge variant={est.stage as Parameters<typeof StatusBadge>[0]["variant"]} label={est.stage} />
               </CommandItem>
-            ))}
+              );
+            })}
           </CommandGroup>
         )}
 

@@ -1,4 +1,5 @@
-import { parentRequest, subaccountRequest, getOrgTwilioCreds, createParentSubaccount } from "./client";
+import { parentRequest, subaccountRequest, getOrgTwilioCreds, createParentSubaccount, findParentSubaccountByName } from "./client";
+import { REGISTERED_HELP_KEYWORDS, REGISTERED_OPT_IN_KEYWORDS, REGISTERED_OPT_OUT_KEYWORDS } from "@/lib/sms/keywords";
 
 // Twilio's actual accepted enum strings for the customer_profile_business_
 // information EndUser type — confirmed against Twilio's "Gather the
@@ -30,6 +31,12 @@ function toE164(phone: string | null | undefined): string {
 const TRUSTHUB = "https://trusthub.twilio.com/v1";
 const MESSAGING = "https://messaging.twilio.com/v1";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
+// Twilio connection override (the #fragment is NOT part of the webhook
+// signature): retry up to 3 times on a connection timeout or a 5xx. By default
+// Twilio retries only connection timeouts, so the webhooks' "5xx so Twilio
+// retries" (a failed STOP, a status callback that beat its activity row) only
+// works with this.
+const WEBHOOK_RETRY = "#rc=3&rp=ct,5xx";
 
 // Twilio's own "Mock" brand/campaign support (see
 // https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/mock-brand-api)
@@ -63,6 +70,8 @@ type Registration = {
   status: string;
   twilio_subaccount_sid: string | null;
   twilio_api_key_sid: string | null;
+  twilio_api_secret_vault_id: string | null;
+  twilio_auth_token_vault_id: string | null;
   twilio_customer_profile_sid: string | null;
   twilio_brand_sid: string | null;
   twilio_phone_number_sid: string | null;
@@ -96,37 +105,49 @@ const SECONDARY_CUSTOMER_PROFILE_POLICY_SID = "RNdfbf3fae0e1107f8aded0e7cead80bf
 // Secret in Supabase Vault). See client.ts for why a Key/Secret pair is used
 // instead of the subaccount's own raw auth token.
 // ---------------------------------------------------------------------------
+//
+// Every SID is saved the moment it exists and reused on a retry, so a run
+// that fails halfway (Vault down, a Twilio 5xx) never creates a second
+// subaccount or key on the next attempt.
 async function createSubaccount(supabase: AnyClient, reg: Registration) {
-  const sub = await createParentSubaccount(`org:${reg.org_id}`);
+  const friendlyName = `org:${reg.org_id}`;
+  let subSid = reg.twilio_subaccount_sid;
 
-  const key = await parentRequest(`/Keys.json`, {
-    accountSid: sub.sid,
-    method: "POST",
-    body: { FriendlyName: `org:${reg.org_id} provisioning key` },
-  });
+  if (!subSid || !reg.twilio_auth_token_vault_id) {
+    // A previous run may have created the subaccount and died before saving
+    // it — pick that one up (the parent's read includes its auth token).
+    const existing = subSid ? null : await findParentSubaccountByName(friendlyName);
+    const sub = existing?.auth_token ? existing : subSid ? null : await createParentSubaccount(friendlyName);
+    if (sub) {
+      // The subaccount's own raw Auth Token — needed only for verifying
+      // inbound webhook signatures on this subaccount's number later (see
+      // get_org_twilio_auth_token / client.ts). Stored with the SID in one save.
+      const { data: authTokenVaultId, error: authTokenErr } = await supabase.rpc("create_secret_for_org_twilio_key", {
+        p_secret: sub.auth_token,
+      });
+      if (authTokenErr) throw new Error(`Failed to store subaccount auth token in Vault: ${authTokenErr.message}`);
+      await patch(supabase, reg.org_id, { twilio_subaccount_sid: sub.sid, twilio_auth_token_vault_id: authTokenVaultId });
+      subSid = sub.sid;
+    }
+  }
+  if (!subSid) throw new Error("Subaccount SID is saved but its auth token isn't — contact support to repair the registration");
 
-  const { data: apiSecretVaultId, error: apiSecretErr } = await supabase.rpc("create_secret_for_org_twilio_key", {
-    p_secret: key.secret,
-  });
-  if (apiSecretErr) throw new Error(`Failed to store API key secret in Vault: ${apiSecretErr.message}`);
+  // The key's secret is shown only once (in the create response), so a key is
+  // only reused when its secret was saved too.
+  if (!reg.twilio_api_key_sid || !reg.twilio_api_secret_vault_id) {
+    const key = await parentRequest(`/Keys.json`, {
+      accountSid: subSid,
+      method: "POST",
+      body: { FriendlyName: `org:${reg.org_id} provisioning key` },
+    });
+    const { data: apiSecretVaultId, error: apiSecretErr } = await supabase.rpc("create_secret_for_org_twilio_key", {
+      p_secret: key.secret,
+    });
+    if (apiSecretErr) throw new Error(`Failed to store API key secret in Vault: ${apiSecretErr.message}`);
+    await patch(supabase, reg.org_id, { twilio_api_key_sid: key.sid, twilio_api_secret_vault_id: apiSecretVaultId });
+  }
 
-  // Also stash the subaccount's own raw Auth Token — needed only for
-  // verifying inbound webhook signatures on this subaccount's number later
-  // (see get_org_twilio_auth_token / client.ts). This is the one and only
-  // place that token is ever available (the account-creation response); it's
-  // never re-fetchable from Twilio afterward.
-  const { data: authTokenVaultId, error: authTokenErr } = await supabase.rpc("create_secret_for_org_twilio_key", {
-    p_secret: sub.auth_token,
-  });
-  if (authTokenErr) throw new Error(`Failed to store subaccount auth token in Vault: ${authTokenErr.message}`);
-
-  await patch(supabase, reg.org_id, {
-    twilio_subaccount_sid: sub.sid,
-    twilio_api_key_sid: key.sid,
-    twilio_api_secret_vault_id: apiSecretVaultId,
-    twilio_auth_token_vault_id: authTokenVaultId,
-    status: "subaccount_created",
-  });
+  await patch(supabase, reg.org_id, { status: "subaccount_created" });
 }
 
 // ---------------------------------------------------------------------------
@@ -331,40 +352,70 @@ async function pollBrand(supabase: AnyClient, reg: Registration) {
 // attach the number, point its inbound webhook at the shared handler (which
 // already resolves org_id from MessagingServiceSid — see inbound/route.ts).
 // ---------------------------------------------------------------------------
+//
+// Like step 1, each SID (number, service) is saved as soon as it exists and
+// reused on a retry — and a number/service a crashed run created but never
+// saved is found in the subaccount — so a retry never buys a second number.
 async function provisionNumber(supabase: AnyClient, reg: Registration) {
-  const available = await parentRequest(`/AvailablePhoneNumbers/US/Local.json?SmsEnabled=true&VoiceEnabled=true`, {
-    accountSid: reg.twilio_subaccount_sid!,
-    method: "GET",
-  });
-  const candidate = available.available_phone_numbers?.[0];
-  if (!candidate) throw new Error("No available phone numbers found for this org's area");
-
-  const purchased = await parentRequest(`/IncomingPhoneNumbers.json`, {
-    accountSid: reg.twilio_subaccount_sid!,
-    body: { PhoneNumber: candidate.phone_number },
-  });
+  const subSid = reg.twilio_subaccount_sid!;
+  let numberSid = reg.twilio_phone_number_sid;
+  if (!numberSid) {
+    // Each org's subaccount only ever holds this one number.
+    const owned = await parentRequest(`/IncomingPhoneNumbers.json?PageSize=1`, { accountSid: subSid, method: "GET" });
+    let number = owned.incoming_phone_numbers?.[0];
+    if (!number) {
+      const available = await parentRequest(`/AvailablePhoneNumbers/US/Local.json?SmsEnabled=true&VoiceEnabled=true`, {
+        accountSid: subSid,
+        method: "GET",
+      });
+      const candidate = available.available_phone_numbers?.[0];
+      if (!candidate) throw new Error("No available phone numbers found for this org's area");
+      number = await parentRequest(`/IncomingPhoneNumbers.json`, {
+        accountSid: subSid,
+        body: { PhoneNumber: candidate.phone_number },
+      });
+    }
+    await patch(supabase, reg.org_id, { twilio_phone_number_sid: number.sid, twilio_phone_number: number.phone_number });
+    numberSid = number.sid as string;
+  }
 
   const creds = await getOrgTwilioCreds(supabase, reg.org_id);
   if (!creds) throw new Error("Missing subaccount credentials");
 
-  const service = await subaccountRequest(MESSAGING, "/Services", creds, {
-    body: {
-      FriendlyName: `${reg.legal_business_name ?? "org"} notifications`,
-      InboundRequestUrl: `${SITE_URL}/api/webhooks/twilio/inbound`,
-      StatusCallback: `${SITE_URL}/api/webhooks/twilio/status`,
-      UseInboundWebhookOnNumber: "false",
-    },
-  });
-  await subaccountRequest(MESSAGING, `/Services/${service.sid}/PhoneNumbers`, creds, {
-    body: { PhoneNumberSid: purchased.sid },
-  });
+  const serviceName = `${reg.legal_business_name ?? "org"} notifications`;
+  let serviceSid = reg.twilio_messaging_service_sid;
+  if (!serviceSid) {
+    const existing = await subaccountRequest(MESSAGING, "/Services?PageSize=50", creds, { method: "GET" });
+    const found = (existing.services ?? []).find((svc: { friendly_name?: string }) => svc.friendly_name === serviceName);
+    const service =
+      found ??
+      (await subaccountRequest(MESSAGING, "/Services", creds, {
+        body: {
+          FriendlyName: serviceName,
+          InboundRequestUrl: `${SITE_URL}/api/webhooks/twilio/inbound${WEBHOOK_RETRY}`,
+          StatusCallback: `${SITE_URL}/api/webhooks/twilio/status${WEBHOOK_RETRY}`,
+          UseInboundWebhookOnNumber: "false",
+        },
+      }));
+    await patch(supabase, reg.org_id, { twilio_messaging_service_sid: service.sid });
+    serviceSid = service.sid as string;
+  }
 
-  await patch(supabase, reg.org_id, {
-    twilio_phone_number_sid: purchased.sid,
-    twilio_phone_number: purchased.phone_number,
-    twilio_messaging_service_sid: service.sid,
-    status: "number_provisioned",
-  });
+  // Attach the number unless a previous run already did.
+  let attached = false;
+  try {
+    await subaccountRequest(MESSAGING, `/Services/${serviceSid}/PhoneNumbers/${numberSid}`, creds, { method: "GET" });
+    attached = true;
+  } catch {
+    attached = false;
+  }
+  if (!attached) {
+    await subaccountRequest(MESSAGING, `/Services/${serviceSid}/PhoneNumbers`, creds, {
+      body: { PhoneNumberSid: numberSid },
+    });
+  }
+
+  await patch(supabase, reg.org_id, { status: "number_provisioned" });
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +426,21 @@ async function submitCampaign(supabase: AnyClient, reg: Registration) {
   const creds = await getOrgTwilioCreds(supabase, reg.org_id);
   if (!creds || !reg.twilio_brand_sid || !reg.twilio_messaging_service_sid) {
     throw new Error("Missing brand or messaging service");
+  }
+
+  // A rejected campaign must be deleted before the service can take a new one.
+  // Resubmitting reuses this org's number and Messaging Service — it never
+  // buys new ones (see REJECTION_RESET in /api/sms-onboarding).
+  if (reg.twilio_campaign_sid) {
+    try {
+      await subaccountRequest(MESSAGING, `/Services/${reg.twilio_messaging_service_sid}/Compliance/Usa2p/${reg.twilio_campaign_sid}`, creds, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      // Already gone is fine; anything else would make the create below fail.
+      if (!(err instanceof Error && err.message.includes("(404)"))) throw err;
+    }
+    await patch(supabase, reg.org_id, { twilio_campaign_sid: null });
   }
 
   const description =
@@ -392,9 +458,12 @@ async function submitCampaign(supabase: AnyClient, reg: Registration) {
       HasEmbeddedPhone: "false",
       "MessageSamples.0": "Hi {name}, this is a reminder your service is scheduled for tomorrow at 9am. Reply STOP to opt out.",
       "MessageSamples.1": "Your crew is on the way and should arrive within 30 minutes.",
-      OptInKeywords: "START,YES,UNSTOP",
-      OptOutKeywords: "STOP,STOPALL,UNSUBSCRIBE,CANCEL,END,QUIT",
-      HelpKeywords: "HELP,INFO",
+      // Shared with the inbound webhook (src/lib/sms/keywords.ts) so what's
+      // registered is what's honoured. REVOKE/OPTOUT added for FCC
+      // 47 CFR 64.1200(a)(10); campaigns registered before keep their list.
+      OptInKeywords: REGISTERED_OPT_IN_KEYWORDS.join(","),
+      OptOutKeywords: REGISTERED_OPT_OUT_KEYWORDS.join(","),
+      HelpKeywords: REGISTERED_HELP_KEYWORDS.join(","),
       OptInMessage: "You are now opted in to receive text updates about your appointments and account. Msg & data rates may apply. Reply STOP to cancel.",
       OptOutMessage: "You have been unsubscribed and will no longer receive text messages. Reply START to resubscribe.",
       HelpMessage: `For help, contact ${reg.support_email ?? reg.support_phone ?? "support"}. Msg & data rates may apply.`,

@@ -6,26 +6,22 @@ import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { getOrgTwilioAuthToken } from "@/lib/twilio/client";
 import { logger } from "@/lib/logger";
 import { SHARED_TWILIO_ORG_ID } from "@/lib/sms/send";
+import { classifySmsKeyword, containedOptOutNote, normalizeSmsText } from "@/lib/sms/keywords";
+import { attachMediaToTicket, copyInboundMedia, parseInboundMedia, type SmsMediaItem } from "@/lib/sms/media";
+import type { SmsOptOutSource } from "@/lib/sms/opt-outs";
 
 const log = logger.child("twilio inbound webhook");
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 
-// Twilio's own Advanced Opt-Out feature (on the Messaging Service) normally
-// intercepts these keywords before they ever reach this webhook and replies
-// with its own confirmation — this list is a defense-in-depth backstop for
-// if that setting is ever off, not the primary compliance mechanism.
-// REVOKE/OPTOUT are in Twilio's own standard opt-out list too.
-const OPT_OUT_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "REVOKE", "OPTOUT"]);
-// "YES" is deliberately NOT an opt-in keyword: clients reply YES to unrelated
-// texts (e.g. "Reply YES to confirm your visit"), which would silently re-grant
-// SMS consent to someone who texted STOP. START/UNSTOP are Twilio's own
-// opt-in keywords.
-const OPT_IN_KEYWORDS = new Set(["START", "UNSTOP"]);
-// None of these need a ticket — they're single-word system commands, not
-// something a staff member needs to respond to.
-const SKIP_TICKET_KEYWORDS = new Set([...OPT_OUT_KEYWORDS, ...OPT_IN_KEYWORDS, "HELP", "INFO"]);
-const OPEN_TICKET_STATUSES = ["open", "pending", "on_hold"];
+// Keyword recognition (which words opt out / in / ask for help, and the
+// "contained in a longer message" rule) lives in src/lib/sms/keywords.ts and
+// mirrors what each campaign registers with Twilio. Twilio's own Advanced
+// Opt-Out normally handles these first and replies with the registered
+// message; this webhook keeps OUR records in step (and is the backstop if that
+// setting is ever off), so it never sends a reply of its own.
+// (Which tickets count as an open text conversation — open/pending/on_hold —
+// is decided in the find_or_create_sms_text_ticket RPC.)
 
 const EMPTY_TWIML = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
 
@@ -97,8 +93,26 @@ export async function POST(request: Request) {
   }
 
   const digits = last10Digits(from);
-  // Trailing punctuation ("Stop." / "STOP!") is still a STOP.
-  const keyword = body.trim().toUpperCase().replace(/[.!?\s]+$/, "");
+
+  // ── What kind of text is this? ───────────────────────────────────────────
+  const kw = classifySmsKeyword(body);
+  // When Advanced Opt-Out is on, Twilio tells us how IT classified the text
+  // (against the Messaging Service's keyword lists) — honour its STOP even if
+  // our own parse missed it. Its START is only followed for START/UNSTOP (see
+  // keywords.ts on why a bare YES never re-grants consent here).
+  const twilioOptOutType = (params.OptOutType ?? "").toUpperCase();
+  const isOptOut = kw.kind === "opt_out" || twilioOptOutType === "STOP";
+  const optOutKeyword = kw.kind === "opt_out" ? kw.keyword : isOptOut ? normalizeSmsText(body).slice(0, 40) || "STOP" : null;
+  // A longer message that merely CONTAINS an opt-out word: still opts out, but
+  // it's a real message too — it gets a ticket and a "re-confirm" note.
+  const optOutContained = kw.kind === "opt_out" && kw.contained && twilioOptOutType !== "STOP";
+  const optOutSource: SmsOptOutSource = optOutContained ? "keyword_in_message" : "keyword";
+  const isOptIn = !isOptOut && kw.kind === "opt_in";
+  const isHelp = !isOptOut && (kw.kind === "help" || twilioOptOutType === "HELP");
+  // Bare STOP/START/HELP are system commands nobody needs to answer.
+  const isSystemCommand = (isOptOut && !optOutContained) || isOptIn || isHelp;
+  const inboundMedia = parseInboundMedia(params);
+  const optOut = isOptOut ? { source: optOutSource, keyword: optOutKeyword } : null;
 
   // ── Which tenant's clients can this text belong to? ──────────────────────
   // When the MessagingServiceSid resolved to an org above, only that org.
@@ -139,7 +153,27 @@ export async function POST(request: Request) {
   }));
 
   if (allMatches.length === 0) {
-    log.warn("no client matched inbound sms", { ownerOrgId });
+    // No client or contact has this number. When we know which org's sender
+    // received it, STOP/START is still recorded against the NUMBER — a person
+    // who isn't (or isn't yet) on file must not get texted after saying STOP,
+    // e.g. once someone adds them as a contact. The shared platform sender
+    // belongs to SHARED_TWILIO_ORG_ID only (see candidateOrgIds above).
+    const receivingOrgId =
+      ownerOrgId ??
+      (messagingServiceSid && messagingServiceSid === process.env.TWILIO_MESSAGING_SERVICE_SID ? SHARED_TWILIO_ORG_ID : null);
+    if (receivingOrgId && /^[0-9]{10}$/.test(digits)) {
+      if (optOut) {
+        const failed = await applyOptOut(supabase, [], digits, messageSid, optOut, receivingOrgId);
+        if (failed) {
+          log.error("failed to apply STOP from unmatched number", { orgId: receivingOrgId, error: failed });
+          return NextResponse.json({ error: "Opt-out failed" }, { status: 500 });
+        }
+      } else if (isOptIn) {
+        const liftErr = await liftNumberOptOut(supabase, receivingOrgId, digits);
+        if (liftErr) log.error("failed to lift number opt-out on START (unmatched)", { orgId: receivingOrgId, error: liftErr });
+      }
+    }
+    log.warn("no client matched inbound sms", { ownerOrgId, receivingOrgId, optOut: !!optOut, optIn: isOptIn });
     return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
   }
 
@@ -155,8 +189,8 @@ export async function POST(request: Request) {
     // consent) — otherwise any of them could text again. START is
     // deliberately NOT applied: consent must never be granted to a tenant it
     // wasn't given to.
-    if (OPT_OUT_KEYWORDS.has(keyword)) {
-      const failed = await applyOptOut(supabase, allMatches, digits, messageSid);
+    if (optOut) {
+      const failed = await applyOptOut(supabase, allMatches, digits, messageSid, optOut);
       if (failed) {
         // 5xx so Twilio retries — a swallowed failure leaves the number textable.
         log.error("failed to apply multi-org STOP", { error: failed });
@@ -165,7 +199,7 @@ export async function POST(request: Request) {
     }
     log.warn("inbound sms matched clients in multiple orgs; not attached to any tenant", {
       orgCount: matchedOrgIds.length,
-      optOutApplied: OPT_OUT_KEYWORDS.has(keyword),
+      optOutApplied: !!optOut,
     });
     return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
   }
@@ -182,8 +216,8 @@ export async function POST(request: Request) {
   // but before flipping the flag would otherwise make every Twilio retry ack
   // as "already handled" and the opt-out would never land. Idempotent, so
   // re-applying on a genuine duplicate is harmless.
-  if (OPT_OUT_KEYWORDS.has(keyword)) {
-    const failed = await applyOptOut(supabase, orgMatches, digits, messageSid);
+  if (optOut) {
+    const failed = await applyOptOut(supabase, orgMatches, digits, messageSid, optOut);
     if (failed) {
       // 5xx so Twilio retries — acking 200 here would leave the number textable
       // after they said STOP.
@@ -207,13 +241,24 @@ export async function POST(request: Request) {
     return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
   }
 
+  // MMS: copy pictures into Storage (falls back to Twilio's URL per item).
+  const media: SmsMediaItem[] = await copyInboundMedia(supabase, orgId, messageSid, inboundMedia);
+  const containedNote = optOutContained && optOutKeyword ? containedOptOutNote(optOutKeyword) : null;
+  const subjectParts: string[] = [];
+  if (containedNote) subjectParts.push(containedNote);
+  else if (optOut) subjectParts.push(`Opted out of texts (replied "${optOutKeyword}")`);
+  else if (isOptIn) subjectParts.push(`Opted back in to texts (replied "${kw.keyword}")`);
+  if (media.length > 0) subjectParts.push(`${media.length} attachment${media.length === 1 ? "" : "s"}`);
+
   const { error: activityErr } = await supabase.from("client_activity").insert(
     orgMatches.map((c) => ({
       org_id: c.org_id,
       client_id: c.id,
       activity_type: "sms",
       direction: "inbound",
+      subject: subjectParts.length > 0 ? subjectParts.join(" · ") : null,
       body,
+      media: media.length > 0 ? media : null,
       sent_to: from,
       status: "received",
       ref_id: messageSid,
@@ -228,18 +273,12 @@ export async function POST(request: Request) {
   }
   if (activityErr) log.error("failed to log inbound sms", { error: activityErr.message });
 
-  if (OPT_IN_KEYWORDS.has(keyword)) {
+  if (isOptIn) {
     // START lifts this number's own opt-out. It grants the CLIENT's consent
     // only when the client's primary phone sent it — a contact can't opt the
     // whole client in.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- crm_sms_opt_outs is newer than the generated types
-    const { error: liftErr } = await (supabase as any)
-      .from("crm_sms_opt_outs")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("org_id", orgId)
-      .eq("phone_last10", digits)
-      .is("deleted_at", null);
-    if (liftErr) log.error("failed to lift number opt-out on START", { orgId, error: liftErr.message });
+    const liftErr = await liftNumberOptOut(supabase, orgId, digits);
+    if (liftErr) log.error("failed to lift number opt-out on START", { orgId, error: liftErr });
     const primaryIds = orgMatches.filter((c) => c.match_kind === "primary").map((c) => c.id);
     if (primaryIds.length > 0) {
       const { error: optInErr } = await supabase
@@ -255,80 +294,86 @@ export async function POST(request: Request) {
   // conversation, else the oldest matching record.
   let matched: MatchedClient = orgMatches[0];
 
-  // A real reply (not a STOP/START/HELP-style system command) needs a staff
-  // response — surface it as a ticket. An open "text" ticket for this client
-  // means an ongoing conversation, so the reply is appended as a comment on
-  // it rather than spawning a new ticket per message.
-  if (!SKIP_TICKET_KEYWORDS.has(keyword) && body.trim()) {
-    const { data: openTicket } = await supabase
-      .from("crm_tickets")
-      .select("id, ticket_number, subject, assigned_to_id, assigned_to, client_id")
-      .eq("org_id", orgId)
-      .in("client_id", matchedIds)
-      .eq("type", "text")
-      .in("status", OPEN_TICKET_STATUSES)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  // A real reply (not a bare STOP/START/HELP) needs a staff response — surface
+  // it as a ticket. A picture with no words is a real reply too. An open
+  // "text" ticket for this client means an ongoing conversation, so the reply
+  // is appended as a comment on it rather than spawning a new ticket per
+  // message. Find-or-create is one locked RPC so two quick texts can't both
+  // open a ticket.
+  if (!isSystemCommand && (body.trim() || media.length > 0)) {
+    const text = body.trim()
+      ? body
+      : `(picture message — ${media.length} attachment${media.length === 1 ? "" : "s"})`;
+    const ticketText = containedNote ? `${text}\n\n— ${containedNote}` : text;
 
-    if (openTicket) {
-      matched = orgMatches.find((c) => c.id === openTicket.client_id) ?? matched;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC is newer than the generated types
+    const { data: ticketRows, error: ticketErr } = await (supabase as any).rpc("find_or_create_sms_text_ticket", {
+      p_org_id: orgId,
+      p_client_ids: matchedIds,
+      p_new_client_id: matched.id,
+      p_subject: `Text from ${matched.display_name}`,
+      p_body: ticketText,
+    });
+    const ticket = ((ticketRows ?? []) as {
+      id: string;
+      ticket_number: number;
+      subject: string | null;
+      assigned_to_id: string | null;
+      assigned_to: string | null;
+      client_id: string;
+      created: boolean;
+    }[])[0];
+
+    if (ticketErr || !ticket) {
+      log.error("failed to find or create text ticket", { orgId, error: ticketErr?.message ?? "no row" });
+    } else if (!ticket.created) {
+      matched = orgMatches.find((c) => c.id === ticket.client_id) ?? matched;
       await supabase.from("comments").insert({
         org_id: matched.org_id,
         created_by: null,
         record_type: "ticket",
-        record_id: openTicket.id,
+        record_id: ticket.id,
         author_id: null,
         author_name: matched.display_name,
-        body,
+        body: ticketText,
       });
       await notifyTicketComment(supabase, {
         orgId: matched.org_id,
-        ticketId: openTicket.id,
-        ticketNumber: openTicket.ticket_number,
-        subject: openTicket.subject,
-        assignedToId: openTicket.assigned_to_id,
-        assignedToName: openTicket.assigned_to,
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticket_number,
+        subject: ticket.subject ?? `Text from ${matched.display_name}`,
+        assignedToId: ticket.assigned_to_id,
+        assignedToName: ticket.assigned_to,
         commenterName: matched.display_name,
         commenterId: null,
-        commentBody: body,
+        commentBody: ticketText,
       });
     } else {
-      const { data: ticket, error: ticketErr } = await supabase
-        .from("crm_tickets")
-        .insert({
-          org_id: matched.org_id,
-          type: "text",
-          client_id: matched.id,
-          subject: `Text from ${matched.display_name}`,
-          body,
-          priority: "normal",
-        })
-        .select("id, ticket_number, subject")
-        .single();
-
-      if (ticketErr) {
-        log.error("failed to create text ticket", { error: ticketErr.message });
-      } else if (ticket) {
-        await notifyStaffOfNewTicket(supabase, {
-          orgId: matched.org_id,
-          ticketId: ticket.id,
-          ticketNumber: ticket.ticket_number,
-          subject: ticket.subject,
-          assignedToId: null,
-          assignedToName: null,
-          createdByUserId: null,
-        });
-        // A texted-in ticket is a new ticket like any other: "Ticket was created"
-        // automations run for it. Replies on an open thread (above) don't re-fire.
-        await fireServerTrigger(supabase, {
-          orgId: matched.org_id,
-          clientId: matched.id,
-          ticketId: ticket.id,
-          triggerType: "ticket_created",
-        });
-      }
+      await notifyStaffOfNewTicket(supabase, {
+        orgId: matched.org_id,
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticket_number,
+        subject: ticket.subject ?? `Text from ${matched.display_name}`,
+        assignedToId: null,
+        assignedToName: null,
+        createdByUserId: null,
+      });
+      // A texted-in ticket is a new ticket like any other: "Ticket was created"
+      // automations run for it. Replies on an open thread (above) don't re-fire.
+      await fireServerTrigger(supabase, {
+        orgId: matched.org_id,
+        clientId: matched.id,
+        ticketId: ticket.id,
+        triggerType: "ticket_created",
+      });
+    }
+    if (ticket && media.length > 0) {
+      await attachMediaToTicket(supabase, {
+        orgId,
+        ticketId: ticket.id,
+        uploadedByName: matched.display_name,
+        media,
+      });
     }
   }
 
@@ -337,8 +382,9 @@ export async function POST(request: Request) {
 
 /**
  * A STOP from this number: remember the opt-out against the NUMBER in each
- * matched org (so texts to a contact's or billing phone stop too), and turn
- * off the client's own consent where the number is the client's primary phone.
+ * matched org (so texts to a contact's or billing phone stop too) — or in
+ * `fallbackOrgId` when nobody matched — and turn off the client's own consent
+ * (recording when and why) where the number is the client's primary phone.
  * Returns an error message on failure, null on success. Idempotent.
  */
 async function applyOptOut(
@@ -347,15 +393,22 @@ async function applyOptOut(
   matches: { id: string; org_id: string; match_kind: string }[],
   digits: string,
   messageSid: string,
+  optOut: { source: SmsOptOutSource; keyword: string | null },
+  fallbackOrgId?: string,
 ): Promise<string | null> {
+  const now = new Date().toISOString();
   if (/^[0-9]{10}$/.test(digits)) {
-    for (const orgId of [...new Set(matches.map((m) => m.org_id))]) {
+    const orgIds = matches.length > 0 ? [...new Set(matches.map((m) => m.org_id))] : fallbackOrgId ? [fallbackOrgId] : [];
+    for (const orgId of orgIds) {
       const first = matches.find((m) => m.org_id === orgId);
       const { error } = await supabase.from("crm_sms_opt_outs").insert({
         org_id: orgId,
         phone_last10: digits,
         client_id: first?.id ?? null,
         source_message_sid: messageSid,
+        source: optOut.source,
+        matched_keyword: optOut.keyword,
+        opted_out_at: now,
       });
       // 23505 = this number already has a live opt-out in the org.
       if (error && error.code !== "23505") return error.message;
@@ -363,8 +416,27 @@ async function applyOptOut(
   }
   const primaryIds = matches.filter((m) => m.match_kind === "primary").map((m) => m.id);
   if (primaryIds.length > 0) {
-    const { error } = await supabase.from("clients").update({ sms_opt_in: false }).in("id", primaryIds);
+    const { error } = await supabase
+      .from("clients")
+      .update({ sms_opt_in: false, sms_opt_out_at: now, sms_opt_out_source: optOut.source })
+      .in("id", primaryIds);
     if (error) return error.message;
   }
   return null;
+}
+
+/** START: lift this number's live opt-out in the org. Returns an error message or null. */
+async function liftNumberOptOut(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  orgId: string,
+  digits: string,
+): Promise<string | null> {
+  const { error } = await supabase
+    .from("crm_sms_opt_outs")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("phone_last10", digits)
+    .is("deleted_at", null);
+  return error ? error.message : null;
 }

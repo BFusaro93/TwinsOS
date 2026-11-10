@@ -14,7 +14,15 @@ import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("stripe autopay charge");
 
-const ChargeSchema = z.object({ invoiceId: z.string().uuid() });
+const ChargeSchema = z.object({
+  invoiceId: z.string().uuid(),
+  /** Set by the "To Charge" queue (single Charge and Charge All). The queue
+   * only collects for clients enrolled in autopay, so a client whose autopay
+   * was turned off after the queue loaded is refused (code autopay_disabled)
+   * instead of charged. A one-off "Charge saved card" from the invoice itself
+   * leaves it unset and is not affected. */
+  fromQueue: z.boolean().optional(),
+});
 
 
 /** Charges an invoice's balance against the client's saved payment method (card or
@@ -60,7 +68,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { invoiceId } = parsed.data;
+  const { invoiceId, fromQueue } = parsed.data;
 
   const { data: invoice } = await supabase
     .from("crm_invoices")
@@ -89,10 +97,20 @@ export async function POST(request: Request) {
   }
   const { data: client } = await supabase
     .from("clients")
-    .select("id, stripe_customer_id, saved_payment_method_id, saved_payment_method_type")
+    .select("id, stripe_customer_id, saved_payment_method_id, saved_payment_method_type, autopay_enabled")
     .eq("id", invoice.client_id)
     .eq("org_id", effOrgId)
     .single();
+  if (fromQueue && client && !client.autopay_enabled) {
+    return NextResponse.json(
+      {
+        error: "Autopay is turned off for this client, so the queue didn't charge this invoice. Charge it from the invoice if you meant to.",
+        code: "autopay_disabled",
+        invoiceId: invoice.id,
+      },
+      { status: 409 }
+    );
+  }
   if (!client?.stripe_customer_id || !client.saved_payment_method_id || !client.saved_payment_method_type) {
     return NextResponse.json({ error: "This client has no saved payment method on file" }, { status: 400 });
   }

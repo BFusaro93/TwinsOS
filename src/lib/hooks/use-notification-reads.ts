@@ -7,6 +7,9 @@ import { realtimeTopic } from "@/lib/supabase/realtime-topic";
  *  user's "mark all read" to the next person who signed in. */
 const LS_KEY_PREFIX = "notif_read_ids";
 const LS_PRUNE_KEY = "notif_pruned_at";
+/** notification_reads rows loaded per page, and at most in total (newest first). */
+const READS_PAGE_SIZE = 1000;
+const MAX_DB_READS = 5000;
 
 function lsKey(userId: string): string {
   return `${LS_KEY_PREFIX}:${userId}`;
@@ -89,23 +92,36 @@ export function useNotificationReads(activeNotifIds: string[], cacheUserId: stri
     const supabase = createClient();
 
     async function fetchFromDb() {
-      // Fetch user ID and notification reads in parallel
-      const [user, { data: reads }] = await Promise.all([
-        getAuthUser(),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("notification_reads").select("notif_id"),
-      ]);
-
+      const user = await getAuthUser();
       if (cancelled) return;
+      if (!user) {
+        setDbLoaded(true);
+        return;
+      }
+      userIdRef.current = user.id;
 
-      if (user) {
-        userIdRef.current = user.id;
+      // Paged and bounded: a single select stopped silently at PostgREST's
+      // 1000-row cap (an arbitrary 1000, so read marks went missing at random
+      // once a user passed it). Newest first, up to MAX_DB_READS rows.
+      const reads: string[] = [];
+      for (let from = 0; from < MAX_DB_READS; from += READS_PAGE_SIZE) {
+        const { data, error } = await supabase
+          .from("notification_reads")
+          .select("notif_id")
+          .eq("user_id", user.id)
+          .order("read_at", { ascending: false })
+          .order("notif_id")
+          .range(from, from + READS_PAGE_SIZE - 1);
+        if (cancelled) return;
+        if (error) break;
+        const page = (data ?? []) as { notif_id: string }[];
+        reads.push(...page.map((r) => r.notif_id));
+        if (page.length < READS_PAGE_SIZE) break;
       }
 
-      if (reads && reads.length > 0) {
+      if (reads.length > 0) {
         setReadIdsState((prev) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const merged = new Set([...prev, ...reads.map((r: any) => r.notif_id as string)]);
+          const merged = new Set([...prev, ...reads]);
           writeLocalCache(cacheUserIdRef.current, merged);
           return merged;
         });

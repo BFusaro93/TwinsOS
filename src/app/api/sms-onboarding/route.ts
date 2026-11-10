@@ -129,10 +129,14 @@ export async function POST(request: Request) {
   // back than that would needlessly re-create a subaccount or re-submit an
   // already-approved profile. Editing at any other status just updates the
   // fields in place; there's nothing to roll back since nothing failed.
+  // A rejected CAMPAIGN goes back to "number_provisioned", not "brand_approved":
+  // the number and Messaging Service are fine, and resetting to brand_approved
+  // bought a second number + service. submitCampaign deletes the failed
+  // campaign and resubmits on the existing service.
   const REJECTION_RESET: Record<string, string> = {
     profile_rejected: "subaccount_created",
     brand_rejected: "profile_approved",
-    campaign_rejected: "brand_approved",
+    campaign_rejected: "number_provisioned",
   };
   const status = existing?.status ?? "not_started";
   if (LOCKED_STATUSES.has(status)) {

@@ -53,16 +53,29 @@ export async function recordClientPrepaymentCharge({
     });
     return "error";
   }
+  // The client may have been merged into another record while the payment was
+  // in flight (an ACH debit settles days later): credit the client that
+  // absorbed it. resolve_merged_client returns the id unchanged otherwise.
+  const { data: resolvedId, error: resolveErr } = await db.rpc("resolve_merged_client", {
+    p_org_id: orgId,
+    p_client_id: clientId,
+  });
+  if (resolveErr) {
+    log.error("failed to resolve the prepayment's client", { error: resolveErr, paymentIntentId: paymentIntent.id, clientId });
+    return "error";
+  }
+  const payerId = (resolvedId as string | null) ?? clientId;
   const { data: client } = await db
     .from("clients")
     .select("id")
-    .eq("id", clientId)
+    .eq("id", payerId)
     .eq("org_id", orgId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!client) {
-    log.error("prepayment charge names a client that isn't in the org", { paymentIntentId: paymentIntent.id, clientId });
-    return "error";
+    // Deleted (not merged) or not in the org: retrying can't fix it.
+    log.error("prepayment charge names a client that isn't live in the org", { paymentIntentId: paymentIntent.id, clientId });
+    return "unrecordable";
   }
 
   // Credit the prepayment, not the gross: a card processing fee is the org's
@@ -86,7 +99,7 @@ export async function recordClientPrepaymentCharge({
     .insert({
       org_id: orgId,
       invoice_id: null,
-      client_id: clientId,
+      client_id: payerId,
       amount_cents: prepaymentCents,
       // Nothing to apply it to — the whole amount is account credit, which keeps
       // allocations + unused + refunded = amount true from the first moment.
@@ -108,7 +121,7 @@ export async function recordClientPrepaymentCharge({
     return "error";
   }
 
-  await db.rpc("sync_client_balance", { p_client_id: clientId });
+  await db.rpc("sync_client_balance", { p_client_id: payerId });
 
   let paymentId: string | null = (inserted?.id as string | undefined) ?? null;
   if (!paymentId) {
@@ -124,7 +137,7 @@ export async function recordClientPrepaymentCharge({
   if (paymentId && !alreadyRecorded) {
     await db.from("client_activity").insert({
       org_id: orgId,
-      client_id: clientId,
+      client_id: payerId,
       activity_type: "payment",
       subject: `Prepayment received: ${method} (online) — credited to account`,
       amount_cents: prepaymentCents,

@@ -22,7 +22,9 @@ function basicAuthHeader(username: string, password: string): string {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 }
 
-async function twilioFetch(url: string, authHeader: string, body?: URLSearchParams, method: "GET" | "POST" = "POST") {
+type TwilioMethod = "GET" | "POST" | "DELETE";
+
+async function twilioFetch(url: string, authHeader: string, body?: URLSearchParams, method: TwilioMethod = "POST") {
   const res = await fetch(url, {
     method,
     headers: {
@@ -55,7 +57,7 @@ function parentAuthHeader(): { sid: string; header: string } {
 /** Calls the classic /2010-04-01 API using the Landscapt platform account's credentials, scoped to a subaccount SID in the path. */
 export async function parentRequest(
   path: string,
-  opts: { accountSid?: string; method?: "GET" | "POST"; body?: Record<string, string> } = {}
+  opts: { accountSid?: string; method?: TwilioMethod; body?: Record<string, string> } = {}
 ) {
   const { sid: parentSid, header } = parentAuthHeader();
   const accountSid = opts.accountSid ?? parentSid;
@@ -71,12 +73,26 @@ export async function createParentSubaccount(friendlyName: string) {
   return twilioFetch(url, header, new URLSearchParams({ FriendlyName: friendlyName }), "POST");
 }
 
+/**
+ * An ACTIVE subaccount of the parent with this exact FriendlyName, or null —
+ * lets provisioning pick up a subaccount a previous run created but died
+ * before saving, instead of creating a duplicate. The parent's own read of a
+ * subaccount includes its auth_token.
+ */
+export async function findParentSubaccountByName(friendlyName: string): Promise<{ sid: string; auth_token?: string } | null> {
+  const { header } = parentAuthHeader();
+  const url = `https://api.twilio.com/2010-04-01/Accounts.json?FriendlyName=${encodeURIComponent(friendlyName)}&Status=active&PageSize=20`;
+  const page = await twilioFetch(url, header, undefined, "GET");
+  const match = (page?.accounts ?? []).find((a: { friendly_name?: string; status?: string }) => a.friendly_name === friendlyName && a.status === "active");
+  return match ? { sid: match.sid, auth_token: match.auth_token } : null;
+}
+
 /** Calls a subaccount-scoped API (Trust Hub, Messaging v1, ...) using that subaccount's own API Key/Secret. */
 export async function subaccountRequest(
   baseUrl: string,
   path: string,
   creds: { apiKeySid: string; apiKeySecret: string },
-  opts: { method?: "GET" | "POST"; body?: Record<string, string> } = {}
+  opts: { method?: TwilioMethod; body?: Record<string, string> } = {}
 ) {
   const url = `${baseUrl}${path}`;
   const body = opts.body ? new URLSearchParams(opts.body) : undefined;

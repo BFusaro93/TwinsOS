@@ -29,6 +29,7 @@ export interface AppNotification {
     | "estimate_deposit_failed"
     | "estimate_deposit_excess"
     | "estimate_deposit_unaccepted"
+    | "estimate_deposit_skipped"
     | "ticket_created"
     | "ticket_assigned"
     | "ticket_contributor_added"
@@ -41,7 +42,8 @@ export interface AppNotification {
     | "part_stock_short"
     | "sales_meeting_reminder"
     | "sales_meeting_assigned"
-    | "payment_disputed";
+    | "payment_disputed"
+    | "payment_failed";
   title: string;
   body: string;
   href: string;

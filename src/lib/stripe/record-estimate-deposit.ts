@@ -347,6 +347,11 @@ export async function recordEstimateDepositCharge({
       memo: `Deposit for estimate #${estimate.estimate_number ?? "—"} paid online`,
       processing_fee_cents: feeCents,
       stripe_payment_intent_id: paymentIntent.id,
+      // Reserved for this estimate: credit-first and every other allocation
+      // path only spend it on invoices of this estimate's job / project /
+      // contract (DB trigger trg_guard_reserved_deposit_allocation) until staff
+      // release it to general credit.
+      estimate_id: estimateId,
     })
     .select("id")
     .single();

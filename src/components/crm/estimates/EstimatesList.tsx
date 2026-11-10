@@ -22,9 +22,7 @@ import { useUpdateEstimateStage } from "@/lib/hooks/use-estimates";
 import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
 import { EstimatesPipelineView } from "./EstimatesPipelineView";
 import { DuplicateEstimateDialog } from "./DuplicateEstimateDialog";
-import { DEFAULT_SUBJECT, DEFAULT_TEMPLATE_BODY } from "./SendEstimateDialog";
-import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
-import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
+import { BulkEmailEstimatesDialog, type BulkEmailEstimateTarget } from "./BulkEmailEstimatesDialog";
 import { toast } from "sonner";
 import { BULK_PRINT_MAX, printInBatches } from "@/lib/bulk-print";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -121,16 +119,9 @@ export function EstimatesList({ clientId }: Props) {
   const { data: estimates, isLoading, refetch } = useEstimates(clientId);
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
-  // Email content templates live in Documents (doc type "estimate") — same
-  // block-based builder SendEstimateDialog uses for a single-estimate send.
-  const { data: allDocTemplates = [] } = useDocumentTemplates();
-  const emailTemplates = useMemo(
-    () => allDocTemplates.filter((t) => t.docType === "estimate" && t.status === "active"),
-    [allDocTemplates]
-  );
-  const defaultTemplateId = (emailTemplates.find((t) => t.isDefault) ?? emailTemplates[0])?.id ?? "";
-  const { data: defaultDocTemplate } = useDocumentTemplate(defaultTemplateId);
-  const [emailingSelected, setEmailingSelected] = useState(false);
+  // Snapshot of the selected, visible estimates taken when "Email Selected"
+  // opens its dialog (null = closed).
+  const [bulkEmailTargets, setBulkEmailTargets] = useState<BulkEmailEstimateTarget[] | null>(null);
   const [dialogOpen,      setDialogOpen]      = useState(false);
   // Dashboard deep-links: ?stage=sent picks that tab; ?stage=draft,quote,sent
   // (My Day's "Pending Estimates") filters to several stages at once and shows
@@ -162,6 +153,17 @@ export function EstimatesList({ clientId }: Props) {
   );
 
   const allEstimates = estimates ?? [];
+
+  // A selection belongs to the tab + search + filter it was made under: once
+  // any of them changes, rows that are no longer shown must not stay selected
+  // (a bulk Email / Mark as Lost would otherwise act on estimates the user
+  // can't see). Same rule as the Clients and Leads lists.
+  const selectionScope = JSON.stringify([stageFilter, stageSet, search, activeFilterKey, filterValue]);
+  const [selectionScopeSeen, setSelectionScopeSeen] = useState(selectionScope);
+  if (selectionScopeSeen !== selectionScope) {
+    setSelectionScopeSeen(selectionScope);
+    setSelectedIds(new Set());
+  }
 
   // Stage tabs/labels come from the org's configurable crm_estimate_stages
   // (sorted by sort_order); fall back to the system defaults only while that
@@ -288,44 +290,17 @@ export function EstimatesList({ clientId }: Props) {
     } catch (err) { toast.error(mutationErrorMessage(err, "Failed to update estimates")); }
   }
 
-  // Actually sends an email per selected estimate (via the same endpoint the
-  // single-estimate "Send" dialog uses) — this used to just flip the stage
-  // to "sent" with a fake success toast and never email anyone.
-  async function bulkEmailSelected() {
-    const targets = (estimates ?? []).filter((e) => selectedIds.has(e.id));
+  // Opens BulkEmailEstimatesDialog: a confirmation step with the count and a
+  // template/subject/body picker, then one-at-a-time sends (the mail provider
+  // allows ~2/second) with each failure's real reason. It used to fire every
+  // send at once with no confirmation, which rate-limited most of the batch.
+  // Only selected rows that are still in the visible list are sent.
+  function bulkEmailSelected() {
+    const targets = filtered
+      .filter((e) => selectedIds.has(e.id))
+      .map((e) => ({ id: e.id, estimateNumber: e.estimateNumber ?? null, clientName: e.clientName ?? null }));
     if (targets.length === 0) return;
-
-    const subject = defaultDocTemplate?.subject ?? DEFAULT_SUBJECT;
-    const bodyHtml = defaultDocTemplate
-      ? renderBlocksToHtml(defaultDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true })
-      : DEFAULT_TEMPLATE_BODY;
-    const includePdf = defaultDocTemplate?.includePdf ?? true;
-
-    setEmailingSelected(true);
-    try {
-      const results = await Promise.allSettled(
-        targets.map((e) =>
-          fetch(`/api/crm/estimates/${e.id}/send-email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subject, bodyHtml, expiresInDays: 30, includePdf }),
-          }).then(async (res) => {
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              throw new Error(data.error ?? `Failed to email estimate #${e.estimateNumber}`);
-            }
-          })
-        )
-      );
-      const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.length - succeeded;
-      if (succeeded > 0) toast.success(`Emailed ${succeeded} estimate${succeeded !== 1 ? "s" : ""}`);
-      if (failed > 0) toast.error(`Failed to email ${failed} estimate${failed !== 1 ? "s" : ""} — check they have a client email on file`);
-      setSelectedIds(new Set());
-      refetch();
-    } finally {
-      setEmailingSelected(false);
-    }
+    setBulkEmailTargets(targets);
   }
 
   // Opens one combined PDF of every selected estimate's real
@@ -509,10 +484,10 @@ export function EstimatesList({ clientId }: Props) {
             <DropdownMenuContent align="start">
               {canSend && (
                 <DropdownMenuItem
-                  disabled={!someSelected || emailingSelected}
-                  onSelect={() => void bulkEmailSelected()}
+                  disabled={!someSelected}
+                  onSelect={bulkEmailSelected}
                 >
-                  {emailingSelected ? "Emailing…" : "Email Selected"}
+                  Email Selected
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem
@@ -799,6 +774,13 @@ export function EstimatesList({ clientId }: Props) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         defaultClientId={clientId}
+      />
+
+      <BulkEmailEstimatesDialog
+        estimates={bulkEmailTargets ?? []}
+        open={bulkEmailTargets !== null}
+        onClose={() => setBulkEmailTargets(null)}
+        onSent={() => { setSelectedIds(new Set()); void refetch(); }}
       />
 
       {duplicateTarget && (

@@ -985,7 +985,10 @@ export function DispatchBoardGuide() {
           service, crew, tag, priority and status-tab filters, the column filter, search text and
           visible columns; click a view to apply it, or <strong>Update</strong> it to overwrite with
           what is on screen. Views are private to you. A date range is saved only if you set it with
-          a Quick range, so a &ldquo;This week&rdquo; view keeps meaning this week.
+          a Quick range, so a &ldquo;This week&rdquo; view keeps meaning this week. A crew, service
+          or tag that has been deleted since the view was saved is skipped when you apply it (a
+          message says how many); save the view again to drop it for good. The board&apos;s Excel{" "}
+          <strong>Export</strong> button needs the Export Lists permission.
         </p>
         <p>
           <strong>Quick range.</strong> Beside the From and To dates: Today, Past 1/3/5 days, Next

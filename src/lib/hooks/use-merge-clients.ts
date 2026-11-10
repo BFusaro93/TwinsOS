@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fireStaleIntentCancel } from "@/lib/stripe/stale-intents-client";
 
 /** Rows referencing the duplicate, per table (plus "sub_accounts",
  *  "referrals", "notifications", "crm_campaigns" for un-keyed references). */
@@ -127,6 +128,9 @@ export function useMergeClients() {
       // that aren't on screen are only marked stale. Not awaited, so the
       // dialog can move on to the kept client right away.
       void qc.invalidateQueries();
+      // The duplicate's invoices moved: any open online pay form for them was
+      // queued for cancellation by the database — cancel it at Stripe now.
+      fireStaleIntentCancel();
     },
   });
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { createClient } from "@supabase/supabase-js";
-import { buildProposalContent, getPublishedProposal } from "@/lib/estimates/proposal-content";
+import { buildProposalContent, getPublishedProposal, isChangedSinceSent } from "@/lib/estimates/proposal-content";
 import { loadEstimateDocumentMergeVars, renderProposalDocumentHtml } from "@/lib/estimates/estimate-document-render";
 import { isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 
@@ -11,6 +11,9 @@ const serviceClient = () =>
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
+
+// Stages that mean the proposal has been accepted (by any route).
+const ACCEPTED_STAGES = ["accepted", "won", "invoiced"];
 
 function stripPricingInternals<T extends { adjRateCents?: unknown; complexityBps?: unknown }>(li: T): Omit<T, "adjRateCents" | "complexityBps"> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -37,9 +40,11 @@ export async function GET(
     return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
   }
 
-  if (shareToken.expires_at && new Date(shareToken.expires_at) < new Date()) {
-    return NextResponse.json({ error: "This proposal link has expired" }, { status: 410 });
-  }
+  // Link expiry is checked once the estimate is loaded (below): an ACCEPTED
+  // proposal stays viewable read-only for good — including the deposit-due /
+  // deposit-retry screen after a bank return, which can land long after the
+  // link's own expiry.
+  const linkExpired = !!shareToken.expires_at && new Date(shareToken.expires_at) < new Date();
 
   // Record the view. Awaited (a fire-and-forget promise can be dropped when the
   // serverless function returns) and incremented atomically in the DB so two
@@ -77,6 +82,16 @@ export async function GET(
 
   if (estErr || !est) {
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
+  }
+
+  // Accepted through THIS link, or some other way (client portal, or the
+  // office marking it accepted / converting it).
+  const stage = est.stage as string;
+  const acceptedElsewhere =
+    !shareToken.accepted_at && (!!est.portal_accepted_at || ACCEPTED_STAGES.includes(stage));
+  const isAccepted = !!shareToken.accepted_at || acceptedElsewhere;
+  if (linkExpired && !isAccepted) {
+    return NextResponse.json({ error: "This proposal link has expired" }, { status: 410 });
   }
 
   // Fetch customer-facing photos — signed URLs are fine here (unlike the PDF,
@@ -151,6 +166,39 @@ export async function GET(
     }
   }
 
+  const expired = await isEstimatePastValidUntil(supabase, shareToken.org_id, content.validUntil);
+  // Staff edited the estimate after sending it: the client must not accept
+  // terms the link doesn't show (the accept route refuses too).
+  const changedSinceSent =
+    !isAccepted && stage === "sent" ? await isChangedSinceSent(supabase, shareToken.estimate_id, shareToken.org_id) : false;
+  // Whether the accept form may be shown at all. Without this the page offered
+  // signing on an estimate staff had pulled back, declined or re-priced, and
+  // the client only found out after signing.
+  const actionable = !isAccepted && stage === "sent" && !changedSinceSent && !expired;
+  const closedReason: "accepted" | "updating" | "closed" | "expired" | null = actionable
+    ? null
+    : isAccepted
+      ? "accepted"
+      : changedSinceSent || stage === "draft" || stage === "quote"
+        ? "updating"
+        : stage === "sent" && expired
+          ? "expired"
+          : "closed";
+
+  // A required deposit nothing has been paid (or is clearing) against, on an
+  // accepted proposal. Deposits are optional — the client may Skip — but the
+  // page keeps showing it as due, with a way to pay it. The amount is the live
+  // estimate's, capped at the accepted total (the same rule deposit-intent
+  // charges by). A client's "I'll send a check" promise does not settle it.
+  const requiredLive = (est.deposit_required_cents as number | null) ?? 0;
+  const collectedLive = (est.deposit_collected_cents as number | null) ?? 0;
+  const pendingLive = (est.deposit_pending_cents as number | null) ?? 0;
+  const acceptedTotal = (est.total_cents as number | null) ?? 0;
+  const depositDueCents =
+    isAccepted && stage !== "lost" && requiredLive > 0 && collectedLive === 0 && pendingLive === 0
+      ? acceptedTotal > 0 ? Math.min(requiredLive, acceptedTotal) : requiredLive
+      : 0;
+
   return NextResponse.json({
     document,
     estimateNumber: est.estimate_number,
@@ -158,10 +206,13 @@ export async function GET(
     createdAt: est.created_at,
     validUntil: content.validUntil,
     // Expiry follows the version the client is looking at.
-    expired: await isEstimatePastValidUntil(supabase, shareToken.org_id, content.validUntil),
+    expired,
     notes: content.notes,
     stage: est.stage,
+    actionable,
+    closedReason,
     alreadyAccepted: !!shareToken.accepted_at,
+    acceptedElsewhere,
     acceptedAt: shareToken.accepted_at ?? null,
     acceptedByName: shareToken.accepted_by_name ?? null,
 
@@ -199,6 +250,11 @@ export async function GET(
     // — the only route back for a client whose ACH bounced days later. The
     // reason is Stripe's own wording; it says nothing about the payment
     // instrument beyond what the payer already knows.
+    depositDueCents,
+    depositPendingCents: pendingLive > 0 ? pendingLive : null,
+    depositPendingMethod: (est.deposit_pending_method as "card" | "us_bank_account" | null) ?? null,
+    depositPromisedCents: (est.deposit_promised_cents as number | null) ?? null,
+    depositPromisedMethod: (est.deposit_promised_method as string | null) ?? null,
     depositFailedCents: (est.deposit_failed_cents as number | null) ?? null,
     depositFailedReason: (est.deposit_failed_reason as string | null) ?? null,
     depositFailedMethod: (est.deposit_failed_method as "card" | "us_bank_account" | null) ?? null,

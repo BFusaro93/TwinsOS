@@ -25,6 +25,17 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "@/components/shared/useConfirm";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import {
+  previewProjectCancel,
+  cancelProjectVisitsRemote,
+  projectCancelConfirmOptions,
+  projectVisitsConfirmOptions,
+  type ProjectCancelPreview,
+} from "@/lib/project-visits-api";
 import {
   Table,
   TableBody,
@@ -53,7 +64,7 @@ import {
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useRequisitions, useAddRequisitionLineItem } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders, useAddPOLineItem } from "@/lib/hooks/use-purchase-orders";
-import { useDeleteProject, useUpdateProject, useArchiveProject } from "@/lib/hooks/use-projects";
+import { useDeleteProject, useUpdateProject, useArchiveProject, useProjectCostTotal } from "@/lib/hooks/use-projects";
 import {
   useProjectDirectItems,
   useAddProjectDirectItem,
@@ -1152,7 +1163,8 @@ function DetailsTab({
 }: {
   project: Project;
   status: ProjectStatus;
-  onStatusChange: (s: ProjectStatus) => void;
+  /** onSuccess runs once the status is saved (cancelling uses it to clean up visits). */
+  onStatusChange: (s: ProjectStatus, onSuccess?: () => void) => void;
   computedTotalCost: number;
   onUpdateHours: (laborHours: number | null, budgetHours: number | null) => void;
   onUpdateRates: (laborRateCents: number, burdenedRateCents: number) => void;
@@ -1180,8 +1192,55 @@ function DetailsTab({
   const netFullPct = netFull != null && project.contractPrice > 0 ? Math.round((netFull / project.contractPrice) * 100) : null;
   const netBurdenedPct = netBurdened != null && project.contractPrice > 0 ? Math.round((netBurdened / project.contractPrice) * 100) : null;
 
+  // Cancelling removes the project's pending billing milestones (database
+  // trigger) and offers to cancel its upcoming visits — the same Yes/No
+  // question cancelling a client asks. Only a login with the projects key is
+  // asked: the check and the visit cancel both need it.
+  const { can } = usePermissions();
+  const qc = useQueryClient();
+  const [askConfirm, confirmDialog] = useConfirm();
+  const [cancelling, setCancelling] = useState(false);
+  async function cancelProject() {
+    if (cancelling) return;
+    setCancelling(true);
+    try {
+      let preview: ProjectCancelPreview | null = null;
+      if (can("sched_add_modify_projects")) {
+        try {
+          preview = await previewProjectCancel(project.id);
+        } catch {
+          toast.warning("Couldn't check this project's upcoming visits — they were left as they are.");
+        }
+      }
+      if (preview && preview.pendingMilestones > 0 && !(await askConfirm(projectCancelConfirmOptions(preview.pendingMilestones)))) {
+        return;
+      }
+      const cancelVisits = !!preview && preview.visits > 0 && (await askConfirm(projectVisitsConfirmOptions(preview.visits)));
+      const removedMilestones = preview?.pendingMilestones ?? 0;
+      onStatusChange("canceled", () => {
+        qc.invalidateQueries({ queryKey: ["project-milestones", project.id] });
+        qc.invalidateQueries({ queryKey: ["estimate-milestones"] });
+        if (removedMilestones > 0) {
+          toast.success(`Project canceled — ${removedMilestones} pending milestone${removedMilestones !== 1 ? "s" : ""} removed`);
+        }
+        if (cancelVisits) {
+          cancelProjectVisitsRemote(project.id)
+            .then((n) => {
+              if (n > 0) toast.success(`${n} upcoming visit${n !== 1 ? "s" : ""} cancelled`);
+              qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+              qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+            })
+            .catch(() => toast.error("The visits couldn't be cancelled — cancel them from the project's jobs."));
+        }
+      });
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5 p-6">
+      {confirmDialog}
       {/* Status flow */}
       <div>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
@@ -1195,21 +1254,21 @@ function DetailsTab({
         {canWriteEquipt && <div className="mt-3 flex flex-wrap gap-2">
           {status === "sold" && (<>
             <Button size="sm" onClick={() => onStatusChange("scheduled")}>Mark Scheduled</Button>
-            <Button size="sm" variant="outline" onClick={() => onStatusChange("canceled")}>Cancel Project</Button>
+            <Button size="sm" variant="outline" onClick={cancelProject} disabled={cancelling}>Cancel Project</Button>
           </>)}
           {status === "scheduled" && (<>
             <Button size="sm" onClick={() => onStatusChange("in_progress")}>Start Project</Button>
             <Button size="sm" variant="outline" onClick={() => onStatusChange("on_hold")}>Put On Hold</Button>
-            <Button size="sm" variant="outline" onClick={() => onStatusChange("canceled")}>Cancel</Button>
+            <Button size="sm" variant="outline" onClick={cancelProject} disabled={cancelling}>Cancel</Button>
           </>)}
           {status === "in_progress" && (<>
             <Button size="sm" onClick={() => onStatusChange("complete")}>Mark Complete</Button>
             <Button size="sm" variant="outline" onClick={() => onStatusChange("on_hold")}>Put On Hold</Button>
-            <Button size="sm" variant="outline" onClick={() => onStatusChange("canceled")}>Cancel</Button>
+            <Button size="sm" variant="outline" onClick={cancelProject} disabled={cancelling}>Cancel</Button>
           </>)}
           {status === "on_hold" && (<>
             <Button size="sm" onClick={() => onStatusChange("in_progress")}>Resume Project</Button>
-            <Button size="sm" variant="outline" onClick={() => onStatusChange("canceled")}>Cancel</Button>
+            <Button size="sm" variant="outline" onClick={cancelProject} disabled={cancelling}>Cancel</Button>
           </>)}
           {status === "complete" && (
             <Button size="sm" variant="outline" onClick={() => onStatusChange("in_progress")}>Reopen</Button>
@@ -1479,9 +1538,9 @@ export function ProjectDetailsTabConnected({ project }: { project: Project }) {
       project={project}
       status={status}
       computedTotalCost={computedTotalCost}
-      onStatusChange={(next) => {
+      onStatusChange={(next, onSuccess) => {
         setStatus(next);
-        updateProject({ id: project.id, status: next });
+        updateProject({ id: project.id, status: next }, { onSuccess });
       }}
       onUpdateHours={(laborHours, budgetHours) => updateProject({ id: project.id, laborHours, budgetHours })}
       onUpdateRates={(laborRateCents, burdenedRateCents) => updateProject({ id: project.id, laborRateCents, burdenedRateCents })}
@@ -1490,64 +1549,20 @@ export function ProjectDetailsTabConnected({ project }: { project: Project }) {
 }
 
 /**
- * A project's total cost, derived from its linked requisition / PO lines, the
- * PO shipping allocated to it, subcontract costs and direct items
- * (projects.total_cost in the DB is never written, so it is computed here).
+ * A project's material & other cost: the same calculation as the Projects list
+ * and the WIP report (computeProjectCostTotal — cancelled/rejected POs and dead
+ * requisitions excluded, split requisitions counted once, PO discount, tax and
+ * shipping allocated per line by allocatePoLine). Refetches whenever the POs,
+ * requisitions, direct items or other costs this panel watches change.
  * Shared by the Equipt panel and the CRM project dialog so both agree.
  */
 function useProjectComputedTotalCost(projectId: string): number {
-  const { data: allRequisitions } = useRequisitions();
-  const { data: allPurchaseOrders } = usePurchaseOrders();
-  const { data: subcontractCostsRaw = [] } = useProjectSubcontractCosts(projectId);
-  const subcontractCosts: import("@/types").ProjectSubcontractCost[] = subcontractCostsRaw;
-  const { data: allDirectItems = [] } = useProjectDirectItems(projectId);
-
-  // Compute project total cost dynamically from linked line items + allocated shipping + subcontract costs.
-  // projects.total_cost in the DB is never written to, so we derive it here instead.
-  return (() => {
-    const taxRateBySourceId = new Map<string, number>();
-    (allPurchaseOrders ?? []).forEach((po) => taxRateBySourceId.set(po.id, po.taxRatePercent));
-    (allRequisitions ?? []).forEach((req) => taxRateBySourceId.set(req.id, req.taxRatePercent));
-
-    let subtotal = 0;
-    let tax = 0;
-
-    (allRequisitions ?? []).forEach((req) => {
-      if (req.convertedPoId && req.status === "ordered") return;
-      req.lineItems.filter((li) => li.projectId === projectId).forEach((li) => {
-        subtotal += li.quantity * li.unitCost;
-        const rate = taxRateBySourceId.get(req.id) ?? 0;
-        tax += Math.round(li.quantity * li.unitCost * rate / 100);
-      });
-    });
-    (allPurchaseOrders ?? []).forEach((po) => {
-      po.lineItems.filter((li) => li.projectId === projectId).forEach((li) => {
-        subtotal += li.quantity * li.unitCost;
-        if (li.taxable !== false) {
-          const rate = taxRateBySourceId.get(po.id) ?? 0;
-          tax += Math.round(li.quantity * li.unitCost * rate / 100);
-        }
-      });
-    });
-
-    // Allocate PO shipping proportionally across the projects that share each PO
-    const allocatedShipping = (allPurchaseOrders ?? []).reduce((acc, po) => {
-      if (!po.shippingCost) return acc;
-      const projectSubtotal = po.lineItems
-        .filter((li) => li.projectId === projectId)
-        .reduce((s, li) => s + li.quantity * li.unitCost, 0);
-      if (projectSubtotal === 0) return acc;
-      const poSubtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-      if (poSubtotal === 0) return acc;
-      return acc + Math.round((projectSubtotal / poSubtotal) * po.shippingCost);
-    }, 0);
-
-    const subcontractTotal = subcontractCosts.reduce((s, c) => s + c.amount, 0);
-    const directTotal = allDirectItems.reduce((s, di) => s + di.quantity * di.unitCost, 0);
-
-    return subtotal + tax + allocatedShipping + subcontractTotal + directTotal;
-  })();
-
+  const { dataUpdatedAt: reqAt } = useRequisitions();
+  const { dataUpdatedAt: poAt } = usePurchaseOrders();
+  const { dataUpdatedAt: subAt } = useProjectSubcontractCosts(projectId);
+  const { dataUpdatedAt: directAt } = useProjectDirectItems(projectId);
+  const { data = 0 } = useProjectCostTotal(projectId, `${reqAt}:${poAt}:${subAt}:${directAt}`);
+  return data;
 }
 
 export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
@@ -1654,9 +1669,9 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
                 project={project}
                 status={status}
                 computedTotalCost={computedTotalCost}
-                onStatusChange={(s) => {
+                onStatusChange={(s, onSuccess) => {
                   setStatus(s);
-                  updateProject({ id: project.id, status: s });
+                  updateProject({ id: project.id, status: s }, { onSuccess });
                 }}
                 onUpdateHours={(laborHours, budgetHours) => {
                   updateProject({ id: project.id, laborHours, budgetHours });
@@ -1702,6 +1717,7 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             <AlertDialogTitle>Delete Project</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete <strong>{project.name}</strong>? This action cannot be undone.
+              A project with invoices, open purchase orders or invoiced milestones can&apos;t be deleted — cancel it instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1714,6 +1730,12 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
                   onSuccess: () => {
                     setDeleteConfirmOpen(false);
                     setSelectedProjectId(null);
+                  },
+                  // Refused once the project has invoices, open POs or invoiced
+                  // milestones (trg_projects_guard_delete) — the message says to Cancel instead.
+                  onError: (err) => {
+                    setDeleteConfirmOpen(false);
+                    toast.error(mutationErrorMessage(err, "Failed to delete project"));
                   },
                 })
               }

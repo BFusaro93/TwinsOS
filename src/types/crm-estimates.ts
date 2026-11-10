@@ -170,6 +170,12 @@ export interface Estimate {
   depositReference: string | null;
   depositNotes: string | null;
   depositCollectedAt: string | null;
+  /** What the CLIENT said they'd send ("I'll pay by check") when accepting
+   *  the proposal. A promise, never counted as money received. */
+  depositPromisedCents: number | null;
+  depositPromisedMethod: 'cash' | 'check' | 'ach' | 'credit_card' | 'other' | null;
+  depositPromisedReference: string | null;
+  depositPromisedAt: string | null;
   /** A deposit the client has submitted that Stripe has not settled yet.
    *  An ACH debit sits in `processing` for 3–5 business days and writes
    *  nothing to crm_payments until it clears, so without these the estimate

@@ -54,6 +54,12 @@ interface Estimate {
   discount_value?: number | null;
   tax_rate_bps?: number | null;
   line_items?: LineItem[];
+  /** Deposit the estimate asks for (of the version shown). */
+  deposit_required_cents?: number | null;
+  /** A required deposit still owed on an ACCEPTED estimate (0 = none). */
+  deposit_due_cents?: number;
+  /** The proposal link to pay it online, when one exists. */
+  deposit_pay_url?: string | null;
 }
 
 const TIERS = ["basic", "standard", "premium"] as const;
@@ -80,7 +86,7 @@ interface LineItem {
 interface SignDialogProps {
   estimate: Estimate;
   onClose: () => void;
-  onAccepted: (id: string) => void;
+  onAccepted: (id: string, depositDueCents: number) => void;
 }
 
 function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
@@ -172,7 +178,8 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
         setError(d.error ?? "Something went wrong.");
         return;
       }
-      onAccepted(estimate.id);
+      const required = estimate.deposit_required_cents ?? 0;
+      onAccepted(estimate.id, required > 0 ? Math.min(required, selectedTotal > 0 ? selectedTotal : required) : 0);
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -319,6 +326,13 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
               <span className="text-slate-900">{fmt(selectedTotal)}</span>
             </div>
           </div>
+        )}
+
+        {(estimate.deposit_required_cents ?? 0) > 0 && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            A deposit of {fmt(Math.min(estimate.deposit_required_cents ?? 0, selectedTotal > 0 ? selectedTotal : (estimate.deposit_required_cents ?? 0)))} is
+            due to confirm this work. You can accept now and pay it afterwards.
+          </p>
         )}
 
         <div>
@@ -584,6 +598,23 @@ export default function PortalEstimatesPage({ estimates: initial, today }: { est
                     Accepted — signed electronically
                   </p>
                 )}
+                {/* A required deposit not paid yet. Accepting never waits on
+                    it, but it stays visible here until it's paid. */}
+                {(est.deposit_due_cents ?? 0) > 0 && (
+                  <p className="text-xs text-amber-700 mt-1.5">
+                    Deposit due: <strong>{fmt(est.deposit_due_cents ?? 0)}</strong>
+                    {est.deposit_pay_url ? (
+                      <>
+                        {" · "}
+                        <a href={est.deposit_pay_url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+                          Pay online
+                        </a>
+                      </>
+                    ) : (
+                      " — we'll be in touch about payment"
+                    )}
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col items-end gap-2 shrink-0">
@@ -647,7 +678,10 @@ export default function PortalEstimatesPage({ estimates: initial, today }: { est
         <SignDialog
           estimate={signing}
           onClose={() => setSigning(null)}
-          onAccepted={(id) => patchStatus(id, "accepted")}
+          onAccepted={(id, depositDueCents) => {
+            patchStatus(id, "accepted");
+            setEstimates((prev) => prev.map((e) => (e.id === id ? { ...e, deposit_due_cents: depositDueCents } : e)));
+          }}
         />
       )}
       {declining && (

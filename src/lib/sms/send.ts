@@ -2,7 +2,11 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { monthStartInZone } from "@/lib/time/zone";
 import { toE164Us } from "@/lib/utils/phone";
-import { findOptedOutNumbers } from "@/lib/sms/opt-outs";
+import { findOptedOutNumbers, recordCarrierOptOut } from "@/lib/sms/opt-outs";
+import { smsSegmentCount } from "@/lib/sms/segments";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("sms send");
 
 /** The org whose Twilio account/campaign the TWILIO_* env fallback belongs to. */
 export const SHARED_TWILIO_ORG_ID = "619de9bb-f8f8-46cf-983c-9faf54f6a7d0";
@@ -113,12 +117,17 @@ export async function sendClientSms(
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
+  // `?logged=1` tells the status webhook an activity row will exist for this
+  // SID, so a terminal callback that beats the insert below gets a 503 and is
+  // retried. Twilio only retries connection timeouts by default; the #fragment
+  // (a Twilio connection override, not part of the signature) adds 5xx.
+  const statusCallback = `${siteUrl}/api/webhooks/twilio/status${params.clientId ? "?logged=1" : ""}#rc=3&rp=ct,5xx`;
   const form = new URLSearchParams({
     // Twilio only accepts E.164; clients' phones are stored as typed.
     To: toE164Us(params.toPhone) ?? params.toPhone,
     MessagingServiceSid: messagingServiceSid,
     Body: params.body,
-    StatusCallback: `${siteUrl}/api/webhooks/twilio/status`,
+    StatusCallback: statusCallback,
   });
 
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
@@ -132,6 +141,18 @@ export async function sendClientSms(
 
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
+    // 21610: this number is on Twilio's/the carrier's opt-out list. Remember it
+    // per number (and on the client when it's the primary phone) so nothing
+    // keeps retrying it.
+    if (String(payload?.code) === "21610") {
+      const optErr = await recordCarrierOptOut(supabase, {
+        orgId: params.orgId,
+        clientId: params.clientId,
+        phone: params.toPhone,
+        messageSid: null,
+      });
+      if (optErr) log.error("failed to record 21610 opt-out", { orgId: params.orgId, error: optErr });
+    }
     // A 400 is Twilio rejecting THIS message (invalid/landline number, the
     // recipient texted STOP — 21211/21614/21610, …): retrying can never
     // succeed. Anything else (401 bad creds, 429, 5xx) may clear on its own,
@@ -144,7 +165,7 @@ export async function sendClientSms(
   }
 
   if (params.clientId) {
-    await supabase.from("client_activity").insert({
+    const row = {
       org_id: params.orgId,
       client_id: params.clientId,
       activity_type: "sms",
@@ -155,8 +176,26 @@ export async function sendClientSms(
       ref_table: "twilio_messages",
       occurred_at: new Date().toISOString(),
       created_by: params.createdBy ?? null,
-    });
+    };
+    // The text is already sent, so a failed insert can't fail the send — but it
+    // must not vanish silently either (no timeline entry, and the status
+    // webhook would keep retrying a callback with nothing to update). One retry.
+    let { error: activityErr } = await supabase.from("client_activity").insert(row);
+    if (activityErr) ({ error: activityErr } = await supabase.from("client_activity").insert(row));
+    if (activityErr) {
+      log.error("text sent but its activity row failed to save", {
+        orgId: params.orgId,
+        clientId: params.clientId,
+        sid: payload?.sid ?? null,
+        error: activityErr.message,
+      });
+    }
   }
+
+  // Usage counts SEGMENTS (what carriers bill): Twilio's num_segments when the
+  // send response has it, else the GSM-7/UCS-2 count of the body.
+  const twilioSegments = parseInt(String(payload?.num_segments ?? ""), 10);
+  const segments = Number.isFinite(twilioSegments) && twilioSegments > 0 ? twilioSegments : Math.max(1, smsSegmentCount(params.body));
 
   // Feeds the SMS add-on's included-volume/overage billing (Phase 3) — every
   // successful send counts, regardless of which org/messaging-service sent
@@ -173,10 +212,15 @@ export async function sendClientSms(
     .rpc("increment_sms_usage", {
       p_org_id: params.orgId,
       p_period_start: periodStart,
+      p_count: segments,
     })
     .then(
-      ({ error }: { error: unknown }) => { if (error) console.error("[sms] increment_sms_usage failed:", error); },
-      (err: unknown) => { console.error("[sms] increment_sms_usage threw:", err); }
+      ({ error }: { error: { message?: string } | null }) => {
+        if (error) log.error("increment_sms_usage failed", { orgId: params.orgId, segments, error: error.message ?? String(error) });
+      },
+      (err: unknown) => {
+        log.error("increment_sms_usage threw", { orgId: params.orgId, error: err instanceof Error ? err.message : String(err) });
+      }
     );
 
   return { ok: true, sid: payload?.sid ?? null };

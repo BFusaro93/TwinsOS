@@ -120,6 +120,7 @@ import type { CRMPayment, CRMInvoice, CRMContract, InvoiceStatus } from "@/types
 import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
 import { EmailBouncesNotice } from "@/components/crm/clients/EmailBouncesNotice";
+import { SmsOptOutsNotice } from "@/components/crm/clients/SmsOptOutsNotice";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import {
@@ -3776,6 +3777,15 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               clientId={clientId}
               addresses={[client.primaryEmail, client.billingEmail]}
               canClear={can(isLead ? "lead_allow_edit" : "client_allow_edit")}
+            />
+            <SmsOptOutsNotice
+              clientId={clientId}
+              phones={[
+                client.primaryPhone,
+                ...(client.phones ?? []).map((p) => p.phone),
+                // Contact numbers only for users who may see contacts.
+                ...(can("client_view_contacts") ? contacts ?? [] : []).flatMap((c) => [c.phone, ...(c.phones ?? []).map((p) => p.phone)]),
+              ]}
             />
 
             {/* Spacer pushes tags + source to the bottom of the left column */}

@@ -1048,6 +1048,7 @@ export type Database = {
           delivered_at: string | null
           direction: string | null
           failed_at: string | null
+          media: Json | null
           id: string
           occurred_at: string
           opened_at: string | null
@@ -1071,6 +1072,7 @@ export type Database = {
           delivered_at?: string | null
           direction?: string | null
           failed_at?: string | null
+          media?: Json | null
           id?: string
           occurred_at?: string
           opened_at?: string | null
@@ -1094,6 +1096,7 @@ export type Database = {
           delivered_at?: string | null
           direction?: string | null
           failed_at?: string | null
+          media?: Json | null
           id?: string
           occurred_at?: string
           opened_at?: string | null
@@ -1687,6 +1690,7 @@ export type Database = {
           linear_ft_perimeter: number | null
           lng: number | null
           map_code: string | null
+          merged_into_client_id: string | null
           mulch_bed_sqft: number | null
           notes_to_crew: string | null
           office_notes: string | null
@@ -1715,6 +1719,8 @@ export type Database = {
           sms_opt_in: boolean
           sms_opt_in_at: string | null
           sms_opt_in_source: string | null
+          sms_opt_out_at: string | null
+          sms_opt_out_source: string | null
           source: string | null
           status: string
           stripe_customer_id: string | null
@@ -1766,6 +1772,7 @@ export type Database = {
           linear_ft_perimeter?: number | null
           lng?: number | null
           map_code?: string | null
+          merged_into_client_id?: string | null
           mulch_bed_sqft?: number | null
           notes_to_crew?: string | null
           office_notes?: string | null
@@ -1794,6 +1801,8 @@ export type Database = {
           sms_opt_in?: boolean
           sms_opt_in_at?: string | null
           sms_opt_in_source?: string | null
+          sms_opt_out_at?: string | null
+          sms_opt_out_source?: string | null
           source?: string | null
           status?: string
           stripe_customer_id?: string | null
@@ -1845,6 +1854,7 @@ export type Database = {
           linear_ft_perimeter?: number | null
           lng?: number | null
           map_code?: string | null
+          merged_into_client_id?: string | null
           mulch_bed_sqft?: number | null
           notes_to_crew?: string | null
           office_notes?: string | null
@@ -1873,6 +1883,8 @@ export type Database = {
           sms_opt_in?: boolean
           sms_opt_in_at?: string | null
           sms_opt_in_source?: string | null
+          sms_opt_out_at?: string | null
+          sms_opt_out_source?: string | null
           source?: string | null
           status?: string
           stripe_customer_id?: string | null
@@ -7576,6 +7588,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           dispute_status: string | null
+          estimate_id: string | null
           disputed_at: string | null
           id: string
           invoice_id: string | null
@@ -7601,6 +7614,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           dispute_status?: string | null
+          estimate_id?: string | null
           disputed_at?: string | null
           id?: string
           invoice_id?: string | null
@@ -7626,6 +7640,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           dispute_status?: string | null
+          estimate_id?: string | null
           disputed_at?: string | null
           id?: string
           invoice_id?: string | null
@@ -11154,6 +11169,8 @@ export type Database = {
         Row: {
           accepted_at: string | null
           accepted_by_name: string | null
+          accepted_user_agent: string | null
+          accepted_version_number: number | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -11172,6 +11189,8 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           accepted_by_name?: string | null
+          accepted_user_agent?: string | null
+          accepted_version_number?: number | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -11190,6 +11209,8 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           accepted_by_name?: string | null
+          accepted_user_agent?: string | null
+          accepted_version_number?: number | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -11545,6 +11566,11 @@ export type Database = {
           deposit_pending_cents: number | null
           deposit_pending_intent_id: string | null
           deposit_pending_method: string | null
+          deposit_promised_at: string | null
+          deposit_promised_cents: number | null
+          deposit_promised_method: string | null
+          deposit_promised_notes: string | null
+          deposit_promised_reference: string | null
           deposit_reference: string | null
           deposit_required_cents: number
           description: string
@@ -11616,6 +11642,11 @@ export type Database = {
           deposit_pending_cents?: number | null
           deposit_pending_intent_id?: string | null
           deposit_pending_method?: string | null
+          deposit_promised_at?: string | null
+          deposit_promised_cents?: number | null
+          deposit_promised_method?: string | null
+          deposit_promised_notes?: string | null
+          deposit_promised_reference?: string | null
           deposit_reference?: string | null
           deposit_required_cents?: number
           description?: string
@@ -11687,6 +11718,11 @@ export type Database = {
           deposit_pending_cents?: number | null
           deposit_pending_intent_id?: string | null
           deposit_pending_method?: string | null
+          deposit_promised_at?: string | null
+          deposit_promised_cents?: number | null
+          deposit_promised_method?: string | null
+          deposit_promised_notes?: string | null
+          deposit_promised_reference?: string | null
           deposit_reference?: string | null
           deposit_required_cents?: number
           description?: string
@@ -14935,6 +14971,8 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           description: string
+          eac_delta_applied_cents: number | null
+          estimate_id: string | null
           id: string
           org_id: string
           project_id: string
@@ -14956,6 +14994,8 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string
+          eac_delta_applied_cents?: number | null
+          estimate_id?: string | null
           id?: string
           org_id?: string
           project_id: string
@@ -14977,6 +15017,8 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string
+          eac_delta_applied_cents?: number | null
+          estimate_id?: string | null
           id?: string
           org_id?: string
           project_id?: string
@@ -15219,6 +15261,7 @@ export type Database = {
           labor_rate_cents: number | null
           name: string
           notes: string | null
+          source_estimate_id: string | null
           org_id: string
           original_contract_price: number
           progress_pct: number
@@ -15249,6 +15292,7 @@ export type Database = {
           labor_rate_cents?: number | null
           name: string
           notes?: string | null
+          source_estimate_id?: string | null
           org_id?: string
           original_contract_price?: number
           progress_pct?: number
@@ -15279,6 +15323,7 @@ export type Database = {
           labor_rate_cents?: number | null
           name?: string
           notes?: string | null
+          source_estimate_id?: string | null
           org_id?: string
           original_contract_price?: number
           progress_pct?: number
@@ -17614,8 +17659,12 @@ export type Database = {
           estimated_gp_cents: number | null
           estimated_gp_pct: number | null
           id: string | null
+          labor_cost_cents: number | null
+          labor_hours: number | null
+          material_cost_cents: number | null
           name: string | null
           original_contract_cents: number | null
+          overhead_cost_cents: number | null
           over_under_billed_cents: number | null
           pct_complete: number | null
           remaining_to_bill_cents: number | null
@@ -18574,7 +18623,7 @@ export type Database = {
         Returns: undefined
       }
       increment_sms_usage: {
-        Args: { p_org_id: string; p_period_start: string }
+        Args: { p_count?: number; p_org_id: string; p_period_start: string }
         Returns: undefined
       }
       insert_audit_entry: {

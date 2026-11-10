@@ -980,6 +980,11 @@ export function PaymentsList({ clientId }: Props) {
   const orgTimeZone = useOrgTimeZone();
   const thirtyDaysAgo = shiftYmd(todayInZone(orgTimeZone), -30);
 
+  // The Deleted tab's fetch includes soft-deleted rows; everywhere else counts
+  // and exports only live payments.
+  const livePayments = useMemo(() => (payments ?? []).filter((p) => p.deletedAt == null), [payments]);
+  const deletedPayments = useMemo(() => (payments ?? []).filter((p) => p.deletedAt != null), [payments]);
+
   const filtered = useMemo(() => {
     let list = payments ?? [];
 
@@ -1036,7 +1041,13 @@ export function PaymentsList({ clientId }: Props) {
       {!clientId && (
         <PageHeader
           title="Payments"
-          description={!isLoading ? `${(payments ?? []).length} payments` : undefined}
+          description={
+            isLoading
+              ? undefined
+              : activeTab === "deleted"
+                ? `${deletedPayments.length} deleted payment${deletedPayments.length === 1 ? "" : "s"}`
+                : `${livePayments.length} payments`
+          }
           action={
             <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu
@@ -1044,7 +1055,17 @@ export function PaymentsList({ clientId }: Props) {
                 templateColumns={PAYMENT_TEMPLATE_COLUMNS}
                 templateFilename="payments-template.csv"
                 requiredColumns={PAYMENT_REQUIRED_COLUMNS}
-                onExport={() => exportCSV((payments ?? []).map(paymentToCsvRow), "payments-export.csv")}
+                onExport={() =>
+                  // Normal views export live payments only. The Deleted tab
+                  // exports its deleted payments with a "deleted" column (the
+                  // date deleted), which the importer refuses to re-create.
+                  activeTab === "deleted"
+                    ? exportCSV(
+                        deletedPayments.map((p) => ({ ...paymentToCsvRow(p), deleted: (p.deletedAt ?? "").slice(0, 10) })),
+                        "payments-deleted-export.csv"
+                      )
+                    : exportCSV(livePayments.map(paymentToCsvRow), "payments-export.csv")
+                }
                 onImport={async (rows) => {
                   const result = await bulkImportPayments(rows);
                   const { succeeded, failed, skipped = [], warnings = [] } = result;

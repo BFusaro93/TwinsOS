@@ -170,7 +170,15 @@ export function OnlinePaymentsGuide() {
 
       <Section id="double-pay" title="What happens if a client pays twice">
         <p>
-          If a client opens the same pay link or portal page on two devices and both payments
+          A client who opens the same pay link or portal page twice gets the same payment form back, not a
+          second one. A form for an old amount, the other payment method or a different set of invoices is
+          canceled at Stripe when a new one starts, and an open form is also canceled when the invoice changes
+          another way: you record a payment, a saved card is charged, or the invoice is voided, deleted,
+          merged or its total edited. That happens straight away from those screens, and a background sweep
+          every few minutes catches anything else.
+        </p>
+        <p>
+          If a payment still slips through on two devices and both payments
           genuinely go through, the second one isn&apos;t silently lost or double-applied to the
           invoice — the system applies only what&apos;s actually still owed at settlement time and
           records the rest as a credit toward that client&apos;s future invoices. It can&apos;t undo
@@ -215,8 +223,9 @@ export function OnlinePaymentsGuide() {
             be returned days after the client accepted, and a card can be declined. When that happens
             the acceptance stands &mdash; only the payment failed &mdash; and the estimate records
             the reason the bank or card network gave. You get a <strong>Deposit failed</strong>{" "}
-            notification and email, and the client&apos;s original proposal link re-opens itself so
-            they can pay it again from the same link. It closes as soon as a deposit is recorded.
+            notification and email, the client is emailed a link to pay it again, and their original
+            proposal link re-opens itself so they can pay it from the same link. It closes as soon
+            as a deposit is recorded.
           </li>
           <li>
             <strong>A refund comes out of unapplied credit before it comes off an invoice.</strong>{" "}
@@ -233,8 +242,36 @@ export function OnlinePaymentsGuide() {
             prepayment or overpayment the client already holds is applied to the invoice first, and
             only the remainder goes to the card or bank. If credit covers the whole invoice, no
             card is charged and you&apos;ll see &ldquo;paid from client credit&rdquo; instead of a
-            charge amount. Credit is applied only after every other check passes, so a charge that
+            charge amount. A proposal deposit is only used on invoices for <em>its own</em> estimate
+            (that estimate&apos;s job, project or contract) unless you release it to general credit
+            from the estimate. Credit is applied only after every other check passes, so a charge that
             is refused (no saved method, a debit still settling) never changes the invoice.
+          </li>
+          <li>
+            <strong>A failed bank payment leaves a trace.</strong> When a client&apos;s bank returns an
+            online bank-transfer invoice payment (insufficient funds, closed account), a
+            &ldquo;Payment failed&rdquo; entry with the bank&apos;s reason is added to the client&apos;s
+            timeline and the people who get payment-dispute alerts (admins and managers by default) are
+            notified. Nothing was recorded for it, so nothing needs reversing; the invoice is open again.
+          </li>
+          <li>
+            <strong>Merging clients with a payment in flight.</strong> Merge Clients waits while the
+            duplicate has a bank transfer still settling or waiting on bank verification (or a proposal
+            deposit in flight), and says so. A payment that still names a merged client when it settles is
+            recorded on the client it was merged into. If a payment can&apos;t be matched to its invoice
+            at all, admins get a <strong>Payment needs to be recorded</strong> alert with the Stripe
+            payment id to record it by hand.
+          </li>
+          <li>
+            <strong>Parents can pay sub-accounts&apos; invoices together.</strong> A combined payment
+            (staff or portal) can cover a parent account&apos;s invoices and its sub-accounts&apos; invoices.
+            The payment is recorded on the parent and applied to each invoice; each invoice is first settled
+            from its own account&apos;s credit. Autopay still charges each account on its own.
+          </li>
+          <li>
+            <strong>The To Charge queue respects autopay.</strong> Charge and Charge All from the queue skip
+            a client whose autopay has been turned off since the list loaded, and say so for that invoice.
+            Charging a saved card from the invoice itself is not affected.
           </li>
           <li>
             <strong>A returned bank debit can be charged again.</strong> If an ACH payment bounces

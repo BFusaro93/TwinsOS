@@ -2586,6 +2586,70 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         q: "Does a client's Primary property follow the client's address?",
         a: "Yes. Changing the client's service address updates the Primary property, and changing the Primary property's address updates the client (and billing, when billing is the same as service).",
       },
+      {
+        q: "Which text replies opt a client out of texts?",
+        a: "Replying STOP, STOPALL, UNSUBSCRIBE, OPTOUT / OPT OUT, REVOKE, CANCEL, END or QUIT opts that number out, and short phrases like \"stop please\" or \"unsubscribe me\" count too. A longer message that contains STOP, STOPALL, UNSUBSCRIBE, OPT OUT or REVOKE also opts the number out, and its ticket notes the word so you can re-confirm with the client. CANCEL, END and QUIT only count as the whole reply, so \"cancel my Tuesday visit\" doesn't opt anyone out. Only the texter can opt back in, by replying START or UNSTOP. A plain \"yes\" doesn't re-subscribe anyone.",
+      },
+      {
+        q: "Why does a client show \"Texts blocked for\" a number?",
+        a: "That number opted out of your texts (it replied STOP or similar) or the carrier reported it as blocked. Texts to that number are skipped until the texter replies START.",
+      },
+      {
+        q: "Does a picture a client texts us show up?",
+        a: "Yes. Photos texted to your number are saved on the client's timeline and attached to a text ticket, even when the message has no words.",
+      },
+      {
+        q: "How are texts counted toward our monthly allowance?",
+        a: "By segment, the same way the carrier bills them: one segment is 160 plain characters, or 70 if the message has emoji or special characters. The send-text box shows how many segments a message will use.",
+      },
+      {
+        q: "How long does a proposal link stay open?",
+        a: "An unsigned link stays open at least until the proposal's Valid Until date. Once the client accepts, the link stays viewable, read-only, so they can see what they signed and pay a deposit that is still due.",
+      },
+      {
+        q: "A client said they'd pay the deposit by check. Does the estimate show it as collected?",
+        a: "No. A promise shows as an amber \"Client says they'll pay by check\" badge. Collected shows only when money actually arrives, either a card or bank payment through the proposal or a payment you record.",
+      },
+      {
+        q: "What happens to a proposal deposit after it's paid?",
+        a: "It's reserved for that estimate's job, project or contract, and only applies to those invoices, not to other invoices like maintenance autopay. If the estimate is later marked Lost, the estimate shows a banner to refund the deposit or release it to general credit.",
+      },
+      {
+        q: "Can a client accept without paying the deposit?",
+        a: "Yes, deposits are optional. If they skip it, the accepted proposal and the portal show the deposit as due with a pay button, and the sales rep and staff are notified that it was accepted without a deposit.",
+      },
+      {
+        q: "Why can't anyone change the signature on an accepted proposal?",
+        a: "Once a client accepts, the name, signature, time and IP address are locked so the record can't be altered. The link also records which version was signed.",
+      },
+      {
+        q: "What happens when I convert an add-on estimate into an existing project?",
+        a: "It's added to the project as an approved change order: the contract and cost estimate go up by the add-on's amounts. Its milestones bill against the add-on's own total, not the whole project contract.",
+      },
+      {
+        q: "Does the WIP report include labor?",
+        a: "Yes. Cost to Date is materials and subcontracts, plus labor (crew hours on the project's visits and any manual hours, times the project's labor rate), plus the estimate's overhead share. That matches how the project's cost estimate was built.",
+      },
+      {
+        q: "Why can't I delete a project?",
+        a: "A project that has invoices, open purchase orders or invoiced milestones can't be deleted. Use Cancel instead: it removes the project's unbilled milestones and asks whether to cancel its upcoming visits.",
+      },
+      {
+        q: "Can a property manager pay several properties' invoices at once?",
+        a: "Yes. In the portal, or when staff take a payment, the parent account can pay its own and its sub-accounts' invoices in one payment, and the amount is applied to each invoice. Autopay still runs per account.",
+      },
+      {
+        q: "A customer opened the pay page twice. Can they be charged twice?",
+        a: "No. An open payment form is reused if nothing changed and cancelled when the invoice is paid, voided, merged or its amount changes, so an old form can't charge again.",
+      },
+      {
+        q: "Why can't I merge two clients right now?",
+        a: "Merge waits while the duplicate has a card or bank payment still processing, so the payment records correctly. Try again once it has gone through.",
+      },
+      {
+        q: "Why did my selected rows clear?",
+        a: "On Invoices, Estimates, Tickets and Contracts, changing the tab, search or a filter clears the selection, so a bulk action never touches rows you can no longer see.",
+      },
     ],
   },
   {

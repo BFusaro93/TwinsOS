@@ -1599,9 +1599,12 @@ type ActiveFilter = "active" | "inactive" | "all";
 
 export function ContractsList({ clientId }: Props) {
   const [confirm, confirmDialog] = useConfirm();
-  const { can, isLoading: permissionsLoading } = usePermissions();
+  const { can, isAdmin, roleId, isLoading: permissionsLoading } = usePermissions();
   const canAdd = can("contract_add");
   const canEdit = can("contract_edit");
+  // Same rule as ImportExportMenu: a CRM role needs export_lists; admins and
+  // logins without a CRM role keep export.
+  const canExport = isAdmin || !roleId || can("export_lists");
   const canDelete = can("contract_delete");
   const canCreateInvoices = can("contract_create_invoices");
   const [filter, setFilter] = useState<ActiveFilter>("active");
@@ -1612,6 +1615,16 @@ export function ContractsList({ clientId }: Props) {
   const [visibleKeys, setVisibleKeys] = useState<string[]>(
     CONTRACT_COLUMNS.map((c) => c.key)
   );
+  // A selection belongs to the tab + search it was made under: once either
+  // changes, rows that are no longer shown must not stay selected (Make
+  // Inactive / Create Invoices would otherwise act on contracts the user can't
+  // see). Same rule as the Clients and Leads lists.
+  const selectionScope = JSON.stringify([filter, search]);
+  const [selectionScopeSeen, setSelectionScopeSeen] = useState(selectionScope);
+  if (selectionScopeSeen !== selectionScope) {
+    setSelectionScopeSeen(selectionScope);
+    setSelected(new Set());
+  }
 
   const activeOnly = filter === "active" ? true : filter === "inactive" ? false : undefined;
   const { data: contracts, isLoading } = useContracts(clientId, activeOnly);
@@ -1655,8 +1668,19 @@ export function ContractsList({ clientId }: Props) {
     // selected), not "apply to everything visible."
     if (selected.size === 0) return;
     const ids = [...selected];
-    await Promise.all(ids.map((id) => updateContract({ id, updates: { is_active: active } })));
-    toast.success(`${ids.length} contract${ids.length !== 1 ? "s" : ""} updated`);
+    // allSettled: one refused update must not hide that the others already
+    // changed (Promise.all rejected on the first failure, showed nothing, and
+    // left the selection in place for a confusing second click).
+    const results = await Promise.allSettled(ids.map((id) => updateContract({ id, updates: { is_active: active } })));
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    const okCount = ids.length - failed.length;
+    if (failed.length === 0) {
+      toast.success(`${okCount} contract${okCount !== 1 ? "s" : ""} updated`);
+    } else {
+      const first: unknown = failed[0].reason;
+      const reason = mutationErrorMessage(first, first instanceof Error ? first.message : "update failed");
+      toast.error(`${okCount} updated, ${failed.length} couldn't be changed: ${reason}`);
+    }
     clearSelection();
   }
 
@@ -1688,6 +1712,7 @@ export function ContractsList({ clientId }: Props) {
   }
 
   function handleExport() {
+    if (!canExport) return;
     const ids = selected.size > 0 ? selected : null;
     const rows = ids ? filtered.filter((c) => ids.has(c.id)) : filtered;
     if (rows.length === 0) {
@@ -1801,7 +1826,7 @@ export function ContractsList({ clientId }: Props) {
                 {generatingInvoices ? "Creating…" : "Create Invoices"}
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onSelect={handleExport}>Export</DropdownMenuItem>
+            {canExport && <DropdownMenuItem onSelect={handleExport}>Export</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
 

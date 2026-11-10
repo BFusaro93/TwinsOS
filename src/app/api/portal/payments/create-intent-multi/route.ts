@@ -11,7 +11,8 @@ import { computeProcessingFee, encodeAllocations, MAX_ALLOCATION_METADATA_LENGTH
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
-import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
+import { refuseIfChargeInFlight, ensureIntentCustomer, cancelMicrodepositIntents } from "@/lib/stripe/duplicate-charge";
+import { reuseOrCancelOpenIntent, rememberOpenIntent } from "@/lib/stripe/open-intent";
 
 const log = logger.child("portal create-intent-multi");
 
@@ -26,6 +27,9 @@ const Schema = z.object({
     .max(40)
     .refine((ids) => new Set(ids).size === ids.length, "Each invoice can only appear once"),
   paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
+  /** The customer chose to cancel a bank payment that is waiting on
+   * micro-deposit verification and pay another way instead. */
+  cancelPendingBankPayment: z.boolean().optional(),
 });
 
 /**
@@ -34,9 +38,11 @@ const Schema = z.object({
  * create-intent-multi: the intent's metadata carries an encoded allocation list
  * and the Connect webhook is the only writer that applies it.
  *
- * The invoices must all belong to ONE account. A parent login can see its
- * sub-accounts' invoices, but a payment records against a single client, so a
- * mixed selection is refused rather than silently split.
+ * A parent login can pay its sub-accounts' invoices together with its own:
+ * the parent is the payer (crm_payments.client_id) and each invoice gets its
+ * own allocation — record_stripe_invoice_payment accepts an invoice of the
+ * payer or of one of its child sub-accounts. A selection from a single
+ * account still records against that account, as before.
  */
 export async function POST(request: Request) {
   if (!isStripeConfigured() && !isStripeTestConfigured()) {
@@ -54,7 +60,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { invoiceIds, paymentMethod } = parsed.data;
+  const { invoiceIds, paymentMethod, cancelPendingBankPayment } = parsed.data;
 
   // Portal users have no RLS read path to clients / crm_invoices — service
 
@@ -75,10 +81,10 @@ export async function POST(request: Request) {
   if (!invoices || invoices.length !== invoiceIds.length || invoices.some((i) => !accountIds.has(i.client_id))) {
     return NextResponse.json({ error: "One or more invoices were not found" }, { status: 404 });
   }
-  const clientId = invoices[0].client_id;
-  if (invoices.some((i) => i.client_id !== clientId)) {
-    return NextResponse.json({ error: "Please pay invoices from one account at a time." }, { status: 400 });
-  }
+  // One account → that account pays. Several → the login's own account (the
+  // parent) pays; getPortalAccounts only ever returns the login plus its own
+  // sub-accounts, so every invoice here is the parent's or a child's.
+  const clientId = invoices.every((i) => i.client_id === invoices[0].client_id) ? invoices[0].client_id : ctx.clientId;
   if (invoices.some((i) => i.status === "void")) {
     return NextResponse.json({ error: "A selected invoice has been voided" }, { status: 400 });
   }
@@ -120,6 +126,15 @@ export async function POST(request: Request) {
       orgId: ctx.orgId,
       clientId,
     });
+    if (cancelPendingBankPayment) {
+      await cancelMicrodepositIntents({
+        stripe,
+        connectedAccountId: org.stripe_connect_account_id,
+        db: service,
+        invoiceIds,
+        customerId,
+      });
+    }
     const refusal = await refuseIfChargeInFlight({
       stripe,
       connectedAccountId: org.stripe_connect_account_id,
@@ -132,6 +147,7 @@ export async function POST(request: Request) {
     if (refusal) return NextResponse.json({ error: refusal.body.error, code: refusal.body.code }, { status: refusal.status });
 
     const allocations = invoices.map((i) => ({ invoiceId: i.id, amountCents: i.balance_cents }));
+    const invoiceClient = new Map(invoices.map((i) => [i.id, i.client_id]));
     // Refused before any credit is consumed, so a refusal never leaves invoices changed.
     if (encodeAllocations(allocations).length > MAX_ALLOCATION_METADATA_LENGTH) {
       return NextResponse.json({ error: "Too many invoices for a single payment — please pay them in two batches." }, { status: 400 });
@@ -141,7 +157,13 @@ export async function POST(request: Request) {
     // card only pays what is still owed.
     try {
       for (const a of allocations) {
-        a.amountCents = await applyCreditBeforeCharge(service, { id: a.invoiceId, client_id: clientId, balance_cents: a.amountCents });
+        // Each invoice is settled from its OWN account's credit — a sub-account's
+        // prepayment belongs to that sub-account.
+        a.amountCents = await applyCreditBeforeCharge(service, {
+          id: a.invoiceId,
+          client_id: invoiceClient.get(a.invoiceId) ?? clientId,
+          balance_cents: a.amountCents,
+        });
       }
     } catch {
       return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
@@ -174,6 +196,35 @@ export async function POST(request: Request) {
       );
     }
 
+    const intentMetadata = {
+      source: "crm_invoice_multi",
+      org_id: ctx.orgId,
+      client_id: clientId,
+      allocations: encoded,
+      fee_cents: String(feeCents),
+    };
+    // One open form per invoice — see the single-invoice route.
+    const reused = await reuseOrCancelOpenIntent({
+      stripe,
+      connectedAccountId: org.stripe_connect_account_id,
+      db: service,
+      orgId: ctx.orgId,
+      invoiceIds: stillOwed.map((a) => a.invoiceId),
+      amountCents: totalChargeCents,
+      paymentMethod,
+      metadata: intentMetadata,
+    });
+    if (reused) {
+      return NextResponse.json({
+        clientSecret: reused.client_secret,
+        connectedAccountId: org.stripe_connect_account_id,
+        livemode: org.stripe_connect_livemode ?? true,
+        balanceCents,
+        feeCents,
+        totalChargeCents,
+      });
+    }
+
     const paymentIntent = await stripe.paymentIntents.create(
       {
         amount: totalChargeCents,
@@ -182,11 +233,7 @@ export async function POST(request: Request) {
         ...surchargeIntentParams(feeCents, paymentMethod === "card"),
         ...(customerId ? { customer: customerId } : {}),
         metadata: {
-          source: "crm_invoice_multi",
-          org_id: ctx.orgId,
-          client_id: clientId,
-          allocations: encoded,
-          fee_cents: String(feeCents),
+          ...intentMetadata,
           ...surchargeIntentMetadata(feeCents, paymentMethod === "card"),
         },
       },
@@ -195,6 +242,7 @@ export async function POST(request: Request) {
         idempotencyKey: chargeIdempotencyKey(["crm_invoice_multi_portal", clientId, encoded, totalChargeCents, paymentMethod]),
       }
     );
+    await rememberOpenIntent(service, ctx.orgId, stillOwed.map((a) => a.invoiceId), paymentIntent.id);
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,

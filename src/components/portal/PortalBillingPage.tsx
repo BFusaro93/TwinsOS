@@ -108,14 +108,13 @@ export default function PortalBillingPage({
   const multiAccount = accounts.length > 1;
 
   // Everything outstanding starts checked (SA's default), so the common case —
-  // pay what I owe — is one click. A payment settles against ONE account, so
-  // when sub-accounts exist the selection only ever spans a single account.
-  // Capped at what one payment can carry — the oldest are checked first.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
-    const first = invoices.filter(isOutstanding)[0];
-    const group = invoices.filter((i) => isOutstanding(i) && i.client_id === first?.client_id);
-    return new Set(oldestFirst(group).slice(0, MAX_INVOICES_PER_PAYMENT).map((i) => i.id));
-  });
+  // pay what I owe — is one click. A parent account's login can pay its
+  // sub-accounts' invoices in the same payment (the parent is the payer and each
+  // invoice gets its own share). Capped at what one payment can carry — the
+  // oldest are checked first.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() =>
+    new Set(oldestFirst(invoices.filter(isOutstanding)).slice(0, MAX_INVOICES_PER_PAYMENT).map((i) => i.id))
+  );
   // A paid invoice drops out of "open" after the refresh; keep the selection honest.
   useEffect(() => {
     setSelectedIds((cur) => {
@@ -127,9 +126,8 @@ export default function PortalBillingPage({
 
   const selected = useMemo(() => open.filter((i) => selectedIds.has(i.id)), [open, selectedIds]);
   const selectedTotal = selected.reduce((sum, i) => sum + i.balance_cents, 0);
-  const anchorGroupSize = open.length > 0 ? open.filter((i) => i.client_id === (selected[0] ?? open[0]).client_id).length : 0;
-  const allSelected = open.length > 0 && selected.length === Math.min(anchorGroupSize, MAX_INVOICES_PER_PAYMENT);
-  const overLimit = anchorGroupSize > MAX_INVOICES_PER_PAYMENT;
+  const allSelected = open.length > 0 && selected.length === Math.min(open.length, MAX_INVOICES_PER_PAYMENT);
+  const overLimit = open.length > MAX_INVOICES_PER_PAYMENT;
 
   function toggle(inv: Invoice) {
     setSelectedIds((cur) => {
@@ -138,9 +136,6 @@ export default function PortalBillingPage({
         next.delete(inv.id);
         return next;
       }
-      const other = open.find((i) => next.has(i.id));
-      // Different account than what's already checked → start a new selection.
-      if (other && other.client_id !== inv.client_id) next.clear();
       if (next.size >= MAX_INVOICES_PER_PAYMENT) return cur;
       next.add(inv.id);
       return next;
@@ -148,10 +143,8 @@ export default function PortalBillingPage({
   }
 
   function toggleAll() {
-    const anchor = selected[0] ?? open[0];
-    if (!anchor) return;
-    const group = open.filter((i) => i.client_id === anchor.client_id);
-    setSelectedIds(allSelected ? new Set() : new Set(oldestFirst(group).slice(0, MAX_INVOICES_PER_PAYMENT).map((i) => i.id)));
+    if (open.length === 0) return;
+    setSelectedIds(allSelected ? new Set() : new Set(oldestFirst(open).slice(0, MAX_INVOICES_PER_PAYMENT).map((i) => i.id)));
   }
 
   function handlePaid() {
@@ -222,7 +215,7 @@ export default function PortalBillingPage({
             )}
           </div>
           {multiAccount && cardPaymentsAvailable && (
-            <p className="mb-2 text-xs text-slate-400">Invoices from different accounts are paid separately.</p>
+            <p className="mb-2 text-xs text-slate-400">Invoices from your sub-accounts can be paid together with your own in one payment.</p>
           )}
           {overLimit && cardPaymentsAvailable && (
             <p className="mb-2 text-xs text-slate-400">

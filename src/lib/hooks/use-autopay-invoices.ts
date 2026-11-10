@@ -40,11 +40,14 @@ export interface ChargeAutopayInvoiceResult {
 export function useChargeAutopayInvoice() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ invoiceId }: { invoiceId: string }) => {
+    // fromQueue: the charge comes from the To Charge / ACH To Charge queue
+    // (row Charge or Charge All) rather than the deliberate one-off Charge Card
+    // dialog — the server then also requires the client's autopay to be on.
+    mutationFn: async ({ invoiceId, fromQueue }: { invoiceId: string; fromQueue?: boolean }) => {
       const res = await fetch("/api/crm/payments/autopay/charge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId }),
+        body: JSON.stringify(fromQueue ? { invoiceId, fromQueue: true } : { invoiceId }),
       });
       const body = await res.json();
       if (!res.ok) {

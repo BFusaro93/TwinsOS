@@ -196,6 +196,7 @@ export function TicketsGuide() {
           </li>
         </ol>
         <p>Bulk creation is also available via CSV import (Actions menu → Import), which requires only a Subject column.</p>
+        <p>Export downloads the live tickets of the list you&apos;re on (Calls, Events, Texts or all tickets). On the Deleted tab it downloads the deleted tickets instead, with a <strong>deleted</strong> column (the date removed). Changing the tab, search or a column filter clears any selection, so bulk actions only touch rows you can see.</p>
       </Section>
 
       <Section id="assignment" title="Assignment">

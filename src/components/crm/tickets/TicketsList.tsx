@@ -459,6 +459,16 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // A selection belongs to the tab + search + filters it was made under: once
+  // any of them changes, rows that are no longer shown must not stay selected
+  // (a bulk Close / Reassign / Delete would otherwise act on tickets the user
+  // can't see). Same rule as the Clients and Leads lists.
+  const selectionScope = JSON.stringify([statusFilter, priorityFilter, categoryFilter, search, activeColFilter, colFilterValue]);
+  const [selectionScopeSeen, setSelectionScopeSeen] = useState(selectionScope);
+  if (selectionScopeSeen !== selectionScope) {
+    setSelectionScopeSeen(selectionScope);
+    setSelectedIds(new Set());
+  }
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignId, setReassignId] = useState("");
   const { data: employees } = useSelectableEmployees();
@@ -670,21 +680,32 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               templateColumns={TICKET_TEMPLATE_COLUMNS}
               templateFilename="tickets-template.csv"
               requiredColumns={TICKET_REQUIRED_COLUMNS}
-              onExport={() =>
-                exportCSV(
-                  all.map((t) => ({
-                    subject: t.subject ?? "",
-                    clientName: t.clientName ?? "",
-                    type: t.type,
-                    status: t.status,
-                    priority: t.priority,
-                    category: t.category ?? "",
-                    body: t.body ?? "",
-                    dueDate: t.dueDate ?? "",
-                  })),
-                  "tickets-export.csv"
-                )
-              }
+              onExport={() => {
+                // Normal views export live tickets only; the Deleted tab exports
+                // its deleted tickets with a "deleted" column (the date deleted)
+                // so they can't be mistaken for live ones.
+                const toRow = (t: (typeof all)[number]) => ({
+                  subject: t.subject ?? "",
+                  clientName: t.clientName ?? "",
+                  type: t.type,
+                  status: t.status,
+                  priority: t.priority,
+                  category: t.category ?? "",
+                  body: t.body ?? "",
+                  dueDate: t.dueDate ?? "",
+                });
+                if (isDeletedView) {
+                  exportCSV(
+                    (deletedTickets ?? []).filter((t) => !typeFilter || t.type === typeFilter).map((t) => ({ ...toRow(t), deleted: (t.deletedAt ?? "").slice(0, 10) })),
+                    "tickets-deleted-export.csv"
+                  );
+                } else {
+                  exportCSV(
+                    activeAll.filter((t) => !t.deletedAt && (!typeFilter || t.type === typeFilter)).map(toRow),
+                    "tickets-export.csv"
+                  );
+                }
+              }}
               onImport={async (rows) => {
                 const result = await bulkImportTickets(rows);
                 const { succeeded, failed } = result;

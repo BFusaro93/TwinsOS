@@ -29,6 +29,8 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
 import { isInvoiceOverdue } from "@/lib/invoice-status";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import { useChargeAutopayInvoice, DuplicateChargeError } from "@/lib/hooks/use-autopay-invoices";
 import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
@@ -91,9 +93,11 @@ const INVOICE_COLUMNS: ColumnDef[] = [
 ];
 
 // What's shown in the Status column: a past-due non-draft reads "overdue" even
-// though the stored status is still sent/viewed/partial.
-function effectiveStatus(inv: CRMInvoice): InvoiceStatus {
-  return isInvoiceOverdue(inv) && inv.status !== "draft" ? "overdue" : inv.status;
+// though the stored status is still sent/viewed/partial. `todayYmd` is the
+// ORG's calendar day — without it isInvoiceOverdue falls back to the platform
+// zone, so an org in another zone saw invoices flip to overdue at the wrong hour.
+function effectiveStatus(inv: CRMInvoice, todayYmd: string): InvoiceStatus {
+  return isInvoiceOverdue(inv, todayYmd) && inv.status !== "draft" ? "overdue" : inv.status;
 }
 
 const STATUS_FILTER_OPTIONS: InvoiceStatus[] = ["draft", "printed", "sent", "viewed", "partial", "overdue", "paid", "void"];
@@ -145,8 +149,8 @@ function formatDate(d: string) {
   });
 }
 
-function isOverdue(inv: CRMInvoice) {
-  return isInvoiceOverdue(inv);
+function isOverdue(inv: CRMInvoice, todayYmd: string) {
+  return isInvoiceOverdue(inv, todayYmd);
 }
 
 type ActiveFilterKey =
@@ -272,12 +276,11 @@ function needsEmail(i: CRMInvoice) {
 // weekly/monthly-billed work in progress, not a real invoice yet. They never
 // show in the normal invoice views (All/Open/etc.), only in their own tab,
 // until finalized (moved to sent/printed) via the To Email/To Print queues.
-function applyQuickFilter(invoices: CRMInvoice[], filter: QuickFilter): CRMInvoice[] {
-  const today = new Date();
+function applyQuickFilter(invoices: CRMInvoice[], filter: QuickFilter, todayYmd: string): CRMInvoice[] {
   switch (filter) {
     case "uninvoiced": return invoices.filter((i) => i.status === "draft");
     case "open":     return invoices.filter((i) => i.status !== "draft" && i.balanceCents > 0 && i.status !== "void");
-    case "past_due": return invoices.filter((i) => i.status !== "draft" && isOverdue(i));
+    case "past_due": return invoices.filter((i) => i.status !== "draft" && isOverdue(i, todayYmd));
     case "to_email": return invoices.filter(needsEmail);
     case "to_print": return invoices.filter(needsPrint);
     case "to_charge_card": return invoices.filter((i) => isChargeableBy(i, "card"));
@@ -286,7 +289,6 @@ function applyQuickFilter(invoices: CRMInvoice[], filter: QuickFilter): CRMInvoi
     case "void":     return invoices.filter((i) => i.status === "void");
     default:         return invoices.filter((i) => i.status !== "draft");
   }
-  void today;
 }
 
 interface Props {
@@ -341,6 +343,21 @@ export function InvoicesList({ clientId }: Props) {
   );
 
   const allInvoices = invoices ?? [];
+  // The org's calendar day for every overdue check below (Past Due tab, the
+  // red rows, the Overdue status/filter/sort).
+  const orgTimeZone = useOrgTimeZone();
+  const todayYmd = todayInZone(orgTimeZone);
+
+  // A selection belongs to the tab + search + filter it was made under: once
+  // any of them changes, rows that are no longer shown must not stay selected
+  // (bulk Void / Email / Charge would otherwise act on invoices the user can't
+  // see). Same rule as the Clients and Leads lists.
+  const selectionScope = JSON.stringify([effectiveClientId ?? null, quickFilter, searchParams.get("ids"), search, activeFilterKey, filterValue]);
+  const [selectionScopeSeen, setSelectionScopeSeen] = useState(selectionScope);
+  if (selectionScopeSeen !== selectionScope) {
+    setSelectionScopeSeen(selectionScope);
+    setSelectedIds(new Set());
+  }
 
   // The client's true account balance — the same maintained
   // clients.balance_outstanding_cents the client card shows, so it's net of
@@ -369,20 +386,20 @@ export function InvoicesList({ clientId }: Props) {
   // Badge counts for filter tabs — reuse applyQuickFilter so a tab's count
   // always matches what clicking it actually shows.
   const counts = useMemo(() => ({
-    all:        applyQuickFilter(allInvoices, "all").length,
-    uninvoiced: applyQuickFilter(allInvoices, "uninvoiced").length,
-    open:       applyQuickFilter(allInvoices, "open").length,
-    past_due:   applyQuickFilter(allInvoices, "past_due").length,
-    to_email:   applyQuickFilter(allInvoices, "to_email").length,
-    to_print:   applyQuickFilter(allInvoices, "to_print").length,
-    to_charge_card: applyQuickFilter(allInvoices, "to_charge_card").length,
-    to_charge_ach:  applyQuickFilter(allInvoices, "to_charge_ach").length,
-    paid:       applyQuickFilter(allInvoices, "paid").length,
-    void:       applyQuickFilter(allInvoices, "void").length,
-  }), [allInvoices]);
+    all:        applyQuickFilter(allInvoices, "all", todayYmd).length,
+    uninvoiced: applyQuickFilter(allInvoices, "uninvoiced", todayYmd).length,
+    open:       applyQuickFilter(allInvoices, "open", todayYmd).length,
+    past_due:   applyQuickFilter(allInvoices, "past_due", todayYmd).length,
+    to_email:   applyQuickFilter(allInvoices, "to_email", todayYmd).length,
+    to_print:   applyQuickFilter(allInvoices, "to_print", todayYmd).length,
+    to_charge_card: applyQuickFilter(allInvoices, "to_charge_card", todayYmd).length,
+    to_charge_ach:  applyQuickFilter(allInvoices, "to_charge_ach", todayYmd).length,
+    paid:       applyQuickFilter(allInvoices, "paid", todayYmd).length,
+    void:       applyQuickFilter(allInvoices, "void", todayYmd).length,
+  }), [allInvoices, todayYmd]);
 
   const filtered = useMemo(() => {
-    let list = idsFilter ? allInvoices.filter((i) => idsFilter.has(i.id)) : applyQuickFilter(allInvoices, quickFilter);
+    let list = idsFilter ? allInvoices.filter((i) => idsFilter.has(i.id)) : applyQuickFilter(allInvoices, quickFilter, todayYmd);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -399,7 +416,7 @@ export function InvoicesList({ clientId }: Props) {
           case "date":           return inDateRange(i.invoiceDate, filterValue);
           case "client":         return (i.clientName ?? "").toLowerCase().includes(fv);
           case "payment_method": return paymentTypeLabel(i).toLowerCase() === fv;
-          case "status":         return effectiveStatus(i) === fv;
+          case "status":         return effectiveStatus(i, todayYmd) === fv;
           case "balance":        return matchesAmount(i.balanceCents, filterValue);
           default:               return true;
         }
@@ -418,7 +435,7 @@ export function InvoicesList({ clientId }: Props) {
         case "credits": av = a.clientCreditsCents ?? 0; bv = b.clientCreditsCents ?? 0; break;
         case "prepay": av = a.clientPrepayCents ?? 0; bv = b.clientPrepayCents ?? 0; break;
         case "accountBalance": av = accountBalanceByClient.get(a.clientId) ?? 0; bv = accountBalanceByClient.get(b.clientId) ?? 0; break;
-        case "status":  av = effectiveStatus(a); bv = effectiveStatus(b); break;
+        case "status":  av = effectiveStatus(a, todayYmd); bv = effectiveStatus(b, todayYmd); break;
         case "paymentType": av = paymentTypeLabel(a).toLowerCase(); bv = paymentTypeLabel(b).toLowerCase(); break;
         case "delivery": av = deliveryLabel(a); bv = deliveryLabel(b); break;
         case "frequency": av = frequencyLabel(a); bv = frequencyLabel(b); break;
@@ -439,7 +456,7 @@ export function InvoicesList({ clientId }: Props) {
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     return list;
-  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir, accountBalanceByClient]);
+  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir, accountBalanceByClient, todayYmd]);
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -602,7 +619,9 @@ export function InvoicesList({ clientId }: Props) {
     if (!ok) return;
     setChargingId(inv.id);
     try {
-      const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
+      // The row's Charge button also shows on other tabs; only a charge made
+      // from the To Charge / ACH To Charge queue is flagged as a queue charge.
+      const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id, fromQueue: onChargeTab });
       if (result.paidFromCredit) {
         toast.success(`Invoice #${inv.invoiceNumber} was paid from ${inv.clientName}'s credit — no card was charged`);
       } else if (result.status === "succeeded" && result.recorded === false) {
@@ -647,7 +666,7 @@ export function InvoicesList({ clientId }: Props) {
     let paidFromCredit = 0;
     for (const inv of chargeableNow) {
       try {
-        const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
+        const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id, fromQueue: true });
         if (result.paidFromCredit) {
           paidFromCredit++;
           continue;
@@ -1048,7 +1067,7 @@ export function InvoicesList({ clientId }: Props) {
                   key={inv.id}
                   className={cn(
                     "group cursor-pointer border-b hover:bg-slate-50 dark:hover:bg-muted/40",
-                    isOverdue(inv) && "bg-red-50/40 dark:bg-red-950/40",
+                    isOverdue(inv, todayYmd) && "bg-red-50/40 dark:bg-red-950/40",
                     selectedIds.has(inv.id) && "bg-brand-50 dark:bg-brand-900/30"
                   )}
                   onClick={() => setOpenInvoiceId(inv.id)}
@@ -1089,7 +1108,7 @@ export function InvoicesList({ clientId }: Props) {
                         // nobody's late on a bill they were never billed. Flag it red like
                         // a real overdue invoice, but keep the "Draft" label so it isn't
                         // confused with one that's actually been sent and is unpaid.
-                        const overdue = isOverdue(inv);
+                        const overdue = isOverdue(inv, todayYmd);
                         const showOverdueLabel = overdue && inv.status !== "draft";
                         return (
                           <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
@@ -1116,7 +1135,7 @@ export function InvoicesList({ clientId }: Props) {
                         return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-muted-foreground">{formatDate(inv.invoiceDate)}</td>;
                       case "due":
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs", isOverdue(inv) ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground")}>
+                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs", isOverdue(inv, todayYmd) ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground")}>
                             {inv.dueDate
                               ? formatDate(inv.dueDate)
                               : inv.terms === "due_on_receipt" && inv.invoiceDate

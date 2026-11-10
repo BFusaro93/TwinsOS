@@ -76,6 +76,11 @@ export function BulkEmailClientsDialog({
   // Defaults to the restrictive option: a sender has to consciously declare a
   // message a service notice before opted-out clients are included.
   const [purpose, setPurpose] = useState<EmailPurpose>("marketing");
+  // Clients already emailed by this dialog. After a run with failures the
+  // dialog stays open; these are left out of the next Send so pressing it again
+  // ("Retry failed") never re-mails anyone who already got the message.
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+  const [failures, setFailures] = useState<{ id: string; name: string; error: string }[]>([]);
   const richTextRef = useRef<RichTextEditorHandle>(null);
 
   function applyTemplate(templateId: string) {
@@ -119,6 +124,8 @@ export function BulkEmailClientsDialog({
     if (!open || ids.length === 0) return;
     let cancelled = false;
     setLoading(true);
+    setSentIds(new Set());
+    setFailures([]);
     (async () => {
       const supabase = createClient();
       // In chunks: a select-all on the board or waiting list puts hundreds of ids in the URL,
@@ -211,8 +218,10 @@ export function BulkEmailClientsDialog({
       if (seen.has(key)) shared.push(r);
       else { seen.add(key); unique.push(r); }
     }
-    return { withEmail: unique, sharedAddress: shared };
-  }, [recipients, purpose]);
+    // An address already emailed in this dialog is done — the next Send only
+    // goes to the ones that failed (or were never attempted).
+    return { withEmail: unique.filter((r) => !sentIds.has(r.id)), sharedAddress: shared };
+  }, [recipients, purpose, sentIds]);
 
   function handleOpenChange(o: boolean) {
     if (!o) {
@@ -222,6 +231,8 @@ export function BulkEmailClientsDialog({
       setBodyHtml("");
       setRecipients([]);
       setPurpose("marketing");
+      setSentIds(new Set());
+      setFailures([]);
     }
   }
 
@@ -240,34 +251,49 @@ export function BulkEmailClientsDialog({
     }
     setSending(true);
     try {
+      const batchTargets = withEmail;
+      const sendOne = async (r: Recipient) => {
+        // A 429 (provider rate limit) is retried after a short pause rather
+        // than reported as a failure.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await fetch(`/api/crm/clients/${r.id}/send-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subject, bodyHtml, bulk: true, purpose }),
+          });
+          if (res.ok) return;
+          if (res.status === 429 && attempt < 2) {
+            await sleep(1000 * (attempt + 1));
+            continue;
+          }
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json.error ?? "Failed to send");
+        }
+      };
       const results: PromiseSettledResult<void>[] = [];
-      for (let i = 0; i < withEmail.length; i += SEND_CONCURRENCY) {
-        const batch = withEmail.slice(i, i + SEND_CONCURRENCY);
-        results.push(...await Promise.allSettled(
-          batch.map((r) =>
-            fetch(`/api/crm/clients/${r.id}/send-email`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ subject, bodyHtml, bulk: true, purpose }),
-            }).then(async (res) => {
-              if (!res.ok) {
-                const json = await res.json().catch(() => ({}));
-                throw new Error(json.error ?? "Failed to send");
-              }
-            })
-          )
-        ));
-        if (i + SEND_CONCURRENCY < withEmail.length) await sleep(BATCH_DELAY_MS);
+      for (let i = 0; i < batchTargets.length; i += SEND_CONCURRENCY) {
+        const batch = batchTargets.slice(i, i + SEND_CONCURRENCY);
+        results.push(...await Promise.allSettled(batch.map(sendOne)));
+        if (i + SEND_CONCURRENCY < batchTargets.length) await sleep(BATCH_DELAY_MS);
       }
-      const failed = results.filter((r) => r.status === "rejected").length;
-      const succeeded = results.length - failed;
+      const newlySent = batchTargets.filter((_, idx) => results[idx]?.status === "fulfilled");
+      const newFailures = batchTargets.flatMap((r, idx) => {
+        const res = results[idx];
+        return res && res.status === "rejected"
+          ? [{ id: r.id, name: r.name, error: res.reason instanceof Error ? res.reason.message : "Failed to send" }]
+          : [];
+      });
+      const succeeded = newlySent.length;
+      const failed = newFailures.length;
       if (succeeded > 0) {
         toast.success(`Sent to ${succeeded} client${succeeded === 1 ? "" : "s"}`);
+        setSentIds((prev) => new Set([...prev, ...newlySent.map((r) => r.id)]));
       }
+      setFailures(newFailures);
       if (failed > 0) {
-        toast.error(`Failed to send to ${failed} client${failed === 1 ? "" : "s"}`);
+        toast.error(`Failed to send to ${failed} client${failed === 1 ? "" : "s"} — see the dialog; Retry only re-sends those`);
       }
-      withEmail.forEach((r) => qc.invalidateQueries({ queryKey: ["clients", r.id, "activity"] }));
+      batchTargets.forEach((r) => qc.invalidateQueries({ queryKey: ["clients", r.id, "activity"] }));
       if (failed === 0) handleOpenChange(false);
     } finally {
       setSending(false);
@@ -295,6 +321,18 @@ export function BulkEmailClientsDialog({
                   <p className="text-xs text-muted-foreground">
                     {sharedAddress.length} share an email address with another selected client — one copy per address: {sharedAddress.map((r) => r.name).join(", ")}
                   </p>
+                )}
+                {sentIds.size > 0 && (
+                  <p className="text-xs text-green-700 dark:text-green-400">
+                    {sentIds.size} already sent — they won&apos;t be emailed again.
+                  </p>
+                )}
+                {failures.length > 0 && (
+                  <div className="max-h-28 space-y-0.5 overflow-auto rounded-md border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-2 py-1.5 text-xs text-red-700 dark:text-red-400">
+                    {failures.map((f) => (
+                      <p key={f.id}>{f.name}: {f.error}</p>
+                    ))}
+                  </div>
                 )}
                 {withoutEmail.length > 0 && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -394,7 +432,11 @@ export function BulkEmailClientsDialog({
             Cancel
           </Button>
           <Button onClick={handleSend} disabled={sending || loading || withEmail.length === 0}>
-            {sending ? "Sending…" : `Send${withEmail.length > 0 ? ` (${withEmail.length})` : ""}`}
+            {sending
+              ? "Sending…"
+              : sentIds.size > 0 || failures.length > 0
+                ? `Retry failed (${withEmail.length})`
+                : `Send${withEmail.length > 0 ? ` (${withEmail.length})` : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

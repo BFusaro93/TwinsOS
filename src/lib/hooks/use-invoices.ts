@@ -21,6 +21,7 @@ import {
   type InvoiceFromJobInput,
 } from "@/lib/invoices/create-from-job";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
+import { fireStaleIntentCancel } from "@/lib/stripe/stale-intents-client";
 
 // ── locked-invoice error handling ───────────────────────────────────────────────
 
@@ -1030,6 +1031,7 @@ export function useDeleteInvoice() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
+      fireStaleIntentCancel();
     },
   });
 }
@@ -1061,6 +1063,8 @@ export function useVoidInvoice() {
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
       invalidateClientBalances(qc);
       fireQuickBooksInvoiceUpdate(vars.id);
+      // A customer's open pay form for this invoice can no longer be submitted.
+      fireStaleIntentCancel();
     },
   });
 }
@@ -1324,6 +1328,8 @@ export function useRecordPayment() {
       invalidateClientBalances(qc);
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      // Paid by hand: cancel any open online pay form the customer still has for these invoices.
+      fireStaleIntentCancel();
       for (const invoiceId of data?.newlyPaidInvoiceIds ?? []) {
         fireAutomationTrigger({ triggerType: "invoice_paid", clientId: vars.clientId, invoiceId });
       }
@@ -1938,6 +1944,13 @@ export function useBulkImportPayments() {
 
       for (const [index, r] of rows.entries()) {
         const rowNumber = index + 2;
+        // A file exported from the Payments list's Deleted tab carries a
+        // "deleted" column; re-importing it must not bring deleted payments back.
+        const deletedMark = (r.deleted ?? "").trim().toLowerCase();
+        if (deletedMark && !["no", "n", "false", "0"].includes(deletedMark)) {
+          failed.push({ row: rowNumber, error: "Payment is marked deleted (Deleted column) — not imported" });
+          continue;
+        }
         const { clientId, reason: clientReason } = resolveClient(r);
         if (clientReason) {
           failed.push({ row: rowNumber, error: clientReason });
@@ -2059,7 +2072,12 @@ export function useBulkImportPayments() {
 
 /** A client's payments that still have money on them not applied to anything —
  * proposal deposits, prepayments, overpayments. Narrow and guarded on purpose:
- * usePayments() with no clientId would pull every payment in the org. */
+ * usePayments() with no clientId would pull every payment in the org.
+ *
+ * A proposal deposit is reserved for its estimate (crm_payments.estimate_id).
+ * With `invoiceId`, a reserved deposit is only listed when that invoice belongs
+ * to the estimate (estimate_owns_invoice — the same rule the allocation trigger
+ * enforces), so the Apply credit picker never offers money it would refuse. */
 export interface UnappliedPayment {
   id: string;
   paymentDate: string;
@@ -2067,30 +2085,53 @@ export interface UnappliedPayment {
   memo: string | null;
   unusedAmountCents: number;
   isPrepayment: boolean;
+  /** Set on a proposal deposit reserved for that estimate. */
+  estimateId: string | null;
 }
 
-export function useUnappliedPayments(clientId: string | undefined) {
+export function useUnappliedPayments(clientId: string | undefined, invoiceId?: string) {
   return useQuery<UnappliedPayment[]>({
-    queryKey: ["crm-payments", "unapplied", clientId ?? "none"],
+    queryKey: ["crm-payments", "unapplied", clientId ?? "none", invoiceId ?? "any"],
     enabled: !!clientId,
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_payments")
-        .select("id, payment_date, method, memo, unused_amount_cents, is_prepayment")
+        .select("id, payment_date, method, memo, unused_amount_cents, is_prepayment, estimate_id")
         .eq("client_id", clientId)
         .is("deleted_at", null)
         .gt("unused_amount_cents", 0)
         .order("payment_date", { ascending: true });
       if (error) throw error;
-      return (data ?? []).map((r: Record<string, unknown>) => ({
+      const rows = (data ?? []) as Record<string, unknown>[];
+      const owns = new Map<string, boolean>();
+      const kept: Record<string, unknown>[] = [];
+      for (const r of rows) {
+        const estimateId = (r.estimate_id as string | null) ?? null;
+        if (estimateId) {
+          if (!invoiceId) continue;
+          if (!owns.has(estimateId)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: ok, error: ownsErr } = await (supabase.rpc as any)("estimate_owns_invoice", {
+              p_estimate_id: estimateId,
+              p_invoice_id: invoiceId,
+            });
+            if (ownsErr) throw ownsErr;
+            owns.set(estimateId, ok === true);
+          }
+          if (!owns.get(estimateId)) continue;
+        }
+        kept.push(r);
+      }
+      return kept.map((r) => ({
         id: r.id as string,
         paymentDate: r.payment_date as string,
         method: r.method as string,
         memo: (r.memo as string) ?? null,
         unusedAmountCents: (r.unused_amount_cents as number) ?? 0,
         isPrepayment: (r.is_prepayment as boolean) ?? false,
+        estimateId: (r.estimate_id as string | null) ?? null,
       }));
     },
   });

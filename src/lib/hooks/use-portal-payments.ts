@@ -11,6 +11,18 @@ export interface CreatePaymentIntentResult {
 
 export type PortalPaymentMethod = "card" | "us_bank_account";
 
+/** A refused payment start, carrying the route's machine-readable code —
+ * "microdeposits_pending" means a bank payment waiting on verification is in the
+ * way and the customer may cancel it (cancelPendingBankPayment) to pay by card. */
+export class PaymentStartError extends Error {
+  code: string | null;
+  constructor(message: string, code: string | null) {
+    super(message);
+    this.name = "PaymentStartError";
+    this.code = code;
+  }
+}
+
 async function post(url: string, body: unknown): Promise<CreatePaymentIntentResult> {
   const res = await fetch(url, {
     method: "POST",
@@ -18,7 +30,12 @@ async function post(url: string, body: unknown): Promise<CreatePaymentIntentResu
     body: JSON.stringify(body),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Failed to start payment");
+  if (!res.ok) {
+    throw new PaymentStartError(
+      typeof json.error === "string" ? json.error : "Failed to start payment",
+      typeof json.code === "string" ? json.code : null
+    );
+  }
   return json as CreatePaymentIntentResult;
 }
 
@@ -32,7 +49,7 @@ export function useCreatePortalPaymentIntent() {
   return useMutation({
     mutationFn: (
       args:
-        | { invoiceIds: string[]; paymentMethod: PortalPaymentMethod }
+        | { invoiceIds: string[]; paymentMethod: PortalPaymentMethod; cancelPendingBankPayment?: boolean }
         | { prepaymentCents: number; nonce: string; accountId?: string; paymentMethod: PortalPaymentMethod }
     ) => {
       if ("prepaymentCents" in args) {
@@ -47,11 +64,13 @@ export function useCreatePortalPaymentIntent() {
         return post("/api/portal/payments/create-intent", {
           invoiceId: args.invoiceIds[0],
           paymentMethod: args.paymentMethod,
+          cancelPendingBankPayment: args.cancelPendingBankPayment,
         });
       }
       return post("/api/portal/payments/create-intent-multi", {
         invoiceIds: args.invoiceIds,
         paymentMethod: args.paymentMethod,
+        cancelPendingBankPayment: args.cancelPendingBankPayment,
       });
     },
   });
