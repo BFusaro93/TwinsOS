@@ -4,7 +4,7 @@ import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
 import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
@@ -43,7 +43,11 @@ export async function POST(request: Request) {
   }
   const { invoiceId, paymentMethod } = parsed.data;
 
-  const supabase = await createClient();
+  // Portal users have no RLS read path to clients / crm_invoices — service
+
+  // client, scoped to this login (ctx is server-derived) on every query below.
+
+  const supabase = createServiceClient();
 
   const [{ data: invoice }, accounts] = await Promise.all([
     supabase

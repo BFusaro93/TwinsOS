@@ -57,13 +57,3 @@ export async function queryByClientIds<T>(
   if (merge?.limit !== undefined) rows = rows.slice(0, merge.limit);
   return { data: rows, error: null };
 }
-
-/**
- * Realtime `in` filters accept at most 100 values. Past that, subscribe to the
- * org's rows instead — RLS still limits delivery to what this login may read.
- */
-export function realtimeClientFilter(clientIds: string[], orgId: string): string {
-  return clientIds.length <= PORTAL_ID_CHUNK_SIZE
-    ? `client_id=in.(${clientIds.join(",")})`
-    : `org_id=eq.${orgId}`;
-}

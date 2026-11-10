@@ -228,23 +228,32 @@ type AnySupabase = SupabaseClient<any>;
 
 export const PROPOSAL_ESTIMATE_SELECT = `*, estimate_line_items(*, ${PRINTED_SUBITEM_SELECT})`;
 
-export async function loadLiveProposalContent(supabase: AnySupabase, estimateId: string): Promise<ProposalContent | null> {
-  const { data } = await supabase.from("estimates").select(PROPOSAL_ESTIMATE_SELECT).eq("id", estimateId).maybeSingle();
+export async function loadLiveProposalContent(supabase: AnySupabase, estimateId: string, orgId?: string): Promise<ProposalContent | null> {
+  let q = supabase.from("estimates").select(PROPOSAL_ESTIMATE_SELECT).eq("id", estimateId);
+  // Service-role callers resolving a public token pass the token's org so a
+  // token can never surface another org's estimate.
+  if (orgId) q = q.eq("org_id", orgId);
+  const { data } = await q.maybeSingle();
   return data ? buildProposalContent(data as Record<string, unknown>) : null;
 }
 
 /** The newest version that recorded proposal content, i.e. what the client's
  *  link shows. Versions sent before this existed have no `proposal` and are
- *  skipped (their estimates keep showing live content). */
+ *  skipped (their estimates keep showing live content).
+ *  Service-role callers (public proposal routes, portal) pass `orgId` so only
+ *  versions of that org are considered. */
 export async function getPublishedProposal(
   supabase: AnySupabase,
-  estimateId: string
+  estimateId: string,
+  orgId?: string
 ): Promise<{ versionNumber: number; content: ProposalContent } | null> {
-  const { data } = await supabase
+  let q = supabase
     .from("estimate_versions")
     .select("version_number, snapshot")
     .eq("estimate_id", estimateId)
-    .not("snapshot->proposal", "is", null)
+    .not("snapshot->proposal", "is", null);
+  if (orgId) q = q.eq("org_id", orgId);
+  const { data } = await q
     .order("version_number", { ascending: false })
     .limit(1);
   const row = (data as { version_number: number; snapshot: { proposal?: ProposalContent } }[] | null)?.[0];
@@ -253,9 +262,9 @@ export async function getPublishedProposal(
 
 /** Whether the live estimate differs from what the client's link shows.
  *  False when nothing has been published yet (the link shows live content). */
-export async function isChangedSinceSent(supabase: AnySupabase, estimateId: string): Promise<boolean> {
-  const published = await getPublishedProposal(supabase, estimateId);
+export async function isChangedSinceSent(supabase: AnySupabase, estimateId: string, orgId?: string): Promise<boolean> {
+  const published = await getPublishedProposal(supabase, estimateId, orgId);
   if (!published) return false;
-  const live = await loadLiveProposalContent(supabase, estimateId);
+  const live = await loadLiveProposalContent(supabase, estimateId, orgId);
   return !!live && !proposalMatchesPublished(live, published.content);
 }

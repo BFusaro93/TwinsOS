@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getPortalAccounts, getPortalContext, subAccountNames } from "@/lib/portal/get-portal-context";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PortalServicesPage from "@/components/portal/PortalServicesPage";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -20,13 +20,17 @@ export default async function ServicesPage() {
   const clientIds = accounts.map((a) => a.id);
   const accountNames = subAccountNames(accounts);
 
+  // Portal users have no RLS read path to crm_job_visits (it would expose
+  // crew notes, labor cost and other internal columns) — service client,
+  // scoped to this login's accounts + org, client-safe columns only.
+  const service = createServiceClient();
   const [upcoming, completedRes] = await Promise.all([
-    loadUpcomingPortalVisits(supabase, { clientIds, orgId: ctx.orgId, today, limit: 25 }),
+    loadUpcomingPortalVisits({ clientIds, orgId: ctx.orgId, today, limit: 25 }),
 
     queryByClientIds(
       clientIds,
       (ids) =>
-        supabase
+        service
           .from("crm_job_visits")
           .select("id, client_id, scheduled_date, status, completed_at, job_id, job_service_id, invoice_description")
           .in("client_id", ids)
@@ -66,8 +70,6 @@ export default async function ServicesPage() {
     <PortalServicesPage
       upcoming={upcomingRows.map(mapVisit)}
       completed={completedRows.map(mapVisit)}
-      clientIds={clientIds}
-      orgId={ctx.orgId}
     />
   );
 }

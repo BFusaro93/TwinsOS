@@ -14,9 +14,7 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { realtimeTopic } from "@/lib/supabase/realtime-topic";
-import { realtimeClientFilter } from "@/lib/portal/client-id-chunks";
+import { usePortalVisitStatuses } from "@/lib/hooks/use-portal-visit-statuses";
 import { describeVisitWindow } from "@/lib/portal/visit-window";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
@@ -98,9 +96,6 @@ interface Props {
   today: string;
   allowTickets: boolean;
   allowEstimates: boolean;
-  /** The login's client plus its sub-accounts (getPortalAccounts). */
-  clientIds: string[];
-  orgId: string;
   /** False when the org can't take online payments — the balance button reads "View Billing", not "Pay Now". */
   cardPaymentsAvailable?: boolean;
 }
@@ -117,36 +112,19 @@ export default function PortalDashboard({
   today,
   allowTickets,
   allowEstimates,
-  clientIds,
-  orgId,
   cardPaymentsAvailable = true,
 }: Props) {
   const [upcomingVisits, setUpcomingVisits] = useState(initialVisits);
 
-  // Subscribe to real-time visit status changes. crm_job_visits was added to
-  // the supabase_realtime publication in 20260826153000_crm_job_visits_realtime.sql;
-  // RLS's own portal-scoped policy (client_portal_multi_org.sql) is what
-  // actually restricts delivery to this client's rows — the client_id filter
-  // here is just to avoid subscribing to an unfiltered stream client-side.
-  const clientKey = clientIds.join(",");
+  // Live visit status. Portal users have no RLS read path to crm_job_visits
+  // (so no Realtime either: its payloads carried internal columns); the page
+  // polls the login-scoped status endpoint instead.
+  const { data: statuses } = usePortalVisitStatuses(initialVisits.map((v) => v.id));
   useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(realtimeTopic(`portal-dashboard-visits-${clientIds[0]}`))
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "crm_job_visits", filter: realtimeClientFilter(clientKey.split(","), orgId) },
-        (payload) => {
-          const updated = payload.new as { id: string; status: string };
-          setUpcomingVisits((prev) =>
-            prev.map((v) => v.id === updated.id ? { ...v, status: updated.status } : v)
-          );
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientKey, orgId]);
+    if (!statuses) return;
+    const byId = new Map(statuses.map((s) => [s.id, s.status]));
+    setUpcomingVisits((prev) => prev.map((v) => ({ ...v, status: byId.get(v.id) ?? v.status })));
+  }, [statuses]);
 
   const inProgressVisit = upcomingVisits.find((v) => v.status === "in_progress");
   const nextVisit = inProgressVisit ?? upcomingVisits[0];

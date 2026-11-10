@@ -33,8 +33,13 @@ export default async function PortalHomePage() {
   const clientIds = accounts.map((a) => a.id);
   const accountNames = subAccountNames(accounts);
 
+  // Portal users have no RLS read path to clients / crm_invoices /
+  // crm_job_visits (a direct read would expose drafts, deleted rows and
+  // internal columns) — every read below uses the service client, scoped to
+  // this login's accounts (getPortalAccounts) + org, client-safe columns only.
+  const service = createServiceClient();
   const [clientRes, balancesRes, invoicesRes, visitsRes, recentRes, estimatesRes, settingsRes] = await Promise.all([
-    supabase
+    service
       .from("clients")
       .select("display_name, first_name")
       .eq("id", ctx.clientId)
@@ -55,7 +60,7 @@ export default async function PortalHomePage() {
     queryByClientIds(
       clientIds,
       (ids) =>
-        supabase
+        service
           .from("crm_invoices")
           .select("id, client_id, invoice_number, total_cents, balance_cents, due_date, status")
           .in("client_id", ids)
@@ -70,12 +75,12 @@ export default async function PortalHomePage() {
       { compare: byColumn("due_date", true), limit: 5 }
     ),
 
-    loadUpcomingPortalVisits(supabase, { clientIds, orgId: ctx.orgId, today, limit: 5 }),
+    loadUpcomingPortalVisits({ clientIds, orgId: ctx.orgId, today, limit: 5 }),
 
     queryByClientIds(
       clientIds,
       (ids) =>
-        supabase
+        service
           .from("crm_job_visits")
           .select("id, client_id, scheduled_date, status, job_id, job_service_id, invoice_description")
           .in("client_id", ids)
@@ -174,8 +179,6 @@ export default async function PortalHomePage() {
       allowTickets={settingsRes.data?.allow_tickets !== false}
       allowEstimates={settingsRes.data?.allow_estimates !== false}
       estimates={(estimatesRes.data ?? []).map((e) => ({ ...e, accountName: accountNames.get(e.client_id) ?? null }))}
-      clientIds={clientIds}
-      orgId={ctx.orgId}
       cardPaymentsAvailable={cardPaymentsAvailable}
     />
   );

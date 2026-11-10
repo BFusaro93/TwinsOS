@@ -97,7 +97,7 @@ export default async function EstimatesPage() {
   // versions table is staff-only under RLS, so read it with the service
   // client — every estimate here is already scoped to this client above.
   const normalized = await Promise.all((estimates ?? []).map(async (e) => {
-    const published = e.status === "sent" ? await getPublishedProposal(service, e.id) : null;
+    const published = e.status === "sent" ? await getPublishedProposal(service, e.id, ctx.orgId) : null;
     if (published) {
       const c = published.content;
       const toPortalLine = (li: (typeof c.lineItems)[number], status: string) => ({

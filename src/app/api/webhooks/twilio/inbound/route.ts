@@ -5,6 +5,7 @@ import { notifyStaffOfNewTicket, notifyTicketComment } from "@/lib/ticket-notify
 import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { getOrgTwilioAuthToken } from "@/lib/twilio/client";
 import { logger } from "@/lib/logger";
+import { SHARED_TWILIO_ORG_ID } from "@/lib/sms/send";
 
 const log = logger.child("twilio inbound webhook");
 
@@ -102,21 +103,14 @@ export async function POST(request: Request) {
   // ── Which tenant's clients can this text belong to? ──────────────────────
   // When the MessagingServiceSid resolved to an org above, only that org.
   // Otherwise the message came in on the shared platform sender (or an
-  // unknown one), which every org WITHOUT its own messaging service sends
-  // from — so only those orgs are candidates (an org with its own number
-  // can't have texted this person from the shared one). This used to match
-  // the first client with this phone across ALL orgs, filing another
-  // tenant's customer's reply (and STOP) on whichever org came back first.
+  // unknown one). sendClientSms (src/lib/sms/send.ts) lets ONLY
+  // SHARED_TWILIO_ORG_ID send from the shared sender, so that org is the only
+  // one that can have texted this person from it. This used to treat every
+  // org without its own messaging service as a candidate, filing a reply —
+  // and applying STOP/START — in an org that never texted that number.
   // There is no per-org phone-number column, so the inbound `To` can't
   // narrow it further than the messaging service does.
-  let candidateOrgIds: string[] | null = null;
-  if (!ownerOrgId) {
-    const { data: sharedOrgs } = await supabase
-      .from("organizations")
-      .select("id")
-      .is("twilio_messaging_service_sid", null);
-    candidateOrgIds = ((sharedOrgs ?? []) as { id: string }[]).map((o) => o.id);
-  }
+  const candidateOrgIds: string[] = ownerOrgId ? [ownerOrgId] : [SHARED_TWILIO_ORG_ID];
 
   // Matched SQL-side (phone_last10()) rather than loading every phone client
   // of every candidate org and comparing in JS — that select hit PostgREST's
@@ -130,7 +124,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC is newer than the generated types
   const { data: clients, error: matchErr } = await (supabase as any).rpc("find_clients_by_any_phone_last10", {
     p_digits: digits,
-    p_org_ids: ownerOrgId ? [ownerOrgId] : candidateOrgIds ?? [],
+    p_org_ids: candidateOrgIds,
   });
   if (matchErr) {
     // Fail loudly (5xx) so Twilio retries instead of dropping a STOP.

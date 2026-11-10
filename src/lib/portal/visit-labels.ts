@@ -24,12 +24,12 @@ export interface PortalVisitLabel {
 const WINDOWED_JOB_TYPES = ["package", "waiting_list"];
 
 /**
- * Names portal visits by their service. Portal users can read their own
- * crm_job_visits rows but have no RLS path to crm_jobs / crm_job_services,
- * so a PostgREST embed from the session client silently returned null and
- * every visit read "Service Visit". The visit rows passed in were already
- * scoped by the portal user's RLS; this only reads labels for those rows,
- * via the service client, pinned to the same org.
+ * Names portal visits by their service. Portal users have no RLS path to
+ * crm_job_visits / crm_jobs / crm_job_services (a direct read would expose
+ * crew notes, labor cost and other internal columns), so every portal read
+ * goes through the service client. The visit rows passed in were already
+ * scoped to the login's accounts + org by the caller; this only reads labels
+ * for those rows, pinned to the same org.
  */
 export async function labelPortalVisits(
   orgId: string,
@@ -107,13 +107,13 @@ export interface PortalUpcomingVisit extends PortalVisitRow {
  * closes.
  */
 export async function loadUpcomingPortalVisits(
-  // The portal user's own session client — RLS scopes the visit rows.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  // clientIds: the login's client plus its sub-accounts (getPortalAccounts).
+  // clientIds: the login's client plus its sub-accounts (getPortalAccounts) —
+  // the ONLY scoping, since this reads with the service client (portal users
+  // have no RLS read path to crm_job_visits). Client-safe columns only.
   params: { clientIds: string[]; orgId: string; today: string; limit: number }
 ): Promise<{ visits: PortalUpcomingVisit[]; labels: Map<string, PortalVisitLabel> }> {
   const { clientIds, orgId, today, limit } = params;
+  const supabase = createServiceClient();
   const cols = "id, client_id, scheduled_date, status, job_id, job_service_id, invoice_description";
   const base = (ids: string[]) =>
     supabase
