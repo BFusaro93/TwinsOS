@@ -508,16 +508,16 @@ function VisitQuickEditFields({
       {confirmDialog}
       <div>
         <label className={labelCls}>Date</label>
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 text-xs md:text-xs" />
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 min-w-0 px-2 text-xs md:text-xs" />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className={labelCls}>Start</label>
-          <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="h-8 text-xs md:text-xs" />
+          <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="h-8 min-w-0 px-2 text-xs md:text-xs" />
         </div>
         <div>
           <label className={labelCls}>End</label>
-          <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="h-8 text-xs md:text-xs" />
+          <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="h-8 min-w-0 px-2 text-xs md:text-xs" />
         </div>
       </div>
       <div>
@@ -873,7 +873,7 @@ function JobDetailSheet({
   // settings), falling back to its plain name.
   const servicesForDescPreview = linkedService ? [linkedService] : services;
   const serviceInvoiceDescPreview = servicesForDescPreview
-    .map((s) => stripHtml(s.serviceInvoiceDescription || s.serviceName || ""))
+    .map((s) => stripHtml(s.invoiceDesc || s.serviceInvoiceDescription || s.serviceName || ""))
     .filter(Boolean)
     .join(", ");
 
