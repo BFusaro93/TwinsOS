@@ -466,6 +466,7 @@ export function printPO(
     .reduce((s, li) => s + li.quantity * li.unitCost, 0);
   const tax = computeSalesTax({
     taxableSubtotal,
+    subtotal,
     taxRatePercent: po.taxRatePercent,
     discountCost: po.discountCost,
     discountReducesTax: po.discountReducesTax,

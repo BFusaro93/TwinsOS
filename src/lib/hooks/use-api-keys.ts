@@ -10,6 +10,11 @@ export interface ApiKey {
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  /** Profile id of the admin who created the key. */
+  createdBy: string | null;
+  createdByName: string | null;
+  /** The creator's login was deactivated — the key still works until revoked. */
+  createdByInactive: boolean;
 }
 
 function mapApiKey(row: Record<string, unknown>): ApiKey {
@@ -22,12 +27,16 @@ function mapApiKey(row: Record<string, unknown>): ApiKey {
     lastUsedAt: (row.last_used_at as string | null) ?? null,
     revokedAt: (row.revoked_at as string | null) ?? null,
     createdAt: row.created_at as string,
+    createdBy: (row.created_by as string | null) ?? null,
+    createdByName: (row.created_by_name as string | null) ?? null,
+    createdByInactive: row.created_by_inactive === true,
   };
 }
 
 /** Lists the org's API keys (masked — never returns the plaintext key or its hash). */
-export function useApiKeys() {
+export function useApiKeys(options: { enabled?: boolean } = {}) {
   return useQuery<ApiKey[]>({
+    enabled: options.enabled ?? true,
     queryKey: ["api-keys"],
     queryFn: async () => {
       const res = await fetch("/api/settings/api-keys");

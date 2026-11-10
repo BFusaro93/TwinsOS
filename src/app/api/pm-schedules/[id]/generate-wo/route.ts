@@ -6,6 +6,7 @@ import { shiftYmd, todayInZone } from "@/lib/time/zone";
 import { setWOPartStock } from "@/lib/inventory/part-stock";
 import { logger } from "@/lib/logger";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { assertOrgWritable } from "@/lib/org-writable";
 
 const log = logger.child("pm-generate-wo");
 
@@ -51,11 +52,34 @@ async function copyTemplatePartsAndDeduct(
     liveTemplates = templateParts.filter((tp: any) => !tp.part_id || live.has(tp.part_id));
   }
   if (liveTemplates.length === 0) return [];
+  // wo_parts allows one live line per part per work order
+  // (wo_parts_work_order_id_part_id_active_key). The same part can come in
+  // from both the schedule's Parts tab and the asset's parts (or twice from
+  // older templates), which made the whole batch fail with a duplicate key —
+  // merge those into one line with the quantities summed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const merged: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byPartId = new Map<string, any>();
+  for (const tp of liveTemplates) {
+    if (!tp.part_id) {
+      merged.push({ ...tp });
+      continue;
+    }
+    const existing = byPartId.get(tp.part_id);
+    if (existing) {
+      existing.quantity = (Number(existing.quantity) || 0) + (Number(tp.quantity) || 0);
+    } else {
+      const row = { ...tp, quantity: Number(tp.quantity) || 0 };
+      byPartId.set(tp.part_id, row);
+      merged.push(row);
+    }
+  }
   const { data: inserted, error: insertErr } = await adminClient
     .from("wo_parts")
     .insert(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      liveTemplates.map((tp: any) => ({
+      merged.map((tp: any) => ({
         org_id: orgId,
         work_order_id: workOrderId,
         part_id: tp.part_id,
@@ -189,7 +213,7 @@ export async function POST(
   }
   const { data: profile } = await userClient
     .from("profiles")
-    .select("org_id, role, name")
+    .select("org_id, role, name, status")
     .eq("id", user.id)
     .single();
   if (profile) profile.org_id = (await getEffectiveOrgId(userClient)) ?? profile.org_id;
@@ -203,11 +227,20 @@ export async function POST(
   if (["viewer", "requestor", "crew", "purchaser"].includes(profile.role as string)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // A deactivated user keeps a valid session until it expires; the
+  // service-role writes below would otherwise still go through for them.
+  if (profile.status !== "active") {
+    return NextResponse.json({ error: "Your account is inactive." }, { status: 403 });
+  }
 
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+  // Service-role writes bypass the read-only policies of a canceled or
+  // expired-trial org, so restate that rule here.
+  const notWritable = await assertOrgWritable(adminClient, profile.org_id as string);
+  if (notWritable) return notWritable;
 
   // ── 1. Fetch the PM schedule ──────────────────────────────────────────────
   const { data: schedule, error: schedErr } = await adminClient

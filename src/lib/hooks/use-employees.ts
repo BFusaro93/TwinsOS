@@ -331,75 +331,123 @@ export function useBulkImportEmployees() {
   });
 }
 
+/**
+ * A login (Users page, profiles.status) and its employee record
+ * (crm_employees.is_active) are one person and stay in sync both ways (owner
+ * decision). For an employee with a linked login, the change goes through the
+ * admin-only Users routes, which ban/unban the login AND flip the employee
+ * record (and respect the last-active-admin guard). Without a login it is a
+ * plain update. Throws the route's message (e.g. "Admin role required",
+ * "This is the last active admin — promote another admin first").
+ */
+async function setEmployeeActive(id: string, active: boolean): Promise<{ warning?: string }> {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: emp, error: readErr } = await (supabase as any)
+    .from("crm_employees")
+    .select("user_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  const loginId = (emp as { user_id: string | null } | null)?.user_id ?? null;
+
+  if (loginId) {
+    const res = await fetch(`/api/users/${loginId}/${active ? "reactivate" : "deactivate"}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // Same default as the Users page's deactivate dialog: the API keys this
+      // person created are revoked with their login.
+      body: JSON.stringify(active ? {} : { revokeApiKeys: true }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { error?: string; warning?: string };
+    if (!res.ok) {
+      throw new Error(
+        res.status === 403 && body.error === "Admin role required"
+          ? `Only an admin can ${active ? "activate" : "deactivate"} an employee who has a login (it ${active ? "reactivates" : "deactivates"} their login too).`
+          : body.error ?? `Failed to ${active ? "activate" : "deactivate"} employee`
+      );
+    }
+    return { warning: body.warning };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from("crm_employees")
+    .update({ is_active: active })
+    .eq("id", id);
+  if (error) throw error;
+  return {};
+}
+
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: async ({ id, updates }: { id: string; updates: Record<string, any> }) => {
       const supabase = createClient();
+      // is_active is applied through setEmployeeActive so the linked login
+      // follows (e.g. Employment Status → Terminated deactivates the login).
+      const { is_active: wantActive, ...rest } = updates;
+      let activeChange: boolean | null = null;
+      if (typeof wantActive === "boolean") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: current, error: readErr } = await (supabase as any)
+          .from("crm_employees")
+          .select("is_active")
+          .eq("id", id)
+          .maybeSingle();
+        if (readErr) throw readErr;
+        if ((current as { is_active: boolean } | null)?.is_active !== wantActive) activeChange = wantActive;
+      }
+      // Deactivate first (it can be refused — last admin, non-admin caller)
+      // so a refusal doesn't leave a half-applied save; activate last, so the
+      // login isn't unbanned when the rest of the save fails.
+      if (activeChange === false) await setEmployeeActive(id, false);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_employees")
-        .update(updates)
+        .update(rest)
         .eq("id", id);
       if (error) throw error;
+      if (activeChange === true) await setEmployeeActive(id, true);
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-employees"] });
       qc.invalidateQueries({ queryKey: ["crm-employees", vars.id] });
       // "Schedule jobs directly" creates/retires a personal crew.
       qc.invalidateQueries({ queryKey: ["crm-crews"] });
-    },
-  });
-}
-
-export function useDeactivateEmployee() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: emp } = await (supabase as any).from("crm_employees").select("user_id").eq("id", id).maybeSingle();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_employees")
-        .update({ is_active: false })
-        .eq("id", id);
-      if (error) throw error;
-
-      // A deactivated employee must not keep their login: the CRM-side triggers only drop CRM
-      // access, leaving the Equipt permissions and notifications of an active profile. Admin-only
-      // route — best effort, so an employee deactivation by a non-admin (or of one's own linked
-      // login) still succeeds and the Users page remains the way to finish it.
-      const loginId = (emp as { user_id: string | null } | null)?.user_id;
-      if (loginId) {
-        try {
-          await fetch(`/api/users/${loginId}/deactivate`, { method: "POST" });
-        } catch {
-          // best effort
-        }
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["crm-employees"] });
       qc.invalidateQueries({ queryKey: ["users"] });
     },
   });
 }
 
+/** Deactivates an employee — and their linked login, if any (see setEmployeeActive). */
+export function useDeactivateEmployee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => setEmployeeActive(id, false),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-employees"] });
+      qc.invalidateQueries({ queryKey: ["crm-crews"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+    // The caller toasts the specific reason (admin-only, last active admin…).
+    onError: () => {},
+  });
+}
+
+/** Activates an employee — and unbans/reactivates their linked login, if any. */
 export function useActivateEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from("crm_employees")
-        .update({ is_active: true })
-        .eq("id", id);
-      if (error) throw error;
+    mutationFn: (id: string) => setEmployeeActive(id, true),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-employees"] });
+      qc.invalidateQueries({ queryKey: ["crm-crews"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-employees"] }),
+    // The caller toasts the specific reason (admin-only, last active admin…).
+    onError: () => {},
   });
 }
 

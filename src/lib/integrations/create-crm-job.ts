@@ -172,7 +172,10 @@ export async function createCrmJob(
    */
   async function rollback(context: string, cause: unknown): Promise<CreateCrmJobResult> {
     const deletedAt = new Date().toISOString();
-    await db.from("crm_job_visits").update({ deleted_at: deletedAt }).eq("job_id", jobId);
+    // Unlinked as they are retired: crm_job_visits.job_service_id no longer
+    // cascades to NULL (20261229000200), so a visit still pointing at the
+    // service would block the delete below.
+    await db.from("crm_job_visits").update({ deleted_at: deletedAt, job_service_id: null, occurrence_date: null }).eq("job_id", jobId);
     // crm_job_services is the one table here with no deleted_at column, so a
     // hard delete is the only option — and it's the right one: leaving the
     // service row would keep firing the budgeted-hours rollup trigger against
@@ -220,6 +223,11 @@ export async function createCrmJob(
         client_id: input.clientId,
         job_service_id: jobService.id,
         scheduled_date: scheduledDate,
+        // A recurring / package job's visits are identified by their
+        // occurrence (src/lib/visits/generate.ts), as estimate conversion and
+        // New Job stamp it: without one, deleting this visit let the generator
+        // re-create it on the same date.
+        ...(jobType === "recurring" || jobType === "package" ? { occurrence_date: scheduledDate } : {}),
         status: "scheduled",
         crew_id: input.crewId ?? null,
         men_count: menCount,

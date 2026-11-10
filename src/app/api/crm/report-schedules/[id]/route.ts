@@ -58,6 +58,24 @@ export async function PATCH(
     .maybeSingle();
   if (!existing) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
 
+  // The schedule runs as created_by. When that person was deactivated it is
+  // paused, and only an admin taking it over (becoming created_by) revives it.
+  const takingOver = patch.takeOver === true;
+  if (takingOver) {
+    const { data: me } = await supabase.from("profiles").select("role, status").eq("id", user.id).maybeSingle();
+    if (me?.role !== "admin" || me.status === "inactive") {
+      return NextResponse.json({ error: "Only an admin can take over a schedule." }, { status: 403 });
+    }
+  } else if (patch.enabled === true && existing.created_by) {
+    const { data: creator } = await supabase.from("profiles").select("status").eq("id", existing.created_by).maybeSingle();
+    if (creator?.status === "inactive") {
+      return NextResponse.json(
+        { error: "The person who created this schedule was deactivated. An admin can take it over and resume it." },
+        { status: 409 }
+      );
+    }
+  }
+
   const timeZone = await getMyTimeZone(supabase);
 
   // Changing recipients or turning a schedule back on re-sends its data, so the
@@ -145,6 +163,11 @@ export async function PATCH(
       ...(patch.dateWindow !== undefined ? { date_window: patch.dateWindow } : {}),
       ...(patch.emailSubject !== undefined ? { email_subject: patch.emailSubject } : {}),
       ...(patch.emailMessage !== undefined ? { email_message: patch.emailMessage } : {}),
+      ...(takingOver ? { created_by: user.id } : {}),
+      // Resuming clears a "paused" note (creator deactivated) from the status column.
+      ...(patch.enabled === true && existing.last_run_status === "paused"
+        ? { last_run_status: null, last_run_error: null }
+        : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

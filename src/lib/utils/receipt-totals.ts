@@ -58,6 +58,7 @@ export function computeReceiptTotals({
     : 0;
   const proratedTax = computeSalesTax({
     taxableSubtotal,
+    subtotal,
     taxRatePercent: po.taxRatePercent,
     discountCost: discountShare,
     discountReducesTax: po.discountReducesTax,

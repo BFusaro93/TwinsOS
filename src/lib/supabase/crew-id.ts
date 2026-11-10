@@ -32,6 +32,9 @@ export async function fetchCallerCrew<T extends { id: string }>(
     .eq("user_id", userId)
     .eq("org_id", orgId)
     .is("deleted_at", null)
+    // A deactivated crew (incl. a personal crew whose employee was made
+    // inactive) is retired: its login must not keep acting as it.
+    .eq("is_active", true)
     .order("created_at", { ascending: true })
     .limit(1);
   const rows = (data ?? []) as T[];

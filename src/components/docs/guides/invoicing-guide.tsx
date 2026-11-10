@@ -73,20 +73,36 @@ export function InvoicingGuide() {
             <strong>A completed visit, on a job with no contract.</strong> Marking a job visit
             complete drafts an invoice automatically — one line item per service on that visit
             (falling back to a single line from the job&apos;s flat rate if it has no services broken
-            out). Recurring, package, and project jobs can rack up many visits, so each one gets
-            its own invoice. One-time and waiting-list jobs are guarded so a job whose services
-            were split across several visits doesn&apos;t get double-billed once the whole job closes.
+            out). If you set a <strong>Rate</strong> (and <strong>Qty</strong>) on the visit in the
+            dispatch board&apos;s visit popup, the visit bills that Rate × Qty (a blank Qty counts as 1)
+            instead of the service&apos;s price &mdash; the same amount the board&apos;s Amt column, the
+            Job Costing tab and the visit reports show. That applies when the visit bills one line (its
+            own service, the job&apos;s only service, or the job&apos;s flat rate); a visit covering a job
+            with several services bills each service at its own price. How visits are grouped onto
+            invoices follows the client&apos;s <strong>Invoice frequency</strong> (below). Project jobs
+            are never billed per visit (they bill through the project&apos;s milestones), and one-time
+            and waiting-list jobs are guarded so a job whose services were split across several visits
+            doesn&apos;t get double-billed once the whole job closes.
             The invoice description follows a fallback chain: the visit&apos;s own override, then the
             job-level override, then the service&apos;s own invoice description, then the plain service
             name.
             <br />
-            <strong>Materials ride along too.</strong> Any Product added to the job that&apos;s
-            still <strong>Pending</strong>, or that a crew already marked <strong>Used</strong> in
-            the field (inventory decremented, but not yet billed), gets swept onto this same
-            invoice as its own line and flipped to <strong>Invoiced</strong> so a later visit on
-            the same job can&apos;t bill it again. A product marked <strong>Used, not billed</strong>
-            {" "}is deliberately skipped — that status exists for materials the crew used but
-            shouldn&apos;t be charged for.
+            <strong>Materials ride along too.</strong> Any Product on the job that a crew marked{" "}
+            <strong>Used</strong> in the field (inventory decremented, but not yet billed) gets swept
+            onto this same invoice as its own line and flipped to <strong>Invoiced</strong> so a later
+            visit on the same job can&apos;t bill it again. On <strong>one-time and waiting-list</strong>
+            {" "}jobs, Products still <strong>Pending</strong> (planned by the office) are billed at
+            completion too. On <strong>recurring and package</strong> jobs only what the crew recorded
+            as Used is billed &mdash; Pending products there are the season&apos;s plan, so they stay
+            Pending (not billed, stock untouched) until the crew records actual use. A product marked{" "}
+            <strong>Used, not billed</strong> is deliberately skipped — that status exists for materials
+            the crew used but shouldn&apos;t be charged for.
+            <br />
+            <strong>Marking a one-time job Completed</strong> from the job page drafts its invoice if
+            no visit has billed yet. If some of its split visits already invoiced themselves, it bills
+            the rest &mdash; every completed visit that has no invoice yet &mdash; instead of stopping. A
+            service with no visit at all is not guessed at: you get a warning naming it so you can add it
+            by hand.
           </li>
           <li>
             <strong>A contract&apos;s billing cycle.</strong> Any job linked to a contract is billed on
@@ -107,6 +123,14 @@ export function InvoicingGuide() {
             Invoices, independent of any job or contract.
           </li>
         </ol>
+        <Callout>
+          <strong>The manual Invoice buttons follow the same rules.</strong> The dispatch board&apos;s
+          visit popup hides its Invoice button &mdash; and the job page&apos;s Invoice button refuses with
+          a message &mdash; when the client&apos;s contract covers that work (it bills on the contract&apos;s
+          cycle), for project jobs (billed by milestones) and for snow jobs (billed from Snow Invoicing).
+          An invoice made from one of these buttons is dated the day you create it; its lines keep the
+          visit&apos;s service date.
+        </Callout>
         <Callout>
           <strong>Snow jobs are excluded</strong> from the completed-visit auto-invoice entirely.
           Snow billing runs storm-by-storm on per-inch/hourly rates a flat auto-invoice can&apos;t
@@ -184,13 +208,25 @@ export function InvoicingGuide() {
             too, not just the first one.
           </li>
           <li>
-            <strong>Batched invoice dates.</strong> For a client invoiced weekly or monthly, the
-            draft that collects the period&apos;s visits is dated the <em>last day of that period</em>{" "}
-            &mdash; the Sunday that ends the Monday&ndash;Sunday week, or the last day of the
-            month &mdash; and its due date counts the client&apos;s terms from that date. So a
+            <strong>Invoice frequency decides the grouping.</strong> A client invoiced{" "}
+            <strong>Daily</strong> gets one draft per service day (every visit that day on one
+            invoice), <strong>Weekly</strong> one per Monday&ndash;Sunday week, and{" "}
+            <strong>Monthly</strong> one per calendar month. <strong>Upon Completion</strong> bills each
+            visit on its own invoice. Visits whose jobs have a different sales rep or PO number go on
+            separate drafts in the same period, so each invoice credits the right rep&apos;s commission
+            and prints the right PO. Once a draft is sent, printed or locked, the next visit of that
+            period starts a new draft.
+          </li>
+          <li>
+            <strong>Batched invoice dates.</strong> For a client invoiced daily, weekly or monthly,
+            the draft that collects the period&apos;s visits is dated the <em>last day of that period</em>{" "}
+            &mdash; the service day, the Sunday that ends the Monday&ndash;Sunday week, or the last day
+            of the month &mdash; and its due date counts the client&apos;s terms from that date. So a
             monthly client on Net 30 whose first visit is Nov 3 gets a draft dated Nov 30, due
-            Dec 30, and it can&apos;t show as past due before the month it bills is even over.
-            Clients invoiced per visit (daily or upon completion) keep the visit&apos;s date.
+            Dec 30, and it can&apos;t show as past due before the month it bills is even over. An
+            invoice for a single visit (Upon Completion clients, or the visit&apos;s Invoice button) is
+            dated the day it is created, in your company&apos;s time zone, and is due from that day;
+            each line still shows the date the work was done.
           </li>
         </ul>
         <Callout>
@@ -261,7 +297,9 @@ export function InvoicingGuide() {
             the client received can&apos;t be edited underneath them. Unlock it first to change it.
             A locked invoice can&apos;t be deleted until you unlock it, and an invoice with payments
             applied can&apos;t be deleted at all: the check runs before anything is changed, so a
-            refused delete leaves the invoice exactly as it was.
+            refused delete leaves the invoice exactly as it was. A locked (sent or printed) invoice
+            <em> can</em> be voided without unlocking it; voiding releases the visits it billed so they
+            can be invoiced again.
           </li>
           <li>
             <strong>Voiding or deleting an invoice releases its materials.</strong> Job materials
@@ -301,7 +339,10 @@ export function InvoicingGuide() {
             per-visit popup and the job detail page&apos;s Invoice button both check for an existing
             invoice first &mdash; a visit or job that&apos;s already been invoiced shows{" "}
             <strong>View Invoice #N</strong> instead and takes you straight there rather than
-            creating a second, duplicate draft.
+            creating a second, duplicate draft. Deleting a visit&apos;s first line from an invoice keeps
+            the visit marked as invoiced as long as another of its lines is still there, and the
+            dispatch board&apos;s bulk <strong>Mark Completed</strong> leaves visits that were already
+            completed alone, so neither can bill a visit a second time.
           </li>
           <li>
             <strong>Products need a Service first.</strong> Adding a Product to a job requires

@@ -17,6 +17,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 import { startOfTodayInZoneIso } from "@/lib/time/zone";
 import { isDue, recurrenceFromRow } from "@/lib/reports/schedule-recurrence";
+import { CREATOR_DEACTIVATED_PAUSE_MESSAGE } from "@/types/report-schedules";
 
 /**
  * GET /api/cron/report-schedules — called hourly by Vercel Cron (see
@@ -107,6 +108,48 @@ export async function GET(request: Request) {
     due.push(schedule);
   }
 
+  // Every schedule runs as its creator. A deactivated creator's schedules are
+  // paused (not run) and their own address dropped from the recipients — for
+  // BOTH prebuilt reports (which have no per-run permission check) and saved
+  // analyses. Deactivation pauses them already (profiles trigger); this
+  // catches anything that slipped past it. An admin can take one over.
+  const creatorIds = [...new Set(due.map((s) => s.created_by).filter((id): id is string => !!id))];
+  const inactiveCreators = new Map<string, string | null>();
+  if (creatorIds.length > 0) {
+    const { data: creators, error: creatorsErr } = await supabase
+      .from("profiles")
+      .select("id, status, email")
+      .in("id", creatorIds);
+    if (creatorsErr) {
+      return NextResponse.json({ error: creatorsErr.message }, { status: 500 });
+    }
+    for (const c of creators ?? []) {
+      if (c.status === "inactive") inactiveCreators.set(c.id, c.email ?? null);
+    }
+  }
+  const runnable: ScheduleRow[] = [];
+  let paused = 0;
+  for (const schedule of due) {
+    if (!schedule.created_by || !inactiveCreators.has(schedule.created_by)) {
+      runnable.push(schedule);
+      continue;
+    }
+    const creatorEmail = inactiveCreators.get(schedule.created_by)?.toLowerCase() ?? null;
+    paused++;
+    await supabase
+      .from("report_schedules")
+      .update({
+        enabled: false,
+        last_run_status: "paused",
+        last_run_error: CREATOR_DEACTIVATED_PAUSE_MESSAGE,
+        recipients: creatorEmail
+          ? schedule.recipients.filter((r) => r.toLowerCase() !== creatorEmail)
+          : schedule.recipients,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", schedule.id);
+  }
+
   const orgNames = new Map<string, string | null>();
   const orgName = async (orgId: string): Promise<string | null> => {
     if (!orgNames.has(orgId)) {
@@ -120,7 +163,7 @@ export async function GET(request: Request) {
   let sent = 0;
   let failed = 0;
 
-  for (const schedule of due) {
+  for (const schedule of runnable) {
     const dayStart = dayStartByOrg.get(schedule.org_id)!;
     // Claim before sending: the conditional UPDATE only succeeds for a row
     // that still hasn't run today on its org's calendar, so an overlapping or
@@ -297,5 +340,5 @@ export async function GET(request: Request) {
       .eq("id", schedule.id);
   }
 
-  return NextResponse.json({ sent, failed, total: schedules?.length ?? 0 });
+  return NextResponse.json({ sent, failed, paused, total: schedules?.length ?? 0 });
 }

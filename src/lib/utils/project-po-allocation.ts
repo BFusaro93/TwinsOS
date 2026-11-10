@@ -1,3 +1,5 @@
+import { taxableDiscountShare } from "@/lib/utils/po-tax";
+
 /** Per-line allocation of PO-level charges to a project.
  *
  *  A project only owns some of a PO's lines, so the PO's shipping, discount
@@ -25,12 +27,21 @@ export function allocatePoLine(
   const shipping = Math.round(share * (ctx.shippingCost || 0));
   const discount = Math.round(share * (ctx.discountCost || 0));
   if (!taxable) return { tax: 0, shipping, discount };
-  // When the PO discounts before tax, the discount shrinks the taxable base
-  // for the whole PO (matching computeSalesTax); a taxable line carries its
-  // proportional part of that reduction.
+  // When the PO discounts before tax, the taxable lines' share of the
+  // discount shrinks the taxable base for the whole PO (matching
+  // computeSalesTax); a taxable line carries its proportional part of that
+  // reduction.
   const factor =
     ctx.discountReducesTax && ctx.poTaxableSubtotal > 0
-      ? Math.max(0, ctx.poTaxableSubtotal - (ctx.discountCost || 0)) / ctx.poTaxableSubtotal
+      ? Math.max(
+          0,
+          ctx.poTaxableSubtotal -
+            taxableDiscountShare({
+              taxableSubtotal: ctx.poTaxableSubtotal,
+              subtotal: ctx.poSubtotal,
+              discountCost: ctx.discountCost || 0,
+            })
+        ) / ctx.poTaxableSubtotal
       : 1;
   const tax = Math.round((lineTotal * ctx.taxRatePercent * factor) / 100);
   return { tax, shipping, discount };

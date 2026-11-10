@@ -28,6 +28,7 @@ import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
 import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
+import { DuplicateClientsWarning, useDuplicateClientCheck } from "@/components/crm/clients/DuplicateClientsWarning";
 
 type InitialStatus = "lead" | "active";
 
@@ -43,6 +44,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
   const { mutateAsync: createClient, isPending } = useCreateClient();
   const rf = useRequiredFields("client");
   const addr = useVerifyAddress();
+  const dup = useDuplicateClientCheck();
 
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<"residential" | "commercial">("residential");
@@ -76,6 +78,9 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
     if (primaryEmail.trim() && !isValidEmail(primaryEmail)) { toast.error("Enter a valid email address"); return; }
     if (rf.isRequired("service_address") && !serviceAddress.trim()) { toast.error("Service address is required"); return; }
     if (rf.isRequired("source") && !source.trim()) { toast.error("Source is required"); return; }
+    // Same email or phone as an existing client/lead: show the matches and wait for
+    // "Create anyway" (a second click goes through).
+    if (!(await dup.check(primaryEmail, primaryPhone))) return;
     try {
       const client = await createClient({
         displayName: displayName.trim(),
@@ -114,6 +119,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
     setEditOpen(o);
     if (!o) {
       // Reset quick-create form for next use
+      dup.reset();
       setDisplayName("");
       setPrimaryPhone("");
       setPrimaryEmail("");
@@ -130,7 +136,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={(o) => { if (!o) dup.reset(); onOpenChange(o); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>New Client</DialogTitle>
@@ -187,7 +193,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
                   <Label>Phone{rf.req("primary_phone")}</Label>
                   <PhoneInput
                     value={primaryPhone}
-                    onChange={setPrimaryPhone}
+                    onChange={(v) => { setPrimaryPhone(v); dup.reset(); }}
                     placeholder="(978) 555-0100"
                   />
                 </div>
@@ -197,7 +203,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
                   <Label>Email{rf.req("primary_email")}</Label>
                   <Input
                     value={primaryEmail}
-                    onChange={(e) => setPrimaryEmail(e.target.value)}
+                    onChange={(e) => { setPrimaryEmail(e.target.value); dup.reset(); }}
                     type="email"
                     placeholder="client@email.com"
                   />
@@ -249,6 +255,8 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
               </div>
             )}
 
+            <DuplicateClientsWarning matches={dup.matches} onCreateAnyway={() => void handleCreate()} creating={isPending} />
+
             <p className="text-xs text-slate-400 dark:text-neutral-500">
               After creating, you&apos;ll be able to fill in billing, custom fields, and more.
             </p>
@@ -260,6 +268,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
               onClick={() => void handleCreate()}
               disabled={
                 isPending ||
+                dup.checking ||
                 !displayName.trim() ||
                 (rf.isRequired("primary_phone") && !primaryPhone.trim()) ||
                 (rf.isRequired("primary_email") && !primaryEmail.trim()) ||

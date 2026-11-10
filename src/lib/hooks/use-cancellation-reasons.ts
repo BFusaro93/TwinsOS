@@ -5,6 +5,10 @@ import { useOrgList } from "@/lib/hooks/use-org-lists";
 /** Reasons the cancel dialogs always offer, whatever the org has added under Settings → Lists. */
 export const BUILTIN_CANCELLATION_REASONS = ["Price", "Moved", "Unhappy with service", "No longer needs service"];
 
+/** Reasons offered when a lead is closed as Lost (Leads list, and More → Close as Lost on the
+ *  lead's own page). "Other" asks for a typed reason. */
+export const LEAD_LOST_REASONS = ["Price", "No response", "Went with competitor", "Not ready", "Out of service area", "Other"];
+
 /** Built-in reasons plus the org's own list (deduplicated), so automation conditions can match
  *  what the cancel dialogs actually store — in a new org the org list is empty. */
 export function useCancellationReasonOptions(): string[] {

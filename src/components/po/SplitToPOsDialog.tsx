@@ -165,6 +165,7 @@ export function SplitToPOsDialog({
 
         const salesTax = computeSalesTax({
           taxableSubtotal: subtotal,
+          subtotal,
           taxRatePercent: requisition.taxRatePercent,
           discountCost,
           discountReducesTax: requisition.discountReducesTax,

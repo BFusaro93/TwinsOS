@@ -16,8 +16,7 @@ import { PODetailSheet } from "./PODetailSheet";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
-import { usePurchaseOrders, useUpdatePurchaseOrderStatus } from "@/lib/hooks/use-purchase-orders";
-import { useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
+import { usePurchaseOrders, useRefreshPOStatus } from "@/lib/hooks/use-purchase-orders";
 import {
   Table,
   TableBody,
@@ -241,8 +240,7 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
   const { data: products = [] } = useProducts();
   const { data: parts = [] } = useParts();
   const { data: purchaseOrders = [] } = usePurchaseOrders();
-  const { data: allReceipts = [] } = useGoodsReceipts();
-  const syncPOStatus = useUpdatePurchaseOrderStatus();
+  const refreshPOStatus = useRefreshPOStatus();
   const { canReceive } = useRoleCapabilities();
 
   const selectedProduct =
@@ -274,39 +272,12 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
     }
   }
 
-  function handleReceiptEdit(editedLines: { lineItemId: string | null; quantityReceived: number }[]) {
+  // The database recomputes the PO's status from its receipts when one is
+  // edited; read it back (and fire any status automations) instead of writing
+  // a status derived from this panel's possibly stale receipt list.
+  function handleReceiptEdit() {
     if (!linkedPO) return;
-    // quantityRemaining on a receipt's own line is only ever "PO total
-    // minus THAT receipt's own contribution" — comparing every OTHER
-    // receipt's quantityRemaining to 0 was nearly always false for any PO
-    // split across multiple partial receipts, since no single receipt's
-    // own remaining reflects the combined total. Sum actual received
-    // quantities across every receipt (using this edit's numbers for the
-    // receipt being edited) per PO line item, and compare that to what the
-    // PO actually ordered.
-    const otherReceipts = allReceipts.filter(
-      (r) => r.purchaseOrderId === receipt.purchaseOrderId && r.id !== receipt.id
-    );
-    const receivedByLineItemId = new Map<string, number>();
-    for (const r of otherReceipts) {
-      for (const l of r.lines) {
-        if (!l.lineItemId) continue;
-        receivedByLineItemId.set(l.lineItemId, (receivedByLineItemId.get(l.lineItemId) ?? 0) + l.quantityReceived);
-      }
-    }
-    for (const l of editedLines) {
-      if (!l.lineItemId) continue;
-      receivedByLineItemId.set(l.lineItemId, (receivedByLineItemId.get(l.lineItemId) ?? 0) + l.quantityReceived);
-    }
-    const allFullyReceived = linkedPO.lineItems.every(
-      // Quantities are numeric(10,3): float sums like 0.7 + 0.1 land just under 0.8.
-      (li) => (receivedByLineItemId.get(li.id) ?? 0) >= li.quantity - 0.0005
-    );
-    const newStatus = allFullyReceived ? "completed" : "partially_fulfilled";
-    // Only update if different from current PO status
-    if (linkedPO.status !== newStatus) {
-      syncPOStatus.mutate({ id: linkedPO.id, status: newStatus });
-    }
+    refreshPOStatus.mutate({ id: linkedPO.id, previousStatus: linkedPO.status });
   }
 
   return (

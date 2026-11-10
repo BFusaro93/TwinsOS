@@ -32,7 +32,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("api_keys")
-    .select("id, name, key_prefix, scopes, rate_limit_per_min, last_used_at, revoked_at, created_at")
+    .select("id, name, key_prefix, scopes, rate_limit_per_min, last_used_at, revoked_at, created_at, created_by")
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
@@ -42,7 +42,26 @@ export async function GET() {
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 
-  return NextResponse.json({ keys: data });
+  // Who created each key — a key keeps working after its creator is
+  // deactivated, so the list flags those ("created by X (deactivated)") and
+  // the Users page's deactivate dialog offers to revoke them.
+  const creatorIds = [...new Set((data ?? []).map((k) => k.created_by).filter((id): id is string => !!id))];
+  const creators = new Map<string, { name: string | null; status: string | null }>();
+  if (creatorIds.length > 0) {
+    const { data: profiles } = await supabase.from("profiles").select("id, name, status").in("id", creatorIds);
+    for (const p of profiles ?? []) creators.set(p.id, { name: p.name ?? null, status: p.status ?? null });
+  }
+
+  return NextResponse.json({
+    keys: (data ?? []).map((k) => {
+      const creator = k.created_by ? creators.get(k.created_by) : undefined;
+      return {
+        ...k,
+        created_by_name: creator?.name ?? null,
+        created_by_inactive: creator?.status === "inactive",
+      };
+    }),
+  });
 }
 
 /** POST /api/settings/api-keys — creates a new scoped API key. Admin-only; returns the plaintext key once. */

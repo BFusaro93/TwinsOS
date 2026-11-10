@@ -48,3 +48,73 @@ export async function removePurchasedBundledAddons(
     if (error) throw error;
   }
 }
+
+/**
+ * Makes organization_addons match what the subscription actually bills.
+ * Called by the billing webhook on every applied subscription state event.
+ *
+ * Without it, rows outlived their subscription: a cancellation left them
+ * enabled with the old stripe_subscription_item_id, and a resubscribe (a NEW
+ * subscription carrying only the plan price) kept granting every add-on the
+ * org had bought before — unbilled — because entitlement checks only look for
+ * an enabled row with an item id.
+ *
+ * - `subscription` null (or ended): every enabled purchase row is disabled.
+ * - Otherwise: an enabled row whose item isn't on this subscription is
+ *   disabled; an add-on whose price IS on it is recorded enabled with that
+ *   item (an add-on added in Stripe directly, or a webhook that landed before
+ *   the add-ons route wrote its row). Rows for bundled add-ons are then
+ *   handled by removePurchasedBundledAddons, which runs after this.
+ *
+ * Reads only the subscription object it is given — never calls Stripe.
+ */
+export async function reconcileAddonsWithSubscription(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  subscription: Stripe.Subscription | null
+): Promise<void> {
+  const items = subscription?.items.data ?? [];
+  const liveItemIds = new Set(items.map((i) => i.id));
+
+  const { data: rows, error } = await db
+    .from("organization_addons")
+    .select("addon_key, enabled, stripe_subscription_item_id")
+    .eq("org_id", orgId);
+  if (error) throw error;
+  const existing = (rows ?? []) as { addon_key: string; enabled: boolean; stripe_subscription_item_id: string | null }[];
+
+  // Billed by this subscription → enabled with its current item id.
+  const billedKeys = new Set<string>();
+  for (const entry of ADDON_CATALOG) {
+    const priceId = getPriceIdForAddon(entry.key as AddonKey);
+    const item = priceId ? items.find((i) => i.price.id === priceId) : undefined;
+    if (!item) continue;
+    billedKeys.add(entry.key);
+    const row = existing.find((r) => r.addon_key === entry.key);
+    if (row?.enabled && row.stripe_subscription_item_id === item.id) continue;
+    const { error: upsertErr } = await db
+      .from("organization_addons")
+      .upsert(
+        { org_id: orgId, addon_key: entry.key, enabled: true, stripe_subscription_item_id: item.id },
+        { onConflict: "org_id,addon_key" }
+      );
+    if (upsertErr) throw upsertErr;
+  }
+
+  // Not billed by this subscription → not granted.
+  for (const row of existing) {
+    if (billedKeys.has(row.addon_key)) continue;
+    const granted = row.enabled || row.stripe_subscription_item_id !== null;
+    const onThisSubscription = !!row.stripe_subscription_item_id && liveItemIds.has(row.stripe_subscription_item_id);
+    // An item still on the subscription whose price we couldn't map (price env
+    // var unset or renamed) is left alone — it is still being billed.
+    if (!granted || onThisSubscription) continue;
+    const { error: disableErr } = await db
+      .from("organization_addons")
+      .update({ enabled: false, stripe_subscription_item_id: null })
+      .eq("org_id", orgId)
+      .eq("addon_key", row.addon_key);
+    if (disableErr) throw disableErr;
+  }
+}

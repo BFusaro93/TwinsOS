@@ -73,6 +73,9 @@ export type CreateReportScheduleInput = z.input<typeof createReportScheduleSchem
 export const updateReportScheduleSchema = z.object({
   recipients: z.array(z.string().email()).min(1).max(50).optional(),
   enabled: z.boolean().optional(),
+  /** Admin only: become the schedule's owner (it runs as created_by). The way
+   *  to revive a schedule paused because its creator was deactivated. */
+  takeOver: z.literal(true).optional(),
   hourLocal: recurrenceFields.hourLocal.optional(),
   frequency: recurrenceFields.frequency.optional(),
   weekdays: recurrenceFields.weekdays.optional(),
@@ -114,11 +117,22 @@ export interface ReportScheduleRow {
   last_run_at: string | null;
   last_run_status: string | null;
   last_run_error: string | null;
+  /** The person the schedule runs as (permissions are re-checked against them). */
+  created_by: string | null;
   created_at: string;
   /** Computed on the ORG's clock; null = paused, ended, or one-off done. */
   next_run_at: string | null;
+  /** Owner's display name / deactivated flag — filled in by the list endpoint. */
+  creator_name?: string | null;
+  creator_inactive?: boolean;
 }
+
+/** last_run_error stored when a schedule is paused because its creator was
+ *  deactivated (same wording as the profiles trigger in
+ *  20261229000510_report_schedules_pause_inactive_creator.sql). */
+export const CREATOR_DEACTIVATED_PAUSE_MESSAGE =
+  "Paused: the person who created this schedule was deactivated. An admin can take it over and resume it.";
 
 /** Columns selected for ReportScheduleRow (minus the computed next_run_at). */
 export const REPORT_SCHEDULE_COLUMNS =
-  "id, report_key, custom_report_id, date_filter_column, date_window, recipients, enabled, hour_local, frequency, weekdays, monthly_mode, month_day, month_week, month_weekday, start_date, end_date, format, email_subject, email_message, last_run_at, last_run_status, last_run_error, created_at";
+  "id, report_key, custom_report_id, date_filter_column, date_window, recipients, enabled, hour_local, frequency, weekdays, monthly_mode, month_day, month_week, month_weekday, start_date, end_date, format, email_subject, email_message, last_run_at, last_run_status, last_run_error, created_by, created_at";

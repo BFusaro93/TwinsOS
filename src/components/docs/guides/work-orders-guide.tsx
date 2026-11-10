@@ -13,7 +13,7 @@ const WO_STATUSES: [string, string][] = [
   ["In Progress", "Work has started."],
   ["On Hold", "Paused — reachable from Open or In Progress."],
   ["Done", "Complete. A parent work order can't reach Done until every sub-work order is Done or Skipped."],
-  ["Skipped", "Sub-work orders only — this asset's portion of the job was intentionally not done. Any parts the work order had already deducted go back to inventory (once); reopening it deducts them again."],
+  ["Skipped", "Sub-work orders only — this asset's portion of the job was intentionally not done. Any parts the work order had already deducted go back to inventory (once); reopening it deducts them again. Parts added or changed while it is skipped are recorded but not taken from stock until it is reopened."],
 ];
 
 const REQUEST_STATUSES: [string, string][] = [

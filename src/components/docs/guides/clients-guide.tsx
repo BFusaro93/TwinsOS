@@ -11,7 +11,7 @@ import {
 const STATUS_ROWS: [string, string, string][] = [
   [
     "Lead",
-    "Default status for a client added as a prospect, or set manually.",
+    "Default status for a client added as a prospect, or set manually. Only an account that has never been a client can be a Lead: once a record is Active, or has a Client Since date, a job or an invoice, Lead is no longer offered (and the database refuses it).",
     "Estimates can be built and sent. Jobs, invoices, and contracts are blocked until the status moves to Active — a Lead isn't a customer yet. Leads don't appear in the Add Job client picker, and a job created for one any other way (API, Zapier, import) is rejected with a “convert the lead first” error.",
   ],
   [
@@ -21,17 +21,17 @@ const STATUS_ROWS: [string, string, string][] = [
   ],
   [
     "Inactive",
-    "Set manually — a client who's paused service without formally cancelling (seasonal pause, temporary hold).",
+    "Set manually — a client who's paused service without formally cancelling (seasonal pause, temporary hold). Setting a client Inactive (Edit or Bulk Edit) asks the same “Cancel their N upcoming visits?” question as Cancel.",
     "Existing jobs and invoices stay visible and editable, but the client won't appear as a pick target for new recurring job generation.",
   ],
   [
     "Cancelled",
-    "Set manually, and only after a cancellation reason is picked.",
+    "Set manually, and only after a cancellation reason is picked. Only clients are cancelled: a lead is closed as Lost instead.",
     "Read-only for scheduling and invoicing going forward. History stays intact for churn reporting.",
   ],
   [
     "Lost",
-    "A Lead closed without converting — via Close as Lost on the Leads list, or when the client declines an estimate in the portal.",
+    "A Lead closed without converting — via Close as Lost on the Leads list or the lead's More menu, a bulk Cancel that included leads, or when the client declines an estimate in the portal.",
     "Still a lead, not a client: it never appears in client counts or Client Since reporting, and shows up in the Closed Leads Summary instead. Like an open Lead, it can't have jobs.",
   ],
 ];
@@ -81,6 +81,7 @@ export function ClientsGuide() {
           <TOCLink href="#contacts">Contacts</TOCLink>
           <TOCLink href="#timeline">Activity timeline</TOCLink>
           <TOCLink href="#account-statement">Account Statement</TOCLink>
+          <TOCLink href="#merging-clients">Merging duplicate clients</TOCLink>
           <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
@@ -94,7 +95,16 @@ export function ClientsGuide() {
             The quick-create step captures just four things: <strong>Display Name</strong>,{" "}
             <strong>Account Type</strong> (Residential or Commercial — Residential is the default),
             plus phone and email. Whether phone and email are required depends on your org&apos;s
-            field settings.
+            field settings. The same Required Fields settings (phone, email, service address,
+            source) apply when the client is edited later, so a required field can&apos;t be
+            cleared afterwards.
+          </li>
+          <li>
+            <strong>Duplicate warning.</strong> If the email or phone you entered is already on
+            another client or lead (email ignoring case and spaces, phone by its digits), New Client
+            and New Lead list the matching accounts, with links, instead of creating. Open a match
+            to check it, or click <strong>Create anyway</strong> if it really is a different
+            customer.
           </li>
           <li>
             Click <strong>Create &amp; Continue →</strong> and the full client record opens
@@ -215,10 +225,40 @@ export function ClientsGuide() {
         <p>
           Cancelling a client requires picking a reason — <strong>Price</strong>,{" "}
           <strong>Moved</strong>, <strong>Unhappy with Service</strong>,{" "}
-          <strong>No Longer Needs Service</strong>, or <strong>Other</strong> (which reveals a
-          free-text field) — and that reason is kept on the record permanently for churn reporting.
-          There&apos;s no undo dialog for it: to bring a cancelled client back, change the status
-          again like any other field.
+          <strong>No Longer Needs Service</strong>, any reasons your org added under Settings →
+          Lists, or <strong>Other</strong> (which reveals a free-text field) — and that reason is
+          kept on the record permanently for churn reporting. To bring a cancelled client back, use{" "}
+          <strong>More → Activate Client</strong>.
+        </p>
+        <p>
+          <strong>Leads are closed as Lost, not cancelled.</strong> On a lead the More menu says{" "}
+          <strong>Close as Lost</strong>, and a bulk <strong>Cancel</strong> on the Clients list
+          closes any leads in the selection as Lost. A lead that never bought isn&apos;t counted as a
+          churned client.
+        </p>
+        <p>
+          <strong>Activating.</strong> Moving an account to Active (Activate, bulk Activate, Convert,
+          or Edit → Status) is a <em>conversion</em> when the account was never a client — no
+          Client Since date, no jobs and no invoices, for example a lead that was set Inactive and
+          then Active. A conversion sets Client Since to today, logs &ldquo;Converted from lead to
+          client&rdquo; and fires the <strong>Lead converted to client</strong> automation. Any
+          other account is <em>reactivated</em> and fires <strong>Client reactivated</strong>.
+        </p>
+        <p>
+          <strong>Who can change status.</strong> Changing a lead&apos;s status needs the lead{" "}
+          <strong>Convert/Close</strong> or <strong>Allow Close as Lost</strong> permission
+          (converting it to Active needs Convert/Close). Changing a client&apos;s status — Cancel,
+          Activate, or Edit → Status — needs <strong>Activate/Deactivate</strong> or{" "}
+          <strong>Allow Cancel/Deactivate</strong>. The buttons are hidden without them, the
+          Status field in Edit is locked, and the database refuses the change from anywhere else.
+          Admins can always change status.
+        </p>
+        <p>
+          <strong>Open estimates.</strong> Closing a lead as Lost or cancelling a client (one or a
+          bulk selection) asks <strong>&quot;Mark the N open estimates as Lost?&quot;</strong> when
+          the account has estimates that aren&apos;t accepted, lost or invoiced. <strong>Yes</strong>{" "}
+          (the default) moves them to Lost with the same reason; estimates that already have a job
+          or invoice are left alone. You&apos;re only asked if your role can edit estimates.
         </p>
         <p>
           If the client (or any of the clients in a bulk cancel) has upcoming visits nobody has
@@ -243,7 +283,7 @@ export function ClientsGuide() {
           <strong>Client Since</strong> is the date a lead became a client — not the date the
           record was created. It is set automatically the moment a lead converts: clicking{" "}
           <strong>Convert to Client</strong> and confirming, or changing a Lead&apos;s status to
-          Active in Edit. A record
+          Active in Edit (or Activating a lead that was set Inactive or Lost). A record
           created directly as an Active client gets its creation date. Leads — open or Lost —
           have no Client Since at all, which is what lets reports tell &quot;when did we first
           hear from them&quot; (created date) apart from &quot;when did they start paying
@@ -334,7 +374,9 @@ export function ClientsGuide() {
           <strong>&quot;via Ridgeline Property Management&quot;</strong>, so someone looking at Oakview
           alone can see how its invoice got paid without knowing to check the parent. Those rows are
           read-only on the sub-account — edit or reverse the payment from the parent where it was
-          recorded.
+          recorded. Unlinking or moving the sub-account later doesn&apos;t strand those payments:
+          they can still be refunded, reconciled and synced to QuickBooks. Only a <em>new</em>{" "}
+          allocation must be to the payment&apos;s own client or one of its current sub-accounts.
         </p>
       </Section>
 
@@ -361,6 +403,13 @@ export function ClientsGuide() {
           (for example a management company with several communities), create each one as its own
           client and link them under a parent account instead.
         </Callout>
+        <p>
+          <strong>The Primary property follows the client&apos;s address.</strong> The property
+          marked <em>Primary</em> is the client&apos;s own service address. Changing the
+          client&apos;s service address updates the Primary property, and editing the Primary
+          property&apos;s address updates the client (and its billing address too when billing is
+          set to &ldquo;same as service&rdquo;). Other properties are never changed this way.
+        </p>
         <p>
           <strong>Measurements per property.</strong> The Add/Edit Property dialog has an optional{" "}
           <strong>Measurements</strong> block (turf, mulch beds, gross, parking lot / hardscape,
@@ -563,13 +612,70 @@ export function ClientsGuide() {
           for their own statements.
         </p>
       </Section>
+      <Section id="merging-clients" title="Merging duplicate clients">
+        <p>
+          When the same customer was entered twice, open either record and choose{" "}
+          <strong>More &gt; Merge Clients</strong>. Search for the duplicate (name, account number,
+          phone, email or address), pick which of the two records to <strong>keep</strong>, review the
+          list of what will move, and type <strong>MERGE</strong> to confirm. Merging needs an admin
+          login or a role with the <strong>Allow Cancel/Deactivate</strong> client permission, because the
+          duplicate is retired.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Everything moves to the kept client:</strong> properties, contacts, jobs and visits,
+            estimates, contracts, invoices, payments and credits, tickets, the activity timeline, files,
+            projects and photo jobs, warranties, portal logins and invites, form responses, automation
+            enrollments, and sub-accounts. Clients the duplicate referred now show the kept client as
+            their referrer, and a hand-picked campaign audience swaps the duplicate for the kept client.
+          </li>
+          <li>
+            <strong>Nothing is doubled up.</strong> Tags both records had appear once. A custom field keeps
+            the kept client&apos;s value and is only filled from the duplicate when it was empty. The kept
+            client keeps its master property and primary contact; the duplicate&apos;s become ordinary ones.
+            If both were enrolled in the same automation, the kept client&apos;s enrollment carries on.
+          </li>
+          <li>
+            <strong>Empty fields are filled from the duplicate</strong> — phone numbers (the duplicate&apos;s
+            extra numbers are added), email, billing and service address, gate code, measurements, sales rep,
+            source and similar. Office notes and crew notes from both are combined. Client Since becomes the
+            earlier of the two dates. Do Not Market carries over if either record had it.
+          </li>
+          <li>
+            <strong>Card on file and QuickBooks.</strong> The kept client&apos;s saved card and QuickBooks link
+            win. If only the duplicate had one, it moves to the kept client. If both records were linked to
+            different QuickBooks customers, the kept client stays linked to its own and the timeline note says
+            which QuickBooks customer to merge or make inactive in QuickBooks.
+          </li>
+          <li>
+            <strong>Balances are recalculated</strong> for the kept client right away, so its balance is the
+            two accounts combined.
+          </li>
+          <li>
+            <strong>The duplicate is deleted</strong> (its status isn&apos;t changed). Both timelines get an
+            entry: &ldquo;Merged from &hellip;&rdquo; on the kept client, listing what moved and any email or
+            address that didn&apos;t fit, and &ldquo;Merged into &hellip;&rdquo; on the duplicate. A merge
+            can&apos;t be undone.
+          </li>
+          <li>
+            <strong>Leads and sub-accounts.</strong> A lead can be merged into a client, but a client can&apos;t
+            be merged into a lead: keep the client record. Merging a parent account and one of its own
+            sub-accounts works either way. A sub-account can&apos;t take over another client&apos;s
+            sub-accounts (only one level of hierarchy is allowed), so keep the parent instead or unlink first.
+          </li>
+          <li>
+            <strong>Status isn&apos;t changed.</strong> If you keep an Inactive or Cancelled record and merge an
+            active duplicate into it, reactivate the kept client afterwards if it&apos;s still a customer.
+          </li>
+        </ul>
+      </Section>
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Inactive and lost clients.</strong> Marking a client Inactive, Lost or Cancelled stops new recurring and package visits and stops their contract invoices. Reactivating resumes both.
           </li>
           <li>
-            <strong>Bringing back a lost lead.</strong> Reactivating a lead that was closed as lost counts as a conversion: Client Since is set, “Converted from lead to client” is logged and the Lead converted to client automation fires.
+            <strong>Bringing back a lost lead.</strong> Reactivating a lead that was closed as lost counts as a conversion: Client Since is set, “Converted from lead to client” is logged and the Lead converted to client automation fires. A lost lead can also be reopened as a Lead from Edit → Status.
           </li>
           <li>
             <strong>Changing the phone number clears text consent.</strong> Consent was given for the old number, so saving a different primary phone turns off “Opted in to text messages” and logs it, unless you tick the box yourself in the same save.
@@ -590,7 +696,7 @@ export function ClientsGuide() {
             <strong>Custom fields that didn&apos;t load.</strong> If a client&apos;s custom fields fail to load, the Custom Fields tab says so and saving the client leaves them unchanged.
           </li>
           <li>
-            <strong>Link Parent.</strong> The Link Parent picker shows up to 50 clients until you search, and explains when a client can&apos;t be a sub-account because it already has sub-accounts of its own.
+            <strong>Link Parent.</strong> The Link Parent picker shows up to 50 clients until you search, and explains when a client can&apos;t be a sub-account because it already has sub-accounts of its own. A parent must be in your own organization, and two accounts can&apos;t be made each other&apos;s parent at the same moment.
           </li>
           <li>
             <strong>Chemical area without a property.</strong> For a client with no property records, chemical amounts use the measurement on the client&apos;s Details tab (for example Turf Sq. Ft.).

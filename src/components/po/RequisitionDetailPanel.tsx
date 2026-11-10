@@ -125,9 +125,13 @@ function DetailsTab({
   /** Compute updated requisition totals from a new subtotal. Sales tax applies
    *  to the full subtotal (requisitions have no per-line taxable flag); whether
    *  the discount comes off that base first is the requisition's own flag. */
-  function totals(newSubtotal: number) {
+  function totals(newSubtotalRaw: number) {
+    // Whole cents: fractional quantities / case pricing give a fractional
+    // raw subtotal, and the integer columns reject it (22P02).
+    const newSubtotal = Math.round(newSubtotalRaw);
     const salesTax = computeSalesTax({
       taxableSubtotal: newSubtotal,
+      subtotal: newSubtotal,
       taxRatePercent: req.taxRatePercent,
       discountCost: req.discountCost,
       discountReducesTax: req.discountReducesTax,
@@ -170,7 +174,7 @@ function DetailsTab({
       partNumber: selected.partNumber ?? "",
       quantity: qty,
       unitCost: costCents,
-      totalCost: qty * costCents,
+      totalCost: Math.round(qty * costCents),
       projectId: canAssignProject && addProjectId !== "none" ? addProjectId : null,
       notes: null,
       taxable: true,

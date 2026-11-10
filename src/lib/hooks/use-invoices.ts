@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { computeInvoiceTotals } from "@/lib/invoices/totals";
@@ -16,6 +17,7 @@ import {
   createInvoiceFromJob,
   findLiveInvoiceCoveringJob,
   findLiveInvoiceForVisit,
+  invoiceBlockReason,
   type InvoiceFromJobInput,
 } from "@/lib/invoices/create-from-job";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
@@ -1577,6 +1579,12 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
   // bill it again and its stock stays decremented. Send it back to pending.
   await resetJobProductsForLines(supabase, [id]);
 
+  // The visit_id tag on a visit's first line is the "this visit is billed"
+  // key every invoicing path checks. Deleting that line must not make the
+  // visit look unbilled while its other lines are still on the invoice (a
+  // re-completion would bill it again), so the tag moves to one of them.
+  const tagTarget = await findVisitTagSuccessor(supabase, id, invoiceId);
+
   // Delete the line item
   const { error } = await supabase
     .from("crm_invoice_line_items")
@@ -1584,7 +1592,54 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
     .eq("id", id);
   if (error) throwIfLockedInvoiceError(error);
 
-  return recalcInvoiceTotalsFromLines(supabase, invoiceId);
+  // After the delete: crm_invoice_line_items_visit_id_unique allows one row per visit.
+  let tagErr: { message?: string } | null = null;
+  if (tagTarget) {
+    const { error: moveErr } = await supabase
+      .from("crm_invoice_line_items")
+      .update({ visit_id: tagTarget.visitId })
+      .eq("id", tagTarget.lineId)
+      .is("visit_id", null);
+    tagErr = moveErr;
+  }
+
+  const result = await recalcInvoiceTotalsFromLines(supabase, invoiceId);
+  if (tagErr) {
+    throw new Error(
+      `The line was removed, but the visit's "already invoiced" marker could not be moved to its remaining line (${tagErr.message ?? "unknown error"}). Don't re-complete that visit until this is fixed, or it may be billed again.`,
+    );
+  }
+  return result;
+}
+
+/**
+ * When the line being deleted carries a visit_id tag, the remaining line of
+ * the same visit that should inherit it. A visit's lines are written
+ * together with the tag on the first, so its other lines are the untagged
+ * ones that follow it (same service date) up to the next visit's tagged
+ * line. On an invoice that bills only this one visit, any remaining line of
+ * the same service date qualifies.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function findVisitTagSuccessor(supabase: any, lineId: string, invoiceId: string): Promise<{ lineId: string; visitId: string } | null> {
+  const { data: rows, error } = await supabase
+    .from("crm_invoice_line_items")
+    .select("id, visit_id, service_date, sort_order, created_at")
+    .eq("invoice_id", invoiceId)
+    .order("sort_order", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  const lines = (rows ?? []) as { id: string; visit_id: string | null; service_date: string | null }[];
+  const idx = lines.findIndex((l) => l.id === lineId);
+  const deleted = idx >= 0 ? lines[idx] : null;
+  if (!deleted?.visit_id) return null;
+  const sameDay = (l: { service_date: string | null }) => l.service_date === deleted.service_date;
+  for (let i = idx + 1; i < lines.length && !lines[i].visit_id; i++) {
+    if (sameDay(lines[i])) return { lineId: lines[i].id, visitId: deleted.visit_id };
+  }
+  if (lines.some((l) => l.id !== lineId && l.visit_id)) return null;
+  const other = lines.find((l) => l.id !== lineId && sameDay(l));
+  return other ? { lineId: other.id, visitId: deleted.visit_id } : null;
 }
 
 /**
@@ -2261,6 +2316,22 @@ export function useInvoiceForVisit(visitId: string | null | undefined) {
 }
 
 
+// Why a visit (or job) must not be invoiced from a manual Invoice button —
+// the client's contract covers it, or it is a project / snow job — or null.
+// The same check createInvoiceFromJob refuses on, so the Dispatch Board can
+// hide the button instead of offering one that only errors.
+export function useInvoiceBlockReason(
+  jobId: string | null | undefined,
+  visitId: string | null | undefined,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["crm-invoices", "block-reason", jobId, visitId ?? null],
+    queryFn: async () => invoiceBlockReason(createClient(), { jobId: jobId as string, visitId }),
+    enabled: !!jobId && enabled,
+  });
+}
+
 // Whether a job is already covered by a live invoice — mirrors
 // applyVisitCompletionSideEffects()'s "job_already_invoiced" guard.
 // JobDetail.tsx's job-level "Invoice" button bills every pending
@@ -2309,8 +2380,13 @@ export function useCreateInvoiceFromJob() {
 // ── automatic invoice when a one-time job is completed ───────────────────────
 
 export interface AutoInvoiceCompletedJobResult {
-  invoiceId: string;
+  /** Null when nothing was invoiced (e.g. the client's contract covers the job). */
+  invoiceId: string | null;
+  /** true when no new invoice was created (already covered, or skipped). */
   alreadyInvoiced: boolean;
+  /** Something the user must know: work left unbilled, or why it was skipped.
+   *  Shown as a toast here — Job Detail only toasts a created invoice. */
+  warning: string | null;
 }
 
 /**
@@ -2325,13 +2401,24 @@ export function useAutoInvoiceCompletedJob() {
   return useMutation({
     mutationFn: async ({ jobId }: { jobId: string; clientId: string }): Promise<AutoInvoiceCompletedJobResult> => {
       const res = await fetch(`/api/crm/jobs/${jobId}/auto-invoice`, { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as { error?: string; invoiceId?: string; alreadyInvoiced?: boolean };
-      if (!res.ok || !body.invoiceId) throw new Error(body.error ?? "Automatic invoice failed");
-      return { invoiceId: body.invoiceId, alreadyInvoiced: !!body.alreadyInvoiced };
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        invoiceId?: string | null;
+        alreadyInvoiced?: boolean;
+        skipped?: boolean;
+        warning?: string | null;
+      };
+      if (!res.ok || (!body.invoiceId && !body.skipped)) throw new Error(body.error ?? "Automatic invoice failed");
+      return {
+        invoiceId: body.invoiceId ?? null,
+        alreadyInvoiced: !!body.alreadyInvoiced || !!body.skipped,
+        warning: body.warning ?? null,
+      };
     },
     onSuccess: (result, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-      if (result.alreadyInvoiced) return;
+      if (result.warning) toast.warning(result.warning, { duration: 10000 });
+      if (result.alreadyInvoiced || !result.invoiceId) return;
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
       qc.invalidateQueries({ queryKey: ["crm-job-products", vars.jobId] });

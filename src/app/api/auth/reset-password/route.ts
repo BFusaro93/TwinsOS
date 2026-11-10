@@ -84,7 +84,7 @@ export async function POST(request: Request) {
         <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Reset your password</h2>
         <p style="margin:0 0 24px;color:#475569">Click the button below to set a new password for your ${isPortal ? "client portal" : "Equipt"} account.</p>
         <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Reset Password</a>
-        <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
+        <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">For security this link expires soon — if it has, request a new one from the sign-in page. If you didn't request this, you can ignore this email.</p>
       </div>
     `,
   });

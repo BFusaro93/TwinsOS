@@ -23,6 +23,7 @@ import { stripHtml } from "@/lib/utils/strip-html";
 import type { CRMPackageService } from "@/types/crm-packages";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
+import { removeJobService } from "@/lib/visits/job-service-removal";
 import {
   isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARDED_STATUS_CHANGES,
   VISIT_IN_PROGRESS_STATUS_MESSAGE, VISIT_IN_PROGRESS_DELETE_MESSAGE,
@@ -115,6 +116,7 @@ export function mapJob(row: any): CRMJob {
     recurrenceRule: row.recurrence_rule,
     recurrenceStart: row.recurrence_start,
     recurrenceEnd: row.recurrence_end,
+    generateVisitsAfter: row.generate_visits_after ?? null,
     packageId: row.package_id,
     packageStep: row.package_step,
     packageTotalSteps: row.package_total_steps,
@@ -1878,6 +1880,10 @@ export function useCreateClientJob() {
       // a different crew than another (e.g. Spring Clean-up to one crew, Mulch
       // to another) even though they were added together on the same job.
       const autoVisitTypes = ['one_time', 'snow', 'project', 'recurring'];
+      // A recurring job's first visit carries its occurrence_date, exactly as
+      // generate-visits and estimate conversion stamp it: without one,
+      // deleting the visit let the generator re-create it on the same date.
+      const recurringOccurrence = values.jobType === 'recurring' ? { occurrence_date: values.scheduledDate } : {};
       if (values.scheduledDate && autoVisitTypes.includes(values.jobType)) {
         if (values.services.length > 1) {
           const visitRows = values.services.map((s, i) => ({
@@ -1885,6 +1891,7 @@ export function useCreateClientJob() {
             client_id: values.clientId,
             job_service_id: serviceIdBySortOrder[i] ?? null,
             scheduled_date: values.scheduledDate,
+            ...recurringOccurrence,
             status: 'scheduled',
             crew_id: values.crewId || null,
             men_count: s.teamSize || jobManCount,
@@ -1905,6 +1912,13 @@ export function useCreateClientJob() {
               job_id: job.id,
               client_id: values.clientId,
               scheduled_date: values.scheduledDate,
+              ...recurringOccurrence,
+              // A single-service recurring job's first visit is that service's
+              // occurrence (linked, like every visit the generator makes), so
+              // it counts toward that service's max_visits like the rest.
+              ...(values.jobType === 'recurring' && values.services.length === 1 && serviceIdBySortOrder[0]
+                ? { job_service_id: serviceIdBySortOrder[0] }
+                : {}),
               status: 'scheduled',
               crew_id: values.crewId || null,
               men_count: jobManCount,
@@ -3627,32 +3641,19 @@ export function useAddJobService() {
 
 export function useDeleteJobService() {
   const qc = useQueryClient();
+  const orgTimeZone = useOrgTimeZone();
   return useMutation({
-    mutationFn: async ({ id }: { id: string }) => {
-      const supabase = createClient();
-      // crm_job_visits.job_service_id is ON DELETE SET NULL, so deleting a
-      // service silently turned its remaining visits into WHOLE-JOB visits: on
-      // completion they billed every other service on the job again, and the
-      // generator treated them as holding that date for all services. Retire the
-      // service's not-yet-started visits first (completed ones are already
-      // invoiced and stay).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: visitErr } = await (supabase as any)
-        .from('crm_job_visits')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('job_service_id', id)
-        .in('status', ['scheduled', 'dispatched'])
-        .is('clocked_in_at', null)
-        .is('deleted_at', null);
-      if (visitErr) throw visitErr;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from('crm_job_services').delete().eq('id', id);
-      if (error) throw error;
-    },
+    // Retires the service's untouched upcoming visits, then deletes the row —
+    // or, when it has history (other live visits / job products), stops it
+    // (included = false) so those visits keep their link. See
+    // src/lib/visits/job-service-removal.ts.
+    mutationFn: async ({ id }: { id: string }) =>
+      removeJobService(createClient(), { serviceId: id, today: todayInZone(orgTimeZone) }),
     onSuccess: () => {
       // No jobId in scope here — see useUpdateJobService's onSuccess above.
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
     },
   });
 }

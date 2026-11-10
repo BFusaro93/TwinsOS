@@ -8,8 +8,11 @@ import {
   useBulkCancelClients,
   useBulkActivateClients,
   useBulkUpdateClients,
+  previewOpenEstimatesLost,
+  markOpenEstimatesLost,
+  openEstimatesConfirmOptions,
 } from "@/lib/hooks/use-clients";
-import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useCancellationReasonOptions } from "@/lib/hooks/use-cancellation-reasons";
 import { useClientFilterFields } from "@/lib/hooks/use-client-filter-fields";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useLoadMoreSentinel } from "@/lib/hooks/use-load-more-sentinel";
@@ -83,13 +86,11 @@ const STATUS_COLOR: Record<string, string> = {
 function BulkCancelDialog({
   open, onOpenChange, count, onConfirm,
 }: { open: boolean; onOpenChange: (o: boolean) => void; count: number; onConfirm: (reason: string) => Promise<void> }) {
-  const { data: reasons = [] } = useOrgList("cancellation_reasons");
+  // Built-ins plus the org's own list (deduplicated); its "Other" entry asks for a typed reason.
+  const allReasons = useCancellationReasonOptions().filter((r) => r !== "Other");
   const [reason, setReason] = useState("");
   const [custom, setCustom] = useState("");
   const [saving, setSaving] = useState(false);
-
-  const BUILTIN = ["Price", "Moved", "Unhappy with service", "No longer needs service"];
-  const allReasons = [...BUILTIN, ...reasons.map((r) => r.value)];
 
   async function confirm() {
     const finalReason = reason === "__custom__" ? custom.trim() : reason;
@@ -106,7 +107,10 @@ function BulkCancelDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Cancel {count} Client{count !== 1 ? "s" : ""}</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-600 dark:text-neutral-400">Select a cancellation reason. This is required and drives cancellation reporting.</p>
+        <p className="text-sm text-slate-600 dark:text-neutral-400">
+          Select a cancellation reason. This is required and drives cancellation reporting.
+          Leads in the selection never became clients, so they are closed as Lost instead.
+        </p>
         <div className="space-y-3">
           <div>
             <Label className="text-xs">Reason <span className="text-red-500 dark:text-red-400">*</span></Label>
@@ -140,8 +144,13 @@ function BulkCancelDialog({
 // ── Bulk Edit dialog ──────────────────────────────────────────────────────────
 
 function BulkEditDialog({
-  open, onOpenChange, count, onConfirm,
-}: { open: boolean; onOpenChange: (o: boolean) => void; count: number; onConfirm: (patch: Record<string, unknown>) => Promise<void> }) {
+  open, onOpenChange, count, onConfirm, canChangeStatus,
+}: {
+  open: boolean; onOpenChange: (o: boolean) => void; count: number;
+  onConfirm: (patch: Record<string, unknown>) => Promise<void>;
+  /** Setting Inactive needs the activate/deactivate keys, same as Cancel. */
+  canChangeStatus: boolean;
+}) {
   const [field, setField] = useState("");
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
@@ -158,7 +167,7 @@ function BulkEditDialog({
     // On only: clearing it in bulk would re-subscribe clients who unsubscribed
     // (the bulk route refuses it). Turn it off on a single client instead.
     { key: "do_not_market", label: "Do Not Market", options: ["true"], hint: "Can only be turned on in bulk. To turn it off, edit the client individually." },
-  ] as { key: string; label: string; options: string[]; hint?: string }[];
+  ].filter((f) => f.key !== "status" || canChangeStatus) as { key: string; label: string; options: string[]; hint?: string }[];
 
   const selected = FIELDS.find((f) => f.key === field);
 
@@ -394,8 +403,9 @@ export function ClientsTable({
                     disabled={bulkActivating}
                     onClick={async () => {
                       try {
-                        await bulkActivate(selectedClientIds);
-                        toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} activated`);
+                        const r = await bulkActivate(selectedClientIds);
+                        toast.success(`${r.affected} client${r.affected !== 1 ? "s" : ""} activated`
+                          + (r.skipped > 0 ? ` — ${r.skipped} lead${r.skipped !== 1 ? "s" : ""} skipped (converting a lead needs the Convert/Close permission)` : ""));
                         clearSelection();
                       } catch { toast.error("Failed to activate"); }
                     }}
@@ -583,23 +593,42 @@ export function ClientsTable({
         onOpenChange={setBulkCancelOpen}
         count={selectedCount}
         onConfirm={async (reason) => {
-          // Ask about their upcoming visits first, act once the clients are cancelled.
+          // Ask about their upcoming visits and open estimates first, act once the clients are cancelled.
           let cancelVisits = false;
           try {
             const n = await previewClientVisits(selectedClientIds);
             if (n > 0) cancelVisits = await askConfirm(clientVisitsConfirmOptions(n));
           } catch { toast.warning("Couldn't check upcoming visits — they were left as they are."); }
-          await bulkCancel({ clientIds: selectedClientIds, reason });
+          let markEstimates = false;
+          if (can("estimate_edit")) {
+            try {
+              const m = await previewOpenEstimatesLost(selectedClientIds);
+              if (m > 0) markEstimates = await askConfirm(openEstimatesConfirmOptions(m));
+            } catch { toast.warning("Couldn't check open estimates — they were left as they are."); }
+          }
+          const result = await bulkCancel({ clientIds: selectedClientIds, reason });
+          const skippedNote = result.skipped > 0
+            ? ` — ${result.skipped} lead${result.skipped !== 1 ? "s" : ""} skipped (closing a lead needs the lead Close permission)`
+            : "";
+          if (markEstimates) {
+            try {
+              const marked = await markOpenEstimatesLost(selectedClientIds, reason);
+              if (marked > 0) toast.success(`${marked} open estimate${marked !== 1 ? "s" : ""} marked lost`);
+            } catch {
+              toast.error("The open estimates couldn't be marked lost — change them from the Estimates page.");
+            }
+            await qc.invalidateQueries({ queryKey: ["estimates"] });
+          }
           if (cancelVisits) {
             try {
               const done = await cancelClientVisitsRemote(selectedClientIds);
-              toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} cancelled — ${done} upcoming visit${done !== 1 ? "s" : ""} cancelled`);
+              toast.success(`${result.affected} account${result.affected !== 1 ? "s" : ""} closed — ${done} upcoming visit${done !== 1 ? "s" : ""} cancelled${skippedNote}`);
             } catch {
               toast.error("Clients cancelled, but their upcoming visits couldn't be cancelled — remove them from the dispatch board.");
             }
             await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
           } else {
-            toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} cancelled`);
+            toast.success(`${result.affected} account${result.affected !== 1 ? "s" : ""} closed${skippedNote}`);
           }
           clearSelection();
         }}
@@ -608,9 +637,27 @@ export function ClientsTable({
         open={bulkEditOpen}
         onOpenChange={(o) => { setBulkEditOpen(o); if (!o) clearSelection(); }}
         count={selectedCount}
+        canChangeStatus={canActivateDeactivate}
         onConfirm={async (patch) => {
-          await bulkUpdate({ clientIds: selectedClientIds, patch });
-          toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} updated`);
+          // Setting clients Inactive asks the same "Cancel their N upcoming visits?" question as Cancel.
+          let cancelVisits = false;
+          if (patch.status === "inactive") {
+            try {
+              const n = await previewClientVisits(selectedClientIds);
+              if (n > 0) cancelVisits = await askConfirm(clientVisitsConfirmOptions(n));
+            } catch { toast.warning("Couldn't check upcoming visits — they were left as they are."); }
+          }
+          const r = await bulkUpdate({ clientIds: selectedClientIds, patch });
+          toast.success(`${r.affected} client${r.affected !== 1 ? "s" : ""} updated`);
+          if (cancelVisits) {
+            try {
+              const done = await cancelClientVisitsRemote(selectedClientIds);
+              toast.success(`${done} upcoming visit${done !== 1 ? "s" : ""} cancelled`);
+            } catch {
+              toast.error("Clients set Inactive, but their upcoming visits couldn't be cancelled — remove them from the dispatch board.");
+            }
+            await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+          }
           clearSelection();
         }}
       />

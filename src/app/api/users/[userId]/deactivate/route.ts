@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
+import { z } from "zod";
 
 const log = logger.child("users-deactivate");
 
@@ -10,6 +11,15 @@ const log = logger.child("users-deactivate");
 // very long duration is the standard way to represent one (mirrors Supabase's
 // own documented workaround).
 const PERMANENT_BAN_DURATION = "876000h";
+
+/** Optional body. `revokeApiKeys`: also revoke the API keys this person created
+ *  (the deactivate dialog lists them, checked by default). */
+const DeactivateBody = z.object({ revokeApiKeys: z.boolean().optional() });
+
+/** The last-active-admin guard's message from prevent_profile_role_escalation(). */
+function guardMessage(err: { code?: string; message?: string } | null): string | null {
+  return err?.code === "P0001" && err.message ? err.message : null;
+}
 
 export async function POST(
   request: Request,
@@ -45,6 +55,9 @@ export async function POST(
     return NextResponse.json({ error: "You cannot deactivate your own account" }, { status: 400 });
   }
 
+  const parsedBody = DeactivateBody.safeParse(await request.json().catch(() => ({})));
+  const revokeApiKeys = parsedBody.success ? parsedBody.data.revokeApiKeys === true : false;
+
   const { data: targetProfile } = await supabase
     .from("profiles")
     .select("org_id, status")
@@ -68,6 +81,9 @@ export async function POST(
     .update({ status: "inactive" })
     .eq("id", userId);
   if (updateError) {
+    // "This is the last active admin — promote another admin first."
+    const guard = guardMessage(updateError);
+    if (guard) return NextResponse.json({ error: guard }, { status: 409 });
     log.error("profile update failed", { error: updateError.message });
     return NextResponse.json({ error: "Failed to deactivate user" }, { status: 500 });
   }
@@ -99,5 +115,45 @@ export async function POST(
     return NextResponse.json({ error: "Failed to deactivate user" }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  // A login and its employee record are one person: deactivating either
+  // deactivates the other (owner decision), so the employee drops off crew
+  // lists, pickers and has_crm_access() along with the login.
+  const { error: employeeError } = await adminClient
+    .from("crm_employees")
+    .update({ is_active: false })
+    .eq("org_id", callerProfile.org_id)
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
+
+  let revokedKeys = 0;
+  if (revokeApiKeys) {
+    const { data: revoked, error: keyError } = await adminClient
+      .from("api_keys")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("org_id", callerProfile.org_id)
+      .eq("created_by", userId)
+      .is("revoked_at", null)
+      .is("deleted_at", null)
+      .select("id");
+    if (keyError) {
+      log.error("api key revoke failed", { error: keyError.message });
+      return NextResponse.json(
+        { error: "The user was deactivated, but their API keys could not be revoked. Revoke them under Settings → Integrations." },
+        { status: 500 }
+      );
+    }
+    revokedKeys = revoked?.length ?? 0;
+  }
+
+  if (employeeError) {
+    log.error("employee deactivate failed", { error: employeeError.message });
+    return NextResponse.json({
+      success: true,
+      revokedKeys,
+      warning: "The login was deactivated, but their employee record could not be — deactivate it under Team → Employees.",
+    });
+  }
+
+  return NextResponse.json({ success: true, revokedKeys });
 }

@@ -37,7 +37,24 @@ export async function GET() {
   }
   const timeZone = await getMyTimeZone(supabase);
   const now = new Date();
-  return NextResponse.json({ schedules: (data ?? []).map((row) => withNextRun(row, now, timeZone)) });
+  // Who each schedule runs as, so the Scheduled tab can show the owner and
+  // offer "Take over" when that person was deactivated.
+  const creatorIds = [...new Set((data ?? []).map((row) => row.created_by).filter((id): id is string => !!id))];
+  const creators = new Map<string, { name: string | null; status: string | null }>();
+  if (creatorIds.length > 0) {
+    const { data: profiles } = await supabase.from("profiles").select("id, name, status").in("id", creatorIds);
+    for (const p of profiles ?? []) creators.set(p.id, { name: p.name ?? null, status: p.status ?? null });
+  }
+  return NextResponse.json({
+    schedules: (data ?? []).map((row) => {
+      const creator = row.created_by ? creators.get(row.created_by) : undefined;
+      return {
+        ...withNextRun(row, now, timeZone),
+        creator_name: creator?.name ?? null,
+        creator_inactive: creator?.status === "inactive",
+      };
+    }),
+  });
 }
 
 export async function POST(request: Request) {

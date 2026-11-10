@@ -101,7 +101,10 @@ export function ApiMcpGuide() {
           (&quot;API access isn&apos;t included on your plan&quot;) and no key is created. This is
           checked live, not just at creation time: if the org later cancels the add-on or downgrades
           off a plan that bundles it, every key and MCP connection it already issued stops working on
-          its very next request — a 403 with the same message, not just a block on new keys.
+          its very next request — a 403 with the same message, not just a block on new keys. A
+          purchased add-on belongs to the subscription it was bought on: if the subscription ends,
+          purchased add-ons end with it, and resubscribing later doesn&apos;t bring them back —
+          add them again in Settings → Subscription.
         </Callout>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
@@ -465,6 +468,9 @@ export function ApiMcpGuide() {
         </p>
         <Callout>
           Revoked keys stay listed, greyed out, for your own audit trail — they just stop working.
+          A key keeps working after the admin who created it is deactivated; the list marks it
+          &quot;Created by … (deactivated)&quot;, and the Users page&apos;s deactivate dialog lists the
+          person&apos;s keys with <strong>Revoke these keys</strong> checked by default.
           There&apos;s no &quot;pause&quot; short of revoking; if you need a key temporarily disabled,
           revoke it and create a fresh one when it&apos;s needed again. Once a key is revoked, a{" "}
           <strong>Remove</strong> button next to it lets you clear it from the list entirely if it&apos;s

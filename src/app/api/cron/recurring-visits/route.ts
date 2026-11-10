@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -32,6 +32,8 @@ export const maxDuration = 300;
  */
 
 const LOOKAHEAD_DAYS = 14;
+/** cron_cursors row holding the org id the next run starts with. */
+const CURSOR_NAME = "recurring-visits";
 /** Stop starting new orgs after this long, leaving room before maxDuration. */
 const RUN_BUDGET_MS = 270_000;
 
@@ -98,16 +100,25 @@ export async function GET(request: Request) {
     else jobsByOrg.set(k, [job]);
   }
   const result = { planned: 0, inserted: 0, errors: [] as unknown[] };
-  // Start at a different org each day and stop before maxDuration: one org with thousands of
-  // package programs could use the whole run, and the orgs after it in a fixed order were never
-  // topped up. Visits are generated LOOKAHEAD_DAYS ahead, so an org skipped once is caught up
-  // the next day.
+  // Stop starting orgs before maxDuration (one org with thousands of package programs can use
+  // most of a run) and resume NEXT run exactly where this one stopped: the cursor holds the
+  // org to start with. (Shifting the start by one org per day instead left the orgs behind a
+  // slow stretch waiting weeks.) It is written BEFORE each org is processed, pointing past it,
+  // so a run killed mid-org still moves on — that org's inserts are idempotent, and it gets its
+  // turn again when the rotation comes back round. Visits are generated LOOKAHEAD_DAYS ahead,
+  // so an org that waits a day is caught up then.
   const startedAt = Date.now();
   let stoppedEarly = false;
   const orgIds = [...jobsByOrg.keys()].sort();
-  const offset = orgIds.length ? Math.floor(startedAt / 86_400_000) % orgIds.length : 0;
-  for (const orgId of [...orgIds.slice(offset), ...orgIds.slice(0, offset)]) {
+  const cursor = await readCursor(supabase);
+  const start = cursor ? Math.max(0, orgIds.findIndex((id) => id >= cursor)) : 0;
+  const order = [...orgIds.slice(start), ...orgIds.slice(0, start)];
+  let processed = 0;
+  for (let i = 0; i < order.length; i++) {
+    const orgId = order[i];
     if (Date.now() - startedAt > RUN_BUDGET_MS) { stoppedEarly = true; break; }
+    await writeCursor(supabase, order[(i + 1) % order.length]);
+    processed++;
     const orgJobs = jobsByOrg.get(orgId) ?? [];
     try {
       const r = await generateVisitsForJobs(supabase, orgJobs, {
@@ -127,7 +138,12 @@ export async function GET(request: Request) {
   if (result.errors.length > 0) {
     log.error("visit generation errors", { errors: result.errors.slice(0, 10), count: result.errors.length });
   }
-  if (stoppedEarly) log.warn("recurring visits stopped at the time budget; remaining orgs run first tomorrow", { orgs: orgIds.length });
+  if (stoppedEarly) {
+    log.warn("recurring visits stopped at the time budget; the next run resumes with the first org not reached", {
+      orgs: orgIds.length,
+      processed,
+    });
+  }
   log.info("recurring visits generated", {
     jobs: jobs.length,
     orgCalendars: orgToday.size,
@@ -141,4 +157,23 @@ export async function GET(request: Request) {
     errors: result.errors.length,
     stoppedEarly,
   }, { status: result.errors.length > 0 && result.inserted === 0 ? 500 : 200 });
+}
+
+type CronClient = SupabaseClient<Database>;
+
+/** The org id to start with, or null (start at the beginning). A read failure starts at the beginning. */
+async function readCursor(supabase: CronClient): Promise<string | null> {
+  const { data, error } = await supabase.from("cron_cursors").select("cursor").eq("name", CURSOR_NAME).maybeSingle();
+  if (error) {
+    log.warn("cron cursor read failed; starting at the first org", { error: error.message });
+    return null;
+  }
+  return data?.cursor ?? null;
+}
+
+async function writeCursor(supabase: CronClient, orgId: string | undefined): Promise<void> {
+  const { error } = await supabase
+    .from("cron_cursors")
+    .upsert({ name: CURSOR_NAME, cursor: orgId ?? null, updated_at: new Date().toISOString() }, { onConflict: "name" });
+  if (error) log.warn("cron cursor write failed", { error: error.message });
 }

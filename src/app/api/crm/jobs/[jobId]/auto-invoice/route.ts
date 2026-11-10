@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { assertOrgWritable } from "@/lib/org-writable";
-import { buildCompletedJobInvoiceInput, createInvoiceFromJob } from "@/lib/invoices/create-from-job";
+import { invoiceCompletedJob, isInvoiceBlockedError } from "@/lib/invoices/create-from-job";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
@@ -17,7 +17,10 @@ const log = logger.child("jobs/auto-invoice");
  * and written here as the service role. The amounts come from the job's own
  * services and products in the database, never from the request, and only a
  * completed one-time job the caller can see is invoiced. Already-invoiced jobs
- * return the existing invoice (alreadyInvoiced) instead of a second one.
+ * return the existing invoice (alreadyInvoiced) instead of a second one; a job
+ * whose split per-service visits were partly billed gets the remainder billed
+ * (invoiceCompletedJob). Work the contract covers is not invoiced: the
+ * response says so (skipped + warning) instead of failing.
  */
 export async function POST(
   _request: Request,
@@ -57,10 +60,12 @@ export async function POST(
 
   try {
     const today = todayInZone(await getOrgTimeZone(service, j.org_id));
-    const input = await buildCompletedJobInvoiceInput(service, j.id, today);
-    const { row, alreadyInvoiced } = await createInvoiceFromJob(service, user.id, input);
-    return NextResponse.json({ invoiceId: (row as { id: string }).id, alreadyInvoiced });
+    const { invoiceId, alreadyInvoiced, warning } = await invoiceCompletedJob(service, user.id, j.id, today);
+    return NextResponse.json({ invoiceId, alreadyInvoiced, warning });
   } catch (err) {
+    if (isInvoiceBlockedError(err)) {
+      return NextResponse.json({ invoiceId: null, alreadyInvoiced: false, skipped: true, warning: err.message });
+    }
     const message = err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err);
     log.error("automatic invoice for completed job failed", { jobId, error: message });
     return NextResponse.json({ error: message }, { status: 500 });

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useQuery } from "@/lib/hooks/use-query";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -19,6 +20,25 @@ function ResetPasswordForm() {
   const [verifying, setVerifying] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [invalidLink, setInvalidLink] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+
+  // An invite link (type=invite, or a re-sent invite that fell back to a
+  // recovery link — marked invite=1) carries the invitee's user id, so an
+  // already-used link can say "you're already set up" instead of "ask your
+  // admin for a new invite".
+  const isInviteLink = searchParams.get("type") === "invite" || searchParams.get("invite") === "1";
+  const inviteUid = searchParams.get("uid");
+  const { data: inviteStatus, isLoading: inviteStatusLoading } = useQuery<{ active: boolean }>({
+    queryKey: ["invite-status", inviteUid],
+    queryFn: async () => {
+      const res = await fetch(`/api/auth/invite-status?uid=${encodeURIComponent(inviteUid ?? "")}`);
+      if (!res.ok) return { active: false };
+      return (await res.json()) as { active: boolean };
+    },
+    enabled: invalidLink && isInviteLink && !!inviteUid,
+    retry: false,
+  });
+  const alreadySetUp = isInviteLink && (signedIn || inviteStatus?.active === true);
 
   // Exchange the token_hash from the email link for a live session.
   // Handles both password reset (type=recovery) and new user invites (type=invite).
@@ -35,10 +55,19 @@ function ResetPasswordForm() {
     const supabase = createClient();
     supabase.auth
       .verifyOtp({ token_hash: tokenHash, type: type as "recovery" | "invite" })
-      .then(({ error: verifyError }) => {
+      .then(async ({ error: verifyError }) => {
         if (verifyError) {
-          setError("This link has expired or is invalid. Please ask your admin to send a new invite.");
+          const invite = type === "invite" || searchParams.get("invite") === "1";
+          setError(
+            invite
+              ? "This invite link has expired or was already used. If you haven't set up your account yet, ask your admin to send a new invite."
+              : "This reset link has expired or was already used. Request a new one below."
+          );
           setInvalidLink(true);
+          // Opened again in the browser they set up their account in: they are
+          // signed in already.
+          const { data } = await supabase.auth.getUser();
+          if (data.user) setSignedIn(true);
         }
         setVerifying(false);
       });
@@ -78,19 +107,35 @@ function ResetPasswordForm() {
 
   return (
     <div className="rounded-xl border bg-white p-6 shadow-sm">
-      {verifying ? (
+      {verifying || (invalidLink && isInviteLink && !!inviteUid && inviteStatusLoading) ? (
         <div className="flex items-center justify-center py-6">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+        </div>
+      ) : invalidLink && alreadySetUp ? (
+        <div className="flex flex-col gap-3 py-2 text-center">
+          <p className="text-sm text-slate-700">You&apos;re already set up — this invite link has been used.</p>
+          <Link href={signedIn ? "/home" : "/login"} className="text-sm font-medium text-brand-600 hover:underline">
+            {signedIn ? "Go to the app" : "Sign in"}
+          </Link>
+          <Link href="/forgot-password" className="text-xs text-slate-500 hover:underline">
+            Forgot your password?
+          </Link>
         </div>
       ) : invalidLink ? (
         <div className="flex flex-col gap-3 py-2 text-center">
           <p className="text-sm text-red-600">{error ?? "Invalid reset link."}</p>
-          <Link
-            href="/forgot-password"
-            className="text-sm text-brand-600 hover:underline"
-          >
-            Request a new reset link
-          </Link>
+          {isInviteLink ? (
+            <Link href="/login" className="text-sm text-brand-600 hover:underline">
+              Already set your password? Sign in
+            </Link>
+          ) : (
+            <Link
+              href="/forgot-password"
+              className="text-sm text-brand-600 hover:underline"
+            >
+              Request a new reset link
+            </Link>
+          )}
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

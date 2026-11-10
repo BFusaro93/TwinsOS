@@ -1,4 +1,5 @@
 import {
+  COUNTED_VISIT_STATUSES,
   GENERATOR_JOB_COLUMNS,
   NON_GENERATING_JOB_STATUSES,
   generateVisitsForJobs,
@@ -31,6 +32,12 @@ type AnyClient = any;
  * In-progress, completed, dispatched and hand-moved visits stay exactly where
  * they are. A multi-crew stop is all-or-nothing (see prune.ts).
  *
+ * "Keep existing visits" (keep) removes nothing: each job records the last
+ * date it already has a visit on (crm_jobs.generate_visits_after), and the
+ * generator only creates visits on the new rules AFTER it — so no week gets a
+ * visit on the old day and another on the new one. An apply replaces visits,
+ * so it clears that floor first.
+ *
  * Every read and write runs on the caller's RLS client. A switched-off
  * schedule is a no-op: the generator creates nothing for it, so pruning would
  * only delete visits.
@@ -47,9 +54,10 @@ export interface ScheduleRescheduleResult {
 
 export async function rescheduleVisitsForSchedule(
   supabase: AnyClient,
-  args: { orgId: string; scheduleId: string; today: string; apply: boolean }
+  args: { orgId: string; scheduleId: string; today: string; apply: boolean; keep?: boolean }
 ): Promise<ScheduleRescheduleResult> {
   const out: ScheduleRescheduleResult = { jobs: 0, count: 0, generated: 0, errors: [] };
+  const apply = args.apply && !args.keep;
 
   const { data: schedule } = await supabase
     .from("crm_schedules")
@@ -76,6 +84,22 @@ export async function rescheduleVisitsForSchedule(
   }
   out.jobs = jobs.length;
 
+  if (args.keep) {
+    out.count = await holdNewVisitsAfterExisting(supabase, jobs, args.today, out.errors);
+    return out;
+  }
+
+  // Replacing visits: a previous "Keep existing visits" floor no longer applies.
+  if (apply) {
+    const floored = jobs.filter((j) => j.generate_visits_after);
+    for (let i = 0; i < floored.length; i += 100) {
+      const ids = floored.slice(i, i + 100).map((j) => j.id);
+      const { error: clearErr } = await supabase.from("crm_jobs").update({ generate_visits_after: null }).in("id", ids);
+      if (clearErr) out.errors.push((clearErr as { message: string }).message);
+    }
+    for (const j of floored) j.generate_visits_after = null;
+  }
+
   const { byOrg, error: schedErr } = await loadSchedulesByOrg(supabase, [args.orgId]);
   if (schedErr) {
     out.errors.push(schedErr);
@@ -92,14 +116,14 @@ export async function rescheduleVisitsForSchedule(
     };
     try {
       const ids = await findUntouchedFutureVisits(supabase, job.id, scope);
-      if (args.apply && ids.length > 0) out.count += await pruneVisits(supabase, ids, scope.statuses);
+      if (apply && ids.length > 0) out.count += await pruneVisits(supabase, ids, scope.statuses);
       else out.count += ids.length;
     } catch (e) {
       out.errors.push(e instanceof Error ? e.message : "Failed to check existing visits");
     }
   }
 
-  if (args.apply && jobs.length > 0) {
+  if (apply && jobs.length > 0) {
     const result = await generateVisitsForJobs(supabase, jobs, {
       horizonDays: 365,
       maxVisitsPerJob: 400,
@@ -110,4 +134,47 @@ export async function rescheduleVisitsForSchedule(
     out.errors.push(...result.errors);
   }
   return out;
+}
+
+/**
+ * "Keep existing visits": for each job, the last date it already has a visit
+ * on (scheduled / dispatched / in progress / completed, org-today onward)
+ * becomes its generate_visits_after floor, never moving an existing floor
+ * earlier. Returns how many jobs got a floor.
+ */
+async function holdNewVisitsAfterExisting(
+  supabase: AnyClient,
+  jobs: GeneratorJob[],
+  today: string,
+  errors: string[]
+): Promise<number> {
+  const lastByJob = new Map<string, string>();
+  for (let i = 0; i < jobs.length; i += 100) {
+    const ids = jobs.slice(i, i + 100).map((j) => j.id);
+    const { rows, error } = await selectAllRows<{ job_id: string; scheduled_date: string | null }>(() => supabase
+      .from("crm_job_visits")
+      .select("job_id, scheduled_date")
+      .in("job_id", ids)
+      .is("deleted_at", null)
+      .in("status", COUNTED_VISIT_STATUSES)
+      .gte("scheduled_date", today));
+    if (error) {
+      errors.push(error);
+      return 0;
+    }
+    for (const r of rows) {
+      if (!r.scheduled_date) continue;
+      const prev = lastByJob.get(r.job_id);
+      if (!prev || r.scheduled_date > prev) lastByJob.set(r.job_id, r.scheduled_date);
+    }
+  }
+  let floored = 0;
+  for (const job of jobs) {
+    const last = lastByJob.get(job.id);
+    if (!last || (job.generate_visits_after && job.generate_visits_after >= last)) continue;
+    const { error } = await supabase.from("crm_jobs").update({ generate_visits_after: last }).eq("id", job.id);
+    if (error) errors.push((error as { message: string }).message);
+    else floored++;
+  }
+  return floored;
 }

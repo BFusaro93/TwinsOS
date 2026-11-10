@@ -34,9 +34,12 @@ interface PartDialogProps {
   onOpenChange: (v: boolean) => void;
   pmScheduleAssetId: string;
   editing?: PMScheduleAssetPart | null;
+  /** Parts already on this asset's template — hidden from the picker, since a
+   *  work order can hold each part only once. */
+  excludePartIds?: string[];
 }
 
-function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing }: PartDialogProps) {
+function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing, excludePartIds = [] }: PartDialogProps) {
   const { data: parts } = useParts();
   const [search, setSearch] = useState("");
   const [partKey, setPartKey] = useState(editing?.partId ?? "");
@@ -46,8 +49,10 @@ function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing }: PartDial
   const addPart = useAddPMScheduleAssetPart();
   const updatePart = useUpdatePMScheduleAssetPart();
 
+  const excluded = new Set(excludePartIds);
   const filtered = (parts ?? []).filter((p) =>
-    !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.partNumber.toLowerCase().includes(search.toLowerCase())
+    !excluded.has(p.id) &&
+    (!search || p.name.toLowerCase().includes(search.toLowerCase()) || p.partNumber.toLowerCase().includes(search.toLowerCase()))
   );
   const selectedPart = (parts ?? []).find((p) => p.id === partKey);
 
@@ -98,7 +103,9 @@ function PartDialog({ open, onOpenChange, pmScheduleAssetId, editing }: PartDial
               />
               <div className="max-h-56 overflow-y-auto rounded border">
                 {filtered.length === 0 ? (
-                  <p className="p-3 text-center text-sm text-slate-400 dark:text-neutral-500">No parts found</p>
+                  <p className="p-3 text-center text-sm text-slate-400 dark:text-neutral-500">
+                    {search || excluded.size === 0 ? "No parts found" : "All parts are already added."}
+                  </p>
                 ) : (
                   filtered.map((p) => (
                     <button
@@ -245,6 +252,7 @@ function AssetPartsSection({ pmScheduleAssetId }: { pmScheduleAssetId: string })
         open={addOpen}
         onOpenChange={setAddOpen}
         pmScheduleAssetId={pmScheduleAssetId}
+        excludePartIds={(parts ?? []).map((p) => p.partId).filter((id): id is string => !!id)}
       />
       <PartDialog
         open={!!editingPart}

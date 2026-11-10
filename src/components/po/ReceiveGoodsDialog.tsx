@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -35,9 +35,8 @@ import { createClient } from "@/lib/supabase/client";
 import { syncPartQtyToProduct } from "@/lib/hooks/use-wo-costs";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useProducts, useReceiveProductCostLayer } from "@/lib/hooks/use-products";
-import { useParts } from "@/lib/hooks/use-parts";
-import { useReceivePartCostLayer } from "@/lib/hooks/use-parts";
-import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
+import { findLinkedPart, useReceivePartCostLayer } from "@/lib/hooks/use-parts";
+import { useCreateGoodsReceipt, useDeleteGoodsReceipt, usePOGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
 import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
@@ -77,17 +76,21 @@ export function ReceiveGoodsDialog({
 }: ReceiveGoodsDialogProps) {
   const { data: users = [] } = useUsers();
   const { data: products = [] } = useProducts();
-  const { data: parts = [] } = useParts();
   const { mutateAsync: receivePartLayer } = useReceivePartCostLayer();
   const { mutateAsync: receiveProductLayer } = useReceiveProductCostLayer();
   const { mutateAsync: createReceipt, isPending: saving } = useCreateGoodsReceipt();
   const { mutateAsync: deleteReceipt } = useDeleteGoodsReceipt();
-  const { data: allReceipts = [], isFetched: receiptsFetched } = useGoodsReceipts();
+  // This PO's receipts only — the org-wide receipts list is capped, and a
+  // missing prior receipt made the dialog offer its quantity again.
+  const { data: poReceipts = [], isFetched: receiptsFetched } = usePOGoodsReceipts(po.id);
   const [applyingInventory, setApplyingInventory] = useState(false);
+  // Set synchronously on the first click, before anything is awaited: the
+  // `saving` / `applyingInventory` flags only take effect after a re-render,
+  // so a double-click could start two submissions (two receipts).
+  const submittingRef = useRef(false);
 
   // Total already received per line item across all prior receipts for this PO
-  const alreadyReceivedMap = allReceipts
-    .filter((r) => r.purchaseOrderId === po.id)
+  const alreadyReceivedMap = poReceipts
     .flatMap((r) => r.lines)
     .reduce((map, l) => {
       map.set(l.lineItemId, (map.get(l.lineItemId) ?? 0) + l.quantityReceived);
@@ -124,8 +127,8 @@ export function ReceiveGoodsDialog({
 
   // Initialise lines from PO line items whenever the dialog opens. Also
   // re-runs once `receiptsFetched` flips to true: if the dialog is opened
-  // before useGoodsReceipts() resolves, alreadyReceivedMap is still empty
-  // (allReceipts defaults to []), so `remaining` would default to the FULL
+  // before usePOGoodsReceipts() resolves, alreadyReceivedMap is still empty
+  // (poReceipts defaults to []), so `remaining` would default to the FULL
   // ordered quantity instead of what's actually still outstanding — and
   // since this effect only depended on `open`, that wrong default would
   // never get recomputed once the query did resolve.
@@ -194,7 +197,7 @@ export function ReceiveGoodsDialog({
   });
   // Prorated discount/shipping/tax plus the final-receipt true-up live in the
   // shared helper so editing a receipt applies the identical math.
-  const priorReceipts = allReceipts.filter((r) => r.purchaseOrderId === po.id);
+  const priorReceipts = poReceipts;
   const {
     salesTax,
     shippingCost,
@@ -220,8 +223,16 @@ export function ReceiveGoodsDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isValid || applyingInventory || saving) return;
+    if (!isValid || applyingInventory || saving || submittingRef.current) return;
+    submittingRef.current = true;
+    try {
+      await submitReceipt();
+    } finally {
+      submittingRef.current = false;
+    }
+  }
 
+  async function submitReceipt() {
     const receivedAt = new Date().toISOString();
     // Atomic per-org counter (same mechanism as WO/PO/REQ numbers) — the old
     // Date.now() suffix collided on same-millisecond / wrapped-ms submits.
@@ -341,9 +352,10 @@ export function ReceiveGoodsDialog({
         }
 
         if (matchedProduct.category === "maintenance_part") {
-          // Also update the Parts inventory record if one is linked
-          const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
-            (line.partNumber ? parts.find((pt) => pt.partNumber === line.partNumber) : null);
+          // Also update the Parts inventory record if one is linked. Looked up
+          // directly: searching the (capped) parts list missed parts in large
+          // inventories, and the units then never reached the part.
+          const linkedPart = await findLinkedPart(createClient(), matchedProduct.id, line.partNumber);
           if (linkedPart) {
             const { settled } = await receivePartLayer({
               partId: linkedPart.id,

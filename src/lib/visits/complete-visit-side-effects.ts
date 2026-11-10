@@ -14,6 +14,7 @@ import {
   resolveAutoInvoiceTaxRateBps,
   resolveJobServiceTaxable,
 } from "@/lib/invoices/auto-invoice-tax";
+import { billableJobProductStatusesForVisit, visitLineAmount } from "@/lib/invoices/create-from-job";
 
 /**
  * Everything that must happen AFTER a crm_job_visits row flips to
@@ -23,8 +24,9 @@ import {
  *   1. Parent-job bookkeeping — close one_time/waiting_list jobs once every
  *      sibling visit is terminal; stamp last_service_date on everything else.
  *   2. Auto-invoice (contract-less, non-snow jobs), honoring the client's
- *      invoice_frequency (weekly/monthly visits fold into the period's open
- *      draft via increment_invoice_totals) and tax pass-through
+ *      invoice_frequency (daily/weekly/monthly visits fold into the period's
+ *      open draft — one per client + period + sales rep + PO — via
+ *      increment_invoice_totals; upon-completion bills each visit) and tax pass-through
  *      (crm_job_services.is_taxable + estimate / client default rate).
  *   3. "Visit completed — <service> (<date>)" client_activity timeline row.
  *   4. service_visit_completed / visit_completed automation triggers, driven
@@ -113,6 +115,9 @@ type VisitRow = {
   crew_group_secondary: boolean | null;
   /** What the crew typed when finishing the stop; copied onto the "Visit completed" timeline row. */
   completion_notes: string | null;
+  /** Per-visit Qty / Rate set on the dispatch sheet — billed instead of the service's when a rate is set. */
+  qty: number | null;
+  rate_cents: number | null;
 };
 
 type JobServiceRow = {
@@ -122,6 +127,8 @@ type JobServiceRow = {
   rate_cents: number | null;
   is_taxable: boolean | null;
   invoice_desc?: string | null;
+  /** false = a removed service with history, "stopped" (job-service-removal.ts) — never billed by a whole-job visit. */
+  included?: boolean | null;
   crm_services: { invoice_description: string | null; is_taxable: boolean | null } | null;
 };
 
@@ -176,7 +183,7 @@ export async function applyVisitCompletionSideEffects(
 
   const { data: visitData, error: visitErr } = await supabase
     .from("crm_job_visits")
-    .select("id, org_id, job_id, client_id, invoice_description, scheduled_date, status, job_service_id, crew_group_secondary, completion_notes")
+    .select("id, org_id, job_id, client_id, invoice_description, scheduled_date, status, job_service_id, crew_group_secondary, completion_notes, qty, rate_cents")
     .eq("id", visitId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -192,7 +199,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 1. Parent-job bookkeeping ─────────────────────────────────────────────
   const { data: jobData } = await supabase
     .from("crm_jobs")
-    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, invoice_desc, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
+    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, invoice_desc, included, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
     .eq("id", visit.job_id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -363,11 +370,14 @@ export async function applyVisitCompletionSideEffects(
         // A visit linked to one specific service (the per-service-split case) bills only
         // that service — otherwise every visit on a multi-service job would re-bill every
         // OTHER service too, including ones that aren't done yet. A visit covering the
-        // whole job (no linked service) falls back to all of the job's services.
+        // whole job (no linked service) falls back to all of the job's services —
+        // except stopped ones (included = false: removed from the job but kept
+        // for their history), which a whole-job visit never bills. A visit
+        // linked to a stopped service still bills that service's own line.
         const allServices: JobServiceRow[] = j.crm_job_services ?? [];
         const services = visitJobServiceId
           ? allServices.filter((s) => s.id === visitJobServiceId)
-          : allServices;
+          : allServices.filter((s) => s.included !== false);
         // Rich-text editors store these as HTML ("<p>Lawn mow</p>"); invoice line
         // descriptions are plain text, so flatten before they become a line.
         const visitInvoiceDescription: string | null = visit.invoice_description ? stripHtml(visit.invoice_description) : null;
@@ -397,21 +407,37 @@ export async function applyVisitCompletionSideEffects(
         // description (from the estimate line), then the job-level
         // master override (Job > Invoice Desc tab), then the service's own invoice
         // description (set in Services settings), then its plain name.
+        //
+        // Amount: the Rate × Qty set on this visit in the dispatch sheet
+        // (crm_job_visits.rate_cents / qty — what rpt_job_visits and Job
+        // Costing count) when a rate is set, else the service's rate × qty.
+        // The visit override is one figure, so it applies only when the visit
+        // bills a single line: its own linked service, the job's only
+        // service, or the job-rate line. A whole-job visit over several
+        // services bills each service at its own rate.
+        const visitOverride = services.length <= 1 ? visit : null;
         const serviceLines: AutoInvoiceLine[] = services.length > 0
           ? services.map((s) => {
               const description = visitInvoiceDescription || (s.invoice_desc ? stripHtml(s.invoice_desc) : null) || jobInvoiceDescription || stripHtml(s.crm_services?.invoice_description || "") || s.service_name;
+              const amount = visitLineAmount(visitOverride, { rateCents: s.rate_cents ?? 0, qty: s.qty ?? 1 });
               return {
                 name: s.service_name,
                 description,
-                qty: s.qty ?? 1,
-                rate_cents: s.rate_cents ?? 0,
-                total_cents: lineTotalCents(s.rate_cents ?? 0, s.qty ?? 1),
+                qty: amount.qty,
+                rate_cents: amount.rateCents,
+                total_cents: amount.totalCents,
                 service_date: visitDate,
                 is_taxable: resolveJobServiceTaxable(s.is_taxable, s.crm_services?.is_taxable),
               };
             })
-          : j.rate_cents
-            ? [{ name: visitInvoiceDescription ?? jobInvoiceDescription ?? "Service", description: visitInvoiceDescription ?? jobInvoiceDescription ?? "Service", qty: 1, rate_cents: j.rate_cents, total_cents: j.rate_cents, service_date: visitDate, is_taxable: false }]
+          // The job-rate line is for a job with no services at all — a job
+          // whose services were all stopped bills nothing for the visit.
+          : allServices.length === 0 && (visit.rate_cents ?? j.rate_cents)
+            ? (() => {
+                const amount = visitLineAmount(visit, { rateCents: j.rate_cents ?? 0, qty: 1 });
+                const label = visitInvoiceDescription ?? jobInvoiceDescription ?? "Service";
+                return [{ name: label, description: label, qty: amount.qty, rate_cents: amount.rateCents, total_cents: amount.totalCents, service_date: visitDate, is_taxable: false }];
+              })()
             : [];
 
         // Sweep in unresolved Products/materials the office called for on this
@@ -424,7 +450,7 @@ export async function applyVisitCompletionSideEffects(
         // appending to the same open period invoice) can't re-bill the same
         // material twice.
         //
-        // BOTH billable statuses are swept, not just 'pending'. 'used' means the
+        // 'used' is always swept, never just 'pending'. 'used' means the
         // crew recorded actual usage and inventory is already decremented, but
         // the material is still to be billed (see JobDetail.tsx's
         // BILLABLE_JOB_PRODUCT_STATUSES and
@@ -437,6 +463,13 @@ export async function applyVisitCompletionSideEffects(
         // Per-service visits: only sweep this visit's own service's materials (plus
         // job-level ones with no service), or the first visit to complete bills every
         // service's materials.
+        //
+        // Recurring and package jobs bill only what the crew recorded as
+        // 'used' (billableJobProductStatusesForVisit): their 'pending' rows are
+        // the office's season plan, not this visit's actual use, and they stay
+        // pending — not invoiced, stock not decremented — so the crew can
+        // still record real usage later. One-time / waiting-list jobs bill
+        // planned materials at completion as before.
         let productQuery = supabase
           .from("crm_job_products")
           .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents")
@@ -445,7 +478,7 @@ export async function applyVisitCompletionSideEffects(
           productQuery = productQuery.or(`job_service_id.eq.${visitJobServiceId},job_service_id.is.null`);
         }
         const { data: pendingProductRows } = await productQuery
-          .in("status", ["pending", "used"])
+          .in("status", billableJobProductStatusesForVisit(j.job_type))
           // A row already linked to a line (even if the status flip below failed)
           // is billed; sweeping it again would invoice the same material twice.
           .is("invoice_line_item_id", null)
@@ -554,23 +587,39 @@ export async function applyVisitCompletionSideEffects(
         if (subtotal <= 0) {
           result.invoiceSkipReason = "zero_subtotal";
         } else {
-          // Clients billed weekly/monthly get every visit in the same period folded into
-          // one invoice instead of one invoice per visit. "daily" and "upon_completion"
-          // clients keep the original one-invoice-per-visit behavior.
+          // Clients billed daily/weekly/monthly get every visit of the same
+          // period folded into one draft instead of one invoice per visit:
+          // "daily" is one invoice per client per service day. Only
+          // "upon_completion" clients get one invoice per visit.
           const invoiceFrequency: string = j.clients?.invoice_frequency ?? "daily";
           const periodDate = visitDate ?? today;
           const period = invoiceFrequency === "monthly"
             ? getMonthRange(periodDate)
             : invoiceFrequency === "weekly"
               ? getWeekRange(periodDate)
-              : null;
+              : invoiceFrequency === "daily"
+                ? { start: periodDate, end: periodDate }
+                : null;
+          // A batch draft is split by sales rep and PO number as well as client
+          // and period: the header carries ONE rep (commission) and ONE PO, so
+          // folding a second job with a different rep/PO into it credited the
+          // wrong rep and printed the wrong PO.
+          const salesRepId: string | null = j.sales_rep_id ?? null;
+          const poNumber: string | null = j.po_number?.trim() || null;
+          // Narrows a crm_invoices query to drafts of this visit's rep + PO.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sameRepAndPo = (q: any) => {
+            const byRep = salesRepId ? q.eq("sales_rep_id", salesRepId) : q.is("sales_rep_id", null);
+            // (Blank POs are written as null by this path, never "".)
+            return poNumber ? byRep.eq("po_number", poNumber) : byRep.is("po_number", null);
+          };
 
           let existingInvoice: { id: string } | null = null;
           if (period && j.client_id) {
             // A locked invoice (printed/manually locked for review) must not be
             // silently appended to — fall through to creating a fresh draft for
             // this period instead, same as if no open invoice existed yet.
-            const { data: openInvoice } = await supabase
+            const openQuery = supabase
               .from("crm_invoices")
               .select("id")
               .eq("org_id", orgId)
@@ -587,8 +636,17 @@ export async function applyVisitCompletionSideEffects(
               .is("project_id", null)
               .is("estimate_id", null)
               .eq("tax_rate_bps", taxRateBps)
-              .gte("invoice_date", period.start)
-              .lte("invoice_date", period.end)
+              // This auto path stamps its drafts with the period's first day.
+              // Weekly/monthly drafts written before that column existed are
+              // still matched by date; daily batching is new, so a daily
+              // client only ever joins a stamped draft (never, say, a manual
+              // invoice dated the same day).
+              .or(
+                invoiceFrequency === "daily"
+                  ? `auto_bill_period_start.eq.${period.start}`
+                  : `auto_bill_period_start.eq.${period.start},and(auto_bill_period_start.is.null,invoice_date.gte.${period.start},invoice_date.lte.${period.end})`
+              );
+            const { data: openInvoice } = await sameRepAndPo(openQuery)
               .order("invoice_date", { ascending: true })
               .limit(1)
               .maybeSingle();
@@ -663,14 +721,17 @@ export async function applyVisitCompletionSideEffects(
               j.clients?.default_terms,
               (orgTermsRow as { default_billing_terms: string | null } | null)?.default_billing_terms,
             );
-            // A weekly/monthly batch draft collects the whole period, so it is
-            // dated the period's last day (Sunday of the Mon–Sun week, or the
-            // month's last day) and its terms run from then — dating it on the
-            // first visit made it fall due (and show past due) before the
-            // period it bills had even ended. Per-visit invoices keep the visit date.
-            const newInvoiceDate = period ? period.end : (visitDate ?? today);
-            // Weekly/monthly clients: crm_invoices_auto_period_draft_unique allows ONE open auto draft
-            // per client + period + tax rate, so two completions that both found "no draft yet" cannot
+            // A batch draft collects the whole period, so it is dated the
+            // period's last day (the service day for daily, Sunday of the
+            // Mon–Sun week, or the month's last day) and its terms run from
+            // then — dating it on the first visit made it fall due (and show
+            // past due) before the period it bills had even ended. A per-visit
+            // (upon-completion) invoice is dated the day it is created, in the
+            // org's time zone, with its due date counted from that day; each
+            // line keeps the visit's service_date.
+            const newInvoiceDate = period ? period.end : today;
+            // Batched clients: crm_invoices_auto_period_draft_unique allows ONE open auto draft
+            // per client + period + tax rate + sales rep + PO, so two completions that both found "no draft yet" cannot
             // both create one. The header starts at zero and every visit's lines (this one included)
             // are added through increment_invoice_totals, which row-locks the invoice and re-derives
             // tax from ALL its lines — so the totals are right whichever visit's lines land first.
@@ -694,7 +755,7 @@ export async function applyVisitCompletionSideEffects(
                 total_cents: zeroHeader ? 0 : subtotal + taxCents,
                 balance_cents: zeroHeader ? 0 : subtotal + taxCents,
                 amount_paid_cents: 0,
-                po_number: j.po_number ?? null,
+                po_number: poNumber,
                 auto_bill_period_start: period ? period.start : null,
               })
               .select("id, invoice_number")
@@ -702,16 +763,18 @@ export async function applyVisitCompletionSideEffects(
             if (invErr) {
               if (period && (invErr as { code?: string }).code === "23505") {
                 // Lost the race: another completion's draft for this period committed first. Join it.
-                const { data: winner } = await supabase
-                  .from("crm_invoices")
-                  .select("id")
-                  .eq("org_id", orgId)
-                  .eq("client_id", j.client_id)
-                  .eq("status", "draft")
-                  .eq("locked", false)
-                  .is("deleted_at", null)
-                  .eq("auto_bill_period_start", period.start)
-                  .eq("tax_rate_bps", taxRateBps)
+                const { data: winner } = await sameRepAndPo(
+                  supabase
+                    .from("crm_invoices")
+                    .select("id")
+                    .eq("org_id", orgId)
+                    .eq("client_id", j.client_id)
+                    .eq("status", "draft")
+                    .eq("locked", false)
+                    .is("deleted_at", null)
+                    .eq("auto_bill_period_start", period.start)
+                    .eq("tax_rate_bps", taxRateBps)
+                )
                   .limit(1)
                   .maybeSingle();
                 if (!winner) throw invErr;

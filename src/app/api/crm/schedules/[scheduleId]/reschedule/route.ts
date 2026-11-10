@@ -9,8 +9,13 @@ import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 const Body = z.object({
-  /** preview — how many upcoming untouched visits would be replaced; apply — replace them. */
-  action: z.enum(["preview", "apply"]),
+  /**
+   * preview — how many upcoming untouched visits would be replaced;
+   * apply   — replace them;
+   * keep    — leave every visit where it is and have the new rules generate
+   *           only after each job's last visit already on the calendar.
+   */
+  action: z.enum(["preview", "apply", "keep"]),
 });
 
 /**
@@ -42,7 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ sch
     return NextResponse.json({ error: "Invalid schedule id" }, { status: 400 });
   }
   const parsed = Body.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "action must be preview or apply" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "action must be preview, apply or keep" }, { status: 400 });
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
@@ -55,6 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ sch
     scheduleId,
     today,
     apply: parsed.data.action === "apply",
+    keep: parsed.data.action === "keep",
   });
   if (result.errors.length > 0 && parsed.data.action === "preview") {
     return NextResponse.json({ error: result.errors[0] }, { status: 500 });

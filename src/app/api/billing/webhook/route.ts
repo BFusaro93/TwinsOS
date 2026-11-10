@@ -5,7 +5,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPlanForPriceId } from "@/lib/stripe/plans";
 import { syncSeatOverage } from "@/lib/stripe/seat-sync";
-import { removePurchasedBundledAddons } from "@/lib/stripe/bundled-addon-reconcile";
+import { reconcileAddonsWithSubscription, removePurchasedBundledAddons } from "@/lib/stripe/bundled-addon-reconcile";
 import { logger } from "@/lib/logger";
 import { EMAIL_FROM } from "@/lib/email/send";
 
@@ -268,6 +268,16 @@ async function applySubscriptionToOrg(
     log.warn("subscription event for a customer with no matching org — ignored", { lookup });
     return;
   }
+
+  // Purchased add-ons are granted only while THIS subscription bills them: an
+  // ended subscription grants none, and a resubscribe (new subscription with
+  // just the plan price) must not inherit the old one's add-on rows. Throws
+  // (→ 500 → Stripe retries) so a failed write can't leave add-ons free.
+  await reconcileAddonsWithSubscription(
+    db,
+    org.id,
+    DOWNGRADE_STATUSES.has(subscription.status) ? null : subscription
+  );
 
   // A downgraded/canceled subscription doesn't need its overage item
   // reconciled — the subscription itself is ending or already gone.

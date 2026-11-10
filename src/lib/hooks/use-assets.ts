@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapAsset } from "@/lib/supabase/mappers";
 import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
-import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { Asset, AssetStatus } from "@/types/cmms";
 
 function patchAssetCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Asset>) {
@@ -18,9 +18,9 @@ export function useAssets() {
     queryKey: ["assets"],
     queryFn: async () => {
       const supabase = createClient();
-      // Paged: a bare select stops at PostgREST's 1000-row cap, so past 1000 rows the oldest silently vanish from the list.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = await fetchAllRows<any>(() =>
+      // Every page, not just the first: PostgREST caps a response at 1,000
+      // rows, and a capped list silently hid records past it.
+      const data = await fetchAllRows<Parameters<typeof mapAsset>[0]>(() =>
         supabase.from("assets").select("*").is("deleted_at", null).order("name")
       );
       return (data.map(mapAsset)) as Asset[];

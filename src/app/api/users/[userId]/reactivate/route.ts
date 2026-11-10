@@ -50,31 +50,49 @@ export async function POST(
   if (!targetProfile || targetProfile.org_id !== callerProfile.org_id) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
-  // A pending invite is not a deactivated account — activating it would skip the acceptance.
-  if (targetProfile.status !== "inactive") {
-    return NextResponse.json({ error: "Only a deactivated user can be reactivated" }, { status: 409 });
-  }
-
   const adminClient = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { error: unbanError } = await adminClient.auth.admin.updateUserById(userId, {
-    ban_duration: "none",
-  });
-  if (unbanError) {
-    log.error("unban failed", { error: unbanError.message });
-    return NextResponse.json({ error: "Failed to reactivate user" }, { status: 500 });
+  // Only a deactivated login is unbanned and set active. A pending invite stays
+  // pending (activating it would skip the acceptance) and an active login is
+  // left as is — in both cases only the linked employee record is (re)activated,
+  // which is what the Employees page's Activate relies on.
+  if (targetProfile.status === "inactive") {
+    const { error: unbanError } = await adminClient.auth.admin.updateUserById(userId, {
+      ban_duration: "none",
+    });
+    if (unbanError) {
+      log.error("unban failed", { error: unbanError.message });
+      return NextResponse.json({ error: "Failed to reactivate user" }, { status: 500 });
+    }
+
+    const { error: updateError } = await adminClient
+      .from("profiles")
+      .update({ status: "active" })
+      .eq("id", userId);
+    if (updateError) {
+      log.error("profile update failed", { error: updateError.message });
+      return NextResponse.json({ error: "Failed to reactivate user" }, { status: 500 });
+    }
   }
 
-  const { error: updateError } = await adminClient
-    .from("profiles")
-    .update({ status: "active" })
-    .eq("id", userId);
-  if (updateError) {
-    log.error("profile update failed", { error: updateError.message });
-    return NextResponse.json({ error: "Failed to reactivate user" }, { status: 500 });
+  // A login and its employee record are one person (owner decision):
+  // reactivating the login reactivates the employee, and vice versa.
+  const { error: employeeError } = await adminClient
+    .from("crm_employees")
+    .update({ is_active: true })
+    .eq("org_id", callerProfile.org_id)
+    .eq("user_id", userId)
+    .eq("is_active", false)
+    .is("deleted_at", null);
+  if (employeeError) {
+    log.error("employee reactivate failed", { error: employeeError.message });
+    return NextResponse.json({
+      success: true,
+      warning: "The login was reactivated, but their employee record could not be — activate it under Team → Employees.",
+    });
   }
 
   return NextResponse.json({ success: true });

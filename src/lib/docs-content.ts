@@ -1884,6 +1884,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         q: "Why did a product's unit cost change after a goods receipt?",
         a: "A Products catalog entry and its linked CMMS Part always share one cost. Depending on the org's Costing Method (Settings > Costing — Manual, WAC, or FIFO), receiving stock at a different price can update that shared cost. See Administration > Inventory Costing Methods for details.",
       },
+      {
+        q: "Why did a PO or requisition total change when I saved it, or need approval again?",
+        a: "Totals are calculated by the system from the line items, the tax rate, shipping and the discount, every time a line or the header changes. A total typed or saved some other way is replaced by the real one, and approval thresholds use that recalculated total, so a request can't slip under a threshold with a lower header total.",
+      },
+      {
+        q: "How does a PO discount affect sales tax when some lines aren't taxable?",
+        a: "With 'discount reduces tax' on, the discount is spread across taxable and non-taxable lines by their share of the subtotal, and only the taxable share lowers the taxed amount. Example: $100 taxable + $900 non-taxable with a $100 discount takes $10 off the taxable part, so tax is charged on $90.",
+      },
+      {
+        q: "Why can't I receive more than was ordered on a PO line?",
+        a: "A PO line can't receive more in total, across all its receipts, than its ordered quantity. This also stops a double-clicked or second-tab receipt from counting twice. If more arrived than ordered, raise the line's ordered quantity first (or add a line), then receive.",
+      },
+      {
+        q: "Why did my PO's status change after I edited a receipt?",
+        a: "A PO's status (Ordered, Partially Fulfilled, Completed) is worked out from its receipts. Editing or deleting a receipt, or changing a line's ordered quantity, recalculates it. For example, correcting a receipt from 10 to 8 on a completed PO moves it back to Partially Fulfilled, so the last 2 can be received.",
+      },
     ],
   },
   {
@@ -1948,6 +1964,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Does it matter which part I start from when linking two interchangeable parts?",
         a: "No. Whichever part you click 'Link as alternative part' from, and whichever part you pick, is purely which side of the link initiates it — the display is identical either way and neither part is treated as more correct or authoritative.",
+      },
+      {
+        q: "A part is on both a PM schedule's Parts tab and an asset's parts. Will the work order get it twice?",
+        a: "No. When the PM generates a work order, the same part from the schedule and from the asset is combined into one row with the quantities added together. A part can only be listed once per schedule and once per asset.",
+      },
+      {
+        q: "Does adding a part to a skipped work order take it out of stock?",
+        a: "No. While a work order is Skipped, its parts don't take stock. If you reopen it, the parts are taken out of stock then.",
       },
     ],
   },
@@ -2470,6 +2494,82 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         q: "Can an Other Charge be a percentage of the invoice instead of a fixed amount?",
         a: "Yes. In Settings > Accounting > Other Charges choose 'Fixed $' or '% of invoice' for each charge (e.g. a 4.5% fuel surcharge). When you add it to an invoice, or to many invoices at once from the Invoices list (Actions > Add Other Charge), the dollar amount is worked out from that invoice's service lines — each after its own discount, not counting other charges or the invoice discount — and written as a normal line such as 'Fuel Surcharge (4.5%)'. It doesn't change afterwards if you edit the services, and an invoice with no service lines is skipped because there's nothing to take a percent of.",
       },
+      {
+        q: "How do I merge two duplicate clients?",
+        a: "Open either client, then More > Merge Clients. Search for the duplicate, choose which record to keep, review what will move (jobs, visits, invoices, payments, estimates, contracts, properties, contacts, tickets, timeline and more), type MERGE and confirm. Everything moves to the kept client, empty fields are filled from the duplicate, and the duplicate is deleted. It can't be undone. You need the Allow Delete permission for clients (admins always can).",
+      },
+      {
+        q: "Why does Landscapt warn me that a client already exists when I add one?",
+        a: "When the new client's or lead's email or phone matches an existing client, you'll see the match(es) with a link before anything is created. Open the existing one, or choose Create anyway if it really is a different customer.",
+      },
+      {
+        q: "Why can't I void an invoice that was already emailed or printed?",
+        a: "You can. Voiding works on sent and printed (locked) invoices; an earlier bug blocked it for invoices created from visits and has been fixed. Void is still blocked while payments are applied: refund or unapply them first.",
+      },
+      {
+        q: "Which price does a visit bill if I changed its Rate or Qty on the Dispatch Board?",
+        a: "The visit's own Rate x Qty, the same amount the board's Amt column and Job Costing show. Without one, it bills the service's rate.",
+      },
+      {
+        q: "Why did a client get two invoices for the same week or month?",
+        a: "Weekly and monthly batch invoices are split by sales rep and PO number. If a client has jobs under two reps or two PO numbers, each gets its own invoice for the period, so commission and the PO on the invoice stay correct.",
+      },
+      {
+        q: "What does the 'Daily' invoice frequency do?",
+        a: "It puts all of a client's visits completed for the same service day on one invoice. 'Upon completion' invoices each visit separately.",
+      },
+      {
+        q: "What date does an invoice for one visit get?",
+        a: "An invoice for a single visit is dated the day it is created, and its due date counts from that day. Each line still shows the visit's service date. Weekly and monthly batch invoices are dated the last day of their period.",
+      },
+      {
+        q: "Why didn't the mulch I planned on a recurring job get billed with the last mow?",
+        a: "On recurring and package jobs, a completed visit bills only the materials the crew recorded as used. Materials the office planned stay planned until the crew records them on the visit that uses them. One-time and waiting-list jobs still bill their planned materials when completed.",
+      },
+      {
+        q: "Why is there no Invoice button on a contract, project or snow visit?",
+        a: "That work is billed elsewhere: contract visits by the contract's invoice, project jobs by their milestones, and snow by snow billing. The Invoice buttons are hidden for that work, and the system refuses to invoice it separately so it isn't billed twice.",
+      },
+      {
+        q: "What happens when I remove a service from a recurring job?",
+        a: "Its upcoming, not-yet-started visits are removed. If the service already has history (completed, skipped or in-progress visits, or materials), it's marked Stopped instead of deleted, so that history keeps its service. Stopped services no longer schedule or bill, and they're left out of the job's value.",
+      },
+      {
+        q: "What does 'Keep existing visits' do when I change a schedule in Settings > Schedules?",
+        a: "Visits already on the calendar stay as they are, and the new schedule only starts after the last of them, so no week gets two visits. Choose 'Update visits' to move the not-yet-started visits to the new days instead.",
+      },
+      {
+        q: "What happens if I mark a recurring or package job Completed?",
+        a: "You'll be asked to remove its upcoming visits, the same as cancelling. Visits that are started, completed or invoiced stay. Setting the job back to an active status regenerates its visits.",
+      },
+      {
+        q: "How do I end a recurring job on a certain date or change when it starts?",
+        a: "Open the job's settings and change the Start Date or End Date. You'll see a preview of the visits that will be added or removed before it's saved.",
+      },
+      {
+        q: "A job is sold for 30 visits. Do skipped visits count?",
+        a: "No. Only scheduled, dispatched, in-progress and completed visits count toward a visit cap. Skipped, cancelled and deleted visits are made up at the end.",
+      },
+      {
+        q: "Why can't I set a client back to Lead?",
+        a: "An account that has been a client, or has jobs or invoices, can't go back to Lead or Lost. Leads exist before the first sale. Use Inactive or Cancelled for a former customer.",
+      },
+      {
+        q: "What happens when I cancel a lead or close it as lost?",
+        a: "A lead is closed as Lost, not Cancelled, so it doesn't count as a lost customer. You'll be asked whether to mark its open estimates as Lost too, so they leave the sales pipeline. Cancelling a client asks the same about its open estimates.",
+      },
+      {
+        q: "Does setting a client Inactive stop their visits?",
+        a: "New visits stop being generated, and you'll be asked whether to cancel the upcoming visits already on the calendar, the same as Cancel.",
+      },
+      {
+        q: "Who can cancel, reactivate or convert a client?",
+        a: "Cancelling, deactivating or reactivating a client needs the Activate/Deactivate or Allow Delete client permission. Converting or closing a lead needs the lead Convert/Close (or Allow Delete) permission. The system checks this however the change is made.",
+      },
+      {
+        q: "Does a client's Primary property follow the client's address?",
+        a: "Yes. Changing the client's service address updates the Primary property, and changing the Primary property's address updates the client (and billing, when billing is the same as service).",
+      },
     ],
   },
   {
@@ -2582,6 +2682,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I connect Zapier?",
         a: "Go to Master Account Settings > Integrations and click Generate Key — this is account-wide, not tied to Equipt or Landscapt specifically. Paste the key into Zapier's API Key field when connecting the app. Most Landscapt triggers fire instantly; most Equipt triggers check every few minutes instead. There's a full, detailed guide to every trigger and action linked right on that Integrations tab, under the API key.",
+      },
+      {
+        q: "What happens when I deactivate a user?",
+        a: "They can't sign in. Their employee record is deactivated too, so they leave rosters and assignment lists, and reactivating either one restores both. If they created API keys, the dialog lists them with 'Revoke these keys' checked, and report emails they scheduled are paused until an admin takes them over.",
+      },
+      {
+        q: "A scheduled report says 'creator deactivated'. How do I start it again?",
+        a: "In Report Center > Scheduled, an admin chooses Take over & resume. The schedule then runs under the admin's name. The deactivated person's email is removed from its recipients.",
+      },
+      {
+        q: "I invited someone who's already on the team. What happens?",
+        a: "Nothing is sent. Landscapt tells you they're already an active member, and their role isn't changed. Change it on the Users page instead.",
+      },
+      {
+        q: "Why can't I change the last admin's role?",
+        a: "Every company needs at least one active admin. Promote someone else to admin first, then change or deactivate the other admin.",
       },
     ],
   },

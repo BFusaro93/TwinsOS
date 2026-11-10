@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   // Dedupe — the same id twice would race itself through completeVisit.
   const ids = [...new Set(parsed.data.ids)];
 
-  // Visits of the SAME client run one after another: weekly/monthly-billed
+  // Visits of the SAME client run one after another: daily/weekly/monthly-billed
   // clients fold every visit of a period into one open draft invoice, and
   // running those concurrently had each visit miss the others' draft and
   // create its own. Different clients never share an invoice, so they still
@@ -64,7 +64,8 @@ export async function POST(request: Request) {
   const groupResults = await Promise.all(
     [...byClient.values()].map(async (group) => {
       const out: ({ id: string } & Awaited<ReturnType<typeof completeVisit>>)[] = [];
-      for (const id of group) out.push({ id, ...(await completeVisit(supabase, user.id, id)) });
+      // Already-completed visits are left alone (no repair / re-billing pass).
+      for (const id of group) out.push({ id, ...(await completeVisit(supabase, user.id, id, { repairIfCompleted: false })) });
       return out;
     })
   );
@@ -74,7 +75,8 @@ export async function POST(request: Request) {
   // Visits that completed but whose auto-invoice threw (swallowed inside the
   // side effects so it can't undo the completion). Without reporting them a
   // dispatcher bulk-completing 20 visits had no idea one stayed unbilled.
-  // Marking such a visit complete again re-runs the (idempotent) invoice step.
+  // Bulk never retries a completed visit; bill it from the visit's Invoice
+  // button (or complete that one visit again on its own).
   const billingErrors = results.filter((r) => r.ok && r.invoiceSkipReason === "error").map((r) => r.id);
   return NextResponse.json({
     completed: results.length - failed.length,

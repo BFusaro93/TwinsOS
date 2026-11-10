@@ -153,7 +153,7 @@ export async function POST(request: Request) {
   // first picks up float error (8.25 / 100) that can land a half-cent on the
   // wrong side, so the API total would drift a cent from the same PO built in
   // the app.
-  const salesTax = computeSalesTax({ taxableSubtotal, taxRatePercent, discountCost, discountReducesTax });
+  const salesTax = computeSalesTax({ taxableSubtotal, subtotal, taxRatePercent, discountCost, discountReducesTax });
   const shippingCost = body.shippingCostCents ?? 0;
   const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
