@@ -98,7 +98,11 @@ export function CommissionsGuide() {
           Sale type is set by your office, because only you know whether a one-time job for an existing
           customer should be paid as a new sale. It is on estimates, contracts, jobs (when creating them)
           and invoices. An invoice uses its own sale type first, then its job&apos;s, its contract&apos;s and
-          its estimate&apos;s. If none is set it counts as a new sale.
+          its estimate&apos;s. If none is set it counts as a new sale. In the Sale Type menu the blank
+          choice reads <em>Not set (inherit, else new sale)</em>: it takes the type from the record
+          above it (job, contract or estimate) and only counts as a new sale when none of them has one.
+          Picking <em>New sale</em> explicitly overrides whatever the job, contract or estimate says.
+          The menu resets each time you open New Job.
         </p>
       </Section>
 
