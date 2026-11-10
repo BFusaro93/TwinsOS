@@ -254,6 +254,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setJobType(initialJobType ?? "one_time");
       setContractId(null);
       setSalesRepId(null);
+      setSaleType(null);
       setDateSold(today);
       setCrewId(null);
       setPropertyId(null);
