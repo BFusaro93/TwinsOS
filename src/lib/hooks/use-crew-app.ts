@@ -20,7 +20,7 @@ import {
   selectCarriedOverClockedInVisits,
   effectiveVisitCrewId,
   fetchCallerCrew,
-  isWaitingPackagePlaceholder,
+  isUndispatchedVisit,
   selectEffectiveCrewVisits,
   type VisitCrewRow,
 } from "@/lib/supabase/crew-id";
@@ -342,7 +342,8 @@ export function useMyCrewVisits(date: string, includeCarryOver = false) {
         // A cancelled visit (the office's Cancel on the dispatch board) disappears from the crew's
         // day too, unless they are clocked into it right now and still need to clock out.
         if (row.status === "cancelled" && !(row.clocked_in_at && !row.clocked_out_at)) return false;
-        if (isWaitingPackagePlaceholder(row)) return false;
+        // Only dispatched work reaches the crew; scheduled visits (incl. package placeholders) stay on the board.
+        if (isUndispatchedVisit(row)) return false;
         const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
         if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
         return !!row.clocked_in_at && !row.clocked_out_at;

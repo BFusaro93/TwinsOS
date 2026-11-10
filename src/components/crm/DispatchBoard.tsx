@@ -68,6 +68,7 @@ import { formatCurrency, cn, relativeTime, formatDateShort, formatHours } from "
 import { useOrgDates, useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import { VisitCrewsSection } from "@/components/crm/dispatch/VisitCrewsSection";
+import { useVisitPhotoCounts } from "@/lib/hooks/use-visit-photo-counts";
 import { allocateStopHours, computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { printRouteSheets } from "@/lib/print";
 import { printChemicalRouteSheets } from "@/lib/chemical/route-sheet";
@@ -106,6 +107,7 @@ import {
   TriangleAlert,
   Bookmark,
   CircleHelp,
+  Camera,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import { BulkSendChemicalNoticesDialog } from "@/components/crm/chemical/BulkSendChemicalNoticesDialog";
@@ -3381,8 +3383,11 @@ function VisitRow({
   customFieldDefs,
   dailyOverrides,
   punchMismatch,
+  photoCount,
 }: {
   visit: CRMJobVisit;
+  /** Crew-app photos on this visit (0 when none). */
+  photoCount: number;
   /** Why this stop's crew punches disagree with its visit times/hours, or null when they agree (see stopPunchMismatch). */
   punchMismatch: string | null;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
@@ -3744,6 +3749,17 @@ function VisitRow({
           >
             {visit.clientName ?? "—"}
           </Link>
+          {photoCount > 0 && (
+            <button
+              type="button"
+              title={`${photoCount} crew photo${photoCount === 1 ? "" : "s"} — see the job's Attachments tab`}
+              aria-label={`${photoCount} crew photos`}
+              onClick={(e) => { e.stopPropagation(); onOpen(visit); }}
+              className="shrink-0 inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+            >
+              <Camera className="h-3 w-3" />{photoCount}
+            </button>
+          )}
           {visit.crewGroupId && (
             <span
               title={visit.crewGroupSecondary
@@ -4959,6 +4975,7 @@ export function DispatchBoard() {
         });
       })();
 
+  const photoCountByVisitId = useVisitPhotoCounts(displayVisits.map((v) => v.id));
   const selectedChemicalVisits = displayVisits.filter(
     (v) => selectedIds.has(v.id) && (v.job?.services ?? []).some((s) => s.serviceId && chemicalServiceIds.has(s.serviceId))
   );
@@ -6400,6 +6417,7 @@ export function DispatchBoard() {
                   manualRouteMode={manualRouteMode}
                   memberTimes={memberTimesByVisitId.get(visit.id) ?? EMPTY_MEMBER_TIMES}
                   punchMismatch={punchMismatchByVisitId.get(visit.id) ?? null}
+                  photoCount={photoCountByVisitId[visit.id] ?? 0}
                   anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
                   allVisits={allVisits}
                   drivingCrewIds={drivingCrewIds}

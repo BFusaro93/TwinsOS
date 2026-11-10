@@ -273,3 +273,14 @@ export function crewVisitComparator(order: CrewRouteOrder) {
     return compareCrewVisitRows(a, b);
   };
 }
+
+/**
+ * A visit the office has not dispatched yet. 'scheduled' visits are on the dispatch
+ * board, but a crew only sees what was dispatched to them (Dispatch on the board, the
+ * Dispatch Day button, or a status change). Without this, every generated recurring
+ * visit showed on the crew tablet the moment it was created. A scheduled visit already
+ * clocked into stays visible so the crew can still clock out of it.
+ */
+export function isUndispatchedVisit(row: Record<string, unknown>): boolean {
+  return row.status === "scheduled" && !row.clocked_in_at;
+}
