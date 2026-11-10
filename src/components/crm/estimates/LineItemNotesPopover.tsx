@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Maximize2, Minimize2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +35,28 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
   const showTreatedArea = isChemical || notes.treatedArea != null;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<LineItemNotes>(notes);
+  // Long quotes need room: an Expand toggle widens the box and makes the editor taller.
+  // Remembered per browser so it stays the way the user left it.
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem("lineItemNotesExpanded") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const editorMinHeight = expanded ? 340 : 100;
+
+  function toggleExpanded() {
+    setExpanded((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem("lineItemNotesExpanded", next ? "1" : "0");
+      } catch {
+        // storage unavailable — the toggle still works for this session
+      }
+      return next;
+    });
+  }
 
   function handleOpen(o: boolean) {
     if (o) setDraft(notes); // reset to saved on open
@@ -60,9 +82,14 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[480px] p-0" side="bottom" align="end">
+      <PopoverContent
+        className={expanded ? "w-[min(920px,92vw)] p-0" : "w-[480px] p-0"}
+        side="bottom"
+        align="end"
+        collisionPadding={12}
+      >
         <Tabs defaultValue="estimate_desc">
-          <div className="border-b px-3 pt-2">
+          <div className="flex items-start justify-between border-b px-3 pt-2">
             <TabsList className="h-8 gap-1 bg-transparent p-0">
               <TabsTrigger value="estimate_desc" className="h-7 rounded-none border-b-2 border-transparent px-2 text-xs data-[state=active]:border-brand-500 data-[state=active]:bg-transparent">
                 Estimate Desc
@@ -80,15 +107,24 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
                 Treated Area
               </TabsTrigger>}
             </TabsList>
+            <button
+              type="button"
+              onClick={toggleExpanded}
+              className="flex h-7 items-center gap-1 rounded px-2 text-xs text-muted-foreground hover:bg-muted"
+              title={expanded ? "Make this box smaller" : "Make this box bigger for long descriptions"}
+            >
+              {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              {expanded ? "Smaller" : "Bigger"}
+            </button>
           </div>
 
-          <div className="h-[200px] overflow-y-auto p-3">
+          <div className={expanded ? "h-[min(65vh,560px)] overflow-y-auto p-3" : "h-[260px] overflow-y-auto p-3"}>
             <TabsContent value="estimate_desc" className="mt-0">
               <p className="mb-1.5 text-xs text-muted-foreground">Shown on the client-facing estimate document.</p>
               <RichTextEditor
                 value={draft.estimateDesc ?? ""}
                 onChange={(v) => setDraft((d) => ({ ...d, estimateDesc: v || null }))}
-                minHeight={100}
+                minHeight={editorMinHeight}
                 placeholder="Description shown on estimate…"
               />
             </TabsContent>
@@ -98,7 +134,7 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
               <RichTextEditor
                 value={draft.jobNote ?? ""}
                 onChange={(v) => setDraft((d) => ({ ...d, jobNote: isBlankRich(v) ? null : v }))}
-                minHeight={100}
+                minHeight={editorMinHeight}
                 placeholder="Notes for crew…"
               />
             </TabsContent>
@@ -106,7 +142,7 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
             <TabsContent value="invoice_desc" className="mt-0">
               <p className="mb-1.5 text-xs text-muted-foreground">Carries to this service&apos;s invoice line description on the job.</p>
               <Textarea
-                rows={6}
+                rows={expanded ? 14 : 6}
                 value={draft.invoiceDesc ?? ""}
                 onChange={(e) => setDraft((d) => ({ ...d, invoiceDesc: e.target.value || null }))}
                 placeholder="Description on invoice…"
@@ -118,7 +154,7 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
               <RichTextEditor
                 value={draft.internalNote ?? ""}
                 onChange={(v) => setDraft((d) => ({ ...d, internalNote: isBlankRich(v) ? null : v }))}
-                minHeight={100}
+                minHeight={editorMinHeight}
                 placeholder="Private internal note…"
               />
             </TabsContent>
