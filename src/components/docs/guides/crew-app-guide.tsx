@@ -67,9 +67,13 @@ export function CrewAppGuide() {
           <strong>Spanish.</strong> The crew pages in the browser and the native app can be switched
           between English and Spanish with the <strong>Español / English</strong> link (it shows the
           language you would switch to). The choice is remembered on that device, and dates and month
-          names follow the language. Job and visit notes written in English show a{" "}
-          <strong>Translate</strong> link underneath that shows the note in the crew member&apos;s
-          language; each note is translated once and kept on the device.
+          names follow the language. The Job Notes box on a stop has{" "}
+          <strong>Translate to Spanish</strong> and <strong>Translate to English</strong> links
+          underneath, whichever language the app itself is set to (the app&apos;s language only decides
+          which link comes first). Tapping one shows the translation beneath the original note, which is
+          never replaced and is labelled &quot;Translated automatically&quot;; a note already in that language
+          says so. Each note is translated once per language and kept on the device. Only the Job Notes
+          box is translated, not client or service names or comments.
         </p>
         <p>
           The native app has the same crew tools as the browser version: Start Day and End Day, Edit
