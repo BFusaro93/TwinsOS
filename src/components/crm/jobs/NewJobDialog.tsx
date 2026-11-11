@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import { DecimalInput } from "@/components/shared/DecimalInput";
+import { MenHoursCalcPopover } from "@/components/crm/jobs/MenHoursCalcPopover";
 import {
   Select,
   SelectContent,
@@ -1223,7 +1224,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   {showServiceDate && <span>Start Date</span>}
                   <span>{showCompleteBy ? "Complete By" : "Qty"}</span>
                   <span>Rate ($)</span>
-                  <span title="Budgeted hours per person. Total = B. Hrs x Team; changing Team keeps the total.">B. Hrs / person</span>
+                  <span title="Budgeted hours per visit for the whole crew. Auto-calculated in blue when a production rate is set, otherwise entered manually. Hours per person = B. Hrs ÷ Team; changing Team keeps the total.">B. Hrs</span>
                   <span>Team</span>
                   <span>Subtotal</span>
                   <span />
@@ -1273,16 +1274,24 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     )}
                     {rowIsAutoHrs(svc.serviceId) ? (
                       <span className="flex h-7 items-center justify-end pr-1 text-xs font-medium text-blue-600 dark:text-blue-400" title="Auto-calculated from production rate">
-                        {svc.budgetedHours.toFixed(2)}
+                        {(svc.budgetedHours * svc.teamSize).toFixed(2)}
                       </span>
                     ) : (
-                      <DecimalInput
-                        min={0}
-                        className="h-7 text-xs"
-                        value={svc.budgetedHours}
-                        selectOnFocus
-                        onCommit={(hrs) => updateService(i, { budgetedHours: hrs })}
-                      />
+                      <div className="flex items-center gap-0.5">
+                        {/* The field is the TOTAL for the crew; the stored per-person figure is total ÷ team. */}
+                        <DecimalInput
+                          min={0}
+                          className="h-7 text-xs"
+                          value={roundHours(svc.budgetedHours * svc.teamSize, 4)}
+                          selectOnFocus
+                          onCommit={(total) => updateService(i, { budgetedHours: roundHours(total / Math.max(1, svc.teamSize), 4) })}
+                        />
+                        <MenHoursCalcPopover
+                          totalHours={svc.budgetedHours * svc.teamSize}
+                          men={svc.teamSize}
+                          onApply={({ totalHours, men }) => updateService(i, { teamSize: men, budgetedHours: roundHours(totalHours / men, 4) })}
+                        />
+                      </div>
                     )}
                     <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateTeamSize(i, parseInt(e.target.value) || 1)} className="h-7 text-xs" />
                     <span className="text-xs text-slate-700 dark:text-neutral-300 font-medium text-right pr-1">{serviceRateLocked ? "—" : formatCurrency(svc.qty * svc.rateCents)}</span>

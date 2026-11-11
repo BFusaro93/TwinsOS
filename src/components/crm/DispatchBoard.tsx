@@ -5637,6 +5637,8 @@ export function DispatchBoard() {
                 {(allServices ?? []).length === 0 && (
                   <p className="px-2 py-2 text-xs text-slate-400 dark:text-neutral-500 italic">No services found</p>
                 )}
+                {/* Capped to the room below the trigger so a long service list scrolls instead of running off screen. */}
+                <div className="max-h-[min(24rem,var(--radix-popover-content-available-height,24rem))] overflow-y-auto overscroll-contain">
                 {(allServices ?? []).map((svc) => (
                   <FilterOptionRow
                     key={svc.id}
@@ -5649,6 +5651,7 @@ export function DispatchBoard() {
                     {svc.name}
                   </FilterOptionRow>
                 ))}
+                </div>
                 <div className="border-t mt-1 pt-1">
                   <button
                     className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:bg-muted"
