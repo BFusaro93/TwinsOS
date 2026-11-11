@@ -11,6 +11,7 @@ export const DISPLAY_TOGGLES: { key: keyof DisplaySettings; label: string; descr
   { key: "showLineTotals", label: "Line totals", description: "Show each line item's total" },
   { key: "showSectionSubtotals", label: "Section subtotals", description: "Show a subtotal under each section" },
   { key: "showPackageVisits", label: "Package visits", description: "List each visit under a package; off shows just the package name, description and total" },
+  { key: "showServiceNameWithDescription", label: "Service name with description", description: "On a line that has a description, also show the service name above it (off shows just the description)" },
   { key: "hideZeroTotals", label: "Hide $0 totals", description: "Drop line items whose total is $0" },
   { key: "hideZeroPrices", label: "Hide $0 prices", description: "Hide the price on lines whose rate is $0 (e.g. included items)" },
 ];

@@ -14,6 +14,9 @@ export interface DisplaySettings {
   hideZeroPrices: boolean;
   /** A package prints as one main line (name, description, total); this also lists its visits under it. */
   showPackageVisits: boolean;
+  /** A line with its own client-facing description prints the description only (the service name can be
+   *  cryptic); on, the service name prints above the description. A line with no description always shows its name. */
+  showServiceNameWithDescription: boolean;
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -26,6 +29,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   hideZeroTotals: false,
   hideZeroPrices: false,
   showPackageVisits: false,
+  showServiceNameWithDescription: false,
 };
 
 export function toDisplaySettings(raw: unknown): DisplaySettings {
@@ -144,4 +148,19 @@ export function groupIntoSections<T extends GroupableItem>(
   // A plain section header may stand alone (a heading), but a package with no visits left
   // has nothing to sell and must not print its name, wording and a $0.00 subtotal.
   return started ? sections.filter((s) => s.items.length > 0 || (s.sectionName !== null && !s.packageId)) : sections;
+}
+
+/**
+ * The name to print for a line, or null to print only its description. A line with no wording of its
+ * own always shows its name (nothing else to print); one with a description shows the name above it
+ * only when the estimate's "Show service name with description" toggle is on.
+ */
+export function printedLineName(
+  li: { serviceName?: string | null; estimateDesc?: string | null },
+  settings: Pick<DisplaySettings, "showServiceNameWithDescription">,
+): string | null {
+  const name = li.serviceName?.trim() || null;
+  if (!name) return null;
+  const hasDesc = !!li.estimateDesc && li.estimateDesc.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").trim() !== "";
+  return !hasDesc || settings.showServiceNameWithDescription ? name : null;
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileText, Clock, CheckCircle2, XCircle, Loader2, Download, MessageSquarePlus } from "lucide-react";
-import { groupIntoSections, DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
+import { groupIntoSections, printedLineName, DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { looksLikeHtml } from "@/lib/utils/sanitize-html";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
@@ -62,12 +62,27 @@ interface Estimate {
   deposit_pay_url?: string | null;
 }
 
+/** A line's wording as plain text (estimate_desc is rich text, usually an HTML fragment). */
+function lineWording(li: { description: string }): string {
+  return (looksLikeHtml(li.description) ? stripHtml(li.description) : li.description).trim();
+}
+
+/** One-line label: the wording alone, the name alone (no wording), or "Name — wording" with the toggle on. */
+function lineLabel(li: { description: string; service_name?: string | null }, settings: DisplaySettings): string {
+  const wording = lineWording(li);
+  const name = printedLineName({ serviceName: li.service_name, estimateDesc: li.description }, settings);
+  if (name && wording) return `${name} — ${wording}`;
+  return name ?? wording;
+}
+
 const TIERS = ["basic", "standard", "premium"] as const;
 type Tier = (typeof TIERS)[number];
 
 interface LineItem {
   id: string;
   description: string;
+  /** The service name; printed with the wording only when the estimate's "Service name with description" toggle is on. */
+  service_name?: string | null;
   quantity: number;
   unit_price_cents: number;
   /** The line's real total (qty × rate × visits), before its own discount. */
@@ -253,7 +268,7 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
                     {section.items.map((li) => (
                       <li key={li.id} className="flex items-baseline justify-between gap-3 py-1.5 pl-9 pr-3 text-xs text-slate-500">
                         <span className="min-w-0 truncate">
-                          {looksLikeHtml(li.description) ? stripHtml(li.description) : li.description}
+                          {lineLabel(li, settings)}
                         </span>
                         {settings.showLineTotals && <span className="shrink-0">{fmt(li.total_cents)}</span>}
                       </li>
@@ -286,7 +301,19 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
                             suffix sits beside it), so flatten to text rather
                             than rendering a block — otherwise the customer
                             reads the raw "<p>" tags. */}
-                        {looksLikeHtml(li.description) ? stripHtml(li.description) : li.description}
+                        {(() => {
+                          const wording = lineWording(li);
+                          const name = printedLineName({ serviceName: li.service_name, estimateDesc: li.description }, settings);
+                          if (name && wording) {
+                            return (
+                              <>
+                                <span className="font-medium">{name}</span>
+                                <span className="block text-xs text-slate-500">{wording}</span>
+                              </>
+                            );
+                          }
+                          return name ?? wording;
+                        })()}
                         {settings.showQuantities && li.quantity > 1 && <span className="text-slate-400 text-xs ml-1">×{li.quantity}</span>}
                         {(li.visits ?? 1) > 1 && <span className="text-slate-400 text-xs ml-1">· {li.visits} visits</span>}
                       </span>
@@ -313,7 +340,7 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
                     <div key={li.id} className="flex items-start gap-2.5 px-3 py-2 text-slate-500">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                       <span className="flex-1 min-w-0">
-                        {looksLikeHtml(li.description) ? stripHtml(li.description) : li.description}
+                        {lineLabel(li, settings)}
                       </span>
                       {settings.showLineTotals && <span className="shrink-0">{fmt(lineNet(li))}</span>}
                     </div>
