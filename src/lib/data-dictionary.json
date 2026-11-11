@@ -5,7 +5,7 @@
     "name": "Forms Summary",
     "description": "Shows forms and the number of responses received in any given time frame.",
     "notes": [
-      "Responses marked Spam or Ignored are not counted. Date bounds are calendar days in Eastern time."
+      "Responses marked Spam or Ignored are not counted. Date bounds are calendar days in your company's time zone."
     ]
   },
   {
@@ -543,7 +543,7 @@
     "key": "invoiced-income-by-client",
     "section": "financial",
     "name": "Invoiced Income by Client",
-    "description": "Totals invoiced income per client — subtotal, tax, total, and amount paid.",
+    "description": "Totals invoiced income per client — subtotal, tax, total, pre-tax revenue (after discounts), and amount paid.",
     "notes": [
       "Excludes draft and void invoices."
     ],
@@ -643,7 +643,7 @@
     "description": "Shows completed visits with budgeted vs actual man-hours, revenue, and labor cost per visit.",
     "notes": [
       "Budgeted and Actual Man-Hours are both duration × number of men.",
-      "Worked Date is the completion date (Eastern time), or the scheduled date for visits completed without a timestamp — the same date the Job Costing page uses.",
+      "Visits are included by when they were completed (Completed Between, in your company's time zone); a visit marked complete without a completion time is not listed. Worked Date is that completion date in your company's time zone.",
       "Revenue is the visit's own rate for per-service visits, otherwise the live sum of the job's included service lines (so re-pricing a line is reflected), otherwise the job rate."
     ],
     "dataset": "rpt_job_visits",
@@ -832,8 +832,8 @@
   {
     "key": "kpi-week-over-week",
     "section": "lead",
-    "name": "Key Performance Indicators (Month-to-Date)",
-    "description": "Compares this week to last week across leads, clients, estimates, calls, and payments."
+    "name": "Key Performance Indicators (Last 7 Days)",
+    "description": "Compares the last 7 days to the 7 days before across leads, clients, estimates, calls, payments, and invoicing."
   },
   {
     "key": "statements",
@@ -859,7 +859,8 @@
     "name": "Invoice Audit Summary",
     "description": "Shows every invoice line item in the period — what was billed, to whom, and for how much.",
     "notes": [
-      "Excludes line items on draft and void invoices."
+      "Excludes line items on draft and void invoices.",
+      "Total is qty × rate; Net is after the line's own discount; Revenue (pre-tax) also takes the invoice-level discount off, spread across the invoice's lines in proportion to their net amounts."
     ],
     "dataset": "rpt_invoice_line_items",
     "columns": [
@@ -871,6 +872,9 @@
       "qty",
       "rate_cents",
       "total_cents",
+      "discount_cents",
+      "net_total_cents",
+      "revenue_ex_tax_cents",
       "invoice_status"
     ]
   },
@@ -894,9 +898,9 @@
     "key": "revenue-by-postal-code",
     "section": "revenue",
     "name": "Revenue by Postal Code",
-    "description": "Totals invoiced revenue by billing postal code.",
+    "description": "Totals invoiced revenue (pre-tax, after discounts) by billing postal code.",
     "notes": [
-      "Excludes draft and void invoices."
+      "Excludes draft and void invoices. Revenue is pre-tax and after discounts (invoice total − sales tax)."
     ],
     "dataset": "rpt_invoices",
     "columns": []
@@ -980,7 +984,7 @@
     "key": "sales-comparison-chart",
     "section": "revenue",
     "name": "Sales Comparison Chart",
-    "description": "Compares invoiced revenue this year to last year, month by month."
+    "description": "Compares invoiced revenue (pre-tax) this year to last year, month by month."
   },
   {
     "key": "sales-comparison-chart-paid",

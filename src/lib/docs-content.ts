@@ -1420,23 +1420,23 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         id: "report-center",
         title: "Report Center & Dashboards",
-        summary: "75 reports across 12 categories, curated and custom dashboards, and a customizable KPI Scorecard.",
+        summary: "100+ pre-built reports across 13 sections, your own saved analyses, scheduled email delivery, ready-made and custom dashboards, and a customizable KPI Scorecard.",
         icon: BarChart3,
         steps: [
           {
             step: "Where it lives",
             detail:
-              "CRM > Reports. A 6-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses), Payroll (crew hours from Start Day / End Day, editable and exportable; admins and roles with View & Edit Payroll Report), and Graphics Library.",
+              "Administration > Reports in the Landscapt sidebar. Seven tabs: Dashboard (the original built-in overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses — New Analysis builds one), Scheduled (emailed reports), Payroll (crew hours from Start Day / End Day, editable, exportable and lockable; admins and roles with View & Edit Payroll Report), and Graphics Library. The ready-made dashboards (KPI Scorecard, Company Report, Social Media and others) are under the Dashboards tile on the Home screen.",
           },
           {
             step: "Categories",
             detail:
-              "Service, Client, Revenue, Schedule Lists, Job Costing, Financial, Audits, Lead, Estimates, Job Hours, Receivables, and Forms.",
+              "Service Reports, Revenue, Client, Job Hours, Schedule Lists, Audits, Financial, Estimates, Job Costing, Lead, Receivables, Tickets, and Forms.",
           },
           {
             step: "Exporting",
             detail:
-              "CSV, Excel, PDF, and print are all available on demand. There is no scheduled or emailed report delivery today.",
+              "CSV, Excel, PDF, and Print are on every report; downloads end with the same Totals row as the screen. Results stop at 5,000 rows, with a banner saying so. Scheduled delivery emails a report as PDF or Excel once, daily, weekly or monthly at an hour on your company's clock: use Schedule on the Actual v. Budgeted Hours reports, or Schedule… on a saved analysis in My Reports (with an optional rolling date window). Creating or changing a schedule needs Manage Report Center plus permission to view that report.",
           },
           {
             step: "KPI Scorecard",
@@ -1456,14 +1456,14 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Full guide",
             detail:
-              "A deeper walkthrough — a worked example running the Production Rate Accuracy report end to end, and the distinction between curated and custom dashboards.",
+              "A deeper walkthrough — how a report gets its numbers, a worked example running the Production Rate Accuracy report end to end, time zone and revenue rules, custom analyses and dashboards, Payroll, the audit trail, scheduled delivery, and who can see what.",
             href: "/settings/support/report-center-guide",
             linkLabel: "Open the Report Center guide",
           },
           {
             step: "Reports reference",
             detail:
-              "A description, available filters, and known gotchas for every one of the ~75 reports, organized by section — for researching a specific report rather than the Report Center itself.",
+              "A description, available filters, and known gotchas for every pre-built report, organized by section — for researching a specific report rather than the Report Center itself.",
             href: "/settings/support/reports-reference-guide",
             linkLabel: "Open the Reports Reference guide",
           },
