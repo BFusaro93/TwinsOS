@@ -623,7 +623,7 @@ export function ReportCenterGuide() {
           view-only. Without it the Customize button is hidden and the cells are read-only, and a
           change is refused even if someone tries to make it another way. Crew logins have neither
           permission, so they cannot reach the page at all. Roles are managed under{" "}
-          <strong>Settings &gt; CRM Settings &gt; Roles</strong>.
+          <strong>Settings &gt; Landscapt Settings &gt; Roles</strong>.
         </p>
         <p>
           The layout is saved once for your whole company; targets and manual actuals are saved
@@ -729,7 +729,7 @@ export function ReportCenterGuide() {
         <p>
           Anyone allowed to see the dashboard can read it. Admins and managers can always log weeks
           and edit goals and platforms; give another role the <strong>Social Media: Enter &amp; Edit
-          Data</strong> permission (Settings &gt; CRM Settings &gt; Roles) to let, say, a marketing
+          Data</strong> permission (Settings &gt; Landscapt Settings &gt; Roles) to let, say, a marketing
           coordinator do it without broader access.
         </p>
       </Section>
@@ -905,7 +905,7 @@ export function ReportCenterGuide() {
           layout (see the KPI Scorecard section above).
         </p>
         <p>
-          On top of that, CRM role permissions (Settings &gt; CRM Settings &gt; Roles, Reports
+          On top of that, CRM role permissions (Settings &gt; Landscapt Settings &gt; Roles, Reports
           tab) control the Report Center itself, and they are checked every time a report runs,
           not just by hiding buttons:
         </p>

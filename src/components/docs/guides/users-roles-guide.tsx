@@ -26,7 +26,7 @@ const MATRIX_ROWS: [string, string, string, string, string, string, string][] = 
   ["Staff",      "No",  "No", "No", "Work orders, PM, parts, meters full; can create requisitions/POs for parts", "None by default", "N/A"],
   ["Viewer",     "No",  "No", "No", "Read-only", "None by default", "N/A"],
   ["Requestor",  "No",  "No", "No", "Maintenance requests (own, editable while Open) + draft requisitions only", "None by default", "N/A"],
-  ["Crew",       "No",  "No", "No", "None — confined to crew field surface", "None — confined to /crm/crew", "N/A"],
+  ["Crew",       "No",  "No", "No", "None — confined to crew field surface", "None — crew app only", "N/A"],
 ];
 
 export function UsersRolesGuide() {
@@ -62,31 +62,31 @@ export function UsersRolesGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>The organization role</strong> — a single value on every user&apos;s profile
-            (<code>profiles.role</code>): <code>admin</code>, <code>manager</code>,{" "}
-            <code>purchaser</code>, <code>technician</code> (shown as Staff), <code>viewer</code>,{" "}
-            <code>requestor</code>, or <code>crew</code>. This is the role you pick when inviting
-            someone from Settings → Users, and it&apos;s what gates Equipt (CMMS) and PO access.
+            <strong>The organization role</strong> — one role on every user&apos;s login: Admin,
+            Manager, Purchaser, Staff, Viewer, Requestor, or Crew. This is the role you pick when
+            inviting someone from Settings → Users, and it&apos;s what controls Equipt (CMMS) and
+            purchasing access.
           </li>
           <li>
             <strong>CRM custom roles</strong> — a completely separate, org-defined permission system
-            for Landscapt, managed at CRM Settings → Roles. Each role is a named set of on/off
-            switches (over a hundred of them — client access, scheduling, accounting, reports, and
-            more) stored as JSONB, closer to Service Autopilot&apos;s permission model than to the
+            for Landscapt, managed at Settings → Landscapt Settings → Roles. Each role is a named
+            set of on/off switches (over a hundred of them — client access, scheduling, accounting,
+            reports, and more), closer to Service Autopilot&apos;s permission model than to the
             seven fixed organization roles.
           </li>
         </ul>
         <Callout>
           <strong>These don&apos;t sync.</strong> Being a Manager or Staff (organization role)
           gives you access to Equipt/PO. It gives you <em>no</em> access to Landscapt/CRM on its own
-          — CRM access requires a separate <code>crm_employees</code> link with a CRM role assigned.
+          — Landscapt access requires the login to be linked to an employee record that has a
+          Landscapt role.
           Only Admin is an exception: Admins bypass CRM permission checks entirely and get full CRM
           access automatically.
         </Callout>
       </Section>
 
       <Section id="staff-roles" title="The seven organization roles">
-        <p>These are the only values <code>profiles.role</code> can hold. Every staff login has exactly one.</p>
+        <p>These are the only organization roles there are. Every staff login has exactly one.</p>
         <Table>
           <thead>
             <TableHeadRow>
@@ -153,8 +153,8 @@ export function UsersRolesGuide() {
         </Table>
         <p className="text-xs text-[#7a7a74] dark:text-neutral-400">
           &quot;None by default&quot; for CRM access means the organization role alone doesn&apos;t
-          grant it — an admin has to separately link the user to a CRM role via CRM Settings →
-          Employees. Client portal accounts are a different login entirely — see{" "}
+          grant it — an admin has to link the user to an employee record with a Landscapt role
+          under Team → Employees. Client portal accounts are a different login entirely — see{" "}
           <GuideLink href="/settings/support/client-portal-guide" className="text-[#60ab45] hover:underline">
             the Client Portal guide
           </GuideLink>.
@@ -163,28 +163,28 @@ export function UsersRolesGuide() {
 
       <Section id="crm-roles" title="Landscapt/CRM custom roles">
         <p>
-          CRM access is governed by <code>crm_roles</code> — organization-defined roles you build
-          yourself at CRM Settings → Roles, not the seven fixed organization roles above. Each role
-          is a flat set of permission keys (<code>client_add</code>, <code>acct_add_modify_invoices</code>,{" "}
-          <code>sched_dispatch_board</code>, and well over a hundred others across Home, CRM,
-          Scheduling, Accounting, and Mobile) that you toggle on or off per role.
+          Landscapt access is governed by Landscapt roles — roles you build yourself at Settings →
+          Landscapt Settings → Roles, not the seven fixed organization roles above. Each role is a
+          list of permissions (Add Client, Add/Modify Invoices, Dispatch Board, and well over a
+          hundred others across Home, CRM, Scheduling, Accounting, and Mobile) that you switch on
+          or off per role.
         </p>
         <p>
           To give someone CRM access, two things have to both be true:
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
-            They have a <code>crm_employees</code> record linked to their login. On the employee
+            They have an employee record (Team → Employees) linked to their login. On the employee
             record, pick the login from the <strong>Select a user to link…</strong> dropdown — it
             lists active users who aren&apos;t already linked to another employee, and once linked
             it shows their name and email.
           </li>
-          <li>That employee record points at an active (non-deleted) <code>crm_roles</code> row — the specific CRM role that defines what they can see and do inside Landscapt.</li>
+          <li>That employee record has an active <strong>Landscapt Role</strong> — the role that defines what they can see and do inside Landscapt.</li>
         </ol>
         <p>
           Without both, a user with a perfectly valid organization role (say, Manager) is blocked
-          from the CRM module entirely — the CRM access gate checks for a <code>crm_role_id</code>,
-          not for anything on <code>profiles.role</code>. The Landscapt tile on their Home screen
+          from Landscapt entirely — Landscapt checks for a Landscapt role on their employee record,
+          not their organization role. The Landscapt tile on their Home screen
           reflects this too: it only appears once both conditions above are met, so an unlinked
           user simply doesn&apos;t see a tile that would otherwise dead-end in a &quot;not
           linked&quot; screen.
@@ -196,8 +196,8 @@ export function UsersRolesGuide() {
           Add/Modify Payments or Credits, applying money or credit to an invoice needs the payment
           or credit permission, and merging invoices, invoicing a project milestone and reconciling
           an invoice&apos;s payments need Add/Modify Invoices (reconcile accepts the payment
-          permissions too). The same keys the buttons use are enforced on the server, so a role
-          without them is refused even if it calls the action another way.
+          permissions too). The system checks the same permissions the buttons use, so a role
+          without them is refused even if it tries the action another way.
         </p>
         <p>
           <strong>Cancelling jobs and bulk-editing clients are enforced the same way.</strong>{" "}
@@ -296,18 +296,18 @@ export function UsersRolesGuide() {
           a balance directly needs View Balance plus Add/Modify Credits (balances recalculated
           from invoices and payments are unaffected). Turning autopay off is always allowed.{" "}
           <strong>Still hide-only:</strong> View Notes, View Credit Card #&apos;s, View Balance,
-          View Billing and Export Lists control what the screen shows and offers, but the data
-          itself is not hidden from a login that queries it directly, and exports are built in
-          the browser from rows already loaded.
+          View Billing and Export Lists control what the screen shows and offers, but they
+          don&apos;t withhold the data itself from that login, and an export contains whatever
+          the screen has already loaded.
         </p>
         <Callout>
-          <strong>Admins skip all of this.</strong> If <code>profiles.role === &quot;admin&quot;</code>,
-          every CRM permission check passes automatically — an Admin never needs a{" "}
-          <code>crm_employees</code> link or a CRM role assigned.
+          <strong>Admins skip all of this.</strong> If someone&apos;s organization role is Admin,
+          every Landscapt permission check passes automatically — an Admin never needs a linked
+          employee record or a Landscapt role.
         </Callout>
         <p>
           <strong>Report permissions</strong> live on the role editor&apos;s Reports tab and work
-          in two layers, both enforced server-side:
+          in two layers, both checked by the system itself, not just by hiding buttons:
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -321,14 +321,14 @@ export function UsersRolesGuide() {
           <li>
             <strong>View &amp; Edit Payroll Report</strong> (Home &gt; Report Access) unlocks the
             Payroll tab in the Report Center, where each person&apos;s Start Day / End Day hours are
-            reviewed, corrected and exported. Admins always have it; the seeded Owner, Operations
-            Manager and Office Admin roles have it by default. A profile role of Manager alone does
+            reviewed, corrected and exported. Admins always have it; the default Owner, Operations
+            Manager and Office Admin roles have it. An organization role of Manager alone does
             not grant it.
           </li>
           <li>
-            <strong>Individual report keys</strong> under CRM Reports, Scheduling Reports, and
+            <strong>Individual report permissions</strong> under CRM Reports, Scheduling Reports, and
             Accounting Reports each unlock one pre-built report by name (Client Balance, Job Cost
-            Summary, A/R Aging Report, …). The same keys also gate the raw datasets behind custom
+            Summary, A/R Aging Report, …). The same permissions also control the datasets behind custom
             analyses and dashboard panels, so a role that can&apos;t see a payroll or accounting
             report can&apos;t rebuild it ad hoc either: <strong>Employees</strong> needs Employee
             Directory; <strong>Timesheets</strong> needs Job Hours Summary or Employee Directory;{" "}
@@ -348,14 +348,13 @@ export function UsersRolesGuide() {
           </li>
           <li>
             <strong>Dashboard Access</strong> (Home &gt; Dashboard Access in the role editor) has
-            one View key per built-in dashboard — Equipt Dashboard, My Day, Reports Dashboard, KPI
+            one View permission per built-in dashboard — Equipt Dashboard, My Day, Reports Dashboard, KPI
             Scorecard, Driver Safety Scores, Company Report, Social Media, Custom Dashboards, Job
-            Costing, Estimate Builder, and Calculators. A role without a key doesn&apos;t see that
-            dashboard in the Dashboards sidebar or overview, and opening its URL directly is
+            Costing, Estimate Builder, and Calculators. A role without one doesn&apos;t see that
+            dashboard in the Dashboards sidebar or overview, and opening its web address directly is
             blocked. Admins always see everything. A login with no Landscapt role sees none of these
             dashboards, with one exception: Equipt-only staff (a shop mechanic, say) still get the
-            Equipt Dashboard and Driver Safety Scores based on their organization role. Existing roles were given every Dashboard Access key on, so nothing disappeared
-            when the keys were introduced.
+            Equipt Dashboard and Driver Safety Scores based on their organization role.
           </li>
         </ul>
       </Section>
@@ -452,9 +451,9 @@ export function UsersRolesGuide() {
           <li>
             She <strong>cannot</strong> open Landscapt/CRM at all yet — inviting her as Staff
             only set her organization role. If she also needs CRM access (say, to see client jobs
-            tied to a work order), an admin has to separately create a <code>crm_employees</code>{" "}
-            record for her at CRM Settings → Employees and assign one of the org&apos;s CRM roles.
-            Until that happens, she&apos;s blocked from every CRM route.
+            tied to a work order), an admin has to link her login to an employee record under
+            Team → Employees and give it one of your Landscapt roles. Until that happens, every
+            Landscapt page is blocked for her.
           </li>
         </ul>
       </Section>
@@ -463,13 +462,13 @@ export function UsersRolesGuide() {
         <p>Two more access modes exist outside the organization-role / CRM-role pair above:</p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Crew accounts</strong> — a shared login (organization role <code>crew</code>)
+            <strong>Crew accounts</strong> — a shared login (organization role Crew)
             for a field team rather than a person. A crew login is confined to the crew field
             surface only: viewing and completing assigned jobs, submitting maintenance requests,
             viewing the Labor Efficiency and Driver Safety Scores dashboards, and uploading photos
             to job sites. It has no access to purchasing, assets, inventory, settings, or the rest
-            of the CRM module — even attempting to load a CRM route outside the crew surface is
-            blocked, regardless of what a <code>crm_role_id</code> might otherwise allow.
+            of Landscapt — opening any other Landscapt page is blocked, whatever Landscapt role the
+            crew might otherwise have.
             <p className="mt-2">
               What a crew login can <em>change</em> is deliberately narrow: it may update only the
               visits belonging to its own crew, and cannot move a visit to a different crew. Jobs and
@@ -481,8 +480,8 @@ export function UsersRolesGuide() {
             <p className="mt-2">
               What a crew login can <em>see</em> about money is limited to what the crew app shows.
               Job prices and totals, labor and material costs, and the price and cost of materials on
-              a job are never available to a crew login — not on screen and not by querying the
-              database directly with the crew&apos;s credentials. The one exception is each
+              a job are never available to a crew login — not on screen and not by reading the data
+              some other way with the crew&apos;s login. The one exception is each
               service&apos;s price on a stop, and only while <strong>Hide pricing from crew
               accounts</strong> is off. For the same reason, reports built on jobs and visits
               (revenue, rates, job costing, budget vs. actual) return no data to a crew login, even on
@@ -515,8 +514,9 @@ export function UsersRolesGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Role dropdown looks editable, isn&apos;t always effective.</strong> Non-admins see
-            the role selector as disabled in the UI, but the real enforcement is server-side (RLS
-            plus a database trigger) — the disabled control is just there to avoid misleading anyone.
+            the role selector as disabled, but the real protection is in the system itself — a
+            non-admin&apos;s role change is refused however it&apos;s attempted. The disabled control is
+            just there to avoid misleading anyone.
           </li>
           <li>
             <strong>Changing someone&apos;s organization role never touches their CRM role.</strong>{" "}
@@ -529,24 +529,21 @@ export function UsersRolesGuide() {
             doesn&apos;t apply.
           </li>
           <li>
-            <strong>A deleted (soft-deleted) CRM role silently revokes access.</strong> If a{" "}
-            <code>crm_roles</code> row an employee is assigned to gets deleted, that employee loses
-            CRM access the same as if no role were assigned at all — nothing on the user record
-            itself changes to indicate why. To prevent that, the app now refuses to delete a role
-            while employees are still assigned to it (&quot;N employees are still assigned to this
+            <strong>A role can&apos;t be deleted while employees hold it.</strong> An employee whose
+            Landscapt role is gone would lose Landscapt access with nothing on their record to say
+            why, so Landscapt refuses to delete a role while employees are still assigned to it (&quot;N employees are still assigned to this
             role. Reassign them to another role first.&quot;); move them to another role, then
             delete.
           </li>
           <li>
             <strong>The employee record has a third, unrelated &quot;User Role&quot; field — it grants nothing.</strong>{" "}
-            CRM Settings → Employees → an employee&apos;s User Settings tab shows a{" "}
+            Team → Employees → an employee&apos;s User Settings tab shows a{" "}
             <strong>User Role</strong> field with options like Admin, Manager, Staff, Purchaser,
             and Viewer — the same familiar names as the organization role. It is purely a display
-            label on <code>crm_employees.user_role</code> and has no effect on access anywhere in the
-            app. Once the employee is linked to a login, it&apos;s auto-populated from that login&apos;s
+            label and has no effect on access anywhere in the app. Once the employee is linked to a login, it&apos;s auto-populated from that login&apos;s
             real organization role and shown read-only, so it can&apos;t drift out of sync — before a
             login is linked, it&apos;s just a manually-set label. Don&apos;t confuse it with either the
-            organization role or the Landscapt Role (<code>crm_role_id</code>) on the same tab.
+            organization role or the <strong>Landscapt Role</strong> field on the same tab.
           </li>
         </ul>
       </Section>
