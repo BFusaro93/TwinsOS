@@ -312,8 +312,7 @@ export function UsersRolesGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>View Report Center</strong> (Home &gt; Report Access) is the front door. It is
-            required to open the Report Center, and — as of the latest reporting changes — to
-            run or save a custom analysis, open a saved report, view a Custom Dashboard, or use the
+            required to open the Report Center and to run or save a custom analysis, open a saved report, view a Custom Dashboard, or use the
             Graphics Library. <strong>Manage Report Center</strong> additionally allows building
             those and editing the KPI Scorecard, and is also what lets someone create or change
             dashboards, custom reports and scheduled report emails. The database itself refuses
@@ -333,11 +332,17 @@ export function UsersRolesGuide() {
             analyses and dashboard panels, so a role that can&apos;t see a payroll or accounting
             report can&apos;t rebuild it ad hoc either: <strong>Employees</strong> needs Employee
             Directory; <strong>Timesheets</strong> needs Job Hours Summary or Employee Directory;{" "}
-            <strong>Invoices</strong> and <strong>Invoice Line Items</strong> need Invoiced Income
-            by Client, Invoices with Balances, or A/R Aging Report; <strong>Payments</strong> needs
+            <strong>Crew Drive Time</strong> needs Job Hours Summary; <strong>Job Visits</strong>{" "}
+            and <strong>Job Services</strong> need Job Costing, Job Cost Summary, Cost of Goods Sold
+            Report, or Job Hours Summary; <strong>Projects — WIP Schedule</strong> needs Job
+            Costing or Job Cost Summary; <strong>Invoices</strong> and{" "}
+            <strong>Invoice Line Items</strong> need Invoiced Income by Client, Invoices with
+            Balances, or A/R Aging Report; <strong>Contracts</strong> needs Client Contracts,
+            Package Summary Report, or one of those three; <strong>Payments</strong> needs
             Payment Audit Summary or one of those three; <strong>Estimates</strong> and{" "}
             <strong>Estimate Line Items</strong> need View Estimates, Estimates by Stage, or Won
-            Estimates by Service. A dashboard panel the user can&apos;t query shows &quot;You
+            Estimates by Service; <strong>Audit Log</strong> needs Audit Log or Security &amp;
+            Access Audit. A dashboard panel the user can&apos;t query shows &quot;You
             don&apos;t have permission to view this panel&quot; rather than failing the whole
             dashboard.
           </li>

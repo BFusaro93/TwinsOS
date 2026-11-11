@@ -141,6 +141,26 @@ const SECTIONS: ReportSection[] = [
           "Visits used counts a completed visit only if it's linked to a job service matching this bundled service — same logic as the Included Services tab on the contract.",
         ],
       },
+      {
+        name: "Field Upsells",
+        description: "Every piece of work a crew flagged from the field, with the client, what they suggested, and whether it became a quote and a sale.",
+        filters: "Outcome",
+        notes: [
+          "Outcome comes from the linked estimate's stage, not the ticket's status — a ticket can be closed without the work ever being quoted.",
+          "'Not quoted' means no estimate has been linked to the ticket yet. Use Create estimate on the ticket to make that link in one step.",
+          "Won Revenue counts only estimates that reached Accepted, Won or Invoiced, so summing it gives money actually sourced from the field rather than open pipeline.",
+        ],
+      },
+      {
+        name: "Upsell Conversion by Crew Member",
+        description: "Who is spotting work in the field, and how much of it turns into money — suggestions submitted against revenue won.",
+        filters: "Outcome",
+        notes: [
+          "Grouped by the person who submitted the suggestion, so it works whether crews share one login or each member has their own.",
+          "Leave Outcome empty for the full picture: the row count is everything they submitted, Won Revenue is what came of it. Filter to Won to see only converted suggestions.",
+          "Won Revenue is the linked estimate's total, so a suggestion that grew into a larger job is credited at what was actually sold.",
+        ],
+      },
     ],
   },
   {
@@ -219,6 +239,11 @@ const SECTIONS: ReportSection[] = [
         notes: [
           "New Leads = accounts created in range that are still leads (open or lost). Converted Leads = accounts whose Client Since date falls in range. Avg Days to Convert = created → Client Since, over converted accounts whose Client Since is after their created date (accounts created directly as clients are excluded). Total Clients = active + inactive + cancelled; Total Leads = open leads only.",
         ],
+      },
+      {
+        name: "Address Verification",
+        description: "Shows every service address a crew could be sent to and whether Google has confirmed it. Defaults to the ones that still need a look.",
+        filters: "Show, Record Type",
       },
     ],
   },
@@ -313,6 +338,18 @@ const SECTIONS: ReportSection[] = [
         description: "Shows credit card payments received, including processing fees where applicable.",
         filters: "Payment Date",
       },
+      {
+        name: "Sales Comparison Chart",
+        description: "Compares invoiced revenue (pre-tax) this year to last year, month by month.",
+      },
+      {
+        name: "Sales Comparison Chart (Paid)",
+        description: "Compares cash collected this year to last year, month by month.",
+      },
+      {
+        name: "Avg. Gross Revenue per Year per Client",
+        description: "Trends average invoiced revenue per client, year over year.",
+      },
     ],
   },
   {
@@ -352,6 +389,10 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Paused Services",
         description: "Shows jobs that have been placed on hold.",
+      },
+      {
+        name: "Upcoming Jobs - No Contract",
+        description: "Shows scheduled upcoming jobs that aren't tied to a signed contract.",
       },
     ],
   },
@@ -477,6 +518,11 @@ const SECTIONS: ReportSection[] = [
         filters: "Invoice Date",
         notes: ["Tax is reported on invoice date (accrual). Excludes draft and void invoices."],
       },
+      {
+        name: "Financials",
+        description: "Invoiced totals and cash collected for a date range, alongside current receivables aging.",
+        filters: "Invoice Date",
+      },
     ],
   },
   {
@@ -583,6 +629,10 @@ const SECTIONS: ReportSection[] = [
         notes: [
           "Conversion % = accounts that became clients (Clients + Cancelled) ÷ all accounts from the source (Leads + Clients + Cancelled + Lost).",
         ],
+      },
+      {
+        name: "Key Performance Indicators (Last 7 Days)",
+        description: "Compares the last 7 days to the 7 days before across leads, clients, estimates, calls, payments, and invoicing.",
       },
     ],
   },
@@ -693,6 +743,16 @@ const SECTIONS: ReportSection[] = [
           "Cost is hours × the crew member's labor burden rate. Days with no Start Day / End Day shift count job punches and recorded drive time only; the report lists how many such days, open shifts and members with no rate it found.",
         ],
       },
+      {
+        name: "Drive Time Summary",
+        description: "Shows total recorded drive time by crew in any defined time frame — day-level, not billed to clients.",
+        filters: "Driving Between",
+      },
+      {
+        name: "Drive Time Detail",
+        description: "Shows individual drive segments (start/end and duration) recorded by each crew.",
+        filters: "Driving Between, Crew",
+      },
     ],
   },
   {
@@ -713,6 +773,21 @@ const SECTIONS: ReportSection[] = [
         description: "Shows each client's outstanding balance alongside their most recent invoice and payment.",
         filters: "Where Balance Greater Than ($)",
         notes: ["Outstanding balance and Last Invoice exclude draft and void invoices. Last Payment is cash only — excludes account credits and AR write-offs."],
+      },
+      {
+        name: "Statements",
+        description: "Generate and email running-balance account statements for clients with an outstanding balance — a date range, an optional message, and a bulk send.",
+        fullPage: true,
+      },
+    ],
+  },
+  {
+    id: "tickets",
+    label: "Tickets",
+    reports: [
+      {
+        name: "My Past Due Tickets",
+        description: "Shows open tickets whose due date has already passed.",
       },
     ],
   },
@@ -778,12 +853,11 @@ export function ReportsReferenceGuide() {
             <strong>AR Write-off</strong> entries are excluded, and amounts are net of refunds.
           </li>
           <li>
-            <strong>The org&apos;s own clock, not the viewer&apos;s.</strong> Every date and time filter
-            (Today, Month to Date, a custom From/To, a bare date) is evaluated on that org&apos;s
-            configured operating timezone (<code>organizations.timezone</code>, set under
-            Settings &gt; Organization) — every existing org defaults to America/New_York, but a
-            due/overdue window or a &quot;today&quot; figure now follows whatever zone the org has chosen,
-            not the browser&apos;s zone and not a hardcoded Eastern assumption. Hours columns on
+            <strong>Your company&apos;s clock, not the viewer&apos;s.</strong> Every date and time filter
+            (Today, Month to Date, a custom From/To, a single date) uses the time zone set under{" "}
+            <strong>Settings &gt; Organization</strong> (Eastern Time unless you change it). A
+            due/overdue window or a &quot;today&quot; figure follows that time zone, not the time
+            zone of the computer you&apos;re viewing from. Hours columns on
             visit-based reports are man-hours (crew hours × number of men).
           </li>
           <li>
