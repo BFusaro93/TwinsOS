@@ -18,7 +18,8 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent } from "@/lib/estimate-calc";
 import { Plus, FileText, X, ChevronDown, RotateCcw, Copy, List, Columns } from "lucide-react";
 import type { EstimateStage } from "@/types/crm-estimates";
-import { useUpdateEstimateStage } from "@/lib/hooks/use-estimates";
+import { useUpdateEstimateStage, useDeleteEstimate } from "@/lib/hooks/use-estimates";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
 import { EstimatesPipelineView } from "./EstimatesPipelineView";
 import { DuplicateEstimateDialog } from "./DuplicateEstimateDialog";
@@ -118,6 +119,9 @@ export function EstimatesList({ clientId }: Props) {
   const canSend = can("estimate_send");
   const { data: estimates, isLoading, refetch } = useEstimates(clientId);
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
+  const { mutateAsync: deleteEstimate } = useDeleteEstimate();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
   // Snapshot of the selected, visible estimates taken when "Email Selected"
   // opens its dialog (null = closed).
@@ -288,6 +292,30 @@ export function EstimatesList({ clientId }: Props) {
       setSelectedIds(new Set());
       refetch();
     } catch (err) { toast.error(mutationErrorMessage(err, "Failed to update estimates")); }
+  }
+
+  async function bulkDeleteSelected() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setDeleting(true);
+    try {
+      // allSettled: an estimate with a job or invoice is refused on its own; the rest still go.
+      const results = await Promise.allSettled(ids.map((id) => deleteEstimate({ id })));
+      const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+      const okCount = ids.length - failed.length;
+      if (failed.length === 0) toast.success(`${okCount} estimate${okCount > 1 ? "s" : ""} deleted`);
+      else {
+        const reason = failed[0].reason instanceof Error ? failed[0].reason.message : "";
+        toast.error(`${okCount} deleted, ${failed.length} couldn't be deleted${reason ? `: ${reason}` : ""}`);
+      }
+      setSelectedIds(new Set());
+      refetch();
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to delete estimates"));
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
   }
 
   // Opens BulkEmailEstimatesDialog: a confirmation step with the count and a
@@ -531,6 +559,13 @@ export function EstimatesList({ clientId }: Props) {
                     onSelect={() => bulkSetStage("lost")}
                   >
                     Mark as Lost
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!someSelected}
+                    className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                    onSelect={() => setDeleteOpen(true)}
+                  >
+                    Delete Selected
                   </DropdownMenuItem>
                 </>
               )}
@@ -782,6 +817,27 @@ export function EstimatesList({ clientId }: Props) {
         onClose={() => setBulkEmailTargets(null)}
         onSent={() => { setSelectedIds(new Set()); void refetch(); }}
       />
+
+      <AlertDialog open={deleteOpen} onOpenChange={(open) => { if (!deleting) setDeleteOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size} estimate{selectedIds.size !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Each whole estimate is removed from your lists, its proposal link stops working and its follow-up
+              sequences stop. An estimate with a job, invoice, contract, payment or project made from it is skipped
+              — cancel or delete those first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={deleting} onClick={(e) => { e.preventDefault(); void bulkDeleteSelected(); }}>
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {duplicateTarget && (
         <DuplicateEstimateDialog
