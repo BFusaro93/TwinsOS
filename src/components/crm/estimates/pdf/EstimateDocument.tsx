@@ -475,9 +475,9 @@ function LineItemSections({
               <View style={S.cellService}>
                 {li.estimateDesc ? (
                   <>
-                    {/* The line's name stays on the document above its wording (a package's
-                        wording already leads with its own name). */}
-                    {li.serviceName && !descLeadsWithName(li.estimateDesc, li.serviceName) && (
+                    {/* With "Service name with description" on, the name prints above its wording
+                        (a package's wording already leads with its own name). */}
+                    {li.serviceName && settings.showServiceNameWithDescription && !descLeadsWithName(li.estimateDesc, li.serviceName) && (
                       <Text style={[S.cellText, { fontFamily: "Helvetica-Bold" }]}>{li.serviceName}</Text>
                     )}
                     <RichText html={li.estimateDesc} style={S.serviceDescText} />

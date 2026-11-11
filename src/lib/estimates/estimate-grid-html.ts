@@ -1,7 +1,8 @@
 import type { EstimatePDFLineItem } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { packageLineNetCents } from "@/lib/estimates/package-line-net";
 import { escapeHtml } from "@/lib/utils/escape-html";
-import { DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
+import { DEFAULT_DISPLAY_SETTINGS, printedLineName, type DisplaySettings } from "@/lib/estimate-display-settings";
+import { stripHtml } from "@/lib/utils/strip-html";
 
 function fmtCents(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -52,7 +53,14 @@ export function buildEstimateGridHtml(
     if (li.rowType === "section") {
       return `<tr><td colspan="3" style="padding:10px 4px 4px;font-weight:700;border-bottom:1px solid #e2e8f0">${escapeHtml(li.sectionName ?? "")}</td></tr>`;
     }
-    const desc = escapeHtml(li.serviceName || li.estimateDesc || "");
+    // The line's own description replaces its (possibly cryptic) service name unless the estimate's
+    // "Service name with description" toggle is on, which prints the name with the wording beneath.
+    const wordingText = li.estimateDesc ? stripHtml(li.estimateDesc).trim() : "";
+    const lineName = printedLineName(li, settings);
+    const desc =
+      lineName && wordingText && settings.showServiceNameWithDescription
+        ? `${escapeHtml(lineName)}<div style="font-weight:400;color:#64748b;font-size:12px">${escapeHtml(wordingText)}</div>`
+        : escapeHtml(lineName ?? (wordingText || li.serviceName || ""));
     return `<tr>
       <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9">${desc}</td>
       <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">${li.qty}${li.unitType ? " " + escapeHtml(li.unitType) : ""}</td>
