@@ -94,7 +94,11 @@ export function dailyRows(members: PayrollMemberTotals[], tz: string): (string |
   );
 }
 
-export const SUMMARY_HEADERS = ["Employee", "Crew", "Days Worked", "Open/No-Shift Days", "Day Hours", "Extra Hours", "Total Hours"];
+/** Printed with the totals so "Days to Review" is self-explanatory on a PDF. */
+export const DAYS_TO_REVIEW_NOTE =
+  "Days to Review = days with a shift that was never ended (open) or job time but no Start Day (no shift). Hours on those days may be understated or missing.";
+
+export const SUMMARY_HEADERS = ["Employee", "Crew", "Days Worked", "Days to Review", "Day Hours", "Extra Hours", "Total Hours"];
 
 export function summaryRows(members: PayrollMemberTotals[]): (string | number)[][] {
   return members.map((m) => [

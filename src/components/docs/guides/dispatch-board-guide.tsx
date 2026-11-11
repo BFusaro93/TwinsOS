@@ -581,6 +581,10 @@ export function DispatchBoardGuide() {
             filter the board down to visits in that state.
           </li>
           <li>
+            <strong>Service filter</strong> — a multi-select checklist of your services. With a long
+            list the checklist scrolls inside the popover, so every service is reachable.
+          </li>
+          <li>
             <strong>Crew filter</strong> — a multi-select checklist to show only selected crews (plus
             &quot;All Crews&quot; to clear it).
           </li>

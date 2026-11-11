@@ -3530,7 +3530,7 @@ export function useUpdateJobService() {
   return useMutation({
     mutationFn: async ({ id, patch }: {
       id: string;
-      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number; treated_area?: number | null; job_note?: string | null; invoice_desc?: string | null; internal_note?: string | null };
+      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number; team_size?: number; treated_area?: number | null; job_note?: string | null; invoice_desc?: string | null; internal_note?: string | null };
     }) => {
       const supabase = createClient();
       if (typeof patch.budgeted_hours === 'number') patch = { ...patch, budgeted_hours: roundHours(patch.budgeted_hours) };

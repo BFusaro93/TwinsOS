@@ -278,7 +278,12 @@ export function CrewAppGuide() {
             comes back after it rejoins the shift they left, so the time away is only taken off
             once. If you export Payroll while some
             days are still open or have no shift, Landscapt warns that hours are understated or missing
-            and asks you to confirm — fix those days first for accurate pay.
+            and asks you to confirm — fix those days first for accurate pay. An <strong>open</strong>{" "}
+            day has a Start Day but no End Day; a <strong>no shift</strong> day has job time but no
+            Start Day. The exported totals count both per employee in the <strong>Days to Review</strong>{" "}
+            column, and each affected day is labelled OPEN SHIFT or NO SHIFT in the daily detail. The
+            PDF export prints a separate table for each employee, with that person&apos;s days and a total
+            row, after the totals-by-employee summary.
           </li>
         </ul>
         <p>
