@@ -28,7 +28,9 @@ interface RowDraft {
 function minutesBetween(inDate: string, inTime: string, outDate: string, outTime: string, tz: string): number | null {
   const a = zoneWallClockToInstant(inDate, inTime, tz);
   const b = zoneWallClockToInstant(outDate, outTime, tz);
-  if (!a || !b || b <= a) return null;
+  // Equal is allowed: a job started and stopped in the same minute shows 0m (stored
+  // times carry seconds; unchanged rows are not re-sent, the server still refuses out <= in).
+  if (!a || !b || b < a) return null;
   return Math.round((b.getTime() - a.getTime()) / 60000);
 }
 
