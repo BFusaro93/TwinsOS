@@ -1906,6 +1906,38 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Maintenance & Work Orders",
     items: [
       {
+        q: "Who is shown as \"Submitted By\" on a maintenance request I create in the app?",
+        a: "You. The request is credited to whoever is signed in when it's created.",
+      },
+      {
+        q: "Can a Requestor or Purchaser edit or delete a maintenance request?",
+        a: "Only their own, and only while it's still Open. They can change the title, description, priority and asset or vehicle. Once someone starts reviewing it, it's locked for them; status changes and converting to a work order are handled by admins, managers and technicians.",
+      },
+      {
+        q: "Why did I get \"This request changed — refresh and try again\"?",
+        a: "Someone else changed the request's status after you opened it. Nothing was saved; refresh to see the current status. A request that's already linked to a work order keeps its status.",
+      },
+      {
+        q: "If someone picks a vehicle on the public request form or the field repair page, is it linked?",
+        a: "Yes. Picking an asset or a vehicle links the request to it, and converting the request attaches that asset or vehicle to the work order.",
+      },
+      {
+        q: "What happens to open maintenance requests when an asset or vehicle is deleted, disposed or sold?",
+        a: "They're closed as Rejected automatically, with a note in the description, and they no longer count as missed PMs in PM compliance.",
+      },
+      {
+        q: "Can I log a meter reading with a future date?",
+        a: "No. Readings can be dated today or earlier, using your company's calendar day (the organization time zone in Settings).",
+      },
+      {
+        q: "Does editing a meter's value directly run my meter automations?",
+        a: "Yes. A direct value edit, a new meter's starting value and a normal reading all run your meter automations right away.",
+      },
+      {
+        q: "How does the Samsara sync label the meter it creates?",
+        a: "As a Samsara meter named \"Odometer\" that carries the vehicle's name. Renaming the vehicle (or an asset) updates its meters' names too.",
+      },
+      {
         q: "What's the difference between a Work Order and a Maintenance Request?",
         a: "A Work Order is a direct maintenance task — created by Staff, Managers, or Admins and immediately actionable. A Maintenance Request goes through an approval flow before becoming a Work Order. Requestors can only submit requests.",
       },
@@ -1978,6 +2010,114 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Landscapt (CRM)",
     items: [
+      {
+        q: "A crew tapped Start Day or End Day with no signal and it synced later. What time is recorded?",
+        a: "The time they tapped, as long as it's within the last 48 hours. The same goes for marking someone in, out or not working, and for Skip.",
+      },
+      {
+        q: "Our crew ended the day but forgot to tap Stop Job until the next morning. Is the night counted?",
+        a: "No. The job's time stops when the crew ended the day.",
+      },
+      {
+        q: "What happens if a crew starts a new job while another one is still running?",
+        a: "The other job's time stops automatically when the new one starts, so nobody is clocked into two jobs at once. The office sees a comment on that visit saying so, and it stays in progress until someone taps Stop Job or the office marks it complete.",
+      },
+      {
+        q: "If I move a job to another crew mid-day, what happens to the stop the first crew is working on?",
+        a: "It stays with the first crew so they can finish it, and finished visits keep the crew that did them. Only upcoming visits move to the new crew.",
+      },
+      {
+        q: "The office completed a stop before the crew tapped Stop Job. Are the crew's notes lost?",
+        a: "No. They're added to the visit's completion notes, and the crew's clocks close at the moment they tapped.",
+      },
+      {
+        q: "How do I stop anyone changing hours after I've run payroll?",
+        a: "An admin opens Report Center > Payroll and sets \"Lock payroll through\" to the last paid day. Shifts, punches and corrections on or before that date can't be changed by anyone (including the crew app) until an admin moves the lock back or unlocks it. Locked days show a Locked badge.",
+      },
+      {
+        q: "Who can change the payroll lock date?",
+        a: "Only admins, and only to a date before today. Every change is in the organization's change history.",
+      },
+      {
+        q: "Why does the crew app show the right day even when a phone is set to a different time zone?",
+        a: "\"Today\" always comes from your company's time zone in Settings, and the app checks it every time the schedule loads or the app is reopened.",
+      },
+      {
+        q: "Why can't our crew clock in or upload photos after our subscription ended?",
+        a: "A canceled or expired account is read-only, so the crew app shows a message instead of looking like the change saved.",
+      },
+      {
+        q: "Can a crew login see what we charge for a job?",
+        a: "Only each service's price on a stop, and only while \"Hide pricing from crew accounts\" is off. Job totals, labor and material costs and material prices are never available to a crew login, not even by querying the data directly. A crew login also can't change a visit's price or quantity.",
+      },
+      {
+        q: "Why does a dashboard marked visible to crews show no job data to my crew?",
+        a: "Reports built on jobs and visits include prices, so they return nothing to a crew login.",
+      },
+      {
+        q: "Why can't I change the price or quantity on some estimate lines?",
+        a: "Those lines have already been converted to a job. The job is what gets billed now, so change the price there. Hours, cost, equipment and notes stay editable on the estimate.",
+      },
+      {
+        q: "Why won't an estimate delete?",
+        a: "It has a job, invoice, contract, payment, project or change order made from it, or its online deposit is still processing. Bank transfers take a few business days; delete it once the deposit clears or fails.",
+      },
+      {
+        q: "What happens to follow-up emails when I delete an estimate?",
+        a: "Its automation sequences stop right away, any of its messages waiting for approval are rejected, and its pending approval requests leave the approvers' queue.",
+      },
+      {
+        q: "Why is no overhead added to some estimate line costs?",
+        a: "Lines costed at your break-even rate already include overhead and labor burden in that rate, so nothing is added on top. Overhead applies to costs you enter yourself, and product sub-items get materials overhead.",
+      },
+      {
+        q: "Is estimate equipment cost per visit?",
+        a: "Yes. Enter what one visit uses; the line's equipment cost is that times its visits. Sub-items are for the whole line.",
+      },
+      {
+        q: "Why did the man-hour calculator's Adjust Cost change my line cost?",
+        a: "It costs the line at exactly the rate you typed (hours × rate), even on square-foot lines. Type a cost to replace it, or 0 to go back to your break-even rate.",
+      },
+      {
+        q: "Does Invoice from an estimate include sub-items?",
+        a: "Yes. Each line's priced sub-items are part of its invoice line, so the invoice matches the estimate total.",
+      },
+      {
+        q: "Can visits on an estimate line be a fraction?",
+        a: "No. Visits is a whole number, 1 or more; a value like 2.5 is rounded when you leave the cell.",
+      },
+      {
+        q: "Why does my flat line discount come back after I raise the quantity?",
+        a: "A flat line discount keeps the amount you entered. If the line total drops below it, only the total's worth applies until the total goes back up.",
+      },
+      {
+        q: "Why did my invoice reminder sequence stop?",
+        a: "A sequence started by Invoice created, Invoice sent or Invoice past due ends on its own once the invoice is paid in full, voided or deleted. One started by Invoice paid only ends if the invoice is voided or deleted. The execution log shows the reason, e.g. \"invoice was paid in full\".",
+      },
+      {
+        q: "Do estimate and ticket follow-ups keep running after the estimate is won or the ticket is closed?",
+        a: "No. Estimate created, sent, expiring or no-response sequences stop when the estimate is won, lost or deleted. Ticket created, past due or reopened sequences stop when the ticket is closed or deleted. Won, lost and closed sequences only stop if the record is deleted.",
+      },
+      {
+        q: "I approved a queued automation step and got \"Not sent\". What happened?",
+        a: "Approving runs the same checks as an automatic send: the automation must still be on, the client must exist, the invoice, estimate, ticket or meeting must still apply, no stop condition can be met, and the step must still exist. Recipients who unsubscribed, bounced or replied STOP are dropped. If a check fails, the step is rejected automatically with the reason.",
+      },
+      {
+        q: "Why did a step vanish from the automation approval queue?",
+        a: "The queue only shows steps whose run is still going. Turning the automation or sequence off or deleting it, deleting the client, or the run ending on its own rejects its queued step automatically.",
+      },
+      {
+        q: "Why is the campaign Send Now count lower than my segment size?",
+        a: "It counts the emails that will actually go out. It leaves out Do Not Market clients, clients not OK to email, clients with no email, hard-bounced and opted-out addresses, and an address shared by several clients gets one copy.",
+      },
+      {
+        q: "Does a 7-day automation Wait step shift by an hour when the clocks change?",
+        a: "No. Days are counted on your company calendar, so a 7-day wait that starts at 9:00 AM resumes at 9:00 AM.",
+      },
+      {
+        q: "Who can create, schedule or send email campaigns?",
+        a: "Only people whose role has the campaign permissions: Add Campaign to create one, and Send Campaign to schedule or send it. Crew logins and roles without those permissions can't create or schedule campaigns, and only admins, managers or people with the Create/Modify Automation permission can change automation steps or decide a queued step.",
+      },
       {
         q: "How do I make an automation wait until a certain time of day, or skip weekends?",
         a: "Edit the Wait step and turn on 'Then wait until a time of day' (for example, wait 1 day, then continue at 9:00 AM; if that time has already passed it rolls to the next day) and/or 'Weekdays only' (a Saturday or Sunday result moves to Monday at the same time). Both are read on your company clock, including daylight saving.",
@@ -2659,6 +2799,38 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "Why did my Zap's \"Create Job\" step used to fail after \"Create Client\"?",
+        a: "Create Client makes a lead, and Create Job now converts that lead to a client first, just like the Convert button: the client gets today as its client-since date, a timeline note, and your \"Lead converted to client\" automations run once. A lead that was closed as lost is still refused; reopen it in the app first.",
+      },
+      {
+        q: "What does a 409 error from the API or Zapier mean?",
+        a: "The request broke one of your account's rules, such as creating a job for a closed-lost lead or setting a former client back to a lead. The error message says which rule. Only a 500 means a server problem that's worth retrying.",
+      },
+      {
+        q: "How do I retry an API create without making duplicates?",
+        a: "Send an Idempotency-Key header (for example a UUID) with each create. Retrying with the same key and the same request within 24 hours returns the first result instead of creating again; a different request with the same key is rejected (422). In MCP, pass idempotencyKey to any create tool. In Zapier, map a unique value from your trigger into the header on a Webhooks or custom request step.",
+      },
+      {
+        q: "Two of my clients have the same name. Will QuickBooks merge them?",
+        a: "No. A QuickBooks customer is linked to only one client. The second client gets its own customer named with its account number, for example \"John Smith (acct #1042)\".",
+      },
+      {
+        q: "QuickBooks says my client's customer is inactive. What do I do?",
+        a: "Make the customer active again in QuickBooks, or link the client to a different customer from its QuickBooks section, then retry. The automatic sync won't keep retrying it until you do.",
+      },
+      {
+        q: "After merging two clients, why do old invoices still show the old customer in QuickBooks?",
+        a: "Invoices already in QuickBooks stay on the customer they were created under, and their payments go to that same customer, because QuickBooks doesn't allow moving a paid invoice to another customer. New invoices go to the surviving client's customer.",
+      },
+      {
+        q: "Why does PATCH /jobs/{id} with scheduledDate or rateCents return 400?",
+        a: "scheduledDate only reschedules a job with a single visit that hasn't been dispatched, started or completed (the visit moves with it); reschedule jobs with several visits visit by visit in the app. rateCents only works for a job with one service line.",
+      },
+      {
+        q: "Do the Zapier triggers send the same fields I mapped when I set up the Zap?",
+        a: "Yes. Live (instant) trigger deliveries carry the same record fields as the sample Zapier shows during setup, plus the trigger type and client id.",
+      },
       {
         q: "Where did some menu items go — what is the 'More' row in the sidebar?",
         a: "To keep the Landscapt sidebar short, less-used items sit under a collapsed More row at the bottom of their group: Requisitions, Contracts, Snow Invoicing and Commissions (Accounting), and Services, Products, Schedules, Packages and Documents (Administration). Invoices, Payments and Purchase Orders stay visible. The CRM and Scheduling groups are always fully visible. Click More to expand it; it opens by itself when you are on one of those pages. Commission plans and assignments now live in Settings > Commissions.",

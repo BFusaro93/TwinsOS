@@ -2514,7 +2514,8 @@ export async function markOpenEstimatesLost(clientIds: string[], reason: string 
     const { data, error } = await supabase.rpc("crm_mark_client_open_estimates_lost", {
       p_client_ids: clientIds.slice(i, i + 500),
       p_apply: true,
-      p_reason: reason,
+      // NULL is valid SQL here; generated RPC arg types are non-null for params without defaults.
+      p_reason: reason as string,
     });
     if (error) throw error;
     total += (data as number | null) ?? 0;
@@ -2550,7 +2551,7 @@ export async function findDuplicateClients(email: string | null | undefined, pho
   const p = phoneDedupeKey(phone);
   if (!e && !p) return [];
   const supabase = createClient();
-  const { data, error } = await supabase.rpc("crm_find_duplicate_clients", { p_email: e || null, p_phone: p });
+  const { data, error } = await supabase.rpc("crm_find_duplicate_clients", { p_email: (e || null) as string, p_phone: p as string }); // NULL is valid; generated arg types are non-null
   if (error) throw error;
   return ((data ?? []) as { id: string; display_name: string; status: string; primary_email: string | null; primary_phone: string | null; matched_on: string }[])
     .map((r) => ({

@@ -36,9 +36,11 @@ export interface PollingTriggerConfig {
  * id that changes per occurrence, or Zapier's dedupe swallows the second one.
  * Events from before this cutoff keep the bare record id they were already
  * delivered under — switching every listed item's id at once would make
- * existing Zaps re-run for the whole page. Set to the release date.
+ * existing Zaps re-run for the whole page. Must be at or after the deploy that
+ * introduced it (round 11): a later date only delays the re-fire fix, an
+ * earlier one re-fires events delivered between the cutoff and the deploy.
  */
-const EVENT_KEYED_IDS_FROM = "2026-11-11T00:00:00Z";
+const EVENT_KEYED_IDS_FROM = "2026-11-16T00:00:00Z";
 
 /** `<recordId>:<event time>` for events at/after the cutoff, the bare id before it. */
 function eventKeyedId(recordId: string, eventAt: string | null | undefined): string {
