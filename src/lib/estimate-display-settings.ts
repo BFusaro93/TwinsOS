@@ -79,6 +79,9 @@ interface GroupableItem {
   /** Set on a package's section marker row and on each of its lines. */
   packageId?: string | null;
   totalCents: number;
+  /** Priced sub-items on the line (printed or not). A $0 line that carries them still has a price. */
+  subitemTotalCents?: number | null;
+  subitems?: unknown[] | null;
 }
 
 export interface DisplaySection<T> {
@@ -127,7 +130,10 @@ export function groupIntoSections<T extends GroupableItem>(
       sections.push(current);
       current = { sectionName: null, items: [], subtotalCents: 0 };
     }
-    if (settings.hideZeroTotals && item.totalCents === 0) continue;
+    // A line priced entirely through its sub-items has a $0 own total but is not a zero-price row:
+    // hiding it dropped the line (and its printed sub-items) from the client's copy.
+    const carriesSubitems = (item.subitemTotalCents ?? 0) > 0 || (item.subitems?.length ?? 0) > 0;
+    if (settings.hideZeroTotals && item.totalCents === 0 && !carriesSubitems) continue;
     current.items.push(item);
     current.subtotalCents += item.totalCents;
     started = true;

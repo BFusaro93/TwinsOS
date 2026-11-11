@@ -57,6 +57,12 @@ export interface EstimatePDFLineItem {
  * check out, for per-unit and fixed-total lines alike (a fixed line's total IS
  * its rate, so both get the same factor).
  */
+/** True when the wording's own text already opens with the line's name (so it isn't printed twice). */
+function descLeadsWithName(html: string, name: string): boolean {
+  const text = html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  return text.startsWith(name.trim().toLowerCase());
+}
+
 function printedRateCents(li: EstimatePDFLineItem): number {
   return Math.round(li.rateCents * complexityFactor(li.complexityBps));
 }
@@ -457,14 +463,21 @@ function LineItemSections({
             <View key={i}>
             <View style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
               <View style={S.cellService}>
-                {li.estimateDesc
-                  ? <RichText html={li.estimateDesc} style={S.serviceDescText} />
+                {li.estimateDesc ? (
+                  <>
+                    {/* The line's name stays on the document above its wording (a package's
+                        wording already leads with its own name). */}
+                    {li.serviceName && !descLeadsWithName(li.estimateDesc, li.serviceName) && (
+                      <Text style={[S.cellText, { fontFamily: "Helvetica-Bold" }]}>{li.serviceName}</Text>
+                    )}
+                    <RichText html={li.estimateDesc} style={S.serviceDescText} />
+                  </>
+                ) : li.serviceName
                   // A line with no client-facing description (e.g. one added from a bundle)
                   // used to print as a blank row; fall back to the service name, as the
                   // emailed [estimategrid] already does.
-                  : li.serviceName
-                    ? <Text style={S.cellText}>{li.serviceName}</Text>
-                    : null}
+                  ? <Text style={S.cellText}>{li.serviceName}</Text>
+                  : null}
               </View>
               {settings.showVisits && (
                 <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>

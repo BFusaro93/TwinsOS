@@ -22,7 +22,7 @@ import {
   type PayrollRow,
 } from "@/lib/hooks/use-payroll";
 import {
-  DAILY_HEADERS, LONG_BREAK_MINUTES, SUMMARY_HEADERS, dailyRows, groupPayrollByMember, isLongBreak, offClockBreakdown, periodLabel, summaryRows,
+  DAILY_HEADERS, DAYS_TO_REVIEW_NOTE, LONG_BREAK_MINUTES, SUMMARY_HEADERS, dailyRows, groupPayrollByMember, isLongBreak, offClockBreakdown, periodLabel, summaryRows,
 } from "@/lib/payroll/export";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
@@ -90,8 +90,17 @@ export function PayrollReport() {
     const text = (rows: (string | number)[][]) => rows.map((r) => r.map((c) => (typeof c === "number" ? fmt(c) : c)));
     try {
       await exportReportPDF(`Payroll ${periodLabel(from, to)}`, [
-        { heading: "Totals by employee", columns: SUMMARY_HEADERS, rows: text(summaryRows(members)) },
-        { heading: "Daily detail", columns: DAILY_HEADERS, rows: text(dailyRows(members, tz)) },
+        { heading: `Totals by employee — ${DAYS_TO_REVIEW_NOTE}`, columns: SUMMARY_HEADERS, rows: text(summaryRows(members)) },
+        // One table per employee (with its own total) instead of one long run of everyone's days.
+        ...members.map((m) => {
+          const dayRows = dailyRows([m], tz).map((r) => r.slice(2));
+          return {
+            heading: `${m.memberName}${m.crewName ? ` — ${m.crewName}` : ""}`,
+            columns: DAILY_HEADERS.slice(2),
+            rows: text(dayRows),
+            totals: ["Total", "", "", "", "", fmt(m.shiftHours), fmt(m.jobHours), fmt(m.extra), fmt(m.total), "", ""],
+          };
+        }),
       ]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "PDF export failed");

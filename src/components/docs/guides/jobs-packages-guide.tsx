@@ -168,9 +168,11 @@ export function JobsPackagesGuide() {
             <strong>One Time</strong>, <strong>Project</strong>, <strong>Waiting List</strong> — a
             service line (or several), date or date range, crew, and team size. Quantity boxes accept
             decimals such as 0.5 or 0.01 when typed, but the up and down arrows move by 1. On a typed
-            service row, Budgeted Hours is <strong>per person</strong> (the job total is hours × team
-            size), and changing Team size keeps the total the same by re-spreading the per-person
-            hours (rounded to four decimals).
+            service row, <strong>B. Hrs</strong> is the <strong>total</strong> budgeted hours for the
+            whole crew for one visit; the hours per person are that total ÷ Team (stored rounded to
+            four decimals). Changing Team keeps the total and re-splits it, so typing 0.25 with a team
+            of 3 gives 0.25 total (0.083 each) in either order. The calculator icon beside the box
+            builds the number from Men × Hrs:Min (2 men × 1:30 = 3.00) and sets Team to match.
           </li>
         </ul>
         <p>
@@ -358,6 +360,18 @@ export function JobsPackagesGuide() {
           <code>scheduled</code>. A single skipped or cancelled visit doesn&apos;t change the
           job&apos;s status — the job only reflects its own state, not a rollup of every visit.
         </Callout>
+        <p>
+          <strong>Cancelling a job asks first.</strong> Cancel Job on the job&apos;s header opens a
+          confirmation (&quot;Cancel this job?&quot;) so it can&apos;t be clicked by accident. To undo a
+          cancellation, set the status back from Cancelled in the job&apos;s edit view.
+        </p>
+        <p>
+          <strong>Changing a service after the job exists.</strong> On the job&apos;s Services tab,
+          the pencil edits a service&apos;s Budgeted Hrs (total for the crew), Crew size, quantity and
+          rate. Changing Crew keeps the total hours and shows the new per-person figure
+          (&quot;= 0.5h per person&quot;); the read-only row shows the total with &quot;3 crew · 0.5h
+          each&quot; underneath. The same Men × Hrs:Min calculator is available here.
+        </p>
         <p>
           <strong>Completing a recurring or package job ends it.</strong> Setting its status to
           Completed in Job Settings works like cancelling: you&apos;re asked{" "}

@@ -1,5 +1,6 @@
 "use client";
 
+import { MenHoursCalcPopover } from "@/components/crm/jobs/MenHoursCalcPopover";
 import { VisitCrewsSection } from "@/components/crm/dispatch/VisitCrewsSection";
 import { useState, useEffect, useRef } from "react";
 import { parsePositiveQty } from "@/lib/utils/quantity";
@@ -30,6 +31,7 @@ import { useAutoInvoiceCompletedJob, useCreateInvoiceFromJob, useInvoiceForJob }
 import { BILLABLE_JOB_PRODUCT_STATUSES } from "@/lib/invoices/create-from-job";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { VisitStatusIcon } from "@/components/shared/VisitStatusIcon";
 import { Input } from "@/components/ui/input";
@@ -49,7 +51,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatCurrency, formatHours } from "@/lib/utils";
+import { cn, formatCurrency, formatHours, roundHours } from "@/lib/utils";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { createClient } from "@/lib/supabase/client";
 import { GENERATED_VISIT_JOB_TYPES, applyJobStatusToVisits, findJobVisitsToRemove, resumeJobVisits } from "@/lib/visits/job-status-visits";
@@ -229,7 +231,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [editingSvcId, setEditingSvcId] = useState<string | null>(null);
   const [svcQty, setSvcQty] = useState("");
   const [svcRate, setSvcRate] = useState("");
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [svcBHrs, setSvcBHrs] = useState("");
+  const [svcTeamSize, setSvcTeamSize] = useState("1");
   const [svcTreatedArea, setSvcTreatedArea] = useState("");
   const [svcJobNote, setSvcJobNote] = useState("");
   const [svcInvoiceDesc, setSvcInvoiceDesc] = useState("");
@@ -601,14 +605,17 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     }
   }
 
-  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null; treatedArea?: number | null; jobNote?: string | null; invoiceDesc?: string | null; internalNote?: string | null }) {
+  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null; teamSize?: number | null; treatedArea?: number | null; jobNote?: string | null; invoiceDesc?: string | null; internalNote?: string | null }) {
     setEditingSvcId(s.id);
     setSvcJobNote(s.jobNote ?? "");
     setSvcInvoiceDesc(s.invoiceDesc ?? "");
     setSvcInternalNote(s.internalNote ?? "");
     setSvcQty(String(s.qty ?? 1));
     setSvcRate(s.rateCents != null ? String(s.rateCents / 100) : "");
-    setSvcBHrs(s.budgetedHours != null ? String(s.budgetedHours) : "0");
+    // The box edits the TOTAL for the crew (stored per person = total ÷ crew).
+    const crew = s.teamSize && s.teamSize > 0 ? s.teamSize : 1;
+    setSvcBHrs(s.budgetedHours != null ? String(roundHours(s.budgetedHours * crew, 4)) : "0");
+    setSvcTeamSize(String(crew));
     setSvcTreatedArea(s.treatedArea != null ? String(s.treatedArea) : "");
   }
 
@@ -623,7 +630,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           qty: parsePositiveQty(svcQty),
           // A locked (not-billed) price is left as it is rather than rewritten.
           ...(svcRateLocked ? {} : { rate_cents: svcRate ? Math.round(parseFloat(svcRate) * 100) : null }),
-          budgeted_hours: parseFloat(svcBHrs) || 0,
+          budgeted_hours: roundHours((parseFloat(svcBHrs) || 0) / Math.max(1, Math.floor(parseFloat(svcTeamSize)) || 1), 4),
+          team_size: Math.max(1, Math.floor(parseFloat(svcTeamSize)) || 1),
           treated_area: parseFloat(svcTreatedArea) > 0 ? parseFloat(svcTreatedArea) : null,
           job_note: nextJobNote,
           invoice_desc: svcInvoiceDesc.trim() || null,
@@ -841,6 +849,26 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   return (
     <div className="flex h-full flex-col overflow-hidden">
 
+      <AlertDialog open={confirmCancelOpen} onOpenChange={setConfirmCancelOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this job?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Upcoming visits that haven&apos;t started will be cancelled. You can reopen the job afterwards by setting its status back from Cancelled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep job</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => { setConfirmCancelOpen(false); void handleStatus("cancelled"); }}
+            >
+              Cancel job
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* ── top bar ── */}
       <div className="flex items-center justify-between gap-4 border-b bg-card px-6 py-3 shadow-sm">
         <div className="flex flex-1 items-center gap-3 min-w-0">
@@ -922,7 +950,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           {effectiveStatus !== "cancelled" && !editing && (
             <PermissionGate permission="job_cancel">
               <Button variant="outline" size="sm" className="h-8 text-xs"
-                onClick={() => handleStatus("cancelled")}>
+                onClick={() => setConfirmCancelOpen(true)}>
                 <XCircle className="mr-1 h-3.5 w-3.5 text-red-400" />
                 Cancel Job
               </Button>
@@ -1715,7 +1743,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   <thead>
                     <tr className="bg-slate-50 dark:bg-muted/40 border-b text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Service</th>
-                      <th className="px-4 py-3 text-right">Budgeted Hrs</th>
+                      <th className="px-4 py-3 text-right" title="Budgeted hours per visit for the whole crew. Hours per person = this ÷ crew size.">Budgeted Hrs</th>
                       <th className="px-4 py-3 text-right">QTY</th>
                       <th className="px-4 py-3 text-right">Rate</th>
                       <th className="px-4 py-3 text-right">Total</th>
@@ -1812,14 +1840,36 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         {editingSvcId === s.id ? (
                           <>
                             <td className="px-2 py-2 text-right">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={svcBHrs}
-                                onChange={(e) => setSvcBHrs(e.target.value)}
-                                className="h-7 w-20 text-right text-sm ml-auto"
-                              />
+                              <div className="ml-auto flex w-28 items-center justify-end gap-0.5">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={svcBHrs}
+                                  onChange={(e) => setSvcBHrs(e.target.value)}
+                                  aria-label="Total budgeted hours for the crew"
+                                  className="h-7 w-20 text-right text-sm"
+                                />
+                                <MenHoursCalcPopover
+                                  totalHours={parseFloat(svcBHrs) || 0}
+                                  men={Math.max(1, Math.floor(parseFloat(svcTeamSize)) || 1)}
+                                  onApply={({ totalHours, men }) => { setSvcBHrs(String(roundHours(totalHours, 4))); setSvcTeamSize(String(men)); }}
+                                />
+                              </div>
+                              <label className="mt-1 flex items-center justify-end gap-1 text-[10px] font-normal normal-case text-slate-500 dark:text-neutral-400" title="Crew size. Changing it keeps the total hours and re-splits them per person.">
+                                Crew
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={svcTeamSize}
+                                  onChange={(e) => setSvcTeamSize(e.target.value)}
+                                  className="h-6 w-14 text-right text-xs"
+                                />
+                              </label>
+                              <p className="mt-0.5 text-[10px] font-normal text-slate-400 dark:text-neutral-500">
+                                = {formatHours((parseFloat(svcBHrs) || 0) / Math.max(1, Math.floor(parseFloat(svcTeamSize)) || 1))}h per person
+                              </p>
                             </td>
                             <td className="px-2 py-2 text-right">
                               <Input
@@ -1856,7 +1906,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           </>
                         ) : (
                           <>
-                            <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{s.budgetedHours ? `${formatHours(s.budgetedHours)}h` : "—"}</td>
+                            <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                              {s.budgetedHours ? `${formatHours(s.budgetedHours * (s.teamSize ?? 1))}h` : "—"}
+                              {s.budgetedHours && (s.teamSize ?? 1) > 1 ? (
+                                <span className="block text-[10px] text-slate-400 dark:text-neutral-500">{s.teamSize} crew · {formatHours(s.budgetedHours)}h each</span>
+                              ) : null}
+                            </td>
                             <td className="px-4 py-3 text-right tabular-nums">{s.qty ?? 1}</td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               {svcRateLocked

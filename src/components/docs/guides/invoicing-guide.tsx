@@ -153,7 +153,10 @@ export function InvoicingGuide() {
             <strong>Coming over from another system?</strong> Go to <strong>Settings → Accounting → Invoice
             Numbering</strong>, enter the number the next invoice should have (for example 1048) and click{" "}
             <strong>Set number</strong>. New invoices continue from there; existing invoices keep their numbers.
-            Your estimates and tickets keep counting from their own highest numbers. Admins, managers and
+            Your estimates and tickets keep counting from their own highest numbers.
+            Estimates have their own card right below it, <strong>Estimate Numbering</strong>: enter the
+            number the next estimate should have and click <strong>Set number</strong>; it never goes
+            below the highest estimate number already in use. Admins, managers and
             anyone with the Accounting, CRM or Company settings permission can change it. Until you set a
             number, an existing company&apos;s card shows &quot;assigned automatically&quot;.
           </li>

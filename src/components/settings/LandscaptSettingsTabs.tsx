@@ -1,6 +1,7 @@
 "use client";
 
 import { useInvoiceNumbering, useSetNextInvoiceNumber } from "@/lib/hooks/use-invoice-numbering";
+import { useEstimateNumbering, useSetNextEstimateNumber } from "@/lib/hooks/use-estimate-numbering";
 import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -1922,6 +1923,12 @@ function AccountingTab() {
         <InvoiceNumberingSection />
       </AccordionSection>
       <AccordionSection
+        title="Estimate Numbering"
+        description="Set the next estimate number so it continues your old sequence."
+      >
+        <EstimateNumberingSection />
+      </AccordionSection>
+      <AccordionSection
         title="Payment Methods"
         count={paymentMethods.length}
       >
@@ -2935,6 +2942,69 @@ function InvoiceNumberingSection() {
       )}
       <p className="text-xs text-slate-400 dark:text-neutral-500">
         Applies to invoices created from now on; existing invoices keep their numbers. Estimates and tickets are numbered separately.
+      </p>
+    </div>
+  );
+}
+
+function EstimateNumberingSection() {
+  const { data: numbering } = useEstimateNumbering();
+  const setNext = useSetNextEstimateNumber();
+  const [draft, setDraft] = useState("");
+
+  const parsed = Math.floor(Number(draft));
+  const valid = draft.trim() !== "" && Number.isFinite(parsed) && parsed >= 1 && parsed <= 2_000_000_000;
+  const overlaps = valid && numbering?.maxExisting != null && parsed <= numbering.maxExisting;
+
+  async function save() {
+    if (!valid) return;
+    try {
+      const effective = await setNext.mutateAsync(parsed);
+      toast.success(
+        effective === parsed
+          ? `The next estimate will be #${effective}`
+          : `You already have estimates up to #${effective - 1}, so the next estimate will be #${effective}`
+      );
+      setDraft("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to set the estimate number");
+    }
+  }
+
+  return (
+    <div className="space-y-3 p-4">
+      <p className="text-sm text-slate-600 dark:text-neutral-400">
+        Next estimate number:{" "}
+        <span className="font-semibold text-slate-900 dark:text-neutral-100">
+          {!numbering ? "…" : numbering.nextNumber != null ? `#${numbering.nextNumber}` : "assigned automatically"}
+        </span>
+        {numbering?.maxExisting != null && (
+          <span className="text-slate-400 dark:text-neutral-500"> · highest existing estimate is #{numbering.maxExisting}</span>
+        )}
+      </p>
+      <div className="flex items-end gap-3">
+        <div className="flex flex-col gap-1.5 w-48">
+          <Label>Start the next estimate at</Label>
+          <Input
+            type="number"
+            min="1"
+            step="1"
+            placeholder="e.g. 2048"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </div>
+        <Button size="sm" onClick={save} disabled={!valid || setNext.isPending}>
+          {setNext.isPending ? "Saving…" : "Set number"}
+        </Button>
+      </div>
+      {overlaps && (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          You already have estimates up to #{numbering?.maxExisting}, so numbering will continue at #{(numbering?.maxExisting ?? 0) + 1} to avoid duplicates.
+        </p>
+      )}
+      <p className="text-xs text-slate-400 dark:text-neutral-500">
+        Applies to estimates created from now on; existing estimates keep their numbers. Invoices are numbered separately.
       </p>
     </div>
   );
