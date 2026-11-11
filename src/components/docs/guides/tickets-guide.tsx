@@ -162,11 +162,10 @@ export function TicketsGuide() {
           </Table>
         </div>
         <p>
-          <strong>Category</strong> is a free-form org-configured list (<code>crm_list_options</code>{" "}
-          under key <code>ticket_categories</code>), not a hard-coded enum. Every organization starts with a
+          <strong>Category</strong> comes from a list your company controls, not a fixed set. Every organization starts with a
           default list: Uncategorized, Estimate, Billing, Change Service, Schedule Service, Complaint,
           Damage / Warranty, Need to Contact Customer, Client Portal Message, Terminate Service, Other
-          and Upsell (where crew-suggested work lands; it is never offered to clients in the portal). Rename, add or delete them under CRM Settings &gt; Ticket Categories. (If a list is ever
+          and Upsell (where crew-suggested work lands; it is never offered to clients in the portal). Rename, add or delete them under Settings &gt; Landscapt Settings &gt; Clients &gt; Ticket Categories. (If a list is ever
           emptied, the pickers fall back to a short built-in set.) New damage cases file their ticket
           under Damage / Warranty.
         </p>
