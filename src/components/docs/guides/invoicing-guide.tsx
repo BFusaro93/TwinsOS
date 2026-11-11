@@ -157,7 +157,7 @@ export function InvoicingGuide() {
             Estimates have their own card right below it, <strong>Estimate Numbering</strong>: enter the
             number the next estimate should have and click <strong>Set number</strong>; it never goes
             below the highest estimate number already in use. Admins, managers and
-            anyone with the Accounting, CRM or Company settings permission can change it. Until you set a
+            anyone with the Accounting or CRM settings permission can change either number. Until you set a
             number, an existing company&apos;s card shows &quot;assigned automatically&quot;.
           </li>
           <li>

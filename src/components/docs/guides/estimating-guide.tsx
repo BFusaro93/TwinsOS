@@ -57,6 +57,7 @@ export function EstimatingGuide() {
           <TOCLink href="#deposits">Taking a deposit on acceptance</TOCLink>
           <TOCLink href="#estimate-limits">Rate and probability limits</TOCLink>
           <TOCLink href="#converting">Converting an estimate to a job</TOCLink>
+          <TOCLink href="#deleting">Deleting an estimate</TOCLink>
           <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
@@ -91,6 +92,13 @@ export function EstimatingGuide() {
         <p>
           From there you&rsquo;re in the estimate detail view, where line items, direct costs, and
           the summary panel all live.
+        </p>
+        <p>
+          <strong>Estimate numbers</strong> count up on their own. To continue the numbering from
+          another system, go to <strong>Settings → Accounting → Estimate Numbering</strong>, enter the
+          number the next estimate should have and click <strong>Set number</strong>. It never goes
+          below the highest estimate number already in use, existing estimates keep their numbers, and
+          invoices are numbered separately.
         </p>
       </Section>
 
@@ -412,7 +420,9 @@ export function EstimatingGuide() {
             <strong>Print or hide on the estimate.</strong> On an estimate line, the <em>On estimate</em> /{" "}
             <em>Hidden</em> button beside each sub-item&apos;s name toggles whether it is printed under
             the line on the client&apos;s PDF, the preview and the emailed copy. New sub-items print by
-            default; sub-items that existed before this feature stay hidden so old estimates look the same.
+            default. On the PDF a printed sub-item shows its own amount on its row, while a hidden
+            sub-item&apos;s amount is included in the line&apos;s total, and section and option subtotals
+            include every priced sub-item, so they add up to the estimate total.
           </li>
           <li>
             <strong>Names, descriptions and $0 lines.</strong> A line with a client-facing description prints just
@@ -542,21 +552,6 @@ export function EstimatingGuide() {
           equipment and notes stay editable. Copying values down a package skips its converted visits. A <strong>+$</strong> rate increase raises each line&apos;s total by that amount per
           visit, whatever its unit; on a per-unit line too small to carry the amount in whole cents, use
           a percentage instead.
-        </p>
-        <p>
-          <strong>Deleting a whole estimate.</strong> Open the estimate and click <strong>Delete</strong>{" "}
-          (red, in the row of stage buttons), or tick estimates in the list and choose{" "}
-          <strong>Actions &gt; Delete Selected</strong>. You need the Edit Estimate permission (or Add
-          Estimate, for an estimate you created and haven&apos;t sent yet). The estimate leaves your lists,
-          its proposal link stops working, its follow-up sequences stop sending, any of its sequence
-          messages waiting for approval are rejected, and any approval request for it leaves the
-          approvers&apos; queue; if it was made from a ticket, the ticket can be converted again. An
-          estimate that has a job, invoice, contract, payment, project or change order made from it
-          can&apos;t be deleted &mdash; cancel or delete those first, or mark the estimate Lost if you only
-          want it out of your open pipeline. An estimate whose online deposit is still processing (a
-          bank transfer takes a few business days) can&apos;t be deleted until the deposit clears or
-          fails. If a deposit does arrive for an estimate that was already deleted, it is added to the
-          client&apos;s account as ordinary credit.
         </p>
         <h3 className="text-base font-semibold">What the client sees</h3>
         <ul className="list-disc space-y-2 pl-5">
@@ -706,7 +701,7 @@ export function EstimatingGuide() {
           <strong>What the client sees.</strong> The page shows the client&rsquo;s billing address
           and the service address, has a <strong>Download PDF</strong> button, and a{" "}
           <strong>Request changes</strong> box. In the estimate&rsquo;s display settings,{" "}
-          <strong>Visits</strong>, <strong>Quantities</strong>, and <strong>Units</strong> are now
+          <strong>Visits</strong>, <strong>Quantities</strong>, and <strong>Units</strong> are
           three separate toggles for what shows on each line, on the page and the PDF.
         </p>
         <p>
@@ -894,8 +889,8 @@ export function EstimatingGuide() {
           </li>
           <li>
             <strong>Good / Better / Best.</strong> Before the client chooses a tier, the estimate total, tax
-            and pipeline value use the lowest-priced tier (&ldquo;starting at&rdquo;). That comparison now
-            includes each tier&rsquo;s priced sub-items, so a tier with large sub-items is no longer mistaken
+            and pipeline value use the lowest-priced tier (&ldquo;starting at&rdquo;). That comparison
+            includes each tier&rsquo;s priced sub-items, so a tier with large sub-items isn&rsquo;t mistaken
             for the cheapest. The summary panel&rsquo;s Costs breakdown counts the same tier only, not
             every option added together.
           </li>
@@ -998,6 +993,24 @@ export function EstimatingGuide() {
           pass, and treats Scheduled Date as the program start.
         </Callout>
       </Section>
+      <Section id="deleting" title="Deleting an estimate">
+        <p>
+          Open the estimate and click <strong>Delete</strong>{" "}
+          (red, in the row of stage buttons), or tick estimates in the list and choose{" "}
+          <strong>Actions &gt; Delete Selected</strong>. You need the Edit Estimate permission (or Add
+          Estimate, for an estimate you created and haven&apos;t sent yet). The estimate leaves your lists,
+          its proposal link stops working, its follow-up sequences stop sending, any of its sequence
+          messages waiting for approval are rejected, and any approval request for it leaves the
+          approvers&apos; queue; if it was made from a ticket, the ticket can be converted again. An
+          estimate that has a job, invoice, contract, payment, project or change order made from it
+          can&apos;t be deleted &mdash; cancel or delete those first, or mark the estimate Lost if you only
+          want it out of your open pipeline. An estimate whose online deposit is still processing (a
+          bank transfer takes a few business days) can&apos;t be deleted until the deposit clears or
+          fails. If a deposit does arrive for an estimate that was already deleted, it is added to the
+          client&apos;s account as ordinary credit.
+        </p>
+      </Section>
+
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
           <li>

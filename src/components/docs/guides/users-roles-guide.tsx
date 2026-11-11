@@ -258,13 +258,15 @@ export function UsersRolesGuide() {
             A crew login can still edit a ticket it created itself (for example a field upsell suggestion).
           </li>
           <li>
-            <strong>Campaigns</strong> need Send/Launch Campaign to be scheduled or sent (including Mark
-            Scheduled), Edit Campaign for other changes and Delete Campaign to delete.
+            <strong>Campaigns</strong> need Add Campaign to be created, Send/Launch Campaign to be
+            scheduled or sent (including Mark Scheduled), Edit Campaign for other changes and Delete
+            Campaign to delete.
           </li>
           <li>
             <strong>Services</strong> need Add, Edit or Delete Service (or the Scheduling settings
-            permission). <strong>Settings → Accounting</strong> (tax rate, ACH, card fee, invoice
-            numbering) needs the Accounting settings permission (or Company or CRM settings).
+            permission). <strong>Settings → Accounting</strong> needs the Accounting settings permission (or CRM
+            settings). Company settings also covers the tax rate, ACH and card fee, but not invoice or
+            estimate numbering.
           </li>
           <li>
             <strong>Automations</strong> need Create/Modify Automation; Stop Automation alone

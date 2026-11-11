@@ -152,7 +152,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Requestor",
             detail:
-              "Can submit maintenance requests only. Cannot create work orders directly. Useful for field staff or other departments who need to flag issues.",
+              "Can submit maintenance requests only, and edit or delete their own while it's still Open. Cannot create work orders directly. Useful for field staff or other departments who need to flag issues.",
           },
           {
             step: "Viewer",
@@ -583,7 +583,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Recording a reading",
             detail:
-              "Click the meter and use '+ Add Reading'. Enter the value and date. The meter's current value updates to the latest reading.",
+              "Click the meter and use '+ Add Reading'. Enter the value and date (today or earlier, on your company's calendar). The meter's current value updates to the latest reading.",
           },
           {
             step: "Creating a meter-threshold automation",
@@ -613,7 +613,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Automations fire immediately on reading",
             detail:
-              "Every time you record a meter reading, the automations engine runs instantly in the background. If the reading crosses a threshold, the WO or request is created right away.",
+              "Every time you record a meter reading (or set a new meter's starting value, or edit a meter's value directly), the automations engine runs instantly in the background. If the reading crosses a threshold, the WO or request is created right away.",
           },
           {
             step: "Pre-built templates",
@@ -725,7 +725,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Cost and overhead",
             detail:
-              "A labor line's cost pre-fills from your org's breakeven (fully-burdened) rate the first time it's added, and only while it's still zero — edit it directly to override. Overhead markup applies per cost type (Labor, Sub-Contract, Product/Material, Asset/Equipment, Service/Other), each configurable separately in org settings.",
+              "A labor line's cost pre-fills from your org's breakeven (fully-burdened) rate the first time it's added, and only while it's still zero — edit it directly to override. Overhead markup applies per cost type (Labor, Sub-Contract, Product/Material, Asset/Equipment, Service/Other), each configurable separately in org settings. Lines costed at the breakeven rate get no overhead or labor burden added on top, because that rate already includes them; product sub-items get the Product/Material overhead.",
           },
           {
             step: "Reading the line-item grid",
@@ -735,7 +735,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Converting an estimate to a job",
             detail:
-              "Click 'Convert Estimate to Job', choose which line items to include, and pick a Job Type: One Time, Recurring, Project, or Waiting List. Package and Snow jobs are created directly rather than converted from an estimate. Set the scheduled date and assign a crew before confirming.",
+              "Click 'Convert Estimate to Job', choose which line items to include, and pick a Job Type: One Time, Recurring, Project, or Waiting List. Package and Snow jobs are created directly rather than converted from an estimate. Set the scheduled date and assign a crew before confirming. Once a line is converted, its price, quantity and visits are locked on the estimate (change them on the job); budgeted hours, cost, equipment and notes stay editable.",
           },
           {
             step: "Full guide",
@@ -1426,7 +1426,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Where it lives",
             detail:
-              "CRM > Reports. A 6-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses), Payroll (crew hours from Start Day / End Day, editable and exportable; admins and managers only), and Graphics Library.",
+              "CRM > Reports. A 6-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses), Payroll (crew hours from Start Day / End Day, editable and exportable; admins and roles with View & Edit Payroll Report), and Graphics Library.",
           },
           {
             step: "Categories",
@@ -1773,7 +1773,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Matching clients to customers",
             detail:
-              "An exact name match links automatically, no match creates a new QuickBooks customer, and similar-but-not-identical names ask you to choose: open the client, find the QuickBooks section, click Sync to QuickBooks and pick a match or 'None of these — create new'.",
+              "An exact name match links automatically (unless that customer is already linked to another client — a QuickBooks customer belongs to one client only, so the second client gets its own customer named with its account number, e.g. 'John Smith (acct #1042)'), no match creates a new QuickBooks customer, and similar-but-not-identical names ask you to choose: open the client, find the QuickBooks section, click Sync to QuickBooks and pick a match or 'None of these — create new'.",
           },
           {
             step: "Check for failures",
@@ -1939,7 +1939,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What's the difference between a Work Order and a Maintenance Request?",
-        a: "A Work Order is a direct maintenance task — created by Staff, Managers, or Admins and immediately actionable. A Maintenance Request goes through an approval flow before becoming a Work Order. Requestors can only submit requests.",
+        a: "A Work Order is a direct maintenance task — created by Staff, Managers, or Admins and immediately actionable. A Maintenance Request goes through an approval flow before becoming a Work Order. Requestors can only submit requests (and edit or delete their own while it's still Open).",
       },
       {
         q: "Can a work order automatically create a requisition for parts?",
@@ -2116,7 +2116,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Who can create, schedule or send email campaigns?",
-        a: "Only people whose role has the campaign permissions: Add Campaign to create one, and Send Campaign to schedule or send it. Crew logins and roles without those permissions can't create or schedule campaigns, and only admins, managers or people with the Create/Modify Automation permission can change automation steps or decide a queued step.",
+        a: "Only people whose role has the campaign permissions: Add Campaign to create one, and Send/Launch Campaign to schedule or send it. Crew logins and roles without those permissions can't create or schedule campaigns, and only admins, managers or people with the Create/Modify Automation permission can change automation steps or decide a queued step.",
       },
       {
         q: "How do I make an automation wait until a certain time of day, or skip weekends?",
@@ -2248,7 +2248,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Why is the QuickBooks invoice stuck on “name exists as a vendor or employee”?",
-        a: "QuickBooks won't create a customer whose name already belongs to a vendor or employee. Rename the Landscapt client (or link it to the existing QuickBooks customer), then edit and save the invoice to retry.",
+        a: "QuickBooks won't create a customer whose name already belongs to a vendor or employee, so Landscapt creates it as \"Name (acct #number)\" instead. Only if that name is taken too does the invoice get stuck with this message. Rename the Landscapt client (or link it to the existing QuickBooks customer), then edit and save the invoice to retry.",
       },
       {
         q: "How do I see what my crews need to load on the truck?",
@@ -2304,11 +2304,11 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What is Equipment on an estimate line, and does the client see it?",
-        a: "Equipment is an internal cost. Add machines under Administration > Services > Equipment (cost rate, optional charge rate, per hour, per day or flat), then expand an estimate line and choose + Add Equipment. Quantity times rate counts against that line's margin. The client never sees it on the proposal, PDF, portal or invoice, and it does not change the line price. A service's Equipment tab can pre-fill machines on every new line of that service.",
+        a: "Equipment is an internal cost. Add machines under Administration > Services > Equipment (cost rate, optional charge rate, per hour, per day or flat), then expand an estimate line and choose + Add Equipment. Equipment is per visit: quantity (what one visit uses) times rate, times the line's visits, counts against that line's margin. The client never sees it on the proposal, PDF, portal or invoice, and it does not change the line price. A service's Equipment tab can pre-fill machines on every new line of that service.",
       },
       {
         q: "What are sub-items on a service bundle or estimate line?",
-        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the On estimate / Hidden button beside a sub-item's name controls whether it is printed under the line for the client. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
+        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the On estimate / Hidden button beside a sub-item's name controls whether it is printed under the line for the client. On the PDF a hidden sub-item's amount is included in the line's total, and section subtotals include every priced sub-item, so they add up to the estimate total. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
       },
       {
         q: "How do I add a service from my catalog as a sub-item on an estimate line?",
@@ -2344,7 +2344,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Can each estimate document have its own client-view toggles?",
-        a: "Yes. In the document's Edit Settings (Estimate-type documents only), tick 'Set What The Client Sees For This Document' and choose visits, quantities, units, line prices, line totals, section subtotals, package visits and the hide-$0 options. Those toggles are copied onto an estimate when it uses the document. The order, most specific first, is the estimate's own toggles, then the document's, then the service bundle's, then the org default. They are copied, so editing the document later does not change existing estimates or sent proposals.",
+        a: "Yes. In the document's Edit Settings (Estimate-type documents only), tick 'Set What The Client Sees For This Document' and choose visits, quantities, units, line prices, line totals, section subtotals, package visits, service name with description and the hide-$0 options. Those toggles are copied onto an estimate when it uses the document. The order, most specific first, is the estimate's own toggles, then the document's, then the service bundle's, then the org default. They are copied, so editing the document later does not change existing estimates or sent proposals.",
       },
       {
         q: "Can I put a package on an estimate?",
@@ -2428,7 +2428,15 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I delete an estimate?",
-        a: "Open the estimate and click Delete (the red button in the row of stage buttons), or tick one or more estimates in the Estimates list and choose Actions > Delete Selected. It asks you to confirm. You need the Edit Estimate permission. The estimate leaves your lists, its proposal link stops working and its follow-up sequences stop; if it was made from a ticket, the ticket can be converted again. An estimate with a job, invoice, contract, payment or project made from it can't be deleted until those are cancelled or deleted. To just take an estimate out of your open pipeline, mark it Lost instead.",
+        a: "Open the estimate and click Delete (the red button in the row of stage buttons), or tick one or more estimates in the Estimates list and choose Actions > Delete Selected. It asks you to confirm. You need the Edit Estimate permission. The estimate leaves your lists, its proposal link stops working, its follow-up sequences stop, any of its messages waiting for approval are rejected and its pending approval requests leave the approvers' queue; if it was made from a ticket, the ticket can be converted again. An estimate with a job, invoice, contract, payment, project or change order made from it can't be deleted until those are cancelled or deleted, and one whose online deposit is still processing can't be deleted until the deposit clears or fails. To just take an estimate out of your open pipeline, mark it Lost instead.",
+      },
+      {
+        q: "How do I make estimate numbers continue from my old system?",
+        a: "Go to Settings > Accounting > Estimate Numbering, enter the number the next estimate should have and click Set number. It never goes below the highest estimate number you already have, existing estimates keep their numbers, and invoices have their own Invoice Numbering card. Admins, managers and anyone with the Accounting or CRM settings permission can change it.",
+      },
+      {
+        q: "Why does my estimate PDF show only the description and not the service name?",
+        a: "A line with its own client-facing description prints just that description, so internal service names stay hidden. Turn on Service name with description in the estimate's Client View toggles (or the org default under Settings > Estimates > Client View) to print the name above the description on the PDF, emailed estimate, proposal page and client portal. A line with no description always prints its name.",
       },
       {
         q: "How do I change the status of or delete several estimate line items at once?",
@@ -2468,7 +2476,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "I applied a bundle with sub-items to an estimate and they did not show. Why?",
-        a: "Applying a bundle from the Apply bundle menu on an existing estimate used to copy the sub-items without refreshing the list, so they appeared only after a reload. They now show straight away. If a bundle's items have no sub-items in the bundle editor, there is nothing to copy.",
+        a: "Sub-items from Apply bundle show under their lines straight away; expand a line to see them. If a bundle's items have no sub-items in the bundle editor, there is nothing to copy.",
       },
       {
         q: "What does the Mine / Everyone toggle on My Day do?",
@@ -2544,7 +2552,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What if someone is late, out today, or leaves early?",
-        a: "On the Crew App's My Schedule screen tap Edit Crew. Mark 'Not working' for someone who is out (they're skipped by Start Day and Start Job), tap Clock In for a late arrival, 'Left for the day' for someone leaving early, and Back if they return the same day (the time away comes off as an unpaid break). The office can fix anything afterward on Report Center > Payroll, or with Edit Job Times on the Dispatch Board.",
+        a: "On the Crew App's My Schedule screen tap Edit Crew. Mark 'Not working' for someone who is out (they're skipped by Start Day and Start Job), tap Clock In for a late arrival, 'Left for the day' for someone leaving early, and Back if they return the same day (the time away comes off as an unpaid break). The office can fix anything afterward on Report Center > Payroll, or with Edit Job Times on the Dispatch Board, unless payroll is locked through that day.",
       },
       {
         q: "Can the crew leader add someone from another crew for the day?",
@@ -2576,7 +2584,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Where do I get crew hours for payroll?",
-        a: "Landscapt > Reports > Payroll tab (admins and any role with the \"View & Edit Payroll Report\" permission, under Report Access in the role editor; other users don't see the tab). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
+        a: "Landscapt > Reports > Payroll tab (admins and any role with the \"View & Edit Payroll Report\" permission, under Report Access in the role editor; other users don't see the tab). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Days on or before the 'Lock payroll through' date (set by an admin at the top of the tab) can't be corrected until an admin moves the lock. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
       },
       {
         q: "Can two crews work the same job on the same day?",
@@ -2865,7 +2873,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which Landscapt role permissions are actually enforced, and which only hide things?",
-        a: "Most are enforced on the server, so a role without them is refused even through another route. That covers creating or changing invoices and invoice lines, estimates and their lines, contracts, jobs (setting a job to Cancelled needs the Cancel permission), tickets, campaigns (scheduling and sending need Send; other edits need Edit), automations, document templates, packages, teams and running reports. The full list by permission is in the Users & Roles guide. Also enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",
+        a: "Most are enforced on the server, so a role without them is refused even through another route. That covers creating or changing invoices and invoice lines, estimates and their lines, contracts, jobs (setting a job to Cancelled needs the Cancel permission), tickets, campaigns (creating one needs Add, scheduling and sending need Send; other edits need Edit), automations, document templates, packages, teams and running reports. The full list by permission is in the Users & Roles guide. Also enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",
       },
       {
         q: "What is Ask AI, and what if it can't answer my question?",

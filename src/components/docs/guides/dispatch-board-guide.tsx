@@ -33,7 +33,7 @@ const COLUMNS: [string, string][] = [
   ["Hr Variance", "Actual minus budgeted, colored red when over and green when under."],
   ["Men", "Crew headcount used in the actual-hours fallback calculation. A value you set here is kept — editing the visit's times only fills Men in when it was blank."],
   ["Qty, Rate, AMT", "Billing quantity, unit rate, and the visit's value — the sum of the job's included service lines, the same figure the visit sheet and the client's Jobs card show. When you set a Rate on the visit itself (visit popup), AMT is that Rate × Qty (blank Qty = 1), and that is exactly what the visit's invoice bills."],
-  ["Notes/Icons", "Call-ahead flags, comments, and other at-a-glance indicators."],
+  ["Notes/Icons", "Call-ahead flags, comments, and other at-a-glance indicators. A small camera icon with a count beside the client's name means the crew took photos at that visit in the crew app; click it to open the visit. The photos are on the job's Attachments tab, and you can add them to an invoice from the invoice's Photos tab."],
 ];
 
 export function DispatchBoardGuide() {
@@ -183,8 +183,9 @@ export function DispatchBoardGuide() {
           <strong>Totals</strong> row, each crew&apos;s stat card, and the Unassigned card exclude
           them from <strong>AMT</strong> and budgeted hours, so a day where three stops rained out
           shows what the crews actually had in front of them, not what was originally on the
-          calendar. The visits themselves stay on the board (and under the Skipped / Cancelled status
-          tabs) — only the rollups leave them out.
+          calendar. Skipped visits stay on the board (and under the Skipped status tab) — only the
+          rollups leave them out. Cancelled visits drop off the All tab too; find or restore one under
+          the Cancelled tab.
         </p>
         <p>
           Status also advances itself in a couple of places outside the board: dispatching a crew&apos;s
@@ -578,7 +579,8 @@ export function DispatchBoardGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Status tabs</strong> — All, Scheduled, Dispatched, Completed, Cancelled, Skipped —
-            filter the board down to visits in that state.
+            filter the board down to visits in that state. All leaves out cancelled visits (and its
+            count does too); use the Cancelled tab to see them.
           </li>
           <li>
             <strong>Service filter</strong> — a multi-select checklist of your services. With a long
@@ -854,10 +856,8 @@ export function DispatchBoardGuide() {
           <li>
             <strong>Cards.</strong> Each visit is a solid block in its crew&apos;s color showing the
             client and service, with budgeted hours at the bottom right. A recurring job carries a
-            repeat icon and a completed visit carries a check mark. A small <strong>camera icon with
-            a count</strong> means the crew uploaded photos from the tablet for that visit; open the
-            visit to see them, and add them to an invoice from its Photos tab. Cancelled visits are
-            hidden from the board unless you filter to Cancelled. Only visits that have been{" "}
+            repeat icon and a completed visit carries a check mark. Cancelled visits aren&apos;t shown
+            on the calendar (use the list&apos;s Cancelled tab). Only visits that have been{" "}
             <strong>dispatched</strong> appear on the crew&apos;s tablet.
           </li>
           <li>
@@ -1046,7 +1046,7 @@ export function DispatchBoardGuide() {
             <strong>Dispatch Assigned.</strong> Dispatch Assigned in Team Assign dispatches the assigned visits for the day shown in its title, even when the board has a From/To range loaded.
           </li>
           <li>
-            <strong>Edit Job Times.</strong> Opening Edit Job Times waits for the crew&apos;s punches to load before filling in anyone, so it never overwrites times the crew recorded.
+            <strong>Edit Job Times.</strong> Opening Edit Job Times waits for the crew&apos;s punches to load before filling in anyone, so it never overwrites times the crew recorded. Times on a day that payroll is locked through (Report Center → Payroll) can&apos;t be changed; the board shows the reason, and an admin has to move the lock date first.
           </li>
           <li>
             <strong>Snow board status icon.</strong> Tapping the status icon steps a stop forward and asks before completing it (completing invoices it) or reopening it. Skipping goes through the outcome dialog with a reason.

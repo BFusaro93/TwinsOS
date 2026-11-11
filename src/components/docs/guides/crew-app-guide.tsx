@@ -85,7 +85,7 @@ export function CrewAppGuide() {
           separate crew login. When their own login is attached to a crew (Team → Crews → Linked
           Login, or automatically by ticking <strong>Schedule Jobs Directly</strong> on their
           employee record), the regular home screen shows a <strong>My Schedule</strong> tile on any
-          day that crew has a visit &mdash; or a stop still clocked in from an earlier day &mdash; and
+          day that crew has a visit &mdash; or a stop still clocked in from the last two days &mdash; and
           hides it on days with nothing assigned.
         </p>
         <p>
@@ -151,6 +151,14 @@ export function CrewAppGuide() {
         <p>
           <strong>My Schedule</strong> is the day&apos;s work as a list of <strong>stops</strong>, in
           route order. Each card shows the client, the address, the services due there, and a status.
+          Tapping the card opens the stop; the map pin button beside the address opens directions in
+          the phone&apos;s maps app.
+        </p>
+        <p>
+          <strong>Equipment today</strong>, above the stops, lists the trucks, trailers and equipment
+          the office put on the crew for the day on the Crew Board (or the crew&apos;s default
+          equipment when nothing was changed for that day), so the crew knows what to take from the
+          yard.
         </p>
         <Callout>
           <strong>A stop is a property visit, not a job.</strong> If a client has three services due
@@ -357,7 +365,9 @@ export function CrewAppGuide() {
           example &ldquo;1h 05m left&rdquo;), turning red as &ldquo;over budget&rdquo; once it runs past. Break time doesn&apos;t
           count against it. A stop with no budgeted hours shows the plain elapsed time. When a crew stops a
           job, a <strong>Time summary</strong> shows each person&apos;s start and finish and the total crew
-          time, so they can fix someone who arrived late or left early before tapping Done.
+          time, so they can fix someone who arrived late or left early before tapping Done. A row can
+          read 0m (a stop started and stopped in the same minute) and still be finished; a finish
+          before the start can&apos;t.
         </p>
         <p>
           Start Job and Stop Job apply to the <strong>whole stop</strong>. Skip is the exception —
@@ -642,7 +652,7 @@ export function CrewAppGuide() {
           photos. Nothing needs to be re-entered at the end of the day.
         </p>
         <p>
-          The day clock lands in <strong>Report Center → Payroll</strong> (admins and managers only):
+          The day clock lands in <strong>Report Center → Payroll</strong> (admins, plus any role with the View &amp; Edit Payroll Report permission):
           each person&apos;s clock-in, clock-out, breaks and total hours per day, ready to correct and
           export for payroll.
         </p>
@@ -671,7 +681,7 @@ export function CrewAppGuide() {
             <strong>Signed out or no connection.</strong> If the crew&apos;s sign-in has expired, My Schedule and the stop page say so with a sign-in button. With no connection they say they couldn&apos;t load and offer Retry, instead of looking like there&apos;s no work.
           </li>
           <li>
-            <strong>Finished stops.</strong> A stop the office cancelled shows as cancelled, with no Start Job. Skipped and cancelled stops count as done in the day&apos;s progress, and an <strong>All stops done</strong> card reminds the crew to tap End Day.
+            <strong>Finished stops.</strong> A stop the office cancels drops off the crew&apos;s list, unless the crew is still clocked in on it; then it stays, marked cancelled with no Start Job, until they clock out. A stop the crew forgot to stop stays on their list for up to two days after its date; after that it drops off and the office closes it from the Dispatch Board. Skipped and cancelled stops count as done in the day&apos;s progress, and an <strong>All stops done</strong> card reminds the crew to tap End Day.
           </li>
           <li>
             <strong>One-handed use.</strong> Start Job and Stop Job sit in a bar at the bottom of the screen, above the iPhone home bar, and small buttons are at least finger-sized. When a button is disabled, the reason shows under it.

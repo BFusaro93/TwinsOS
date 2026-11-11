@@ -377,7 +377,8 @@ export function AutomationsGuide() {
           <li>
             <strong>Who is told.</strong> When a step is parked for approval, every admin and manager
             in your organization gets an in-app notification (&quot;Automation step needs
-            approval&quot;); only admins and managers can approve or reject.
+            approval&quot;); only admins, managers and anyone with Create/Modify Automation can approve
+            or reject.
           </li>
         </ul>
       </Section>

@@ -485,7 +485,11 @@ export function ReportCenterGuide() {
           <li>
             <strong>Export.</strong> The <strong>Export</strong> menu has Excel (a Totals sheet plus a
             Daily sheet), CSV of totals by employee, CSV of daily detail, and PDF. Hours are numbers,
-            so Excel and payroll uploads can add them up.
+            so Excel and payroll uploads can add them up. The totals include a{" "}
+            <strong>Days to Review</strong> count per person: days with a shift that was never ended
+            (open) or with job time but no Start Day (no shift), where hours may be understated or
+            missing. The PDF prints the totals by employee first, then a separate table for each
+            employee with their days and a total row.
           </li>
           <li>
             <strong>Lock a pay period.</strong> After a period is exported and paid, an admin sets{" "}
@@ -901,32 +905,25 @@ export function ReportCenterGuide() {
 
       <Section id="permissions" title="Permissions and gating">
         <p>
-          Gating on the reporting surfaces is by <strong>subscription plan and org
-          flag</strong>, not by a distinct report-level role:
+          Who sees which reports and dashboards depends on your plan, on a few dashboards that are
+          specific to one company, and on each person&apos;s role:
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Module gating</strong> — <code>useModuleAccess(&quot;equipt&quot; |
-            &quot;landscapt&quot;)</code> checks the org&apos;s
-            Stripe plan against <code>planIncludesModule</code>; it hides the Equipt Dashboard,
-            Landscapt My Day, and Reports Dashboard cards/links when the org&apos;s plan doesn&apos;t
-            include that module. The KPI Scorecard and Company Report cards/links require the Landscapt
-            module too.
+            <strong>Your plan</strong> &mdash; the Equipt Dashboard appears only when your plan
+            includes Equipt; Landscapt My Day, the Reports Dashboard, the KPI Scorecard and the
+            Company Report appear only when it includes Landscapt.
           </li>
           <li>
-            <strong>Internal-only dashboards</strong> — Financial, Labor Efficiency, and Driver
-            Safety Scores are gated by <code>useIsInternalOrg()</code> both in the
-            nav (hidden entirely) and by an <code>InternalOnlyGuard</code> wrapping{" "}
-            <code>{"{children}"}</code> in the reports layout itself for the paths listed in{" "}
-            <code>INTERNAL_ONLY_PATHS</code> —
-            so even a direct URL hit is blocked, not just hidden from the nav.
+            <strong>Company-specific dashboards</strong> &mdash; Financial, Labor Efficiency and
+            Driver Safety Scores are built for one company&apos;s own data and don&apos;t appear in
+            other accounts, even if someone opens their web address directly.
           </li>
           <li>
-            <strong>Crew role</strong> — the KPI Scorecard, Company Report, and Financial nav
-            entries set <code>hideFromCrew</code>, <code>DashboardsHomePage</code>
-            independently checks <code>currentUser.role === &quot;crew&quot;</code> to hide the
-            same cards, and <code>CrewBlockedGuard</code> in the reports layout blocks the office
-            dashboards by URL as well.
+            <strong>Crew logins</strong> &mdash; crews don&apos;t see the KPI Scorecard, Company
+            Report, Financial or the office dashboards, and opening their web address directly is
+            blocked too. They only see dashboards marked visible to crews (and reports built on
+            jobs and visits return no data to them, because those include prices).
           </li>
           <li>
             <strong>Per-dashboard View permissions</strong> — each built-in dashboard also has a{" "}
