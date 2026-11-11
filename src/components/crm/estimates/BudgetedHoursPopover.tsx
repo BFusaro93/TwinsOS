@@ -99,6 +99,21 @@ export function BudgetedHoursPopover({
   const occCostCents = occurrenceCostCents(totalCostCents, visits) / factor;
   const currentRateCentsPerHr = hoursDraft > 0 ? occCostCents / hoursDraft : 0;
   const targetRateCents = Math.round((parseFloat(targetRate) || 0) * 100);
+  // Each link needs something to work from; with nothing to solve for they
+  // used to do nothing at all when clicked (B.Hrs 0, or a $0 cost), which read
+  // as broken. Disable them instead and say what's missing.
+  const canAdjustCost = hoursDraft > 0 && targetRateCents > 0;
+  const canAdjustHours = targetRateCents > 0 && occCostCents > 0;
+  const adjustHint =
+    targetRateCents <= 0
+      ? "Enter a man-hour rate to use these."
+      : !canAdjustCost && !canAdjustHours
+        ? "Enter Men × Hrs to set the cost from this rate, or give the line a cost to work out its hours."
+        : !canAdjustCost
+          ? "Enter Men × Hrs to set the cost from this rate."
+          : !canAdjustHours
+            ? "Adjust B.Hrs needs the line to have a cost."
+            : null;
 
   // Cost = hours × the typed rate, kept exactly: the line stores the RATE
   // (labor_cost_rate_cents) with cost_cents 0, and computeLineItem costs it as
@@ -227,13 +242,26 @@ export function BudgetedHoursPopover({
             />
           </div>
           <div className="mt-1.5 flex gap-3 text-[11px]">
-            <button type="button" onClick={handleAdjustCost} className="text-brand-600 dark:text-brand-400 underline hover:text-brand-700 dark:hover:text-brand-400">
+            <button
+              type="button"
+              onClick={handleAdjustCost}
+              disabled={!canAdjustCost}
+              title="Set this line's cost to B.Hrs × the rate above, and save it"
+              className="text-brand-600 dark:text-brand-400 underline hover:text-brand-700 dark:hover:text-brand-400 disabled:cursor-not-allowed disabled:text-slate-400 dark:disabled:text-neutral-500 disabled:no-underline"
+            >
               Adjust Cost
             </button>
-            <button type="button" onClick={handleAdjustHours} className="text-brand-600 dark:text-brand-400 underline hover:text-brand-700 dark:hover:text-brand-400">
+            <button
+              type="button"
+              onClick={handleAdjustHours}
+              disabled={!canAdjustHours}
+              title="Set this line's B.Hrs to its cost ÷ the rate above, and save it"
+              className="text-brand-600 dark:text-brand-400 underline hover:text-brand-700 dark:hover:text-brand-400 disabled:cursor-not-allowed disabled:text-slate-400 dark:disabled:text-neutral-500 disabled:no-underline"
+            >
               Adjust B.Hrs
             </button>
           </div>
+          {adjustHint && <p className="mt-1 text-[10px] text-slate-400 dark:text-neutral-500">{adjustHint}</p>}
         </div>
 
         <div className="flex justify-end gap-2 border-t pt-2">
