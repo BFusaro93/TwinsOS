@@ -10,7 +10,7 @@ import { AlertCircle, CheckCircle2, Loader2, MessageSquarePlus, CreditCard, Land
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { getScopedStripeJs, hasPublishableKey } from "@/lib/stripe/client";
 import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
-import { groupIntoSections, type DisplaySettings } from "@/lib/estimate-display-settings";
+import { groupIntoSections, printedLineName, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { unitLabel } from "@/lib/estimates/units";
 import { LineDescription } from "@/components/shared/LineDescription";
 import { deriveProposalTotals, proposalLineNet } from "@/lib/estimates/proposal-totals";
@@ -1083,7 +1083,9 @@ export default function ProposalPage() {
                   <div key={li.id} className="flex items-start gap-3 px-4 py-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
+                        {printedLineName(li, proposal.displaySettings) !== null || !li.estimateDesc ? (
+                          <p className="font-medium text-slate-800">{printedLineName(li, proposal.displaySettings) ?? li.serviceName ?? "Service"}</p>
+                        ) : null}
                         {li.tier === null && (
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">Included in all</span>
                         )}
@@ -1118,7 +1120,9 @@ export default function ProposalPage() {
                       style={{ accentColor: brand }}
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
+                      {(printedLineName(li, proposal.displaySettings) !== null || !li.estimateDesc) && (
+                        <p className="font-medium text-slate-800">{printedLineName(li, proposal.displaySettings) ?? li.serviceName ?? "Service"}</p>
+                      )}
                       {li.estimateDesc && <LineDescription html={li.estimateDesc} />}
                       {(li.printedSubitems ?? []).length > 0 && (
                         <ul className="mt-1.5 space-y-0.5">
@@ -1163,7 +1167,9 @@ export default function ProposalPage() {
                 <div key={li.id} className="flex items-start gap-3 px-4 py-3">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-700">{li.serviceName ?? "Service"}</p>
+                    {(printedLineName(li, proposal.displaySettings) !== null || !li.estimateDesc) && (
+                      <p className="font-medium text-slate-700">{printedLineName(li, proposal.displaySettings) ?? li.serviceName ?? "Service"}</p>
+                    )}
                     {li.estimateDesc && <LineDescription html={li.estimateDesc} />}
                     {meta && <p className="mt-1 text-xs text-slate-400">{meta}</p>}
                   </div>

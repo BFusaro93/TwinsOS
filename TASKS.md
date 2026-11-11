@@ -224,3 +224,11 @@ The Payroll tab (#466) shows marked-out gaps with start/end times, but lunch, br
 - [ ] **Crew sees only dispatched jobs (org setting, default off).** Crews currently see `scheduled` and `dispatched`; recurring visits are generated `scheduled`, so making dispatched-only the default would empty crews' days unless someone clicks Dispatch All.
 - [ ] **Package "season ends / needs renewal" badge + reminder.** Packages are per season and renew by hand (`Renew for next season`, bulk Renew Packages); nothing reminds anyone, and a contract link can drop on renewal.
 - [ ] **Equipment on the office dispatch sheet / client Activity:** crew photos are now on the job's Attachments tab only.
+
+## Backlog — crew equipment load check-off (Pezz, 2026-11-10)
+Raised by Pezz (Salisbury, field user on the mobile crew app). Equipment dragged from the yard onto a crew on the crew board shows as an "Equipment today" list in the crew app (`GET /api/crm/crew/equipment`). Wanted: the crew can tick each piece off as "loaded" as it comes off the yard.
+
+- [ ] Per-day, per-crew loaded flag for each equipment assignment (a `loaded_at` / `loaded_by` on the crew-board equipment assignment row, or a small join table; needs a migration on TEST + PROD) and a crew-app route to toggle it.
+- [ ] Tappable check / cross-off on the crew app's "Equipment today" list, web and native `crew-app/`; show a "3 of 5 loaded" count.
+- [ ] Show loaded state to the office on the crew board so dispatch can see a crew left without the skid steer. Decide whether un-loading is allowed and whether the flag resets daily.
+

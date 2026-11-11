@@ -19,6 +19,7 @@ interface LineItemRow {
   status: string;
   row_type: "item" | "section" | null;
   section_name: string | null;
+  service_name?: string | null;
   tier: string | null;
   package_id: string | null;
   discount_cents: number | null;
@@ -85,7 +86,7 @@ export default async function EstimatesPage() {
           "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
             "discount_cents, discount_type, discount_value, tax_rate_bps, " +
             "deposit_required_cents, deposit_collected_cents, deposit_pending_cents, " +
-            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, adj_rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
+            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, adj_rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, service_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
         )
         .in("client_id", ids)
         .eq("org_id", ctx.orgId)
@@ -110,7 +111,10 @@ export default async function EstimatesPage() {
       const c = published.content;
       const toPortalLine = (li: (typeof c.lineItems)[number], status: string) => ({
         id: li.id,
-        description: li.estimateDesc ?? li.serviceName ?? "",
+        // Wording only; the service name travels separately so the page can follow the
+        // "Service name with description" toggle (a line with no wording falls back to its name).
+        description: li.estimateDesc ?? "",
+        service_name: li.serviceName ?? null,
         quantity: li.qty,
         // The rate the line is actually priced at (Adj Rate wins) — "Hide $0
         // prices" keys off this, so a line re-priced to $0 is hidden and a $0
@@ -178,7 +182,17 @@ export default async function EstimatesPage() {
     if ((e.deposit_collected_cents ?? 0) > 0 || (e.deposit_pending_cents ?? 0) > 0) return 0;
     return e.total_price_cents > 0 ? Math.min(required, e.total_price_cents) : required;
   };
-  const dueIds = normalized.filter((e) => depositDue(e) > 0).map((e) => e.id);
+  // The pay link is looked up for every estimate that can owe a deposit, not only ones already
+  // accepted: a client who accepts here sees "Deposit due" immediately, and without the link
+  // already loaded it read "we'll be in touch" until they reloaded the page.
+  const dueIds = normalized
+    .filter((e) =>
+      (e.deposit_required_cents ?? 0) > 0 &&
+      (e.deposit_collected_cents ?? 0) === 0 &&
+      (e.deposit_pending_cents ?? 0) === 0 &&
+      !["lost", "declined"].includes(e.status)
+    )
+    .map((e) => e.id);
   const payUrlByEstimate = new Map<string, string>();
   if (dueIds.length) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

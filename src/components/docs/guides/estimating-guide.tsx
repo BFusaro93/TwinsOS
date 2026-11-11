@@ -415,8 +415,11 @@ export function EstimatingGuide() {
             default; sub-items that existed before this feature stay hidden so old estimates look the same.
           </li>
           <li>
-            <strong>Names, descriptions and $0 lines.</strong> A line prints its name in bold with its
-            client-facing description underneath (the name is not replaced by the description). A line
+            <strong>Names, descriptions and $0 lines.</strong> A line with a client-facing description prints just
+            that description, so a cryptic service name stays internal. Turn on <strong>Service name with
+            description</strong> in the estimate&apos;s client-view toggles (or the org default under Settings →
+            Estimates → Client View) to print the name above the description on the PDF, the emailed
+            estimate, the proposal page and the client portal. A line with no description always prints its name. A line
             priced entirely through its sub-items has a $0 own total, but it still prints even when
             &quot;hide zero totals&quot; is on, along with its printed sub-items. A sub-item&apos;s price is added on
             top of the line&apos;s own rate, so don&apos;t type the sub-item total into the line&apos;s rate too, or it

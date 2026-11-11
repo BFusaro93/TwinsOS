@@ -63,6 +63,16 @@ function descLeadsWithName(html: string, name: string): boolean {
   return text.startsWith(name.trim().toLowerCase());
 }
 
+/**
+ * Sub-item money NOT printed as its own row under the line (hidden sub-items). The line's Total
+ * column carries it, so a line priced through hidden sub-items doesn't read $0.00 above a
+ * non-zero subtotal. Printed sub-items keep their own rows and amounts.
+ */
+function hiddenSubitemCents(li: EstimatePDFLineItem): number {
+  const printed = (li.subitems ?? []).reduce((sum, s) => sum + s.totalCents, 0);
+  return Math.max(0, (li.subitemTotalCents ?? 0) - printed);
+}
+
 function printedRateCents(li: EstimatePDFLineItem): number {
   return Math.round(li.rateCents * complexityFactor(li.complexityBps));
 }
@@ -465,9 +475,9 @@ function LineItemSections({
               <View style={S.cellService}>
                 {li.estimateDesc ? (
                   <>
-                    {/* The line's name stays on the document above its wording (a package's
-                        wording already leads with its own name). */}
-                    {li.serviceName && !descLeadsWithName(li.estimateDesc, li.serviceName) && (
+                    {/* With "Service name with description" on, the name prints above its wording
+                        (a package's wording already leads with its own name). */}
+                    {li.serviceName && settings.showServiceNameWithDescription && !descLeadsWithName(li.estimateDesc, li.serviceName) && (
                       <Text style={[S.cellText, { fontFamily: "Helvetica-Bold" }]}>{li.serviceName}</Text>
                     )}
                     <RichText html={li.estimateDesc} style={S.serviceDescText} />
@@ -495,7 +505,7 @@ function LineItemSections({
               )}
               {settings.showLineTotals && (
                 <View style={S.cellTotal}>
-                  <Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text>
+                  <Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents + hiddenSubitemCents(li))}</Text>
                 </View>
               )}
             </View>
@@ -568,7 +578,7 @@ function EstimatePages({ estimate, org }: { estimate: EstimatePDFData; org: OrgP
           TIER_ORDER.map((tierKey) => {
             const items = estimate.lineItems.filter((li) => li.tier === tierKey);
             if (items.length === 0) return null;
-            const tierTotalCents = items.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents, 0);
+            const tierTotalCents = items.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents + (li.subitemTotalCents ?? 0), 0);
             const sections = groupIntoSections(items, estimate.displaySettings);
             return (
               <View key={tierKey} style={S.tierGroup}>
@@ -768,7 +778,7 @@ function EstimatePages({ estimate, org }: { estimate: EstimatePDFData; org: OrgP
           TIER_ORDER.map((tierKey) => {
             const items = estimate.lineItems.filter((li) => li.tier === tierKey);
             if (items.length === 0) return null;
-            const tierTotalCents = items.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents, 0);
+            const tierTotalCents = items.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents + (li.subitemTotalCents ?? 0), 0);
             const sections = groupIntoSections(items, estimate.displaySettings);
             return (
               <View key={tierKey} style={S.tierGroup}>
