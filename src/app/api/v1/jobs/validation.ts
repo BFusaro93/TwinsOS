@@ -63,9 +63,22 @@ export const createJobSchema = z.object({
 export const updateJobSchema = z.object({
   status: z.enum(["scheduled", "in_progress", "completed", "cancelled", "skipped", "hold"]).optional(),
   subStatus: z.string().nullable().optional(),
-  scheduledDate: isoDate.nullable().optional(),
+  scheduledDate: isoDate
+    .nullable()
+    .optional()
+    .describe(
+      "YYYY-MM-DD. Reschedules a job that has at most ONE visit, and only while that visit is still just scheduled (not dispatched, started or completed) — the visit moves with it. A job with several visits, or one already under way, is rejected (400): reschedule those visits in the app."
+    ),
   crewId: z.string().uuid().nullable().optional(),
-  rateCents: z.number().int().nonnegative().nullable().optional().describe("Job rate, in CENTS (integer)."),
+  rateCents: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullable()
+    .optional()
+    .describe(
+      "Rate in CENTS (integer). With exactly one service line, sets that line's rate (the one invoices use). A job with several service lines is rejected (400): change each line's rate in the app."
+    ),
   notesToCrew: z.string().nullable().optional(),
   completionNotes: z.string().nullable().optional(),
 });

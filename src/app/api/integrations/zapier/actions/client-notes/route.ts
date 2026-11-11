@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
-import { logger } from "@/lib/logger";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
-
-const log = logger.child("zapier-action");
+import { withIdempotency } from "@/lib/api/idempotency";
+import { clientNotFoundResponse, jsonServerError } from "@/lib/api/route-helpers";
 
 const createNoteSchema = z.object({
   clientId: z.string().uuid(),
@@ -27,40 +26,41 @@ export async function POST(request: Request) {
   if (!(await checkZapierRateLimit(db, auth.integrationId))) {
     return NextResponse.json({ error: "Rate limit exceeded — slow down" }, { status: 429 });
   }
+  // Idempotency-Key: a retried create returns the first result instead of a duplicate.
+  return withIdempotency(db, auth.orgId, request, async () => {
+    const parsed = createNoteSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
+    }
+    const body = parsed.data;
 
-  const parsed = createNoteSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) {
-    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
-  }
-  const body = parsed.data;
+    const { data: client } = await db
+      .from("clients")
+      .select("org_id")
+      .eq("id", body.clientId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!client || client.org_id !== auth.orgId) {
+      return clientNotFoundResponse(db, auth.orgId, body.clientId);
+    }
 
-  const { data: client } = await db
-    .from("clients")
-    .select("org_id")
-    .eq("id", body.clientId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!client || client.org_id !== auth.orgId) {
-    return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  }
+    const { data, error } = await db
+      .from("client_activity")
+      .insert({
+        org_id: auth.orgId,
+        client_id: body.clientId,
+        activity_type: "note",
+        subject: body.subject ?? "Note from Zapier",
+        body: body.body,
+      })
+      .select("id, occurred_at")
+      .single();
 
-  const { data, error } = await db
-    .from("client_activity")
-    .insert({
-      org_id: auth.orgId,
-      client_id: body.clientId,
-      activity_type: "note",
-      subject: body.subject ?? "Note from Zapier",
-      body: body.body,
-    })
-    .select("id, occurred_at")
-    .single();
+    if (error || !data) {
+      // Don't hand raw database errors (constraint/column names) to the caller.
+      return jsonServerError("zapier client-notes: create failed", error);
+    }
 
-  if (error || !data) {
-    // Don't hand raw database errors (constraint/column names) to the caller.
-    log.error("create failed", { error: error?.message });
-    return NextResponse.json({ error: "create failed" }, { status: 500 });
-  }
-
-  return NextResponse.json({ id: data.id, occurredAt: data.occurred_at });
+    return NextResponse.json({ id: data.id, occurredAt: data.occurred_at });
+  });
 }

@@ -35,7 +35,7 @@ export async function resolvePunchOwnerVisitId(
 }
 
 const STOP_VISIT_SELECT =
-  "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, crm_jobs(crew_id, property_id, service_address, service_city)";
+  "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id, property_id, service_address, service_city)";
 
 interface StopVisitRow {
   id: string;

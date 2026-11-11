@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
-import { recalcEstimateTotals } from "@/lib/estimate-calc";
+import { lineEquipmentCostCents, recalcEstimateTotals } from "@/lib/estimate-calc";
 
 // Equipment is an internal cost input (see 20261127000400_crm_equipment_costs.sql):
 // a catalog of machines with a cost rate, snapshotted onto estimate lines. It is
@@ -43,6 +43,8 @@ export interface LineItemEquipment {
   qty: number;
   rateCents: number;
   chargeRateCents: number | null;
+  /** qty × rate for ONE visit. The line's equipment cost is this × the line's
+   *  visits (lineEquipmentCostCents) — equipment runs on every visit. */
   totalCostCents: number;
   sortOrder: number;
 }
@@ -188,7 +190,10 @@ export function useLineItemEquipment(lineItemId: string) {
 /**
  * Total equipment cost across the given estimate lines — feeds the Asset/Equipment
  * row of the summary panel's cost breakdown. Callers pass only the lines the
- * estimate counts (not lost / draft / deleted), mirroring recalcEstimateTotals.
+ * estimate counts (not lost / draft / deleted, and only the basis tier),
+ * mirroring recalcEstimateTotals. Equipment is PER VISIT: each row's
+ * total_cost_cents (qty × rate) is multiplied by its line's visits, exactly as
+ * recalcEstimateTotals does (lineEquipmentCostCents).
  */
 export function useEstimateEquipmentCost(lineItemIds: string[]) {
   const key = [...lineItemIds].sort().join(",");
@@ -199,12 +204,15 @@ export function useEstimateEquipmentCost(lineItemIds: string[]) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("estimate_line_item_equipment")
-        .select("total_cost_cents")
+        .select("total_cost_cents, estimate_line_items(visits)")
         .in("line_item_id", lineItemIds)
         .is("deleted_at", null);
       if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).reduce((sum: number, r: any) => sum + (r.total_cost_cents ?? 0), 0);
+      return (data ?? []).reduce(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (sum: number, r: any) => sum + lineEquipmentCostCents(r.total_cost_cents ?? 0, r.estimate_line_items?.visits),
+        0,
+      );
     },
     enabled: lineItemIds.length > 0,
   });

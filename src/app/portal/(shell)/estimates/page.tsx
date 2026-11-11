@@ -13,6 +13,7 @@ interface LineItemRow {
   description: string | null;
   quantity: number;
   unit_price_cents: number;
+  adj_rate_cents?: number | null;
   visits: number | null;
   total_cents: number;
   status: string;
@@ -85,7 +86,7 @@ export default async function EstimatesPage() {
           "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
             "discount_cents, discount_type, discount_value, tax_rate_bps, " +
             "deposit_required_cents, deposit_collected_cents, deposit_pending_cents, " +
-            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, service_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
+            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, adj_rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, service_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
         )
         .in("client_id", ids)
         .eq("org_id", ctx.orgId)
@@ -115,7 +116,10 @@ export default async function EstimatesPage() {
         description: li.estimateDesc ?? "",
         service_name: li.serviceName ?? null,
         quantity: li.qty,
-        unit_price_cents: li.rateCents,
+        // The rate the line is actually priced at (Adj Rate wins) — "Hide $0
+        // prices" keys off this, so a line re-priced to $0 is hidden and a $0
+        // catalog rate with a real Adj Rate is not.
+        unit_price_cents: li.adjRateCents ?? li.rateCents,
         visits: li.visits,
         total_cents: li.totalCents,
         discount_cents: li.discountCents ?? 0,
@@ -157,8 +161,10 @@ export default async function EstimatesPage() {
         premium: e.tier_labels?.premium ?? "Premium",
       },
       display_settings: toDisplaySettings(e.display_settings),
-      line_items: e.line_items.map(({ subitems, ...li }) => ({
+      line_items: e.line_items.map(({ subitems, adj_rate_cents, ...li }) => ({
         ...li,
+        // Effective rate: Adj Rate wins (see the published-version mapping above).
+        unit_price_cents: adj_rate_cents ?? li.unit_price_cents,
         description: li.description ?? "",
         discount_cents: li.discount_cents ?? 0,
         subitem_total_cents: (subitems ?? []).filter((si) => !si.deleted_at).reduce((sum, si) => sum + (si.total_cents ?? 0), 0),

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { assertOrgWritable } from "@/lib/org-writable";
+import { createServiceClient } from "@/lib/supabase/server";
 import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
@@ -29,7 +31,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
   };
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, crm_jobs(crew_id, property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, crm_jobs:crew_job(crew_id, property_id, service_address, service_city)";
 
 /**
  * Pauses every open visit in this stop (lunch, stopping for the day) without
@@ -62,6 +64,10 @@ export async function POST(
   if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
+  // Read-only (canceled / expired-trial) org: the update would match 0 rows
+  // under RLS and look like a successful replay.
+  const readOnly = await assertOrgWritable(createServiceClient(), anchor.org_id);
+  if (readOnly) return readOnly;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidateQuery = (supabase as any)

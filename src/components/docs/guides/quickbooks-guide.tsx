@@ -103,15 +103,36 @@ export function QuickBooksGuide() {
               <td className={CELL}>The client is linked to it automatically.</td>
             </tr>
             <tr className={ROW}>
+              <td className={CELL_LABEL}>A customer with exactly the same name that is already linked to a different client</td>
+              <td className={CELL}>
+                Two clients never share one QuickBooks customer. This client gets its own customer, named with its
+                account number — for example &quot;John Smith (acct #1042)&quot; (a short reference code instead, for a client
+                with no account number).
+              </td>
+            </tr>
+            <tr className={ROW}>
+              <td className={CELL_LABEL}>A customer with exactly the same name that is inactive in QuickBooks</td>
+              <td className={CELL}>
+                The invoice shows &quot;This client&apos;s QuickBooks customer is inactive&quot;. Make the customer active again
+                in QuickBooks, or link the client to a different customer from its QuickBooks section, then Retry.
+              </td>
+            </tr>
+            <tr className={ROW}>
               <td className={CELL_LABEL}>No similar customer at all</td>
-              <td className={CELL}>A new QuickBooks customer is created from the client&apos;s name, email, phone and billing address.</td>
+              <td className={CELL}>
+                A new QuickBooks customer is created from the client&apos;s name, email, phone and billing address. If
+                QuickBooks already uses that name for a vendor or employee, the customer is created as &quot;Name (acct
+                #number)&quot; instead.
+              </td>
             </tr>
             <tr>
               <td className={CELL_LABEL}>Only similar names (for example &quot;Pam Trainor&quot; vs &quot;Pamela Trainor&quot;)</td>
               <td className={CELL}>
                 Landscapt won&apos;t guess. The invoice shows a sync error until you pick the right customer — open the
                 client, find the <strong>QuickBooks</strong> section, click <strong>Sync to QuickBooks</strong>, and
-                choose a match or <strong>None of these — create new</strong>.
+                choose a match or <strong>None of these — create new</strong>. A customer already linked to another client
+                can&apos;t be chosen. A new customer takes the client&apos;s plain name when QuickBooks has it free, otherwise
+                &quot;Name (acct #number)&quot;.
               </td>
             </tr>
           </tbody>
@@ -226,6 +247,12 @@ export function QuickBooksGuide() {
           <li>
             <strong>Applying credit.</strong> Applying a client&apos;s prepayment, deposit or account credit to an
             invoice sends it to QuickBooks as soon as it is applied.
+          </li>
+          <li>
+            <strong>Merged clients.</strong> After <strong>Merge Clients</strong>, invoices that were already in QuickBooks
+            stay on the QuickBooks customer they were created under, and payments on them are sent to that same
+            customer — QuickBooks doesn&apos;t allow moving a paid invoice to another customer. New invoices go to the
+            surviving client&apos;s customer.
           </li>
           <li>
             <strong>Write-offs.</strong> An AR write-off isn&apos;t money received, so it goes to QuickBooks as a credit
@@ -381,7 +408,7 @@ export function QuickBooksGuide() {
             <strong>Synced invoices are voided, not deleted.</strong> An invoice that has been sent to QuickBooks can&apos;t be deleted in Landscapt. Void it instead, and the void is sent to QuickBooks.
           </li>
           <li>
-            <strong>“Name exists as a vendor or employee”.</strong> QuickBooks won&apos;t create a customer whose name already belongs to a vendor or employee. When that happens the invoice shows this message and stops retrying. Rename the customer or link it to the existing QuickBooks customer, then edit and save the invoice to retry.
+            <strong>“Name exists as a vendor or employee”.</strong> QuickBooks won&apos;t create a customer whose name already belongs to a vendor or employee, so Landscapt creates it as &quot;Name (acct #number)&quot; instead. Only if that name is taken too does the invoice show this message and stop retrying. Rename the client or link it to an existing QuickBooks customer, then edit and save the invoice to retry.
           </li>
           <li>
             <strong>Editing a payment.</strong> Changing a payment&apos;s amount, date, reference or split keeps its link to the QuickBooks payment, which is updated rather than sent a second time. An invoice taken out of the split has its QuickBooks payment voided.

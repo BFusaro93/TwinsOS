@@ -4,6 +4,7 @@ type AdminClient = ReturnType<typeof import("@supabase/supabase-js").createClien
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { purgeExpiredIdempotencyKeys } from "@/lib/api/idempotency";
 
 const SAMSARA_STATS_URL =
   "https://api.samsara.com/fleet/vehicles/stats?types=obdOdometerMeters,gpsDistanceMeters";
@@ -63,6 +64,11 @@ async function handleSync(request: Request) {
     }
     callerOrgId = profile.org_id;
   }
+
+  // ── Daily housekeeping (cron run only) ───────────────────────────────────
+  // Expired Idempotency-Key rows from the public API / Zapier creates. Rides on
+  // this daily cron rather than a cron of its own; best-effort, never blocks the sync.
+  if (isCron) await purgeExpiredIdempotencyKeys(adminClient);
 
   // ── Determine which orgs to sync ──────────────────────────────────────────
 
@@ -204,6 +210,11 @@ async function syncOrg(
         .insert({
           org_id: orgId,
           asset_id: dbVehicle.id,
+          // Label it as the Samsara feed and carry the vehicle's name — without
+          // these it showed as a "Manual" meter with a blank asset, and the
+          // requests / work orders its automations raised had no unit name.
+          asset_name: dbVehicle.name,
+          source: "samsara",
           name: "Odometer",
           unit: "miles",
           current_value: 0,

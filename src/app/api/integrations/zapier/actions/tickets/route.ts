@@ -5,6 +5,8 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { logger } from "@/lib/logger";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { withIdempotency } from "@/lib/api/idempotency";
+import { clientNotFoundResponse, jsonServerError } from "@/lib/api/route-helpers";
 
 const log = logger.child("zapier-action");
 
@@ -20,7 +22,13 @@ const createTicketSchema = z.object({
       .pipe(z.enum(["low", "normal", "high", "urgent"], { message: "priority must be low, normal, high or urgent" }))
   ),
   category: blankToUndefined(z.string()),
-  type: blankToUndefined(z.string()),
+  // crm_tickets.type is CHECK-constrained; a free-text value used to fail the insert as a 500.
+  type: blankToUndefined(
+    z
+      .string()
+      .transform((v) => v.trim().toLowerCase())
+      .pipe(z.enum(["note", "call", "event", "text"], { message: "type must be note, call, event or text" }))
+  ),
   // due_date is a `date` column: an unvalidated string failed the insert as an opaque 500.
   dueDate: blankToUndefined(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dueDate must be YYYY-MM-DD")),
 });
@@ -40,90 +48,91 @@ export async function POST(request: Request) {
   if (!(await checkZapierRateLimit(db, auth.integrationId))) {
     return NextResponse.json({ error: "Rate limit exceeded — slow down" }, { status: 429 });
   }
+  // Idempotency-Key: a retried create returns the first result instead of a duplicate.
+  return withIdempotency(db, auth.orgId, request, async () => {
+    const parsed = createTicketSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) {
+      return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
+    }
+    const body = parsed.data;
 
-  const parsed = createTicketSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) {
-    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
-  }
-  const body = parsed.data;
+    const { data: client } = await db
+      .from("clients")
+      .select("org_id")
+      .eq("id", body.clientId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!client || client.org_id !== auth.orgId) {
+      return clientNotFoundResponse(db, auth.orgId, body.clientId);
+    }
 
-  const { data: client } = await db
-    .from("clients")
-    .select("org_id")
-    .eq("id", body.clientId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!client || client.org_id !== auth.orgId) {
-    return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  }
+    const { data, error } = await db
+      .from("crm_tickets")
+      .insert({
+        org_id: auth.orgId,
+        client_id: body.clientId,
+        subject: body.subject,
+        body: body.body ?? null,
+        priority: body.priority ?? "normal",
+        category: body.category ?? null,
+        type: body.type ?? "note",
+        due_date: body.dueDate ?? null,
+        status: "open",
+      })
+      .select("id, ticket_number, subject, status, created_at")
+      .single();
 
-  const { data, error } = await db
-    .from("crm_tickets")
-    .insert({
+    if (error || !data) {
+      // Don't hand raw database errors (constraint/column names) to the caller.
+      return jsonServerError("zapier tickets: create ticket failed", error);
+    }
+
+    // Same follow-through as the in-app New Ticket dialog (useCreateTicket): a
+    // client-timeline row, the staff "new ticket" notification, and the
+    // ticket_created automation trigger (which also feeds Zapier REST hooks).
+    // All best-effort — the ticket already exists.
+    const { error: activityError } = await db.from("client_activity").insert({
       org_id: auth.orgId,
       client_id: body.clientId,
+      activity_type: "ticket",
       subject: body.subject,
       body: body.body ?? null,
-      priority: body.priority ?? "normal",
-      category: body.category ?? null,
-      type: body.type ?? "note",
-      due_date: body.dueDate ?? null,
       status: "open",
-    })
-    .select("id, ticket_number, subject, status, created_at")
-    .single();
-
-  if (error || !data) {
-    // Don't hand raw database errors (constraint/column names) to the caller.
-    log.error("create ticket failed", { error: error?.message });
-    return NextResponse.json({ error: "create failed" }, { status: 500 });
-  }
-
-  // Same follow-through as the in-app New Ticket dialog (useCreateTicket): a
-  // client-timeline row, the staff "new ticket" notification, and the
-  // ticket_created automation trigger (which also feeds Zapier REST hooks).
-  // All best-effort — the ticket already exists.
-  const { error: activityError } = await db.from("client_activity").insert({
-    org_id: auth.orgId,
-    client_id: body.clientId,
-    activity_type: "ticket",
-    subject: body.subject,
-    body: body.body ?? null,
-    status: "open",
-    ref_id: data.id,
-    ref_table: "crm_tickets",
-  });
-  if (activityError) log.error("ticket activity insert failed", { ticketId: data.id, error: activityError.message });
-  try {
-    await notifyStaffOfNewTicket(db, {
-      orgId: auth.orgId,
-      ticketId: data.id as string,
-      ticketNumber: data.ticket_number as number,
-      subject: data.subject as string | null,
-      assignedToName: null,
-      createdByUserId: null,
-      source: "Zapier",
+      ref_id: data.id,
+      ref_table: "crm_tickets",
     });
-  } catch (e) {
-    log.error("ticket notify failed", { ticketId: data.id, error: e instanceof Error ? e.message : String(e) });
-  }
-  try {
-    await fireSimpleTrigger(db, {
-      orgId: auth.orgId,
-      clientId: body.clientId,
-      ticketId: data.id as string,
-      triggerType: "ticket_created",
-      matchValues: body.category ? [body.category] : undefined,
-    });
-  } catch {
-    // enrollment failure must not fail the create
-  }
+    if (activityError) log.error("ticket activity insert failed", { ticketId: data.id, error: activityError.message });
+    try {
+      await notifyStaffOfNewTicket(db, {
+        orgId: auth.orgId,
+        ticketId: data.id as string,
+        ticketNumber: data.ticket_number as number,
+        subject: data.subject as string | null,
+        assignedToName: null,
+        createdByUserId: null,
+        source: "Zapier",
+      });
+    } catch (e) {
+      log.error("ticket notify failed", { ticketId: data.id, error: e instanceof Error ? e.message : String(e) });
+    }
+    try {
+      await fireSimpleTrigger(db, {
+        orgId: auth.orgId,
+        clientId: body.clientId,
+        ticketId: data.id as string,
+        triggerType: "ticket_created",
+        matchValues: body.category ? [body.category] : undefined,
+      });
+    } catch {
+      // enrollment failure must not fail the create
+    }
 
-  return NextResponse.json({
-    id: data.id,
-    ticketNumber: data.ticket_number,
-    subject: data.subject,
-    status: data.status,
-    createdAt: data.created_at,
+    return NextResponse.json({
+      id: data.id,
+      ticketNumber: data.ticket_number,
+      subject: data.subject,
+      status: data.status,
+      createdAt: data.created_at,
+    });
   });
 }

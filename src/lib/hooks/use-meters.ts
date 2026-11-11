@@ -3,17 +3,18 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapMeter } from "@/lib/supabase/mappers";
 import type { Meter } from "@/types/cmms";
-import { addMeterReadingCore } from "@/lib/hooks/use-meter-readings";
+import { addMeterReadingCore, runMeterAutomations } from "@/lib/hooks/use-meter-readings";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 export function useMeters() {
   return useQuery({
     queryKey: ["meters"],
     queryFn: async () => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("meters").select("*").is("deleted_at", null).order("name");
-      if (error) throw error;
+      // Every page, not just the first (PostgREST caps a response at 1,000 rows).
+      const data = await fetchAllRows<Parameters<typeof mapMeter>[0]>(() =>
+        supabase.from("meters").select("*").is("deleted_at", null).order("name")
+      );
       return (data.map(mapMeter)) as Meter[];
     },
   });
@@ -76,11 +77,12 @@ export function useCreateMeter() {
       }
       return mapMeter(data);
     },
-    onSuccess: () => {
+    onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ["meters"] });
       queryClient.invalidateQueries({ queryKey: ["meter-readings"] });
+      // A starting reading can already be past a threshold.
+      if (Number(input.currentValue) > 0) runMeterAutomations(queryClient);
     },
-    onError: (err) => console.error("[useCreateMeter]", err),
   });
 }
 
@@ -153,10 +155,12 @@ export function useUpdateMeter() {
       if (error) throw error;
       return mapMeter(data);
     },
-    onSuccess: (_, { id }) => {
+    onSuccess: (_, { id, currentValue }) => {
       queryClient.invalidateQueries({ queryKey: ["meters"] });
       queryClient.invalidateQueries({ queryKey: ["meters", id] });
       queryClient.invalidateQueries({ queryKey: ["meter-readings", id] });
+      // A direct value edit records a reading — re-check meter automations.
+      if (currentValue !== undefined) runMeterAutomations(queryClient);
     },
   });
 }

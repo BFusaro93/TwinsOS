@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { crewGroupVisitIds } from "@/lib/crew/crew-group-visits";
 import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("crew/use-materials");
@@ -77,7 +78,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, job_id, org_id, crew_id, crew_unassigned, crew_group_id, crm_jobs(crew_id)")
+    .select("id, job_id, org_id, crew_id, crew_unassigned, crew_group_id, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -87,11 +88,17 @@ export async function POST(
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
+  // crm_job_products carries the material's price and cost, so a crew login
+  // can't read it directly (20261231000340). Visit ownership is proven above
+  // and the row is checked against that visit's job below; only price-free
+  // columns are read.
+  const admin = createServiceClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: jobProduct, error: jpError } = await (supabase as any)
+  const { data: jobProduct, error: jpError } = await (admin as any)
     .from("crm_job_products")
     .select("id, job_id, org_id, product_id, product_name, planned_qty, qty, status, visit_id")
     .eq("id", jobProductId)
+    .eq("org_id", visit.org_id as string)
     .is("deleted_at", null)
     .maybeSingle();
   if (jpError) return NextResponse.json({ error: jpError.message }, { status: 500 });
@@ -182,12 +189,14 @@ export async function POST(
   // pending row asserting a quantity nobody recorded.
   const qtyChanged = "usedQty" in parsed.data && parsed.data.usedQty !== previousQty;
   if (qtyChanged && "usedQty" in parsed.data) {
+    // crew_set_job_product_qty runs as the caller (the audit trail names the
+    // crew) and only updates a still-pending row on the caller's crew's job —
+    // the race guard the direct UPDATE used to carry.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: updateError } = await (supabase as any)
-      .from("crm_job_products")
-      .update({ qty: parsed.data.usedQty })
-      .eq("id", jobProductId)
-      .eq("status", "pending"); // still-pending guard, race-safe with the check above
+    const { error: updateError } = await (supabase as any).rpc("crew_set_job_product_qty", {
+      p_job_product_id: jobProductId,
+      p_qty: parsed.data.usedQty,
+    });
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
@@ -205,11 +214,10 @@ export async function POST(
   if (rpcError) {
     if (qtyChanged) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: restoreError } = await (supabase as any)
-        .from("crm_job_products")
-        .update({ qty: previousQty })
-        .eq("id", jobProductId)
-        .eq("status", "pending");
+      const { error: restoreError } = await (supabase as any).rpc("crew_set_job_product_qty", {
+        p_job_product_id: jobProductId,
+        p_qty: previousQty,
+      });
       if (restoreError) {
         log.error("qty rollback failed after status change failed", {
           jobProductId, previousQty, error: restoreError.message,
@@ -227,7 +235,7 @@ export async function POST(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: updated, error: reloadError } = await (supabase as any)
+  const { data: updated, error: reloadError } = await (admin as any)
     .from("crm_job_products")
     .select("id, product_name, planned_qty, qty, status")
     .eq("id", jobProductId)

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
+import { assertOrgWritable } from "@/lib/org-writable";
 
 const Body = z.object({ checked: z.boolean() });
 
@@ -27,7 +28,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, job_id, org_id, crew_id, crew_unassigned, crm_jobs(crew_id)")
+    .select("id, job_id, org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -37,6 +38,9 @@ export async function POST(
   }
 
   const admin = createServiceClient();
+  // The write below uses the service role, which skips the read-only-when-canceled RLS.
+  const readOnly = await assertOrgWritable(admin, visit.org_id);
+  if (readOnly) return readOnly;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: subitem } = await (admin as any)
     .from("crm_job_service_subitems")

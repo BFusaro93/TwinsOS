@@ -64,16 +64,35 @@ export async function submitWorkRequest(
   // and unvalidated, so without this check any caller could smuggle in a
   // UUID belonging to a DIFFERENT org's asset, writing a cross-tenant FK
   // into maintenance_requests.asset_id.
+  // The equipment picker offers vehicles as well as assets, and
+  // maintenance_requests.asset_id is polymorphic (asset OR vehicle, same as
+  // the in-app dialog and work_orders.asset_id) — so either table can vouch
+  // for the id. Checking assets only silently dropped every vehicle link, and
+  // converting the request then produced a work order with no vehicle.
   let validatedAssetId: string | null = null;
+  let validatedUnitName: string | null = null;
   if (input.assetId) {
-    const { data: asset } = await supabase
-      .from("assets")
-      .select("id")
-      .eq("id", input.assetId)
-      .eq("org_id", org.id)
-      .maybeSingle();
-    validatedAssetId = asset?.id ?? null;
+    const [{ data: asset }, { data: vehicle }] = await Promise.all([
+      supabase
+        .from("assets")
+        .select("id, name")
+        .eq("id", input.assetId)
+        .eq("org_id", org.id)
+        .is("deleted_at", null)
+        .maybeSingle(),
+      supabase
+        .from("vehicles")
+        .select("id, name")
+        .eq("id", input.assetId)
+        .eq("org_id", org.id)
+        .is("deleted_at", null)
+        .maybeSingle(),
+    ]);
+    const unit = (asset ?? vehicle) as { id: string; name: string | null } | null;
+    validatedAssetId = unit?.id ?? null;
+    validatedUnitName = unit?.name?.trim() || null;
   }
+  const assetName = input.equipment?.trim() || validatedUnitName;
 
   const { data: mr, error: insertErr } = await supabase
     .from("maintenance_requests")
@@ -85,7 +104,7 @@ export async function submitWorkRequest(
       status: "open",
       priority: normalisePriority(input.priority),
       asset_id: validatedAssetId,
-      asset_name: input.equipment?.trim() || null,
+      asset_name: assetName,
       requested_by_id: attribution.requestedById,
       requested_by_name: input.requestedBy,
       equipment_type: input.equipmentType?.trim() || null,
@@ -109,13 +128,16 @@ export async function submitWorkRequest(
       const { Resend } = await import("resend");
       const { data: recipients } = await supabase
         .from("profiles")
-        .select("email, name, notification_prefs")
+        .select("id, email, name, notification_prefs")
         .eq("org_id", org.id)
         .neq("status", "inactive")
         .in("role", ["admin", "manager"]);
 
-      const eligible = (recipients ?? []).filter((p: { email: string | null; notification_prefs: Record<string, unknown> | null }) => {
-        if (!p.email) return false;
+      // Never notify the actor about their own action: an admin/manager who
+      // files a request from the field page doesn't need an email about it.
+      const actorIds = new Set([attribution.createdBy, attribution.requestedById].filter(Boolean));
+      const eligible = (recipients ?? []).filter((p: { id: string; email: string | null; notification_prefs: Record<string, unknown> | null }) => {
+        if (!p.email || actorIds.has(p.id)) return false;
         const prefs = p.notification_prefs ?? {};
         return prefs["emailNewMaintenanceRequest"] !== false;
       });
@@ -166,7 +188,7 @@ export async function submitWorkRequest(
       orgId: org.id,
       eventTrigger: "request_submitted",
       assetId: validatedAssetId,
-      assetName: input.equipment?.trim() || null,
+      assetName,
       actorUserId: attribution.createdBy,
     });
   } catch (err) {

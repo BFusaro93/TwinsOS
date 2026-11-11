@@ -118,7 +118,10 @@ export interface CrewDriveInfo {
 }
 
 export interface CrewVisitsResponse {
+  /** The day answered for — the org's today when no date was asked for. */
   date: string;
+  /** The org's IANA timezone (absent from older servers). */
+  timeZone?: string;
   crewId: string | null;
   crewName: string | null;
   visits: CrewVisit[];

@@ -29,7 +29,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .select(ESTIMATE_LINE_ITEM_SELECT)
     .eq("org_id", auth.orgId)
     .eq("estimate_id", id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    // The order the estimate shows them in (the app and the PDF sort the same way).
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
 
   if (lineItemsError) return jsonServerError("GET /api/v1/estimates/[id]", lineItemsError);
 

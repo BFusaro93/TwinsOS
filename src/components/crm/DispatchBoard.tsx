@@ -1067,7 +1067,7 @@ function JobDetailSheet({
         clockedOutAt: field === "end_time"   ? clockIso : t.otherClockedOutAt,
       })));
     } catch {
-      toast.error("Failed to save time");
+      // useUpsertCrewMemberTime already shows the server's reason (e.g. a payroll lock).
     }
   }
 
@@ -3235,7 +3235,7 @@ function EditJobTimesDialog({
         ...(breakMinutes != null && start && end ? { breakMinutes } : {}),
       });
     } catch {
-      toast.error("Failed to save time");
+      // useUpsertCrewMemberTime already shows the server's reason (e.g. a payroll lock).
     }
   }
 
@@ -3271,7 +3271,7 @@ function EditJobTimesDialog({
     try {
       await del.mutateAsync({ visitId: anchorVisitId, crewMemberId: memberId });
     } catch {
-      toast.error("Failed to remove");
+      // useDeleteCrewMemberTime already shows the server's reason.
     }
   }
 
@@ -3639,7 +3639,7 @@ function VisitRow({
         clockedOutAt: field === "end_time"   ? clockIso : t.otherClockedOutAt,
       })));
     } catch {
-      toast.error("Failed to save time");
+      // useUpsertCrewMemberTime already shows the server's reason (e.g. a payroll lock).
     }
   }
 

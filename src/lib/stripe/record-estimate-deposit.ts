@@ -249,12 +249,18 @@ export async function recordEstimateDepositCharge({
 
   // client_id is read from the estimate rather than the metadata, so a forged
   // client_id can't attach someone else's credit to the wrong account.
+  //
+  // A soft-deleted estimate is still read. Deleting is refused while a deposit
+  // is processing (crm_delete_estimate), but a deposit that started clearing
+  // anyway — or an estimate deleted by an older build — must not make this
+  // return "error": Stripe would redeliver the event for days and the client's
+  // money would never be recorded. It is recorded as ordinary account credit
+  // instead (see `estimateDeleted` below).
   const { data: estimate, error: estErr } = await db
     .from("estimates")
-    .select("id, org_id, client_id, estimate_number, deposit_required_cents, deposit_collected_cents, deposit_reference")
+    .select("id, org_id, client_id, estimate_number, deposit_required_cents, deposit_collected_cents, deposit_reference, deleted_at")
     .eq("id", estimateId)
     .eq("org_id", orgId)
-    .is("deleted_at", null)
     .single();
   if (estErr || !estimate) {
     log.error("estimate deposit charge has no matching estimate", { paymentIntentId: paymentIntent.id, estimateId });
@@ -263,6 +269,16 @@ export async function recordEstimateDepositCharge({
   if (!estimate.client_id) {
     log.error("estimate deposit charge on an estimate with no client", { paymentIntentId: paymentIntent.id, estimateId });
     return "error";
+  }
+  // The deposit landed after the estimate was deleted: there is no estimate
+  // left to reserve it for, so it becomes plain, unreserved account credit
+  // (estimate_id null) that the client's next invoice can use.
+  const estimateDeleted = !!estimate.deleted_at;
+  if (estimateDeleted) {
+    log.warn("deposit settled for a deleted estimate — recording it as general account credit", {
+      paymentIntentId: paymentIntent.id,
+      estimateId,
+    });
   }
 
   // Credit the DEPOSIT, not the total charged. When a card processing fee
@@ -344,14 +360,17 @@ export async function recordEstimateDepositCharge({
       payment_date: todayInZone(await getOrgTimeZone(db, orgId)),
       method,
       reference: paymentIntent.id,
-      memo: `Deposit for estimate #${estimate.estimate_number ?? "—"} paid online`,
+      memo: estimateDeleted
+        ? `Deposit for deleted estimate #${estimate.estimate_number ?? "—"} paid online — account credit`
+        : `Deposit for estimate #${estimate.estimate_number ?? "—"} paid online`,
       processing_fee_cents: feeCents,
       stripe_payment_intent_id: paymentIntent.id,
       // Reserved for this estimate: credit-first and every other allocation
       // path only spend it on invoices of this estimate's job / project /
       // contract (DB trigger trg_guard_reserved_deposit_allocation) until staff
-      // release it to general credit.
-      estimate_id: estimateId,
+      // release it to general credit. A deleted estimate has nothing to
+      // reserve it for, so its deposit is general credit from the start.
+      estimate_id: estimateDeleted ? null : estimateId,
     })
     .select("id")
     .single();
@@ -437,7 +456,7 @@ export async function recordEstimateDepositCharge({
 
   // If the client accepted only part of the proposal, the deposit can exceed
   // the accepted total. Left as account credit; tell staff to refund/apply it.
-  if (!fullyReversed) await notifyStaffOfDepositExcess(db, orgId, estimateId);
+  if (!fullyReversed && !estimateDeleted) await notifyStaffOfDepositExcess(db, orgId, estimateId);
 
   // On the already-recorded path `inserted` is null (the insert failed with
   // 23505), so dereferencing it threw and the webhook 500'd on every retry,
@@ -471,7 +490,9 @@ export async function recordEstimateDepositCharge({
       org_id: orgId,
       client_id: estimate.client_id,
       activity_type: "payment",
-      subject: `Deposit received: ${method} (online) — credited to account`,
+      subject: estimateDeleted
+        ? `Deposit received: ${method} (online) for deleted estimate #${estimate.estimate_number ?? "—"} — credited to account`
+        : `Deposit received: ${method} (online) — credited to account`,
       amount_cents: depositCents,
       ref_id: paymentId,
       ref_table: "crm_payments",

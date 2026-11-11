@@ -181,7 +181,8 @@ export function DocumentsGuide() {
           <li>
             <strong>Set What The Client Sees For This Document.</strong> Off by default. Tick it to
             choose the client-view toggles (visits, quantities, units, line prices, line totals, section
-            subtotals, hide $0 totals, hide $0 prices) that estimates using this document start with.
+            subtotals, package visits, service name with description, hide $0 totals, hide $0 prices)
+            that estimates using this document start with.
             Leave it off and the document sets none, so the service bundle or your org default applies.
           </li>
         </ul>

@@ -291,6 +291,11 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   // them instead of reading uploadPhoto.isPending keeps Add Photo usable for
   // the next shot instead of locking it behind the first one.
   const [photosUploading, setPhotosUploading] = useState(0);
+  // One client id per picked photo (name + size + last-modified + phase). A
+  // manual re-pick of the SAME photo after a failed / lost upload resends the
+  // same id, so the server keeps one copy (same storage path, unique row)
+  // instead of saving it twice. Forgotten once the upload succeeds.
+  const photoClientIds = useRef(new Map<string, string>());
   const { data: upsellServices = [] } = useFieldUpsellServices();
   const submitUpsell  = useSubmitFieldUpsell();
   // Every visit of the stop, not just the anchor: a stop can combine services
@@ -559,13 +564,17 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     // change event.
     e.target.value = "";
     setPhotosUploading((n) => n + 1);
+    const photoKey = `${anchorVisitId}|${file.name}|${file.size}|${file.lastModified}|${phase ?? ""}`;
+    const clientId = photoClientIds.current.get(photoKey) ?? crypto.randomUUID();
+    photoClientIds.current.set(photoKey, clientId);
     try {
       const result = await uploadPhoto.mutateAsync({
         visitId: anchorVisitId,
         file,
-        clientId: crypto.randomUUID(),
+        clientId,
         ...(phase ? { caption: phaseCaption(phase) } : {}),
       });
+      photoClientIds.current.delete(photoKey);
       if (phase) setPhasesAdded((cur) => new Set(cur).add(phase));
       if (result?.signedUrl) {
         setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));

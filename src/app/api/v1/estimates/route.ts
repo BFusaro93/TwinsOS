@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
-import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
+import { clientNotFoundResponse, jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { computeLineItem, getBreakevenRateCents, recalcEstimateTotals } from "@/lib/estimate-calc";
 import { ESTIMATE_SELECT, ESTIMATE_LINE_ITEM_SELECT, shapeEstimate, shapeEstimateLineItem } from "./shape";
 import { createEstimateSchema } from "./validation";
@@ -8,6 +8,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { withIdempotency } from "@/lib/api/idempotency";
 
 /**
  * GET /api/v1/estimates — list the org's estimates. Requires scope
@@ -52,156 +53,158 @@ export async function POST(request: Request) {
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "estimates:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // Idempotency-Key: a retried create returns the first result instead of a duplicate.
+  return withIdempotency(db, auth.orgId, request, async () => {
+    const parsed = createEstimateSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
+    const body = parsed.data;
+    if (body.estimateDate && body.validUntilDate && body.validUntilDate < body.estimateDate) {
+      return jsonError("validUntilDate can't be before estimateDate", 400);
+    }
 
-  const parsed = createEstimateSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
-  const body = parsed.data;
-  if (body.estimateDate && body.validUntilDate && body.validUntilDate < body.estimateDate) {
-    return jsonError("validUntilDate can't be before estimateDate", 400);
-  }
-
-  // deleted_at IS NULL on every FK check: an estimate pointing at a
-  // soft-deleted client, service or rep is a dangling reference.
-  const { data: client } = await db
-    .from("clients")
-    .select("org_id")
-    .eq("id", body.clientId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!client || client.org_id !== auth.orgId) return jsonError("Client not found", 404);
-
-  const { data: service } = await db
-    .from("crm_services")
-    .select("org_id, name, unit, default_rate_cents, production_rate_sqft_per_hr, budget_method, is_active")
-    .eq("id", body.serviceId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!service || service.org_id !== auth.orgId) return jsonError("Service not found", 404);
-  if (!service.is_active) return jsonError("Service is not active", 400);
-
-  if (body.salesRepId) {
-    const { data: rep } = await db
-      .from("crm_employees")
+    // deleted_at IS NULL on every FK check: an estimate pointing at a
+    // soft-deleted client, service or rep is a dangling reference.
+    const { data: client } = await db
+      .from("clients")
       .select("org_id")
-      .eq("id", body.salesRepId)
+      .eq("id", body.clientId)
       .is("deleted_at", null)
       .maybeSingle();
-    if (!rep || rep.org_id !== auth.orgId) return jsonError("Sales rep not found", 404);
-  }
+    if (!client || client.org_id !== auth.orgId) return clientNotFoundResponse(db, auth.orgId, body.clientId);
 
-  const { data: org } = await db.from("organizations").select("customizations").eq("id", auth.orgId).maybeSingle();
-  const breakevenRateCents = getBreakevenRateCents(org?.customizations as Record<string, unknown> | null);
+    const { data: service } = await db
+      .from("crm_services")
+      .select("org_id, name, unit, default_rate_cents, production_rate_sqft_per_hr, budget_method, is_active")
+      .eq("id", body.serviceId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!service || service.org_id !== auth.orgId) return jsonError("Service not found", 404);
+    if (!service.is_active) return jsonError("Service is not active", 400);
 
-  const { data: overheadRow } = await db
-    .from("crm_overhead_settings")
-    .select("flat_overhead_rate_bps")
-    .eq("org_id", auth.orgId)
-    .maybeSingle();
+    if (body.salesRepId) {
+      const { data: rep } = await db
+        .from("crm_employees")
+        .select("org_id")
+        .eq("id", body.salesRepId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (!rep || rep.org_id !== auth.orgId) return jsonError("Sales rep not found", 404);
+    }
 
-  const { data: estimate, error: estimateError } = await db
-    .from("estimates")
-    .insert({
+    const { data: org } = await db.from("organizations").select("customizations").eq("id", auth.orgId).maybeSingle();
+    const breakevenRateCents = getBreakevenRateCents(org?.customizations as Record<string, unknown> | null);
+
+    const { data: overheadRow } = await db
+      .from("crm_overhead_settings")
+      .select("flat_overhead_rate_bps")
+      .eq("org_id", auth.orgId)
+      .maybeSingle();
+
+    const { data: estimate, error: estimateError } = await db
+      .from("estimates")
+      .insert({
+        org_id: auth.orgId,
+        client_id: body.clientId,
+        description: body.description ?? service.name,
+        estimate_date: body.estimateDate ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
+        valid_until_date: body.validUntilDate ?? null,
+        stage: "draft",
+        overhead_rate_bps: overheadRow?.flat_overhead_rate_bps ?? 0,
+        sales_rep_id: body.salesRepId ?? null,
+      })
+      .select(ESTIMATE_SELECT)
+      .single();
+
+    if (estimateError || !estimate) return jsonServerError("POST /api/v1/estimates (header insert)", estimateError);
+
+    const visits = body.visits ?? 1;
+    const computed = computeLineItem(
+      {
+        calcType: 1,
+        qty: body.qty,
+        rateCents: service.default_rate_cents ?? 0,
+        visits,
+        budgetedHours: 0,
+        costCents: 0,
+        adjRateCents: null,
+        unitType: service.unit,
+        productionRateSqftPerHr: service.production_rate_sqft_per_hr,
+        budgetMethod: service.budget_method as "manual" | "production_rate",
+      },
+      breakevenRateCents
+    );
+
+    const { error: lineItemError } = await db.from("estimate_line_items").insert({
+      org_id: auth.orgId,
+      estimate_id: estimate.id,
+      service_id: body.serviceId,
+      service_name: service.name,
+      status: "quote",
+      calc_type: 1,
+      qty: body.qty,
+      unit_type: service.unit,
+      production_rate_sqft_per_hr: service.production_rate_sqft_per_hr,
+      budget_method: service.budget_method,
+      rate_cents: service.default_rate_cents ?? 0,
+      visits,
+      cost_cents: computed.costCents,
+      adj_rate_cents: null,
+      sort_order: 0,
+      total_cents: computed.totalCents,
+      budgeted_hours: computed.budgetedHours,
+      total_budgeted_hours: computed.totalBudgetedHours,
+      total_cost_cents: computed.totalCostCents,
+      margin_bps: computed.marginBps,
+      markup_bps: computed.markupBps,
+    });
+
+    if (lineItemError) {
+      // Line item failed after the header was committed — delete the
+      // just-created draft estimate (soft delete — the project never hard
+      // deletes) so it doesn't leak an orphaned empty draft.
+      await db.from("estimates").update({ deleted_at: new Date().toISOString() }).eq("id", estimate.id);
+      return jsonServerError("POST /api/v1/estimates (line item insert)", lineItemError);
+    }
+
+    await recalcEstimateTotals(db, estimate.id);
+
+    await db.from("client_activity").insert({
       org_id: auth.orgId,
       client_id: body.clientId,
-      description: body.description ?? service.name,
-      estimate_date: body.estimateDate ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
-      valid_until_date: body.validUntilDate ?? null,
-      stage: "draft",
-      overhead_rate_bps: overheadRow?.flat_overhead_rate_bps ?? 0,
-      sales_rep_id: body.salesRepId ?? null,
-    })
-    .select(ESTIMATE_SELECT)
-    .single();
-
-  if (estimateError || !estimate) return jsonServerError("POST /api/v1/estimates (header insert)", estimateError);
-
-  const visits = body.visits ?? 1;
-  const computed = computeLineItem(
-    {
-      calcType: 1,
-      qty: body.qty,
-      rateCents: service.default_rate_cents ?? 0,
-      visits,
-      budgetedHours: 0,
-      costCents: 0,
-      adjRateCents: null,
-      unitType: service.unit,
-      productionRateSqftPerHr: service.production_rate_sqft_per_hr,
-      budgetMethod: service.budget_method as "manual" | "production_rate",
-    },
-    breakevenRateCents
-  );
-
-  const { error: lineItemError } = await db.from("estimate_line_items").insert({
-    org_id: auth.orgId,
-    estimate_id: estimate.id,
-    service_id: body.serviceId,
-    service_name: service.name,
-    status: "quote",
-    calc_type: 1,
-    qty: body.qty,
-    unit_type: service.unit,
-    production_rate_sqft_per_hr: service.production_rate_sqft_per_hr,
-    budget_method: service.budget_method,
-    rate_cents: service.default_rate_cents ?? 0,
-    visits,
-    cost_cents: computed.costCents,
-    adj_rate_cents: null,
-    sort_order: 0,
-    total_cents: computed.totalCents,
-    budgeted_hours: computed.budgetedHours,
-    total_budgeted_hours: computed.totalBudgetedHours,
-    total_cost_cents: computed.totalCostCents,
-    margin_bps: computed.marginBps,
-    markup_bps: computed.markupBps,
-  });
-
-  if (lineItemError) {
-    // Line item failed after the header was committed — delete the
-    // just-created draft estimate (soft delete — the project never hard
-    // deletes) so it doesn't leak an orphaned empty draft.
-    await db.from("estimates").update({ deleted_at: new Date().toISOString() }).eq("id", estimate.id);
-    return jsonServerError("POST /api/v1/estimates (line item insert)", lineItemError);
-  }
-
-  await recalcEstimateTotals(db, estimate.id);
-
-  await db.from("client_activity").insert({
-    org_id: auth.orgId,
-    client_id: body.clientId,
-    activity_type: "estimate",
-    subject: `Estimate created: ${estimate.description}`,
-    ref_id: estimate.id,
-    ref_table: "estimates",
-  });
-
-  // The app's New Estimate fires estimate_created (filterable by sales rep);
-  // without it an estimate made through the API never reached those
-  // automations or Zapier hooks. Best-effort.
-  try {
-    await fireSimpleTrigger(db, {
-      orgId: auth.orgId,
-      clientId: body.clientId,
-      estimateId: estimate.id as string,
-      triggerType: "estimate_created",
-      matchValues: body.salesRepId ? [body.salesRepId] : undefined,
+      activity_type: "estimate",
+      subject: `Estimate created: ${estimate.description}`,
+      ref_id: estimate.id,
+      ref_table: "estimates",
     });
-  } catch {
-    // enrollment failure must not fail the create
-  }
 
-  const { data: finalEstimate } = await db
-    .from("estimates")
-    .select(ESTIMATE_SELECT)
-    .eq("id", estimate.id)
-    .single();
-  const { data: lineItems } = await db
-    .from("estimate_line_items")
-    .select(ESTIMATE_LINE_ITEM_SELECT)
-    .eq("estimate_id", estimate.id);
+    // The app's New Estimate fires estimate_created (filterable by sales rep);
+    // without it an estimate made through the API never reached those
+    // automations or Zapier hooks. Best-effort.
+    try {
+      await fireSimpleTrigger(db, {
+        orgId: auth.orgId,
+        clientId: body.clientId,
+        estimateId: estimate.id as string,
+        triggerType: "estimate_created",
+        matchValues: body.salesRepId ? [body.salesRepId] : undefined,
+      });
+    } catch {
+      // enrollment failure must not fail the create
+    }
 
-  return NextResponse.json(
-    { ...shapeEstimate(finalEstimate ?? estimate), lineItems: (lineItems ?? []).map(shapeEstimateLineItem) },
-    { status: 201 }
-  );
+    const { data: finalEstimate } = await db
+      .from("estimates")
+      .select(ESTIMATE_SELECT)
+      .eq("id", estimate.id)
+      .single();
+    const { data: lineItems } = await db
+      .from("estimate_line_items")
+      .select(ESTIMATE_LINE_ITEM_SELECT)
+      .eq("estimate_id", estimate.id);
+
+    return NextResponse.json(
+      { ...shapeEstimate(finalEstimate ?? estimate), lineItems: (lineItems ?? []).map(shapeEstimateLineItem) },
+      { status: 201 }
+    );
+  });
 }

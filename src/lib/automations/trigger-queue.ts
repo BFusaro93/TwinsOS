@@ -1,6 +1,7 @@
 import { fetchOrgTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 import { logger } from "@/lib/logger";
+import { isZapierTriggerType } from "@/lib/integrations/zapier";
 import { chunk } from "@/lib/utils/chunk";
 import type { TriggerType } from "@/types/crm-automations";
 
@@ -92,6 +93,35 @@ export async function dispatchClientTriggers(
   }
 }
 
+/** True when at least one of these trigger rows belongs to a live (active, not deleted) sequence and automation. */
+function hasLiveTrigger(triggers: unknown[]): boolean {
+  return triggers.some((t) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seq = (t as { crm_automation_sequences?: any }).crm_automation_sequences;
+    const auto = seq?.crm_automations;
+    return !!seq?.is_active && !!auto?.is_active && !seq.deleted_at && !auto.deleted_at;
+  });
+}
+
+/** Whether a Zapier REST hook would receive this event (same checks as notifyZapierSubscribers). */
+async function hasZapierSubscribers(admin: AnyClient, orgId: string, triggerType: string): Promise<boolean> {
+  if (!isZapierTriggerType(triggerType)) return false;
+  const { data: integration } = await admin
+    .from("integrations")
+    .select("enabled")
+    .eq("org_id", orgId)
+    .eq("provider", "zapier")
+    .maybeSingle();
+  if (!integration?.enabled) return false;
+  const { count } = await admin
+    .from("zapier_webhook_subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("trigger_type", triggerType)
+    .is("deleted_at", null);
+  return (count ?? 0) > 0;
+}
+
 interface QueueRow {
   id: string;
   org_id: string;
@@ -117,6 +147,8 @@ export async function drainTriggerQueue(
   let failed = 0;
   // One trigger lookup per org + type per run, not per queued row.
   const triggerCache = new Map<string, unknown[]>();
+  // Whether anything (a live sequence trigger or a Zapier hook) listens for that org + type.
+  const listenedCache = new Map<string, boolean>();
   // A row that failed is retried on the next run, not again in this one.
   const seen = new Set<string>();
 
@@ -138,32 +170,74 @@ export async function drainTriggerQueue(
     }
     const rows = ((data ?? []) as QueueRow[]).filter((r) => !seen.has(r.id));
     if (rows.length === 0) break;
+    for (const row of rows) seen.add(row.id);
 
-    for (const row of rows) {
-      if (Date.now() - startedAt >= opts.budgetMs) break;
-      seen.add(row.id);
-      // Claim before firing: of two concurrent runs (the cron and a member running the
-      // processor by hand) only the one whose conditional update matches fires the row.
-      const claimNow = new Date();
+    // Claim the whole page in one conditional update (it used to be one round
+    // trip per row): of two concurrent runs (the cron and a member running the
+    // processor by hand) only the rows THIS update matched are fired here.
+    const claimNow = new Date();
+    const claimedIds = new Set<string>();
+    for (const ids of chunk(rows.map((r) => r.id), 100)) {
       const { data: claimed, error: claimErr } = await admin
         .from("crm_automation_trigger_queue")
         .update({ claimed_until: new Date(claimNow.getTime() + CLAIM_LEASE_MS).toISOString() })
-        .eq("id", row.id)
+        .in("id", ids)
         .is("processed_at", null)
         .or(`claimed_until.is.null,claimed_until.lt.${claimNow.toISOString()}`)
         .select("id");
-      if (claimErr || !claimed || claimed.length === 0) continue;
+      if (claimErr) {
+        log.error("queue claim failed", { error: claimErr.message });
+        continue;
+      }
+      for (const c of (claimed ?? []) as { id: string }[]) claimedIds.add(c.id);
+    }
+    const mine = rows.filter((r) => claimedIds.has(r.id));
+
+    // Events nothing listens to — no active sequence for that trigger type and no
+    // Zapier subscription — are marked processed in bulk instead of being fired
+    // one by one (each fire is a client lookup that then does nothing).
+    const idle: string[] = [];
+    const work: QueueRow[] = [];
+    for (const row of mine) {
       const cacheKey = `${row.org_id}:${row.trigger_type}`;
-      try {
+      let listened = listenedCache.get(cacheKey);
+      if (listened === undefined) {
         let triggers = triggerCache.get(cacheKey);
         if (!triggers) {
           triggers = (await fetchOrgTriggers(admin, row.org_id, row.trigger_type)) ?? [];
           triggerCache.set(cacheKey, triggers);
         }
+        listened = hasLiveTrigger(triggers) || (await hasZapierSubscribers(admin, row.org_id, row.trigger_type));
+        listenedCache.set(cacheKey, listened);
+      }
+      if (listened) work.push(row);
+      else idle.push(row.id);
+    }
+    for (const ids of chunk(idle, 100)) {
+      const doneAt = new Date().toISOString();
+      const { error: idleErr } = await admin
+        .from("crm_automation_trigger_queue")
+        .update({ processed_at: doneAt, updated_at: doneAt })
+        .in("id", ids);
+      if (idleErr) log.error("queue idle mark failed", { error: idleErr.message });
+      else processed += ids.length;
+    }
+
+    for (const row of work) {
+      // Past the budget: hand the rest of the claimed page back for the next run.
+      if (Date.now() - startedAt >= opts.budgetMs) {
+        const rest = work.slice(work.indexOf(row)).map((r) => r.id);
+        for (const ids of chunk(rest, 100)) {
+          await admin.from("crm_automation_trigger_queue").update({ claimed_until: null }).in("id", ids).is("processed_at", null);
+        }
+        break;
+      }
+      const cacheKey = `${row.org_id}:${row.trigger_type}`;
+      try {
         await fireSimpleTrigger(
           admin,
           { orgId: row.org_id, clientId: row.client_id, triggerType: row.trigger_type, matchValues: row.match_values ?? undefined },
-          triggers
+          triggerCache.get(cacheKey) ?? []
         );
         await admin
           .from("crm_automation_trigger_queue")

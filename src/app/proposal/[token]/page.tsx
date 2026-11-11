@@ -847,7 +847,7 @@ export default function ProposalPage() {
               client said they'd send a check. Deposits are optional, so this
               doesn't undo the acceptance; it just keeps the amount visible
               and payable. */}
-          {depositDue && (
+          {depositDue > 0 && (
             <div className="mt-5 rounded-lg border border-amber-200 bg-white p-4 text-left shadow-sm space-y-3">
               <div>
                 <p className="font-semibold text-slate-800">Deposit due: {cents(depositDue)}</p>

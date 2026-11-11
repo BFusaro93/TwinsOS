@@ -88,10 +88,12 @@ export function effectiveVisitCrewId(row: VisitCrewRow | null | undefined): stri
  *
  * PostgREST can't OR a base-table column with an embedded one in a single
  * request, so this runs the two halves separately and merges them (deduped by
- * id). The second half needs the crm_jobs embed as !inner to filter on it, so
- * `select` MUST contain a top-level `crm_jobs(` embed — it's rewritten to
- * `crm_jobs!inner(` for that half only. The first half keeps the plain embed,
- * so a directly-assigned visit whose job row is hidden still shows.
+ * id). The second half needs the job embed as !inner to filter on it, so
+ * `select` MUST contain a top-level job embed keyed `crm_jobs` — either the
+ * price-free `crm_jobs:crew_job(` the crew surfaces use (a crew login can't
+ * read crm_jobs itself; see 20261231000330) or a plain `crm_jobs(` — and it's
+ * rewritten to `…!inner(` for that half only. The first half keeps the plain
+ * embed, so a directly-assigned visit whose job row is hidden still shows.
  *
  * `filter` applies the caller's other conditions (date, client, deleted_at…)
  * to both halves. Ordering is NOT preserved across the merge — sort after.
@@ -104,10 +106,11 @@ export async function selectEffectiveCrewVisits(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   filter: (q: any) => any
 ): Promise<{ data: Record<string, unknown>[]; error: { message: string } | null }> {
-  if (!/(^|[\s,(])crm_jobs\(/.test(select)) {
-    throw new Error("selectEffectiveCrewVisits: select must embed crm_jobs(...)");
+  const jobEmbed = /(^|[\s,(])(crm_jobs(?::crew_job)?)\(/;
+  if (!jobEmbed.test(select)) {
+    throw new Error("selectEffectiveCrewVisits: select must embed crm_jobs:crew_job(...) or crm_jobs(...)");
   }
-  const innerSelect = select.replace(/(^|[\s,(])crm_jobs\(/, "$1crm_jobs!inner(");
+  const innerSelect = select.replace(jobEmbed, "$1$2!inner(");
 
   const [direct, inherited] = await Promise.all([
     filter(supabase.from("crm_job_visits").select(select)).eq("crew_id", crewId),

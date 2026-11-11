@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger";
 import { isOrgInactive, type OrgPlanRow } from "@/lib/orgs/org-canceled";
 import { postJsonToPublicUrl } from "@/lib/net/ssrf-guard";
 import type { TriggerType } from "@/types/crm-automations";
+import { loadLiveTriggerRecord, type LiveTriggerIds } from "@/lib/integrations/zapier-triggers";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -68,6 +69,10 @@ export type ZapierTriggerType = (typeof ZAPIER_TRIGGER_TYPES)[number];
 
 export function isZapierTriggerType(value: string): value is ZapierTriggerType {
   return (ZAPIER_TRIGGER_TYPES as readonly string[]).includes(value);
+}
+
+export function isZapierCrmTriggerType(value: string): value is ZapierCrmTriggerType {
+  return (ZAPIER_CRM_TRIGGER_TYPES as readonly string[]).includes(value);
 }
 
 /**
@@ -171,7 +176,18 @@ export async function notifyZapierSubscribers(
   db: any,
   orgId: string,
   triggerType: ZapierTriggerType,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  /**
+   * For a Landscapt (CRM) trigger: the ids of the record the event is about.
+   * The record is loaded and sent in the SAME shape the trigger's polling
+   * endpoint returns — which is what Zapier showed the Zap author as the
+   * sample when they built the Zap. Live hooks used to send only
+   * `{ id: "<type>-<uuid>", clientId, … }`, so every field mapped from the
+   * sample (displayName, jobNumber, amountPaidCents…) arrived empty. `payload`
+   * is kept underneath (additive), so a Zap mapped to clientId/firedAt still
+   * works; the record's own id replaces the random one.
+   */
+  opts?: { record?: LiveTriggerIds }
 ): Promise<void> {
   // A disabled integration delivers nothing, even to subscriptions that are
   // still on file (the key check only guards inbound calls).
@@ -192,6 +208,16 @@ export async function notifyZapierSubscribers(
 
   if (!subscriptions || subscriptions.length === 0) return;
 
+  let body = payload;
+  if (opts?.record && isZapierCrmTriggerType(triggerType)) {
+    try {
+      const record = await loadLiveTriggerRecord(db, orgId, triggerType, opts.record);
+      if (record) body = { ...payload, ...record };
+    } catch (err) {
+      log.error("live trigger record load failed — sending the bare event", { triggerType, err });
+    }
+  }
+
   await Promise.all(
     subscriptions.map(async (sub: { id: string; target_url: string }) => {
       try {
@@ -199,7 +225,7 @@ export async function notifyZapierSubscribers(
         // hooks/route.ts), with the connection pinned to the validated
         // address (DNS rebinding) and redirects NOT followed — a 3xx counts
         // as a failed delivery so a redirect can't reach an internal host.
-        const res = await postJsonToPublicUrl(sub.target_url, payload);
+        const res = await postJsonToPublicUrl(sub.target_url, body);
         if (!res.ok) {
           log.warn("subscriber webhook rejected", {
             subscriptionId: sub.id,

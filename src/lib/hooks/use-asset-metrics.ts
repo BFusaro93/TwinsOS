@@ -13,12 +13,29 @@ export function useAssetMetrics(windowDays: number, assetId?: string) {
     queryKey: ["asset-metrics", windowDays, assetId ?? "all"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase.rpc("cmms_asset_metrics", {
-        p_window_days: windowDays,
-        ...(assetId ? { p_asset_id: assetId } : {}),
-      });
-      if (error) throw error;
-      return (data ?? []).map((r): AssetMetrics => ({
+      // One row per asset AND vehicle, so a fleet passes PostgREST's 1,000-row
+      // response cap — the Uptime report silently dropped every unit past it.
+      // Page with a total order (entity_type + asset_id) until a short page.
+      const PAGE = 1000;
+      const fetchPage = async (from: number) => {
+        const { data: page, error } = await supabase
+          .rpc("cmms_asset_metrics", {
+            p_window_days: windowDays,
+            ...(assetId ? { p_asset_id: assetId } : {}),
+          })
+          .order("entity_type", { ascending: true })
+          .order("asset_id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        return page ?? [];
+      };
+      const data: Awaited<ReturnType<typeof fetchPage>> = [];
+      for (let from = 0; ; from += PAGE) {
+        const page = await fetchPage(from);
+        data.push(...page);
+        if (page.length < PAGE) break;
+      }
+      return data.map((r): AssetMetrics => ({
         entityType: r.entity_type as AssetMetrics["entityType"],
         assetId: r.asset_id,
         name: r.name,

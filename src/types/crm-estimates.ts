@@ -41,6 +41,10 @@ export interface EstimateLineItem {
   totalBudgetedHours: number;
   costCents: number;
   totalCostCents: number;
+  /** Line labor cost per man-hour (cents), set by the man-hour calculator's
+   *  "Adjust Cost". Used while costCents is 0: cost = hours × this rate × visits.
+   *  null/undefined = cost off the org break-even rate. */
+  laborCostRateCents?: number | null;
   marginBps: number;         // basis points: 10000 = 100%
   markupBps: number;
   adjRateCents: number | null;

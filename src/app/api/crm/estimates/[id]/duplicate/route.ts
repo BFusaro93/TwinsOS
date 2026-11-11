@@ -115,9 +115,11 @@ export async function POST(
       deposit_failed_reason: null,
       // reset financial aggregates so they recalculate fresh
       subtotal_cents: 0,
-      // A flat discount's amount IS discount_cents (the recalc reads it as the
-      // source of truth); percent discounts re-derive from discount_value.
-      discount_cents: src.discount_type === "flat" ? src.discount_cents ?? 0 : 0,
+      // A flat discount — including a legacy one with no discount_type, which
+      // the recalc treats as flat (intendedEstimateDiscountCents) — carries its
+      // amount; only a percent discount re-derives from discount_value. Testing
+      // `=== "flat"` dropped every legacy header discount on the copy.
+      discount_cents: src.discount_type === "percent" ? 0 : src.discount_cents ?? 0,
       tax_cents: 0,
       total_cents: 0,
       revenue_cents: 0,

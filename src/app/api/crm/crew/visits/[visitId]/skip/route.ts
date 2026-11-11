@@ -4,13 +4,20 @@ import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { formatMonthDay } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
-import { closeStopPunches } from "@/lib/crew/stop-punches";
+import { closeStopPunches, resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { createServiceClient } from "@/lib/supabase/server";
+import { resolveOccurredAt } from "@/lib/crew/occurred-at";
+import { assertOrgWritable } from "@/lib/org-writable";
+import { stopClockOutCap } from "@/lib/crew/visit-pause";
 import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
 
 const log = logger.child("crew/skip");
 
-const Body = z.object({ reason: z.string().min(1, "Reason is required").max(2000) });
+const Body = z.object({
+  reason: z.string().min(1, "Reason is required").max(2000),
+  /** When the crew tapped Skip (ISO). Both crew apps queue skips offline; bounded by resolveOccurredAt. */
+  occurredAt: z.string().optional(),
+});
 
 export async function POST(
   request: Request,
@@ -29,7 +36,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("org_id, crew_group_id, crew_id, crew_unassigned, client_id, job_id, job_service_id, scheduled_date, status, clocked_in_at, crm_jobs(crew_id)")
+    .select("org_id, crew_group_id, crew_id, crew_unassigned, client_id, job_id, job_service_id, scheduled_date, status, clocked_in_at, paused_at, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -37,6 +44,10 @@ export async function POST(
   if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
+  // The skip and its punch closes run partly under the service role, which
+  // skips the read-only-when-canceled RLS.
+  const readOnly = await assertOrgWritable(createServiceClient(), existing.org_id);
+  if (readOnly) return readOnly;
 
   // Status guard. A skip queued offline can reach the server long after the
   // crew clocked the stop out (or a supervisor cancelled it) — without this,
@@ -56,6 +67,10 @@ export async function POST(
   }
 
   const now = new Date().toISOString();
+  // When the skip actually happened — never before the stop's clock-in. A skip
+  // queued offline used to close the crew's punches at the sync time, paying
+  // everyone until the phone found signal.
+  const tappedAt = resolveOccurredAt(parsed.data.occurredAt, { notBefore: existing.clocked_in_at }).toISOString();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
@@ -89,10 +104,12 @@ export async function POST(
   if (existing.clocked_in_at) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: stopMates } = await (supabase as any)
-        .from("crm_job_visits")
-        .select("id, status")
-        .eq("client_id", existing.client_id)
+      const mateQuery = (supabase as any).from("crm_job_visits").select("id, status");
+      // .eq(col, null) matches nothing in PostgREST: a client-less stop's mates
+      // were never found, so its punches were never closed.
+      const { data: stopMates } = await (existing.client_id
+        ? mateQuery.eq("client_id", existing.client_id)
+        : mateQuery.is("client_id", null))
         .eq("scheduled_date", existing.scheduled_date)
         .eq("clocked_in_at", existing.clocked_in_at)
         .is("deleted_at", null);
@@ -101,10 +118,15 @@ export async function POST(
       if (!stillRunning) {
         // Service client: crew logins can't write punches directly (RLS); the
         // visit was authorized above and its stop-mates are found from it.
-        const punchWriter = createServiceClient();
-        for (const id of new Set([visitId, ...mates.map((m) => m.id)])) {
-          await closeStopPunches(punchWriter, id, now);
-        }
+        // Only the visit that actually holds the stop's punches (the same
+        // owner rule Stop Job and member times use), closed at the tap time.
+        const punchVisitId = await resolvePunchOwnerVisitId(supabase, mates.map((m) => m.id), visitId);
+        // ...or when the crew's day ended, if they ended it before skipping
+        // (paused at 4pm or End Day at 5pm, skipped next morning).
+        const closeAt = await stopClockOutCap(supabase, {
+          orgId: existing.org_id, punchVisitId, pausedAt: existing.paused_at ?? null, clockedInAt: existing.clocked_in_at, now: tappedAt,
+        });
+        await closeStopPunches(createServiceClient(), punchVisitId, closeAt);
       }
     } catch (err) {
       log.error("closing punches on skip failed", { visitId, error: err instanceof Error ? err.message : String(err) });
@@ -154,7 +176,7 @@ export async function POST(
       ref_id: existing.job_id,
       ref_table: "crm_jobs",
       created_by: user.id,
-      occurred_at: now,
+      occurred_at: tappedAt,
     });
     if (actErr) log.error("activity insert failed", { visitId, error: actErr.message });
   }

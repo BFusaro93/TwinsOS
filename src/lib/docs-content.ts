@@ -152,7 +152,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Requestor",
             detail:
-              "Can submit maintenance requests only. Cannot create work orders directly. Useful for field staff or other departments who need to flag issues.",
+              "Can submit maintenance requests only, and edit or delete their own while it's still Open. Cannot create work orders directly. Useful for field staff or other departments who need to flag issues.",
           },
           {
             step: "Viewer",
@@ -583,7 +583,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Recording a reading",
             detail:
-              "Click the meter and use '+ Add Reading'. Enter the value and date. The meter's current value updates to the latest reading.",
+              "Click the meter and use '+ Add Reading'. Enter the value and date (today or earlier, on your company's calendar). The meter's current value updates to the latest reading.",
           },
           {
             step: "Creating a meter-threshold automation",
@@ -613,7 +613,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Automations fire immediately on reading",
             detail:
-              "Every time you record a meter reading, the automations engine runs instantly in the background. If the reading crosses a threshold, the WO or request is created right away.",
+              "Every time you record a meter reading (or set a new meter's starting value, or edit a meter's value directly), the automations engine runs instantly in the background. If the reading crosses a threshold, the WO or request is created right away.",
           },
           {
             step: "Pre-built templates",
@@ -725,7 +725,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Cost and overhead",
             detail:
-              "A labor line's cost pre-fills from your org's breakeven (fully-burdened) rate the first time it's added, and only while it's still zero — edit it directly to override. Overhead markup applies per cost type (Labor, Sub-Contract, Product/Material, Asset/Equipment, Service/Other), each configurable separately in org settings.",
+              "A labor line's cost pre-fills from your org's breakeven (fully-burdened) rate the first time it's added, and only while it's still zero — edit it directly to override. Overhead markup applies per cost type (Labor, Sub-Contract, Product/Material, Asset/Equipment, Service/Other), each configurable separately in org settings. Lines costed at the breakeven rate get no overhead or labor burden added on top, because that rate already includes them; product sub-items get the Product/Material overhead.",
           },
           {
             step: "Reading the line-item grid",
@@ -735,7 +735,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Converting an estimate to a job",
             detail:
-              "Click 'Convert Estimate to Job', choose which line items to include, and pick a Job Type: One Time, Recurring, Project, or Waiting List. Package and Snow jobs are created directly rather than converted from an estimate. Set the scheduled date and assign a crew before confirming.",
+              "Click 'Convert Estimate to Job', choose which line items to include, and pick a Job Type: One Time, Recurring, Project, or Waiting List. Package and Snow jobs are created directly rather than converted from an estimate. Set the scheduled date and assign a crew before confirming. Once a line is converted, its price, quantity and visits are locked on the estimate (change them on the job); budgeted hours, cost, equipment and notes stay editable.",
           },
           {
             step: "Full guide",
@@ -1420,23 +1420,23 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         id: "report-center",
         title: "Report Center & Dashboards",
-        summary: "75 reports across 12 categories, curated and custom dashboards, and a customizable KPI Scorecard.",
+        summary: "100+ pre-built reports across 13 sections, your own saved analyses, scheduled email delivery, ready-made and custom dashboards, and a customizable KPI Scorecard.",
         icon: BarChart3,
         steps: [
           {
             step: "Where it lives",
             detail:
-              "CRM > Reports. A 6-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses), Payroll (crew hours from Start Day / End Day, editable and exportable; admins and managers only), and Graphics Library.",
+              "Administration > Reports in the Landscapt sidebar. Seven tabs: Dashboard (the original built-in overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses — New Analysis builds one), Scheduled (emailed reports), Payroll (crew hours from Start Day / End Day, editable, exportable and lockable; admins and roles with View & Edit Payroll Report), and Graphics Library. The ready-made dashboards (KPI Scorecard, Company Report, Social Media and others) are under the Dashboards tile on the Home screen.",
           },
           {
             step: "Categories",
             detail:
-              "Service, Client, Revenue, Schedule Lists, Job Costing, Financial, Audits, Lead, Estimates, Job Hours, Receivables, and Forms.",
+              "Service Reports, Revenue, Client, Job Hours, Schedule Lists, Audits, Financial, Estimates, Job Costing, Lead, Receivables, Tickets, and Forms.",
           },
           {
             step: "Exporting",
             detail:
-              "CSV, Excel, PDF, and print are all available on demand. There is no scheduled or emailed report delivery today.",
+              "CSV, Excel, PDF, and Print are on every report; downloads end with the same Totals row as the screen. Results stop at 5,000 rows, with a banner saying so. Scheduled delivery emails a report as PDF or Excel once, daily, weekly or monthly at an hour on your company's clock: use Schedule on the Actual v. Budgeted Hours reports, or Schedule… on a saved analysis in My Reports (with an optional rolling date window). Creating or changing a schedule needs Manage Report Center plus permission to view that report.",
           },
           {
             step: "KPI Scorecard",
@@ -1456,14 +1456,14 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Full guide",
             detail:
-              "A deeper walkthrough — a worked example running the Production Rate Accuracy report end to end, and the distinction between curated and custom dashboards.",
+              "A deeper walkthrough — how a report gets its numbers, a worked example running the Production Rate Accuracy report end to end, time zone and revenue rules, custom analyses and dashboards, Payroll, the audit trail, scheduled delivery, and who can see what.",
             href: "/settings/support/report-center-guide",
             linkLabel: "Open the Report Center guide",
           },
           {
             step: "Reports reference",
             detail:
-              "A description, available filters, and known gotchas for every one of the ~75 reports, organized by section — for researching a specific report rather than the Report Center itself.",
+              "A description, available filters, and known gotchas for every pre-built report, organized by section — for researching a specific report rather than the Report Center itself.",
             href: "/settings/support/reports-reference-guide",
             linkLabel: "Open the Reports Reference guide",
           },
@@ -1773,7 +1773,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Matching clients to customers",
             detail:
-              "An exact name match links automatically, no match creates a new QuickBooks customer, and similar-but-not-identical names ask you to choose: open the client, find the QuickBooks section, click Sync to QuickBooks and pick a match or 'None of these — create new'.",
+              "An exact name match links automatically (unless that customer is already linked to another client — a QuickBooks customer belongs to one client only, so the second client gets its own customer named with its account number, e.g. 'John Smith (acct #1042)'), no match creates a new QuickBooks customer, and similar-but-not-identical names ask you to choose: open the client, find the QuickBooks section, click Sync to QuickBooks and pick a match or 'None of these — create new'.",
           },
           {
             step: "Check for failures",
@@ -1906,8 +1906,40 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Maintenance & Work Orders",
     items: [
       {
+        q: "Who is shown as \"Submitted By\" on a maintenance request I create in the app?",
+        a: "You. The request is credited to whoever is signed in when it's created.",
+      },
+      {
+        q: "Can a Requestor or Purchaser edit or delete a maintenance request?",
+        a: "Only their own, and only while it's still Open. They can change the title, description, priority and asset or vehicle. Once someone starts reviewing it, it's locked for them; status changes and converting to a work order are handled by admins, managers and technicians.",
+      },
+      {
+        q: "Why did I get \"This request changed — refresh and try again\"?",
+        a: "Someone else changed the request's status after you opened it. Nothing was saved; refresh to see the current status. A request that's already linked to a work order keeps its status.",
+      },
+      {
+        q: "If someone picks a vehicle on the public request form or the field repair page, is it linked?",
+        a: "Yes. Picking an asset or a vehicle links the request to it, and converting the request attaches that asset or vehicle to the work order.",
+      },
+      {
+        q: "What happens to open maintenance requests when an asset or vehicle is deleted, disposed or sold?",
+        a: "They're closed as Rejected automatically, with a note in the description, and they no longer count as missed PMs in PM compliance.",
+      },
+      {
+        q: "Can I log a meter reading with a future date?",
+        a: "No. Readings can be dated today or earlier, using your company's calendar day (the organization time zone in Settings).",
+      },
+      {
+        q: "Does editing a meter's value directly run my meter automations?",
+        a: "Yes. A direct value edit, a new meter's starting value and a normal reading all run your meter automations right away.",
+      },
+      {
+        q: "How does the Samsara sync label the meter it creates?",
+        a: "As a Samsara meter named \"Odometer\" that carries the vehicle's name. Renaming the vehicle (or an asset) updates its meters' names too.",
+      },
+      {
         q: "What's the difference between a Work Order and a Maintenance Request?",
-        a: "A Work Order is a direct maintenance task — created by Staff, Managers, or Admins and immediately actionable. A Maintenance Request goes through an approval flow before becoming a Work Order. Requestors can only submit requests.",
+        a: "A Work Order is a direct maintenance task — created by Staff, Managers, or Admins and immediately actionable. A Maintenance Request goes through an approval flow before becoming a Work Order. Requestors can only submit requests (and edit or delete their own while it's still Open).",
       },
       {
         q: "Can a work order automatically create a requisition for parts?",
@@ -1978,6 +2010,114 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Landscapt (CRM)",
     items: [
+      {
+        q: "A crew tapped Start Day or End Day with no signal and it synced later. What time is recorded?",
+        a: "The time they tapped, as long as it's within the last 48 hours. The same goes for marking someone in, out or not working, and for Skip.",
+      },
+      {
+        q: "Our crew ended the day but forgot to tap Stop Job until the next morning. Is the night counted?",
+        a: "No. The job's time stops when the crew ended the day.",
+      },
+      {
+        q: "What happens if a crew starts a new job while another one is still running?",
+        a: "The other job's time stops automatically when the new one starts, so nobody is clocked into two jobs at once. The office sees a comment on that visit saying so, and it stays in progress until someone taps Stop Job or the office marks it complete.",
+      },
+      {
+        q: "If I move a job to another crew mid-day, what happens to the stop the first crew is working on?",
+        a: "It stays with the first crew so they can finish it, and finished visits keep the crew that did them. Only upcoming visits move to the new crew.",
+      },
+      {
+        q: "The office completed a stop before the crew tapped Stop Job. Are the crew's notes lost?",
+        a: "No. They're added to the visit's completion notes, and the crew's clocks close at the moment they tapped.",
+      },
+      {
+        q: "How do I stop anyone changing hours after I've run payroll?",
+        a: "An admin opens Report Center > Payroll and sets \"Lock payroll through\" to the last paid day. Shifts, punches and corrections on or before that date can't be changed by anyone (including the crew app) until an admin moves the lock back or unlocks it. Locked days show a Locked badge.",
+      },
+      {
+        q: "Who can change the payroll lock date?",
+        a: "Only admins, and only to a date before today. Every change is in the organization's change history.",
+      },
+      {
+        q: "Why does the crew app show the right day even when a phone is set to a different time zone?",
+        a: "\"Today\" always comes from your company's time zone in Settings, and the app checks it every time the schedule loads or the app is reopened.",
+      },
+      {
+        q: "Why can't our crew clock in or upload photos after our subscription ended?",
+        a: "A canceled or expired account is read-only, so the crew app shows a message instead of looking like the change saved.",
+      },
+      {
+        q: "Can a crew login see what we charge for a job?",
+        a: "Only each service's price on a stop, and only while \"Hide pricing from crew accounts\" is off. Job totals, labor and material costs and material prices are never available to a crew login, not even by querying the data directly. A crew login also can't change a visit's price or quantity.",
+      },
+      {
+        q: "Why does a dashboard marked visible to crews show no job data to my crew?",
+        a: "Reports built on jobs and visits include prices, so they return nothing to a crew login.",
+      },
+      {
+        q: "Why can't I change the price or quantity on some estimate lines?",
+        a: "Those lines have already been converted to a job. The job is what gets billed now, so change the price there. Hours, cost, equipment and notes stay editable on the estimate.",
+      },
+      {
+        q: "Why won't an estimate delete?",
+        a: "It has a job, invoice, contract, payment, project or change order made from it, or its online deposit is still processing. Bank transfers take a few business days; delete it once the deposit clears or fails.",
+      },
+      {
+        q: "What happens to follow-up emails when I delete an estimate?",
+        a: "Its automation sequences stop right away, any of its messages waiting for approval are rejected, and its pending approval requests leave the approvers' queue.",
+      },
+      {
+        q: "Why is no overhead added to some estimate line costs?",
+        a: "Lines costed at your break-even rate already include overhead and labor burden in that rate, so nothing is added on top. Overhead applies to costs you enter yourself, and product sub-items get materials overhead.",
+      },
+      {
+        q: "Is estimate equipment cost per visit?",
+        a: "Yes. Enter what one visit uses; the line's equipment cost is that times its visits. Sub-items are for the whole line.",
+      },
+      {
+        q: "Why did the man-hour calculator's Adjust Cost change my line cost?",
+        a: "It costs the line at exactly the rate you typed (hours × rate), even on square-foot lines. Type a cost to replace it, or 0 to go back to your break-even rate.",
+      },
+      {
+        q: "Does Invoice from an estimate include sub-items?",
+        a: "Yes. Each line's priced sub-items are part of its invoice line, so the invoice matches the estimate total.",
+      },
+      {
+        q: "Can visits on an estimate line be a fraction?",
+        a: "No. Visits is a whole number, 1 or more; a value like 2.5 is rounded when you leave the cell.",
+      },
+      {
+        q: "Why does my flat line discount come back after I raise the quantity?",
+        a: "A flat line discount keeps the amount you entered. If the line total drops below it, only the total's worth applies until the total goes back up.",
+      },
+      {
+        q: "Why did my invoice reminder sequence stop?",
+        a: "A sequence started by Invoice created, Invoice sent or Invoice past due ends on its own once the invoice is paid in full, voided or deleted. One started by Invoice paid only ends if the invoice is voided or deleted. The execution log shows the reason, e.g. \"invoice was paid in full\".",
+      },
+      {
+        q: "Do estimate and ticket follow-ups keep running after the estimate is won or the ticket is closed?",
+        a: "No. Estimate created, sent, expiring or no-response sequences stop when the estimate is won, lost or deleted. Ticket created, past due or reopened sequences stop when the ticket is closed or deleted. Won, lost and closed sequences only stop if the record is deleted.",
+      },
+      {
+        q: "I approved a queued automation step and got \"Not sent\". What happened?",
+        a: "Approving runs the same checks as an automatic send: the automation must still be on, the client must exist, the invoice, estimate, ticket or meeting must still apply, no stop condition can be met, and the step must still exist. Recipients who unsubscribed, bounced or replied STOP are dropped. If a check fails, the step is rejected automatically with the reason.",
+      },
+      {
+        q: "Why did a step vanish from the automation approval queue?",
+        a: "The queue only shows steps whose run is still going. Turning the automation or sequence off or deleting it, deleting the client, or the run ending on its own rejects its queued step automatically.",
+      },
+      {
+        q: "Why is the campaign Send Now count lower than my segment size?",
+        a: "It counts the emails that will actually go out. It leaves out Do Not Market clients, clients not OK to email, clients with no email, hard-bounced and opted-out addresses, and an address shared by several clients gets one copy.",
+      },
+      {
+        q: "Does a 7-day automation Wait step shift by an hour when the clocks change?",
+        a: "No. Days are counted on your company calendar, so a 7-day wait that starts at 9:00 AM resumes at 9:00 AM.",
+      },
+      {
+        q: "Who can create, schedule or send email campaigns?",
+        a: "Only people whose role has the campaign permissions: Add Campaign to create one, and Send/Launch Campaign to schedule or send it. Crew logins and roles without those permissions can't create or schedule campaigns, and only admins, managers or people with the Create/Modify Automation permission can change automation steps or decide a queued step.",
+      },
       {
         q: "How do I make an automation wait until a certain time of day, or skip weekends?",
         a: "Edit the Wait step and turn on 'Then wait until a time of day' (for example, wait 1 day, then continue at 9:00 AM; if that time has already passed it rolls to the next day) and/or 'Weekdays only' (a Saturday or Sunday result moves to Monday at the same time). Both are read on your company clock, including daylight saving.",
@@ -2108,7 +2248,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Why is the QuickBooks invoice stuck on “name exists as a vendor or employee”?",
-        a: "QuickBooks won't create a customer whose name already belongs to a vendor or employee. Rename the Landscapt client (or link it to the existing QuickBooks customer), then edit and save the invoice to retry.",
+        a: "QuickBooks won't create a customer whose name already belongs to a vendor or employee, so Landscapt creates it as \"Name (acct #number)\" instead. Only if that name is taken too does the invoice get stuck with this message. Rename the Landscapt client (or link it to the existing QuickBooks customer), then edit and save the invoice to retry.",
       },
       {
         q: "How do I see what my crews need to load on the truck?",
@@ -2164,11 +2304,11 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What is Equipment on an estimate line, and does the client see it?",
-        a: "Equipment is an internal cost. Add machines under Administration > Services > Equipment (cost rate, optional charge rate, per hour, per day or flat), then expand an estimate line and choose + Add Equipment. Quantity times rate counts against that line's margin. The client never sees it on the proposal, PDF, portal or invoice, and it does not change the line price. A service's Equipment tab can pre-fill machines on every new line of that service.",
+        a: "Equipment is an internal cost. Add machines under Administration > Services > Equipment (cost rate, optional charge rate, per hour, per day or flat), then expand an estimate line and choose + Add Equipment. Equipment is per visit: quantity (what one visit uses) times rate, times the line's visits, counts against that line's margin. The client never sees it on the proposal, PDF, portal or invoice, and it does not change the line price. A service's Equipment tab can pre-fill machines on every new line of that service.",
       },
       {
         q: "What are sub-items on a service bundle or estimate line?",
-        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the On estimate / Hidden button beside a sub-item's name controls whether it is printed under the line for the client. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
+        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the On estimate / Hidden button beside a sub-item's name controls whether it is printed under the line for the client. On the PDF a hidden sub-item's amount is included in the line's total, and section subtotals include every priced sub-item, so they add up to the estimate total. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
       },
       {
         q: "How do I add a service from my catalog as a sub-item on an estimate line?",
@@ -2204,7 +2344,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Can each estimate document have its own client-view toggles?",
-        a: "Yes. In the document's Edit Settings (Estimate-type documents only), tick 'Set What The Client Sees For This Document' and choose visits, quantities, units, line prices, line totals, section subtotals, package visits and the hide-$0 options. Those toggles are copied onto an estimate when it uses the document. The order, most specific first, is the estimate's own toggles, then the document's, then the service bundle's, then the org default. They are copied, so editing the document later does not change existing estimates or sent proposals.",
+        a: "Yes. In the document's Edit Settings (Estimate-type documents only), tick 'Set What The Client Sees For This Document' and choose visits, quantities, units, line prices, line totals, section subtotals, package visits, service name with description and the hide-$0 options. Those toggles are copied onto an estimate when it uses the document. The order, most specific first, is the estimate's own toggles, then the document's, then the service bundle's, then the org default. They are copied, so editing the document later does not change existing estimates or sent proposals.",
       },
       {
         q: "Can I put a package on an estimate?",
@@ -2288,7 +2428,15 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I delete an estimate?",
-        a: "Open the estimate and click Delete (the red button in the row of stage buttons), or tick one or more estimates in the Estimates list and choose Actions > Delete Selected. It asks you to confirm. You need the Edit Estimate permission. The estimate leaves your lists, its proposal link stops working and its follow-up sequences stop; if it was made from a ticket, the ticket can be converted again. An estimate with a job, invoice, contract, payment or project made from it can't be deleted until those are cancelled or deleted. To just take an estimate out of your open pipeline, mark it Lost instead.",
+        a: "Open the estimate and click Delete (the red button in the row of stage buttons), or tick one or more estimates in the Estimates list and choose Actions > Delete Selected. It asks you to confirm. You need the Edit Estimate permission. The estimate leaves your lists, its proposal link stops working, its follow-up sequences stop, any of its messages waiting for approval are rejected and its pending approval requests leave the approvers' queue; if it was made from a ticket, the ticket can be converted again. An estimate with a job, invoice, contract, payment, project or change order made from it can't be deleted until those are cancelled or deleted, and one whose online deposit is still processing can't be deleted until the deposit clears or fails. To just take an estimate out of your open pipeline, mark it Lost instead.",
+      },
+      {
+        q: "How do I make estimate numbers continue from my old system?",
+        a: "Go to Settings > Accounting > Estimate Numbering, enter the number the next estimate should have and click Set number. It never goes below the highest estimate number you already have, existing estimates keep their numbers, and invoices have their own Invoice Numbering card. Admins, managers and anyone with the Accounting or CRM settings permission can change it.",
+      },
+      {
+        q: "Why does my estimate PDF show only the description and not the service name?",
+        a: "A line with its own client-facing description prints just that description, so internal service names stay hidden. Turn on Service name with description in the estimate's Client View toggles (or the org default under Settings > Estimates > Client View) to print the name above the description on the PDF, emailed estimate, proposal page and client portal. A line with no description always prints its name.",
       },
       {
         q: "How do I change the status of or delete several estimate line items at once?",
@@ -2328,7 +2476,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "I applied a bundle with sub-items to an estimate and they did not show. Why?",
-        a: "Applying a bundle from the Apply bundle menu on an existing estimate used to copy the sub-items without refreshing the list, so they appeared only after a reload. They now show straight away. If a bundle's items have no sub-items in the bundle editor, there is nothing to copy.",
+        a: "Sub-items from Apply bundle show under their lines straight away; expand a line to see them. If a bundle's items have no sub-items in the bundle editor, there is nothing to copy.",
       },
       {
         q: "What does the Mine / Everyone toggle on My Day do?",
@@ -2404,7 +2552,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What if someone is late, out today, or leaves early?",
-        a: "On the Crew App's My Schedule screen tap Edit Crew. Mark 'Not working' for someone who is out (they're skipped by Start Day and Start Job), tap Clock In for a late arrival, 'Left for the day' for someone leaving early, and Back if they return the same day (the time away comes off as an unpaid break). The office can fix anything afterward on Report Center > Payroll, or with Edit Job Times on the Dispatch Board.",
+        a: "On the Crew App's My Schedule screen tap Edit Crew. Mark 'Not working' for someone who is out (they're skipped by Start Day and Start Job), tap Clock In for a late arrival, 'Left for the day' for someone leaving early, and Back if they return the same day (the time away comes off as an unpaid break). The office can fix anything afterward on Report Center > Payroll, or with Edit Job Times on the Dispatch Board, unless payroll is locked through that day.",
       },
       {
         q: "Can the crew leader add someone from another crew for the day?",
@@ -2436,7 +2584,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Where do I get crew hours for payroll?",
-        a: "Landscapt > Reports > Payroll tab (admins and any role with the \"View & Edit Payroll Report\" permission, under Report Access in the role editor; other users don't see the tab). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
+        a: "Landscapt > Reports > Payroll tab (admins and any role with the \"View & Edit Payroll Report\" permission, under Report Access in the role editor; other users don't see the tab). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Days on or before the 'Lock payroll through' date (set by an admin at the top of the tab) can't be corrected until an admin moves the lock. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
       },
       {
         q: "Can two crews work the same job on the same day?",
@@ -2660,6 +2808,38 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Users & Settings",
     items: [
       {
+        q: "Why did my Zap's \"Create Job\" step used to fail after \"Create Client\"?",
+        a: "Create Client makes a lead, and Create Job now converts that lead to a client first, just like the Convert button: the client gets today as its client-since date, a timeline note, and your \"Lead converted to client\" automations run once. A lead that was closed as lost is still refused; reopen it in the app first.",
+      },
+      {
+        q: "What does a 409 error from the API or Zapier mean?",
+        a: "The request broke one of your account's rules, such as creating a job for a closed-lost lead or setting a former client back to a lead. The error message says which rule. Only a 500 means a server problem that's worth retrying.",
+      },
+      {
+        q: "How do I retry an API create without making duplicates?",
+        a: "Send an Idempotency-Key header (for example a UUID) with each create. Retrying with the same key and the same request within 24 hours returns the first result instead of creating again; a different request with the same key is rejected (422). In MCP, pass idempotencyKey to any create tool. In Zapier, map a unique value from your trigger into the header on a Webhooks or custom request step.",
+      },
+      {
+        q: "Two of my clients have the same name. Will QuickBooks merge them?",
+        a: "No. A QuickBooks customer is linked to only one client. The second client gets its own customer named with its account number, for example \"John Smith (acct #1042)\".",
+      },
+      {
+        q: "QuickBooks says my client's customer is inactive. What do I do?",
+        a: "Make the customer active again in QuickBooks, or link the client to a different customer from its QuickBooks section, then retry. The automatic sync won't keep retrying it until you do.",
+      },
+      {
+        q: "After merging two clients, why do old invoices still show the old customer in QuickBooks?",
+        a: "Invoices already in QuickBooks stay on the customer they were created under, and their payments go to that same customer, because QuickBooks doesn't allow moving a paid invoice to another customer. New invoices go to the surviving client's customer.",
+      },
+      {
+        q: "Why does PATCH /jobs/{id} with scheduledDate or rateCents return 400?",
+        a: "scheduledDate only reschedules a job with a single visit that hasn't been dispatched, started or completed (the visit moves with it); reschedule jobs with several visits visit by visit in the app. rateCents only works for a job with one service line.",
+      },
+      {
+        q: "Do the Zapier triggers send the same fields I mapped when I set up the Zap?",
+        a: "Yes. Live (instant) trigger deliveries carry the same record fields as the sample Zapier shows during setup, plus the trigger type and client id.",
+      },
+      {
         q: "Where did some menu items go — what is the 'More' row in the sidebar?",
         a: "To keep the Landscapt sidebar short, less-used items sit under a collapsed More row at the bottom of their group: Requisitions, Contracts, Snow Invoicing and Commissions (Accounting), and Services, Products, Schedules, Packages and Documents (Administration). Invoices, Payments and Purchase Orders stay visible. The CRM and Scheduling groups are always fully visible. Click More to expand it; it opens by itself when you are on one of those pages. Commission plans and assignments now live in Settings > Commissions.",
       },
@@ -2693,7 +2873,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which Landscapt role permissions are actually enforced, and which only hide things?",
-        a: "Most are enforced on the server, so a role without them is refused even through another route. That covers creating or changing invoices and invoice lines, estimates and their lines, contracts, jobs (setting a job to Cancelled needs the Cancel permission), tickets, campaigns (scheduling and sending need Send; other edits need Edit), automations, document templates, packages, teams and running reports. The full list by permission is in the Users & Roles guide. Also enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",
+        a: "Most are enforced on the server, so a role without them is refused even through another route. That covers creating or changing invoices and invoice lines, estimates and their lines, contracts, jobs (setting a job to Cancelled needs the Cancel permission), tickets, campaigns (creating one needs Add, scheduling and sending need Send; other edits need Edit), automations, document templates, packages, teams and running reports. The full list by permission is in the Users & Roles guide. Also enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",
       },
       {
         q: "What is Ask AI, and what if it can't answer my question?",

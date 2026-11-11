@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { fetchCrewVisits } from '@/lib/api';
 import { subscribeScheduleRefresh } from '@/lib/hooks/schedule-refresh';
@@ -11,6 +12,10 @@ export interface PhotoRules {
 const NO_RULES: PhotoRules = { requireBefore: false, requireAfter: false };
 
 interface UseCrewStopsResult {
+  /** The day the server answered for (the org's today when no date was passed). */
+  date: string | null;
+  /** The org's IANA timezone, once the server has said (older servers: null). */
+  timeZone: string | null;
   stops: CrewStop[];
   crewName: string | null;
   drive: CrewDriveInfo;
@@ -33,7 +38,13 @@ const EMPTY_DRIVE: CrewDriveInfo = { openSegment: null, totalMinutes: 0 };
  * a flat per-visit list to the stop model; deliberately still plain fetch +
  * local state rather than TanStack Query, matching that hook's own note.
  */
-export function useCrewStops(date: string): UseCrewStopsResult {
+export function useCrewStops(date?: string): UseCrewStopsResult {
+  // `date` omitted = the ORG's today, decided by the server on every load (see
+  // fetchCrewVisits). The screens used to pass a module-level date computed
+  // once at launch from the phone's clock, so an app left open overnight (or a
+  // phone in another timezone) kept showing yesterday's route.
+  const [answeredDate, setAnsweredDate] = useState<string | null>(date ?? null);
+  const [timeZone, setTimeZone] = useState<string | null>(null);
   const [stops, setStops] = useState<CrewStop[]>([]);
   const [crewName, setCrewName] = useState<string | null>(null);
   const [drive, setDrive] = useState<CrewDriveInfo>(EMPTY_DRIVE);
@@ -48,6 +59,8 @@ export function useCrewStops(date: string): UseCrewStopsResult {
     setError(null);
     try {
       const data = await fetchCrewVisits(date);
+      setAnsweredDate(data.date ?? date ?? null);
+      setTimeZone(data.timeZone ?? null);
       setStops(data.stops);
       setCrewName(data.crewName);
       setDrive(data.drive ?? EMPTY_DRIVE);
@@ -69,5 +82,14 @@ export function useCrewStops(date: string): UseCrewStopsResult {
   // A push (new assignment, dispatcher note) asks every mounted schedule to refresh.
   useEffect(() => subscribeScheduleRefresh(() => void load(false)), [load]);
 
-  return { stops, crewName, drive, photoRules, isLoading, isRefetching, error, refetch };
+  // Coming back to the app (left open overnight, or after a call) reloads, so
+  // the org's new day shows without needing a screen change.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load(false);
+    });
+    return () => sub.remove();
+  }, [load]);
+
+  return { date: answeredDate, timeZone, stops, crewName, drive, photoRules, isLoading, isRefetching, error, refetch };
 }

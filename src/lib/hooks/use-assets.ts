@@ -319,44 +319,57 @@ export function useDeleteAsset() {
       const { error } = await supabase.from("assets").update({ deleted_at: deletedAt }).eq("id", id);
       if (error) throw error;
 
+      // The asset is gone from here on; a cleanup step that fails is reported
+      // (not swallowed) so nobody is left with a live meter or automation for
+      // an asset they can't see. Open maintenance requests for the asset are
+      // closed by the database (asset delete trigger).
+      const cleanupFailed = (what: string, err: { message?: string }) =>
+        new Error(`The asset was deleted, but ${what} failed: ${err.message ?? "unknown error"}. Try again or contact support.`);
+
       // Deactivate the asset's meters and any meter-threshold automations that
       // point at them, so readings/automations don't keep running for an asset
       // that no longer exists in the UI.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: assetMeters } = await (supabase as any)
+      const { data: assetMeters, error: metersErr } = await (supabase as any)
         .from("meters")
         .update({ deleted_at: deletedAt })
         .eq("asset_id", id)
         .is("deleted_at", null)
         .select("id");
+      if (metersErr) throw cleanupFailed("retiring its meters", metersErr);
       const meterIds = new Set<string>(((assetMeters ?? []) as { id: string }[]).map((m) => m.id));
       if (meterIds.size > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: autos } = await (supabase as any)
+        const { data: autos, error: autosErr } = await (supabase as any)
           .from("automations")
           .select("id, trigger_config")
           .eq("trigger_type", "meter_threshold")
           .eq("enabled", true)
           .is("deleted_at", null);
+        if (autosErr) throw cleanupFailed("turning off its meter automations", autosErr);
         const toDisable = ((autos ?? []) as { id: string; trigger_config: Record<string, unknown> | null }[])
           .filter((a) => meterIds.has(String(a.trigger_config?.meter_id ?? "")))
           .map((a) => a.id);
         if (toDisable.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("automations").update({ enabled: false }).in("id", toDisable);
+          const { error: disableErr } = await (supabase as any).from("automations").update({ enabled: false }).in("id", toDisable);
+          if (disableErr) throw cleanupFailed("turning off its meter automations", disableErr);
         }
       }
 
       // asset_parts rows cache the asset↔part link; without cleaning them up
       // here they go stale (and, since (asset_id, part_id) is UNIQUE, can
       // block re-linking the same part if the asset is ever restored/re-added).
-      await supabase.from("asset_parts").update({ deleted_at: deletedAt }).eq("asset_id", id).is("deleted_at", null);
+      const { error: partsErr } = await supabase.from("asset_parts").update({ deleted_at: deletedAt }).eq("asset_id", id).is("deleted_at", null);
+      if (partsErr) throw cleanupFailed("removing its part links", partsErr);
     },
-    onSuccess: () => {
+    onSettled: () => {
+      // Settled, not success: a cleanup failure still means the asset itself was deleted.
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
       queryClient.invalidateQueries({ queryKey: ["meters"] });
       queryClient.invalidateQueries({ queryKey: ["automations"] });
+      queryClient.invalidateQueries({ queryKey: ["requests"] });
     },
   });
 }

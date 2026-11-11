@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useCallback, useEffect } from "react";
+import { Fragment, useState, useCallback, useEffect, useRef } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents, resolveLineDiscountCents } from "@/lib/estimate-calc";
+import { bpsToPercent, centsToDisplay, clampComplexityBps, clampLineDiscount, computeLineItem, getBreakevenRateCents, lineEquipmentCostCents, lineVisits } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem, useEstimateSubitemTotals } from "@/lib/hooks/use-estimates";
 import { packageGroupLineIds } from "@/lib/estimates/package-group";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -85,6 +85,8 @@ function InlineNum({
   className,
   step,
   zeroAsEmpty = true,
+  disabled = false,
+  title,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -92,6 +94,8 @@ function InlineNum({
   onBlur?: () => void;
   className?: string;
   step?: number;
+  disabled?: boolean;
+  title?: string;
   /** `value || ""` makes 0 render as a blank box — the right call for a
    *  field where 0 means "unset" (Adj Rate), but confusing on Cost: typing
    *  0 to intentionally reset back to auto-fill mode looked like the input
@@ -112,13 +116,19 @@ function InlineNum({
       onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
       onFocus={onFocus}
       onBlur={onBlur}
+      disabled={disabled}
+      title={title}
       className={cn(
         "w-full rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none",
+        disabled && "cursor-not-allowed opacity-60",
         className
       )}
     />
   );
 }
+
+/** Shown on every locked control of a line that is already on a job. */
+const CONVERTED_LINE_MESSAGE = "Already converted to a job — change it on the job";
 
 // ── status badge / selector ───────────────────────────────────────────────────
 
@@ -131,7 +141,7 @@ const STATUS_COLOR: Record<LineItemStatus, string> = {
 
 // ── sub-item rows ─────────────────────────────────────────────────────────────
 
-function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClick: () => void }) {
+function SubitemRows({ lineItemId, onAddClick, readOnly = false }: { lineItemId: string; onAddClick: () => void; readOnly?: boolean }) {
   const { data: subitems = [], isLoading } = useLineItemSubitems(lineItemId);
   const { mutateAsync: deleteSubitem } = useDeleteSubitem();
   const { mutate: togglePrint } = useToggleSubitemPrint();
@@ -175,12 +185,15 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
               {s.printOnEstimate ? "On estimate" : "Hidden"}
             </button>
           </td>
-          <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400">{s.qty}</td>
+          <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400" title="Sub-items are for the whole line, not per visit">{s.qty}</td>
           <td colSpan={5} />
           <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400">
             ${(s.rateCents / 100).toFixed(2)}
           </td>
-          <td className="w-20 px-2 py-1 text-right tabular-nums font-medium text-slate-700 dark:text-neutral-300">
+          <td
+            className="w-20 px-2 py-1 text-right tabular-nums font-medium text-slate-700 dark:text-neutral-300"
+            title="For the whole line — sub-items are not multiplied by visits"
+          >
             {centsToDisplay(s.totalCents)}
           </td>
           <td />
@@ -192,6 +205,7 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
           </td>
           <td />
           <td className="px-2 py-1">
+            {!readOnly && (
             <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
               <button onClick={() => setEditingSubitem(s)} title="Edit"
                 className="rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
@@ -202,16 +216,24 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
                 <Trash2 className="h-3 w-3" />
               </button>
             </div>
+            )}
           </td>
           <td />
         </tr>
       ))}
       <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/40 dark:bg-muted/40">
         <td colSpan={17} className="px-8 py-1">
-          <button onClick={onAddClick}
-            className="text-[11px] text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline">
-            + Add Product / Service
-          </button>
+          {readOnly ? (
+            <span className="text-[11px] text-muted-foreground">{CONVERTED_LINE_MESSAGE}</span>
+          ) : (
+            <>
+              <button onClick={onAddClick}
+                className="text-[11px] text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline">
+                + Add Product / Service
+              </button>
+              <span className="ml-2 text-[10px] text-muted-foreground">Sub-items are for the whole line (not per visit).</span>
+            </>
+          )}
         </td>
       </tr>
       {editingSubitem && (
@@ -384,6 +406,7 @@ function LineItemRow({
   discounts,
   onStatusChange,
   takeoff,
+  converted = false,
 }: {
   item: EstimateLineItem;
   estimateId: string;
@@ -398,8 +421,16 @@ function LineItemRow({
   onStatusChange?: (status: LineItemStatus) => void;
   /** The estimate's client measurements, for the "use takeoff" shortcut on sq ft lines. */
   takeoff: ClientTakeoff | null;
+  /** Already turned into a job: its price, quantity, visits, discount, status
+   *  and the line itself are locked (the database refuses those changes too). */
+  converted?: boolean;
 }) {
   const [row, setRow] = useState<RowState>(() => item);
+  // The version of the line this row's unsaved edits started from. A save
+  // sends only the fields that differ from it, so two people editing the same
+  // estimate don't overwrite each other's unrelated changes (a whole-row write
+  // used to put back the notes, discount or status someone else had just saved).
+  const baseRef = useRef<RowState>(item);
   const { data: catalogServices } = useCRMServices();
   const isChemicalLine = !!row.serviceId && !!catalogServices?.find((s) => s.id === row.serviceId)?.trackChemicals;
   const [dirty, setDirty] = useState(false);
@@ -414,7 +445,10 @@ function LineItemRow({
   // this local draft, so the cell would keep showing pre-update values. Resync
   // whenever the incoming item changes and we don't have an unsaved local edit.
   useEffect(() => {
-    if (!dirty) setRow(item);
+    if (!dirty) {
+      setRow(item);
+      baseRef.current = item;
+    }
   }, [item, dirty]);
   const { mutateAsync: upsert, isPending } = useUpsertLineItem();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -424,7 +458,8 @@ function LineItemRow({
   const { data: lineEquipment = [] } = useLineItemEquipment(item.id);
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
-  const equipmentCents = lineEquipment.reduce((sum, e) => sum + e.totalCostCents, 0);
+  // Equipment is per visit (see lineEquipmentCostCents); sub-items are not.
+  const equipmentCents = lineEquipment.reduce((sum, e) => sum + lineEquipmentCostCents(e.totalCostCents, row.visits), 0);
 
   // A flat discount can't exceed the line's own (possibly now-smaller) total —
   // otherwise the line contributes NEGATIVE revenue to the estimate subtotal.
@@ -437,56 +472,80 @@ function LineItemRow({
   // A PERCENT discount is also re-derived here against the new total: its
   // discount_cents was a snapshot from when it was picked, so any qty/rate/
   // complexity change left the line discounted by the old dollar amount.
+  //
+  // A FLAT discount clamps its intended amount (discount_value), not the last
+  // applied discount_cents, so it grows back when the total does — see
+  // clampLineDiscount / resolveLineDiscountCents.
   function clampDiscount(r: RowState): RowState {
-    return { ...r, discountCents: resolveLineDiscountCents(r) };
+    const d = clampLineDiscount(r);
+    return { ...r, discountCents: d.discountCents, discountType: d.discountType as RowState["discountType"], discountValue: d.discountValue };
   }
 
-  function update<K extends keyof RowState>(key: K, val: RowState[K]) {
+  function updateFields(patch: Partial<RowState>) {
     setRow((prev) => {
-      const next = { ...prev, [key]: val };
+      const next = { ...prev, ...patch };
       const computed = computeLineItem(next, breakevenRateCents);
       return clampDiscount({ ...next, ...computed });
     });
     setDirty(true);
   }
 
-  async function save() {
-    if (!dirty) return;
+  function update<K extends keyof RowState>(key: K, val: RowState[K]) {
+    updateFields({ [key]: val } as Partial<RowState>);
+  }
+
+  async function persist(r: RowState) {
+    // Only what this row actually changed (vs the version its edits started
+    // from) — derived totals change whenever their inputs do, so they ride along.
+    const columns: [string, keyof RowState][] = [
+      ["service_id", "serviceId"], ["service_name", "serviceName"], ["status", "status"],
+      ["calc_type", "calcType"], ["qty", "qty"], ["unit_type", "unitType"],
+      ["production_rate_sqft_per_hr", "productionRateSqftPerHr"], ["budget_method", "budgetMethod"],
+      ["complexity_bps", "complexityBps"], ["rate_cents", "rateCents"], ["visits", "visits"],
+      ["total_cents", "totalCents"], ["discount_cents", "discountCents"], ["discount_type", "discountType"],
+      ["discount_value", "discountValue"], ["applied_discount_id", "appliedDiscountId"],
+      ["budgeted_hours", "budgetedHours"], ["total_budgeted_hours", "totalBudgetedHours"],
+      ["cost_cents", "costCents"], ["labor_cost_rate_cents", "laborCostRateCents"],
+      ["total_cost_cents", "totalCostCents"], ["margin_bps", "marginBps"], ["markup_bps", "markupBps"],
+      ["adj_rate_cents", "adjRateCents"], ["sort_order", "sortOrder"],
+    ];
+    const base = baseRef.current;
+    const patch: Record<string, unknown> = {};
+    for (const [col, key] of columns) {
+      if ((r[key] ?? null) !== (base[key] ?? null)) patch[col] = r[key] ?? null;
+    }
+    if (Object.keys(patch).length === 0) {
+      setDirty(false);
+      return;
+    }
     try {
-      await upsert({
-        estimateId,
-        item: {
-          id: row.id,
-          service_id: row.serviceId,
-          service_name: row.serviceName,
-          status: row.status,
-          calc_type: row.calcType,
-          qty: row.qty,
-          unit_type: row.unitType,
-          production_rate_sqft_per_hr: row.productionRateSqftPerHr,
-          budget_method: row.budgetMethod,
-          complexity_bps: row.complexityBps,
-          rate_cents: row.rateCents,
-          visits: row.visits,
-          total_cents: row.totalCents,
-          discount_cents: row.discountCents,
-          discount_type: row.discountType,
-          discount_value: row.discountValue,
-          applied_discount_id: row.appliedDiscountId,
-          budgeted_hours: row.budgetedHours,
-          total_budgeted_hours: row.totalBudgetedHours,
-          cost_cents: row.costCents,
-          total_cost_cents: row.totalCostCents,
-          margin_bps: row.marginBps,
-          markup_bps: row.markupBps,
-          adj_rate_cents: row.adjRateCents,
-          sort_order: row.sortOrder,
-        },
-      });
+      await upsert({ estimateId, item: { id: r.id, ...patch } });
+      baseRef.current = r;
       setDirty(false);
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Failed to save line item"));
     }
+  }
+
+  async function save() {
+    if (!dirty) return;
+    await persist(row);
+  }
+
+  // Visits are a whole number, 1 or more (estimate_line_items.visits is an
+  // integer — 2.5 used to be accepted here and then fail to save).
+  async function saveVisits() {
+    if (!dirty) return;
+    const fixed = lineVisits(row.visits);
+    if (fixed !== row.visits) {
+      toast.info("Visits must be a whole number, 1 or more");
+      const next = { ...row, visits: fixed };
+      const merged = clampDiscount({ ...next, ...computeLineItem(next, breakevenRateCents) });
+      setRow(merged);
+      await persist(merged);
+      return;
+    }
+    await persist(row);
   }
 
   async function saveDiscount(patch: LineItemDiscountPatch) {
@@ -515,7 +574,12 @@ function LineItemRow({
     // would recompute totalCostCents off the old budgetedHours in between),
     // and the upsert needs the freshly merged row, not the current closure's
     // stale `row` a queued save() would read.
-    const next = { ...row, budgetedHours: patch.budgetedHours, ...(patch.costCents !== undefined ? { costCents: patch.costCents } : {}) };
+    const next = {
+      ...row,
+      budgetedHours: patch.budgetedHours,
+      ...(patch.costCents !== undefined ? { costCents: patch.costCents } : {}),
+      ...(patch.laborCostRateCents !== undefined ? { laborCostRateCents: patch.laborCostRateCents } : {}),
+    };
     const computed = computeLineItem(next, breakevenRateCents);
     const merged: RowState = clampDiscount({ ...next, ...computed });
     setRow(merged);
@@ -530,6 +594,7 @@ function LineItemRow({
           budgeted_hours: merged.budgetedHours,
           total_budgeted_hours: merged.totalBudgetedHours,
           cost_cents: merged.costCents,
+          labor_cost_rate_cents: merged.laborCostRateCents ?? null,
           total_cost_cents: merged.totalCostCents,
           margin_bps: merged.marginBps,
           markup_bps: merged.markupBps,
@@ -537,6 +602,7 @@ function LineItemRow({
           discount_cents: merged.discountCents,
         },
       });
+      baseRef.current = merged;
     } catch (err) {
       setRow(row);
       toast.error(mutationErrorMessage(err, "Failed to update budgeted hours"));
@@ -612,7 +678,7 @@ function LineItemRow({
   const noRateWarning = row.rowType !== "section" && row.rateCents === 0 && (row.adjRateCents ?? 0) === 0;
   // Client takeoff the sq ft qty could be defaulted from (offered, never forced).
   const takeoffSqft = isAreaUnit(row.unitType) ? resolveTakeoffSqft(row.serviceName, takeoff) : null;
-  const offerTakeoff = takeoffSqft !== null && row.qty !== takeoffSqft;
+  const offerTakeoff = !converted && takeoffSqft !== null && row.qty !== takeoffSqft;
 
   // Is Cost auto-calculated from Budgeted Hours × the org's breakeven labor
   // rate? costCents stays 0 (see computeLineItem) for as long as this is
@@ -627,7 +693,7 @@ function LineItemRow({
   const subitemCostCents = subitems.reduce((a, si) => a + Math.round(si.costCents * si.qty), 0);
   const rolledRevenueCents = row.totalCents + subitemRevenueCents;
   const equipmentChargeCents = lineEquipment.reduce(
-    (a, e) => a + Math.round(e.qty * effectiveChargeCents(e.rateCents, e.chargeRateCents)),
+    (a, e) => a + lineEquipmentCostCents(Math.round(e.qty * effectiveChargeCents(e.rateCents, e.chargeRateCents)), row.visits),
     0
   );
   const hourlyServiceIds = new Set((catalogServices ?? []).filter((s) => s.serviceMode === "hourly").map((s) => s.id));
@@ -644,13 +710,16 @@ function LineItemRow({
     (equipmentCents > 0 || subitems.length > 0) && rolledRevenueCents > 0
       ? Math.round(((rolledRevenueCents - row.totalCostCents - equipmentCents - subitemCostCents) / rolledRevenueCents) * 10000)
       : row.marginBps;
-  const isAutoCost = !costFocused && row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
+  // Auto cost: hours × the line's own labor rate (set from the man-hour
+  // calculator) or, without one, × the org break-even rate.
+  const lineLaborRateCents = (row.laborCostRateCents ?? 0) > 0 ? (row.laborCostRateCents as number) : null;
+  const isAutoCost = !costFocused && row.costCents === 0 && (!!lineLaborRateCents || !!breakevenRateCents) && row.budgetedHours > 0;
   const isComplexityAdjusted = row.complexityBps !== 10000;
   // A fixed line's Cost is the whole line's cost (computeLineItem), so its
   // auto figure is the total, not a per-unit share.
   const autoCostPerUnitCents = isAutoCost
     ? row.calcType === 1
-      ? row.totalCostCents / (row.qty > 0 ? row.qty : 1) / (row.visits > 0 ? row.visits : 1)
+      ? row.totalCostCents / (row.qty > 0 ? row.qty : 1) / lineVisits(row.visits)
       : row.totalCostCents
     : 0;
 
@@ -691,6 +760,8 @@ function LineItemRow({
         <td className="px-2 py-1.5">
           <select
             value={row.status}
+            disabled={converted}
+            title={converted ? CONVERTED_LINE_MESSAGE : undefined}
             onChange={(e) => {
               const next = e.target.value as LineItemStatus;
               update("status", next);
@@ -699,6 +770,7 @@ function LineItemRow({
             onBlur={save}
             className={cn(
               "rounded px-1.5 py-0.5 text-[10px] font-medium focus:outline-none",
+              converted && "cursor-not-allowed opacity-70",
               STATUS_COLOR[row.status]
             )}
           >
@@ -714,6 +786,8 @@ function LineItemRow({
           <td className="w-20 px-2 py-1.5">
             <select
               value={row.tier ?? "all"}
+              disabled={converted}
+              title={converted ? CONVERTED_LINE_MESSAGE : undefined}
               onChange={async (e) => {
                 const val = e.target.value === "all" ? null : e.target.value as 'basic' | 'standard' | 'premium';
                 setRow((r) => ({ ...r, tier: val }));
@@ -780,8 +854,10 @@ function LineItemRow({
           <InlineNum
             value={row.visits}
             onChange={(v) => update("visits", v)}
-            onBlur={save}
+            onBlur={() => void saveVisits()}
             step={1}
+            disabled={converted}
+            title={converted ? CONVERTED_LINE_MESSAGE : "Whole number of visits, 1 or more"}
           />
         </td>
 
@@ -791,6 +867,8 @@ function LineItemRow({
             value={row.qty}
             onChange={(v) => update("qty", v)}
             onBlur={save}
+            disabled={converted}
+            title={converted ? CONVERTED_LINE_MESSAGE : undefined}
           />
         </td>
 
@@ -826,9 +904,7 @@ function LineItemRow({
                 />
                 <BudgetedHoursPopover
                   budgetedHours={row.budgetedHours}
-                  qty={row.qty}
                   visits={row.visits}
-                  calcType={row.calcType}
                   complexityBps={row.complexityBps}
                   totalCostCents={row.totalCostCents}
                   isAutoCost={isAutoCost}
@@ -856,6 +932,8 @@ function LineItemRow({
         <td className="w-12 px-2 py-1.5 text-center">
           <select
             value={row.calcType}
+            disabled={converted}
+            title={converted ? CONVERTED_LINE_MESSAGE : undefined}
             onChange={(e) => update("calcType", Number(e.target.value) as 0 | 1)}
             onBlur={save}
             className="rounded border border-border bg-card px-1 py-0.5 text-[10px] focus:outline-none"
@@ -871,6 +949,8 @@ function LineItemRow({
             value={row.rateCents / 100}
             onChange={(v) => update("rateCents", Math.round(v * 100))}
             onBlur={save}
+            disabled={converted}
+            title={converted ? CONVERTED_LINE_MESSAGE : undefined}
           />
         </td>
 
@@ -910,7 +990,14 @@ function LineItemRow({
         <td className="w-24 px-2 py-1.5">
           <InlineNum
             value={isAutoCost ? autoCostPerUnitCents / 100 : row.costCents / 100}
-            onChange={(v) => update("costCents", Math.round(v * 100))}
+            // Typing a cost replaces any labor rate the man-hour calculator set;
+            // typing 0 goes back to the org break-even rate.
+            onChange={(v) => updateFields({ costCents: Math.round(v * 100), laborCostRateCents: null })}
+            title={isAutoCost
+              ? lineLaborRateCents
+                ? `Budgeted hours × this line's labor rate (${centsToDisplay(lineLaborRateCents)}/man-hr)`
+                : "Budgeted hours × your break-even labor rate (it already includes overhead)"
+              : undefined}
             onFocus={() => setCostFocused(true)}
             onBlur={() => { setCostFocused(false); save(); }}
             className={isAutoCost ? "text-blue-600 dark:text-blue-400 font-medium" : undefined}
@@ -932,6 +1019,8 @@ function LineItemRow({
             value={(row.adjRateCents ?? 0) / 100}
             onChange={(v) => update("adjRateCents", v === 0 ? null : Math.round(v * 100))}
             onBlur={save}
+            disabled={converted}
+            title={converted ? CONVERTED_LINE_MESSAGE : undefined}
           />
         </td>
 
@@ -946,6 +1035,7 @@ function LineItemRow({
               lineTotalCents={row.totalCents}
               discounts={discounts}
               onSave={saveDiscount}
+              disabled={converted}
             />
             {/* Complexity lives OUTSIDE the hover-reveal group: an adjusted
                 line has to be identifiable at rest. Hover-reveal is also
@@ -956,6 +1046,8 @@ function LineItemRow({
             <LineItemComplexityPopover
               complexityBps={row.complexityBps}
               onSave={saveComplexity}
+              disabled={converted}
+              disabledReason={CONVERTED_LINE_MESSAGE}
             />
             <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <LineItemNotesPopover
@@ -972,8 +1064,12 @@ function LineItemRow({
             </button>
             <button
               onClick={() => onDelete(row.id)}
-              title="Delete"
-              className="rounded p-0.5 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
+              disabled={converted}
+              title={converted ? CONVERTED_LINE_MESSAGE : "Delete"}
+              className={cn(
+                "rounded p-0.5 text-slate-400 dark:text-neutral-500",
+                converted ? "cursor-not-allowed opacity-50" : "hover:text-red-500 dark:hover:text-red-400"
+              )}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -1049,11 +1145,13 @@ function LineItemRow({
         <SubitemRows
           lineItemId={item.id}
           onAddClick={() => setAddSubitemOpen(true)}
+          readOnly={converted}
         />
       )}
       {expanded && (
         <LineItemEquipmentRows
           lineItemId={item.id}
+          visits={row.visits}
           revenueCents={rolledRevenueCents}
           lineCostCents={row.totalCostCents + subitemCostCents}
         />
@@ -1101,10 +1199,15 @@ interface Props {
   onSelectionChange?: (ids: string[]) => void;
   tiersEnabled?: boolean;
   onItemStatusChange?: (status: LineItemStatus) => void;
+  /** Lines already turned into a job (useEstimateConvertedLines) — read-only here. */
+  convertedLineIds?: Set<string>;
+  /** A job from this estimate predates per-line tracking: every line counts as converted. */
+  allLinesConverted?: boolean;
 }
 
-export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items, allItems, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
+export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items, allItems, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange, convertedLineIds, allLinesConverted = false }: Props) {
   const everyItem = allItems ?? items;
+  const isConverted = (id: string) => allLinesConverted || !!convertedLineIds?.has(id);
   const { data: subitemTotals = {} } = useEstimateSubitemTotals(estimateId);
   const { data: services } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
@@ -1163,7 +1266,15 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       const target = everyItem.find((i) => i.id === id);
       // The package's own visits, by position from the full list: lines hidden by the status
       // tab are still part of it, and a second copy of the same package is a separate group.
+      if (target?.rowType !== "section" && (allLinesConverted || convertedLineIds?.has(id))) {
+        toast.error(CONVERTED_LINE_MESSAGE);
+        return;
+      }
       const groupIds = target?.rowType === "section" && target.packageId ? packageGroupLineIds(id, everyItem) : [];
+      if (groupIds.some((lineId) => allLinesConverted || convertedLineIds?.has(lineId))) {
+        toast.error("This package's visits are already on a job — change them on the job");
+        return;
+      }
       if (groupIds.length > 0) {
         setPackageDelete({ id, name: target?.sectionName ?? "this package", lineIds: groupIds });
         return;
@@ -1174,7 +1285,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         toast.error(mutationErrorMessage(err, "Failed to delete line item"));
       }
     },
-    [deleteItem, estimateId, everyItem]
+    [deleteItem, estimateId, everyItem, allLinesConverted, convertedLineIds]
   );
 
   async function confirmPackageDelete() {
@@ -1197,18 +1308,22 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     const lines = everyItem.filter((i) =>
       !i.deletedAt && i.rowType !== "section" && (groupIds ? groupIds.has(i.id) : i.packageId === packageId)
     );
-    const [first, ...rest] = lines;
+    const [first, ...allRest] = lines;
+    // Visits already on a job keep the job's price.
+    const rest = allRest.filter((l) => !isConverted(l.id));
+    if (allRest.length > rest.length) toast.info(`${allRest.length - rest.length} visit${allRest.length - rest.length !== 1 ? "s" : ""} skipped — already on a job`);
     if (!first || rest.length === 0) return;
     const pick = (src: EstimateLineItem): Partial<EstimateLineItem> => {
       switch (field) {
         case "qty": return { qty: src.qty };
         case "rate": return { rateCents: src.rateCents };
         case "hours": return { budgetedHours: src.budgetedHours };
-        case "cost": return { costCents: src.costCents };
+        case "cost": return { costCents: src.costCents, laborCostRateCents: src.laborCostRateCents ?? null };
         case "adj": return { adjRateCents: src.adjRateCents };
         default: return {
           qty: src.qty, rateCents: src.rateCents, calcType: src.calcType,
           budgetedHours: src.budgetedHours, costCents: src.costCents, adjRateCents: src.adjRateCents,
+          laborCostRateCents: src.laborCostRateCents ?? null,
         };
       }
     };
@@ -1217,7 +1332,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         const next = { ...line, ...pick(first) };
         const computed = computeLineItem(next, breakevenRateCents);
         const merged = { ...next, ...computed };
-        const withDiscount = { ...merged, discountCents: resolveLineDiscountCents(merged) };
+        const withDiscount = { ...merged, ...clampLineDiscount(merged) };
         await upsert({
           estimateId,
           item: {
@@ -1227,9 +1342,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             rate_cents: withDiscount.rateCents,
             total_cents: withDiscount.totalCents,
             discount_cents: withDiscount.discountCents,
+            discount_type: withDiscount.discountType,
+            discount_value: withDiscount.discountValue,
             budgeted_hours: withDiscount.budgetedHours,
             total_budgeted_hours: withDiscount.totalBudgetedHours,
             cost_cents: withDiscount.costCents,
+            labor_cost_rate_cents: withDiscount.laborCostRateCents ?? null,
             total_cost_cents: withDiscount.totalCostCents,
             margin_bps: withDiscount.marginBps,
             markup_bps: withDiscount.markupBps,
@@ -1262,6 +1380,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             budgeted_hours: item.budgetedHours,
             total_budgeted_hours: item.totalBudgetedHours,
             cost_cents: item.costCents,
+            labor_cost_rate_cents: item.laborCostRateCents ?? null,
             total_cost_cents: item.totalCostCents,
             margin_bps: item.marginBps,
             markup_bps: item.markupBps,
@@ -1847,6 +1966,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                       discounts={activeDiscounts}
                       onStatusChange={onItemStatusChange}
                       takeoff={takeoff}
+                      converted={isConverted(item.id)}
                     />
                   )}
                   {endsPackage && (

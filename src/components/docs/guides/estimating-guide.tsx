@@ -19,10 +19,10 @@ const STAGES: [string, string][] = [
 ];
 
 const COST_TYPES: [string, string, string][] = [
-  ["Labor", "Labor Overhead + Labor Burden", "Line items’ modeled cost (totalCostCents) is bucketed here, alongside any Direct Cost rows typed as Labor."],
+  ["Labor", "Labor Overhead + Labor Burden", "Line items’ cost and sub-service sub-items, alongside any Direct Cost rows typed as Labor. Lines costed at your break-even rate get no overhead added — that rate already includes it."],
   ["Sub-Contract", "Contract Overhead", "Subcontracted work entered as a Direct Cost."],
-  ["Product/Material", "Materials Overhead", "Materials entered as a Direct Cost."],
-  ["Asset/Equipment", "Equipment Overhead", "Equipment costs entered as a Direct Cost."],
+  ["Product/Material", "Materials Overhead", "Product sub-items on lines, and materials entered as a Direct Cost."],
+  ["Asset/Equipment", "Equipment Overhead", "Equipment on lines (per visit × the line’s visits), and equipment costs entered as a Direct Cost."],
   ["Service/Other", "Other Overhead", "Direct Costs typed as Service or Other — there’s no dedicated bucket for “Service,” so it shares Other’s rate."],
 ];
 
@@ -57,6 +57,7 @@ export function EstimatingGuide() {
           <TOCLink href="#deposits">Taking a deposit on acceptance</TOCLink>
           <TOCLink href="#estimate-limits">Rate and probability limits</TOCLink>
           <TOCLink href="#converting">Converting an estimate to a job</TOCLink>
+          <TOCLink href="#deleting">Deleting an estimate</TOCLink>
           <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
@@ -91,6 +92,13 @@ export function EstimatingGuide() {
         <p>
           From there you&rsquo;re in the estimate detail view, where line items, direct costs, and
           the summary panel all live.
+        </p>
+        <p>
+          <strong>Estimate numbers</strong> count up on their own. To continue the numbering from
+          another system, go to <strong>Settings → Accounting → Estimate Numbering</strong>, enter the
+          number the next estimate should have and click <strong>Set number</strong>. It never goes
+          below the highest estimate number already in use, existing estimates keep their numbers, and
+          invoices are numbered separately.
         </p>
       </Section>
 
@@ -233,11 +241,13 @@ export function EstimatingGuide() {
             line-item grid.
           </li>
           <li>
-            <strong>Overhead:</strong> at the estimate level, that $360.00 in modeled line-item
-            cost is bucketed as Labor cost and run through the org&rsquo;s configured Labor
-            overhead + Labor Burden percentages (set separately from the per-line breakeven rate)
-            to arrive at the estimate&rsquo;s overhead cost, which nets against gross profit to
-            produce the estimate&rsquo;s net profit figure in the summary panel.
+            <strong>Overhead:</strong> the $45.00/hr breakeven rate already includes overhead
+            recovery and labor burden, so <strong>no overhead is added</strong> on this
+            $360.00. Labor overhead and Labor Burden (or the flat overhead %) only apply to cost you
+            entered yourself &mdash; a typed Cost, a labor rate set from the B.Hrs calculator,
+            sub-items, equipment and Direct Costs. The estimate&rsquo;s overhead nets against gross
+            profit to give the net profit figure in the summary panel, and the Costs breakdown notes
+            how much of the labor was costed at the breakeven rate.
           </li>
         </ol>
         <p>
@@ -249,7 +259,10 @@ export function EstimatingGuide() {
           up instead of guessing: enter Men and Hrs:Min to compose budgeted hours (e.g. 2 men for
           2:30 = 5.0 hrs), or give it a target man-hour rate &mdash; defaulting to the org&rsquo;s
           breakeven labor rate &mdash; and it solves for whichever of Cost or B.Hrs you leave it to
-          fill in.
+          fill in. <strong>Adjust Cost</strong> costs the line at exactly that man-hour rate: 2.00
+          hours at $67.14 is $134.28 of cost, even on a 12,000 sq ft line. The Cost cell stays blue
+          and its tooltip shows the line&rsquo;s rate; type a Cost to replace it, or type 0 to go
+          back to the breakeven rate.
         </p>
       </Section>
 
@@ -338,7 +351,13 @@ export function EstimatingGuide() {
           <strong>$</strong> &mdash; the entered rate <em>is</em> the line&rsquo;s total,
           regardless of quantity). A fixed line with several visits is the same work repeated: its
           price covers every visit, and its budgeted hours and auto-calculated cost both count every
-          visit, so the margin isn&rsquo;t overstated.
+          visit, so the margin isn&rsquo;t overstated. <strong>Visits</strong> is a whole number, 1 or
+          more; a value like 2.5 is rounded when you leave the cell, with a note.
+        </p>
+        <p>
+          A <strong>line&apos;s flat discount</strong> works the same way as the estimate-level one: it
+          keeps the amount you entered. If the line&rsquo;s total drops below it, only the total&rsquo;s
+          worth applies, and the rest comes back when the total goes up again.
         </p>
         <p>
           An <strong>estimate-level flat discount</strong> keeps the amount you typed. If the subtotal
@@ -401,7 +420,9 @@ export function EstimatingGuide() {
             <strong>Print or hide on the estimate.</strong> On an estimate line, the <em>On estimate</em> /{" "}
             <em>Hidden</em> button beside each sub-item&apos;s name toggles whether it is printed under
             the line on the client&apos;s PDF, the preview and the emailed copy. New sub-items print by
-            default; sub-items that existed before this feature stay hidden so old estimates look the same.
+            default. On the PDF a printed sub-item shows its own amount on its row, while a hidden
+            sub-item&apos;s amount is included in the line&apos;s total, and section and option subtotals
+            include every priced sub-item, so they add up to the estimate total.
           </li>
           <li>
             <strong>Names, descriptions and $0 lines.</strong> A line with a client-facing description prints just
@@ -423,9 +444,12 @@ export function EstimatingGuide() {
           </li>
           <li>
             <strong>Equipment cost.</strong> A line can also carry internal equipment cost, which lowers
-            its margin but is never shown to the client. On each equipment row the bold amount is the{" "}
-            <strong>charge</strong> (what you type and what the line bills); the cost and margin sit
-            beside it in lighter text. See <em>Equipment costs</em> in the Services &amp; Pricing guide.
+            its margin but is never shown to the client. Equipment is <strong>per visit</strong>: the
+            quantity is what one visit uses, and the line&rsquo;s equipment cost is that times the
+            line&rsquo;s visits (a $40 mower on a 6-visit line costs $240). On each equipment row the bold
+            amount is the <strong>charge per visit</strong> (what the line price should cover); the cost and
+            margin sit beside it in lighter text. See <em>Equipment costs</em> in the Services &amp; Pricing
+            guide.
           </li>
           <li>
             <strong>Line notes box.</strong> The note icon on a line opens Estimate Desc, Job Note,
@@ -447,9 +471,12 @@ export function EstimatingGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Sub-items are added on top of the line&apos;s own Rate.</strong> The line&apos;s TP,
-            T.Cost and GM% include its sub-items, and so do the estimate totals and the Costs breakdown
-            on the right (sub-services under <em>Service</em>, products under <em>Product/Materials</em>).
+            <strong>Sub-items are added on top of the line&apos;s own Rate.</strong> A sub-item is for the{" "}
+            <strong>whole line</strong> &mdash; it isn&apos;t multiplied by the line&apos;s visits (equipment
+            is). The line&apos;s TP, T.Cost and GM% include its sub-items, and so do the estimate totals,
+            the Invoice button and the Costs breakdown on the right (sub-services under{" "}
+            <em>Labor / Line Items</em>, products under <em>Product/Materials</em>, which also decides
+            which overhead they get).
             If you price a line as one lump sum in Rate and also add sub-items that make up the same
             work, the work is counted twice. Either put the full price in Rate and hide the sub-items,
             or leave Rate to cover only what the sub-items don&apos;t.
@@ -463,7 +490,8 @@ export function EstimatingGuide() {
           <li>
             <strong>Where a line&apos;s cost comes from.</strong> When Budgeted Hours are set and Cost is
             left blank, the Cost shows in blue: budgeted hours times your organization&rsquo;s breakeven
-            (fully-burdened) labor rate. Typing a number in Cost replaces it. A sub-service&apos;s own cost is
+            (fully-burdened) labor rate, or the line&rsquo;s own rate if you set one with the B.Hrs
+            calculator. Typing a number in Cost replaces it. A sub-service&apos;s own cost is
             separate, so a labor sub-item with a $0 cost doesn&apos;t double the line&apos;s labor cost.
           </li>
         </ul>
@@ -514,18 +542,16 @@ export function EstimatingGuide() {
           <strong>Rate Increase</strong> and <strong>Delete</strong>. Delete asks for confirmation first.
           The actions apply only to ticked lines that are showing on the current status tab (switching
           tabs clears the ticks), and lines already converted to a job are skipped with a note saying how
-          many. A <strong>+$</strong> rate increase raises each line&apos;s total by that amount per
-          visit, whatever its unit; on a per-unit line too small to carry the amount in whole cents, use
-          a percentage instead.
+          many.
         </p>
         <p>
-          <strong>Deleting a whole estimate.</strong> Open the estimate and click <strong>Delete</strong>{" "}
-          (red, in the row of stage buttons), or tick estimates in the list and choose{" "}
-          <strong>Actions &gt; Delete Selected</strong>. You need the Edit Estimate permission. The
-          estimate leaves your lists, its proposal link stops working, and its follow-up sequences stop;
-          if it was made from a ticket, the ticket can be converted again. An estimate that has a job,
-          invoice, contract, payment or project made from it can&apos;t be deleted &mdash; cancel or delete
-          those first, or mark the estimate Lost if you only want it out of your open pipeline.
+          <strong>Lines already on a job are locked.</strong> Once a line has been converted to a job its
+          Status, Visits, Qty, Calc, Rate, Adj Rate, discount, complexity and sub-items can&apos;t be changed
+          on the estimate, and the line can&apos;t be deleted &mdash; hover a locked cell to see
+          &ldquo;Already converted to a job &mdash; change it on the job&rdquo;. Budgeted hours, cost,
+          equipment and notes stay editable. Copying values down a package skips its converted visits. A <strong>+$</strong> rate increase raises each line&apos;s total by that amount per
+          visit, whatever its unit; on a per-unit line too small to carry the amount in whole cents, use
+          a percentage instead.
         </p>
         <h3 className="text-base font-semibold">What the client sees</h3>
         <ul className="list-disc space-y-2 pl-5">
@@ -675,7 +701,7 @@ export function EstimatingGuide() {
           <strong>What the client sees.</strong> The page shows the client&rsquo;s billing address
           and the service address, has a <strong>Download PDF</strong> button, and a{" "}
           <strong>Request changes</strong> box. In the estimate&rsquo;s display settings,{" "}
-          <strong>Visits</strong>, <strong>Quantities</strong>, and <strong>Units</strong> are now
+          <strong>Visits</strong>, <strong>Quantities</strong>, and <strong>Units</strong> are
           three separate toggles for what shows on each line, on the page and the PDF.
         </p>
         <p>
@@ -863,9 +889,10 @@ export function EstimatingGuide() {
           </li>
           <li>
             <strong>Good / Better / Best.</strong> Before the client chooses a tier, the estimate total, tax
-            and pipeline value use the lowest-priced tier (&ldquo;starting at&rdquo;). That comparison now
-            includes each tier&rsquo;s priced sub-items, so a tier with large sub-items is no longer mistaken
-            for the cheapest.
+            and pipeline value use the lowest-priced tier (&ldquo;starting at&rdquo;). That comparison
+            includes each tier&rsquo;s priced sub-items, so a tier with large sub-items isn&rsquo;t mistaken
+            for the cheapest. The summary panel&rsquo;s Costs breakdown counts the same tier only, not
+            every option added together.
           </li>
           <li>
             <strong>Photos.</strong> iPhone HEIC photos are accepted on an estimate&rsquo;s Photos tab and
@@ -879,7 +906,18 @@ export function EstimatingGuide() {
           The estimate&rsquo;s <strong>tax rate</strong>, <strong>overhead rate</strong>, and{" "}
           <strong>win probability</strong> are percentages limited to 0&ndash;100%. A value outside
           that range is clamped when you leave the field, so a typo like 825 can&rsquo;t multiply
-          through the totals.
+          through the totals. A <strong>Direct Cost</strong> row&rsquo;s quantity and rate can&rsquo;t
+          be negative either.
+        </p>
+        <p>
+          <strong>Two people on one estimate.</strong> Saving a line, or the tax, overhead or discount
+          in the summary panel, saves only what you changed, so it doesn&rsquo;t put back something a
+          colleague changed in the meantime.
+        </p>
+        <p>
+          <strong>Duplicating</strong> an estimate keeps its estimate-level discount, whether it is a
+          percentage or a dollar amount. In the client portal, <strong>Hide $0 prices</strong> looks at
+          the rate the line is actually priced at (its Adj Rate when one is set).
         </p>
       </Section>
 
@@ -934,6 +972,9 @@ export function EstimatingGuide() {
           quantity &times; visits units at the per-unit rate the total works out to (Adj Rate and
           complexity included); for a fixed line, or when that rate isn&rsquo;t a whole number of
           cents, 1 &times; the line total. Editing anything on the invoice line then keeps its price.
+          Each line&rsquo;s priced <strong>sub-items</strong> are included in its invoice line (the same
+          way Convert to Job folds them in), so the invoice bills the full amount the estimate totals,
+          and on a Good / Better / Best estimate it bills the same tier the total is based on.
         </Callout>
         <Callout>
           <strong>A multi-visit line becomes a per-visit price.</strong> An estimate line priced
@@ -952,6 +993,24 @@ export function EstimatingGuide() {
           pass, and treats Scheduled Date as the program start.
         </Callout>
       </Section>
+      <Section id="deleting" title="Deleting an estimate">
+        <p>
+          Open the estimate and click <strong>Delete</strong>{" "}
+          (red, in the row of stage buttons), or tick estimates in the list and choose{" "}
+          <strong>Actions &gt; Delete Selected</strong>. You need the Edit Estimate permission (or Add
+          Estimate, for an estimate you created and haven&apos;t sent yet). The estimate leaves your lists,
+          its proposal link stops working, its follow-up sequences stop sending, any of its sequence
+          messages waiting for approval are rejected, and any approval request for it leaves the
+          approvers&apos; queue; if it was made from a ticket, the ticket can be converted again. An
+          estimate that has a job, invoice, contract, payment, project or change order made from it
+          can&apos;t be deleted &mdash; cancel or delete those first, or mark the estimate Lost if you only
+          want it out of your open pipeline. An estimate whose online deposit is still processing (a
+          bank transfer takes a few business days) can&apos;t be deleted until the deposit clears or
+          fails. If a deposit does arrive for an estimate that was already deleted, it is added to the
+          client&apos;s account as ordinary credit.
+        </p>
+      </Section>
+
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
           <li>

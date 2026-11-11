@@ -54,9 +54,20 @@ Syncs: clients (as QBO customers), invoices, payments, and later changes
 
 ## Mapping rules
 
-- **Customers:** exact `DisplayName` match auto-links; zero matches creates a
-  customer; fuzzy-only matches (even one) need a human to choose. Every client
-  is a top-level customer (no parent/child sub-customers).
+- **Customers:** exact `DisplayName` match (inactive customers included)
+  auto-links — unless another live client already holds that
+  `qbo_customer_id`, in which case a new customer "<Name> (acct #<account
+  number>)" is created (`ref <8 hex>` without an account number). An inactive
+  exact match raises `QboInactiveCustomerError` (fix in QBO). Zero matches
+  creates a customer, retrying under the disambiguated name on 6240. Fuzzy-only
+  matches (even one) need a human to choose; "create new" uses the same
+  fallback. One client per customer is enforced by the partial unique index
+  `clients_org_qbo_customer_unique`. Every client is a top-level customer (no
+  parent/child sub-customers).
+- **After Merge Clients:** an invoice already in QBO keeps its own
+  `CustomerRef` on update, and a payment uses its QBO invoice's `CustomerRef`
+  (QBO rejects re-parenting a paid invoice / a payment for another customer's
+  invoice).
 - **Lines:** a line whose name matches a `crm_services` row (case-insensitive)
   uses that service's own QBO item; anything else uses the shared "Services" item.
 - **Terms:** matched to a QBO Term by days-to-due (created as `Net N` /
@@ -75,6 +86,7 @@ needs QuickBooks Resync). Or check `qbo_sync_error` on the invoice/allocation.
 | Message / symptom | Cause | Fix |
 |---|---|---|
 | "Client match is ambiguous — resolve it from the client's QuickBooks section." | Only similar customer names exist in QBO | Client > QuickBooks section > Sync to QuickBooks, pick one or "create new", then Retry |
+| "This client's QuickBooks customer is inactive in QuickBooks…" | Exact-name customer exists but is inactive in QBO | Reactivate it in QBO, or link the client to another customer; Retry. (Not in the cron's skip list, so it retries each run until fixed.) |
 | "QuickBooks totals $X but this invoice is $Y — usually sales tax…" | QBO computed different tax (wrong tax code/agency, or QBO company not using the same rate) | Fix tax setup in QBO or the invoice rate; Retry. The invoice **was** created — this is a warning, not a failure |
 | "This invoice was voided in QuickBooks and can't be reopened there" | Voided directly in QBO, then reopened/edited here | Create a new Landscapt invoice; cannot be undone |
 | "This payment's invoice hasn't been pushed to QuickBooks yet." | Payment synced before its invoice | Retry the invoice first (or wait for the cron) |

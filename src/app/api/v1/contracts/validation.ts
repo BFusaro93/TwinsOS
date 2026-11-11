@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zoneWallClockToInstant } from "@/lib/time/zone";
 
 const BILLING_FREQUENCIES = ["weekly", "biweekly", "monthly", "quarterly", "annual", "one_time"] as const;
 const CONTRACT_STATUSES = ["draft", "sent", "signed", "active", "expired", "cancelled"] as const;
@@ -10,7 +11,11 @@ const CONTRACT_STATUSES = ["draft", "sent", "signed", "active", "expired", "canc
  * contract starts billing by a day.
  */
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be a YYYY-MM-DD date (no time component)");
-/** signedAt is a timestamptz: a full ISO instant, or a bare date meaning midnight. */
+/**
+ * signedAt is a timestamptz: a full ISO instant, a timestamp with no offset,
+ * or a bare date. The last two are read in the ORG's time zone by
+ * signedAtToInstant (not here — the zone is per org).
+ */
 const isoDateTime = z
   .string()
   .regex(
@@ -74,7 +79,9 @@ const contractItemSchema = z.object({
   status: z.enum(CONTRACT_STATUSES).optional().describe(STATUS_DESCRIPTION),
   signedAt: isoDateTime
     .optional()
-    .describe("When the contract was actually signed, for one executed outside the app. Does not by itself start billing."),
+    .describe(
+      "When the contract was actually signed, for one executed outside the app. Does not by itself start billing. A bare date (YYYY-MM-DD) or a time without a UTC offset is read in the organization's time zone."
+    ),
   signedBy: z.string().optional(),
   // 1-31, not 1-28: the app's own contract form allows the full range, and
   // both billing paths already clamp a day past the end of a short month
@@ -147,7 +154,9 @@ export const createContractSchema = z.object({
   status: z.enum(CONTRACT_STATUSES).optional().describe(STATUS_DESCRIPTION),
   signedAt: isoDateTime
     .optional()
-    .describe("When the contract was actually signed, for one executed outside the app. Does not by itself start billing."),
+    .describe(
+      "When the contract was actually signed, for one executed outside the app. Does not by itself start billing. A bare date (YYYY-MM-DD) or a time without a UTC offset is read in the organization's time zone."
+    ),
   signedBy: z.string().optional(),
   billingDayOfMonth: z
     .number()
@@ -181,3 +190,22 @@ export const createContractSchema = z.object({
 });
 
 export type CreateContractItem = z.infer<typeof contractItemSchema>;
+
+/**
+ * signedAt as the instant to store. A bare date ("2026-03-01") used to be
+ * cast by Postgres as UTC midnight — the evening of Feb 28 in the US, so the
+ * contract showed as signed a day early. A bare date is now midday of that
+ * date in the org's time zone (the same calendar day wherever it's viewed in
+ * the US), and a timestamp without an offset is that wall-clock time in the
+ * org's zone. A value with Z or ±hh:mm is an exact instant and kept as given.
+ */
+export function signedAtToInstant(value: string, timeZone: string): string {
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) return value;
+  const m = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?)?$/.exec(value);
+  if (!m) return value;
+  const [, date, hh, mm, ss, frac] = m;
+  const base = zoneWallClockToInstant(date, hh ? `${hh}:${mm}` : "12:00", timeZone);
+  if (!base) return value;
+  const extraMs = (ss ? Number(ss) * 1000 : 0) + (frac ? Math.round(Number(frac) * 1000) : 0);
+  return new Date(base.getTime() + extraMs).toISOString();
+}

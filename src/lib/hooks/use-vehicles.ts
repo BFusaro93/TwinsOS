@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapVehicle } from "@/lib/supabase/mappers";
 import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
@@ -17,10 +18,10 @@ export function useVehicles() {
     queryKey: ["vehicles"],
     queryFn: async () => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("vehicles").select("*").is("deleted_at", null).order("name");
-      if (error) throw error;
+      // Every page, not just the first (PostgREST caps a response at 1,000 rows).
+      const data = await fetchAllRows<Parameters<typeof mapVehicle>[0]>(() =>
+        supabase.from("vehicles").select("*").is("deleted_at", null).order("name")
+      );
       return (data.map(mapVehicle)) as Vehicle[];
     },
   });
@@ -351,36 +352,61 @@ export function useDeleteVehicle() {
       const { error } = await (supabase as any).from("vehicles").update({ deleted_at: deletedAt }).eq("id", id);
       if (error) throw error;
 
+      // The vehicle is gone from here on; a cleanup step that fails is
+      // reported (not swallowed) so nobody is left with a live meter or
+      // automation for a vehicle they can't see. Open maintenance requests
+      // for the vehicle are closed by the database (vehicle delete trigger).
+      const cleanupFailed = (what: string, err: { message?: string }) =>
+        new Error(`The vehicle was deleted, but ${what} failed: ${err.message ?? "unknown error"}. Try again or contact support.`);
+
       // Its meters keep the vehicle's asset_id: retire them and any meter-threshold automations
       // pointing at them so nothing keeps firing for a vehicle that no longer shows in the UI.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: vehicleMeters } = await (supabase as any)
+      const { data: vehicleMeters, error: metersErr } = await (supabase as any)
         .from("meters")
         .update({ deleted_at: deletedAt })
         .eq("asset_id", id)
         .is("deleted_at", null)
         .select("id");
+      if (metersErr) throw cleanupFailed("retiring its meters", metersErr);
       const meterIds = new Set<string>(((vehicleMeters ?? []) as { id: string }[]).map((m) => m.id));
       if (meterIds.size > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: autos } = await (supabase as any)
+        const { data: autos, error: autosErr } = await (supabase as any)
           .from("automations")
           .select("id, trigger_config")
           .eq("trigger_type", "meter_threshold")
           .eq("enabled", true)
           .is("deleted_at", null);
+        if (autosErr) throw cleanupFailed("turning off its meter automations", autosErr);
         const toDisable = ((autos ?? []) as { id: string; trigger_config: Record<string, unknown> | null }[])
           .filter((a) => meterIds.has(String(a.trigger_config?.meter_id ?? "")))
           .map((a) => a.id);
         if (toDisable.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("automations").update({ enabled: false }).in("id", toDisable);
+          const { error: disableErr } = await (supabase as any).from("automations").update({ enabled: false }).in("id", toDisable);
+          if (disableErr) throw cleanupFailed("turning off its meter automations", disableErr);
         }
       }
+
+      // Same as deleting an asset: its part links (asset_parts.asset_id is
+      // polymorphic too) go with it, otherwise they go stale and — since
+      // (asset_id, part_id) is unique — block re-linking if it's re-added.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: partsErr } = await (supabase as any)
+        .from("asset_parts")
+        .update({ deleted_at: deletedAt })
+        .eq("asset_id", id)
+        .is("deleted_at", null);
+      if (partsErr) throw cleanupFailed("removing its part links", partsErr);
     },
-    onSuccess: () => {
+    onSettled: () => {
+      // Settled, not success: a cleanup failure still means the vehicle itself was deleted.
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["meters"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
+      queryClient.invalidateQueries({ queryKey: ["automations"] });
+      queryClient.invalidateQueries({ queryKey: ["requests"] });
     },
   });
 }

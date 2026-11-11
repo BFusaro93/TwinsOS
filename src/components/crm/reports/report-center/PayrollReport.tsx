@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { AlertTriangle, ChevronDown, ChevronRight, Download, RotateCcw, Wallet } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Download, Lock, RotateCcw, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,9 +18,13 @@ import { instantToZoneWallClock, mondayOfYmd, shiftYmd, todayInZone } from "@/li
 import {
   PayrollForbiddenError,
   usePayroll,
+  usePayrollLock,
   useSavePayrollAdjustment,
+  useSetPayrollLock,
   type PayrollRow,
 } from "@/lib/hooks/use-payroll";
+import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
+import { isPayrollDayLocked } from "@/lib/crew/payroll-lock";
 import {
   DAILY_HEADERS, DAYS_TO_REVIEW_NOTE, LONG_BREAK_MINUTES, SUMMARY_HEADERS, dailyRows, groupPayrollByMember, isLongBreak, offClockBreakdown, periodLabel, summaryRows,
 } from "@/lib/payroll/export";
@@ -57,6 +61,7 @@ export function PayrollReport() {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const { data: rows = [], isLoading, error } = usePayroll(from, to);
   const members = useMemo(() => groupPayrollByMember(rows), [rows]);
+  const { data: lockedThrough = null } = usePayrollLock();
 
   const setRange = (r: { from: string; to: string }) => { setFrom(r.from); setTo(r.to); };
   const toggle = (id: string) =>
@@ -145,6 +150,8 @@ export function PayrollReport() {
         </div>
       </div>
 
+      <PayrollLockBar lockedThrough={lockedThrough} tz={tz} />
+
       <p className="text-xs text-muted-foreground">
         Paid time is each person&apos;s day — clocked in at the shop to clocked out at the shop — less lunch and unpaid pauses.
         Edit any day to change its hours or add shop time/PTO. The recorded hours stay visible and job costing is not changed.
@@ -197,7 +204,9 @@ export function PayrollReport() {
                         {m.adjustedDays > 0 && <Badge variant="outline">{m.adjustedDays} adjusted</Badge>}
                       </TableCell>
                     </TableRow>
-                    {isOpen && m.days.map((d) => <DayRow key={d.workDate} row={d} tz={tz} />)}
+                    {isOpen && m.days.map((d) => (
+                      <DayRow key={d.workDate} row={d} tz={tz} locked={isPayrollDayLocked(d.workDate, lockedThrough)} />
+                    ))}
                   </Fragment>
                 );
               })}
@@ -209,7 +218,68 @@ export function PayrollReport() {
   );
 }
 
-function DayRow({ row, tz }: { row: PayrollRow; tz: string }) {
+/**
+ * The payroll lock date: days on or before it can't be changed by anyone (the
+ * database refuses shift, punch and adjustment edits). Everyone with Payroll
+ * sees it; only an admin can move it, and only to a day before today.
+ */
+function PayrollLockBar({ lockedThrough, tz }: { lockedThrough: string | null; tz: string }) {
+  const { data: profile } = useCurrentProfile();
+  const isAdmin = profile?.role === "admin";
+  const setLock = useSetPayrollLock();
+  const [draft, setDraft] = useState<string>("");
+  const yesterday = shiftYmd(todayInZone(tz), -1);
+  const value = draft || lockedThrough || "";
+
+  if (!isAdmin && !lockedThrough) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+      <Lock className="h-4 w-4 text-muted-foreground" />
+      <span className="text-sm">
+        {lockedThrough
+          ? <>Payroll is locked through <strong>{format(parseISO(lockedThrough), "EEE MMM d, yyyy")}</strong> — those days can&apos;t be changed.</>
+          : "Payroll isn't locked. Lock a pay period after you've exported and paid it."}
+      </span>
+      {isAdmin && (
+        <div className="ml-auto flex items-center gap-2">
+          <Input
+            type="date"
+            value={value}
+            max={yesterday}
+            onChange={(e) => setDraft(e.target.value)}
+            aria-label="Lock payroll through"
+            className="h-8 w-40 text-xs"
+          />
+          <Button
+            size="sm"
+            className="h-8"
+            disabled={setLock.isPending || !value || value === lockedThrough || value > yesterday}
+            onClick={() => setLock.mutate(value, { onSuccess: () => setDraft("") })}
+          >
+            {lockedThrough ? "Move lock" : "Lock"}
+          </Button>
+          {lockedThrough && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8"
+              disabled={setLock.isPending}
+              onClick={() => {
+                if (window.confirm("Unlock payroll? Every past day becomes editable again.")) {
+                  setLock.mutate(null, { onSuccess: () => setDraft("") });
+                }
+              }}
+            >
+              Unlock
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: boolean }) {
   const save = useSavePayrollAdjustment();
   const [hours, setHours] = useState(row.hoursOverride != null ? String(row.hoursOverride) : "");
   const [extra, setExtra] = useState(row.extraHours ? String(row.extraHours) : "");
@@ -255,7 +325,14 @@ function DayRow({ row, tz }: { row: PayrollRow; tz: string }) {
     <TableRow className="bg-muted/30">
       <TableCell />
       <TableCell className="pl-6 text-sm">
-        <div>{format(parseISO(row.workDate), "EEE MMM d")}</div>
+        <div className="flex items-center gap-1.5">
+          {format(parseISO(row.workDate), "EEE MMM d")}
+          {locked && (
+            <Badge variant="outline" className="gap-1 px-1.5 py-0 text-[10px]" title="Payroll is locked for this day — an admin can move the lock date">
+              <Lock className="h-3 w-3" /> Locked
+            </Badge>
+          )}
+        </div>
         <div className="text-xs text-muted-foreground">
           {row.noShift ? "No day punch" : `${clock(row.shiftStart)} – ${row.openShift ? "still open" : clock(row.shiftEnd)}`}
         </div>
@@ -277,29 +354,29 @@ function DayRow({ row, tz }: { row: PayrollRow; tz: string }) {
       </TableCell>
       <TableCell>
         <div className="flex flex-wrap items-center gap-1">
-          <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} title={`Clock in (recorded ${clock(row.recordedStart)})`} className="h-8 w-36 text-xs" />
+          <Input disabled={locked} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} title={`Clock in (recorded ${clock(row.recordedStart)})`} className="h-8 w-36 text-xs" />
           <span className="text-xs text-muted-foreground">to</span>
-          <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} title={`Clock out (recorded ${row.recordedStart && !row.recordedEnd ? "still open" : clock(row.recordedEnd)})`} className="h-8 w-36 text-xs" />
-          <Input value={breakMins} onChange={(e) => setBreakMins(e.target.value)} inputMode="numeric" aria-label="Minutes off the clock" title={`Total unpaid minutes off the clock for the day (recorded ${row.recordedBreakMinutes}). Replaces the recorded breaks, job breaks included`} className="h-8 w-20 text-xs" />
+          <Input disabled={locked} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} title={`Clock out (recorded ${row.recordedStart && !row.recordedEnd ? "still open" : clock(row.recordedEnd)})`} className="h-8 w-36 text-xs" />
+          <Input disabled={locked} value={breakMins} onChange={(e) => setBreakMins(e.target.value)} inputMode="numeric" aria-label="Minutes off the clock" title={`Total unpaid minutes off the clock for the day (recorded ${row.recordedBreakMinutes}). Replaces the recorded breaks, job breaks included`} className="h-8 w-20 text-xs" />
           <span className="text-xs text-muted-foreground">min off</span>
         </div>
-        <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (why adjusted)" className="mt-1 h-8 text-xs" />
+        <Input disabled={locked} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (why adjusted)" className="mt-1 h-8 text-xs" />
       </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1">
           <span className="text-xs text-muted-foreground tabular-nums">{fmt(computed)} →</span>
-          <Input value={hours} onChange={(e) => setHours(e.target.value)} placeholder={fmt(computed)} inputMode="decimal" className="h-8 w-20 text-right" />
+          <Input disabled={locked} value={hours} onChange={(e) => setHours(e.target.value)} placeholder={fmt(computed)} inputMode="decimal" className="h-8 w-20 text-right" />
         </div>
       </TableCell>
       <TableCell className="text-right text-muted-foreground tabular-nums">{fmt(row.jobHours)}</TableCell>
       <TableCell className="text-right">
-        <Input value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="0.00" inputMode="decimal" className="h-8 w-20 text-right" />
+        <Input disabled={locked} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="0.00" inputMode="decimal" className="h-8 w-20 text-right" />
       </TableCell>
       <TableCell className="text-right font-medium tabular-nums">{fmt(row.totalHours)}</TableCell>
       <TableCell className="space-x-1 whitespace-nowrap">
-        <Button size="sm" className="h-8" disabled={!dirty || save.isPending} onClick={() => submit()}>Save</Button>
+        <Button size="sm" className="h-8" disabled={locked || !dirty || save.isPending} onClick={() => submit()}>Save</Button>
         {row.adjusted && (
-          <Button size="sm" variant="ghost" className="h-8 px-2" title="Reset to recorded hours" disabled={save.isPending} onClick={() => submit(true)}>
+          <Button size="sm" variant="ghost" className="h-8 px-2" title="Reset to recorded hours" disabled={locked || save.isPending} onClick={() => submit(true)}>
             <RotateCcw className="h-4 w-4" />
           </Button>
         )}

@@ -507,7 +507,7 @@ export function ClientsGuide() {
         </p>
         <p>
           <strong>Sync to Custom Fields.</strong> If your organization has number-type custom
-          fields (set up under CRM Settings → Custom Fields), the dialog lists each one with a
+          fields (set up under Settings → Landscapt Settings → Clients → Custom Client Fields), the dialog lists each one with a
           dropdown of what to keep it in sync with: Turf total, Mulch bed total, Parking lot total,
           Gross total, or a Perimeter / Edging / Other / All-distances total (the dropdown guesses a
           sensible match from the field name). A distance can instead be pointed at a specific

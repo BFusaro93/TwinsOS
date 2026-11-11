@@ -31,8 +31,14 @@ export function usePendingSequenceApprovals() {
       const supabase = db();
       const { data, error } = await supabase
         .from("crm_sequence_step_approvals")
-        .select("id, enrollment_id, sequence_id, client_id, channel, to_email, to_name, subject, body_html, to_phone, body_text, created_at, crm_automation_sequences(name), clients(display_name)")
+        // Only steps whose run is still live: a run that was stopped (automation
+        // turned off, its invoice paid, its client deleted…) or finished can't
+        // send, so its queued step isn't something to decide.
+        .select("id, enrollment_id, sequence_id, client_id, channel, to_email, to_name, subject, body_html, to_phone, body_text, created_at, crm_automation_sequences(name), clients(display_name), crm_sequence_enrollments!inner(stopped_at, completed_at, deleted_at)")
         .eq("status", "pending")
+        .is("crm_sequence_enrollments.stopped_at", null)
+        .is("crm_sequence_enrollments.completed_at", null)
+        .is("crm_sequence_enrollments.deleted_at", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
 
@@ -73,7 +79,9 @@ export function useDecideSequenceApproval() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    // Settled, not just success: a step the server rejected automatically (its
+    // run ended, its recipients opted out) answers 409 and must leave the list too.
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["crm-sequence-approvals"] });
     },
   });

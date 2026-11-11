@@ -299,6 +299,109 @@ export class QboDuplicateNameError extends Error {
   }
 }
 
+/** The client's QuickBooks customer exists but was made inactive there — QuickBooks won't take
+ *  new invoices or payments for it until it's active again. */
+export const QBO_INACTIVE_CUSTOMER_MESSAGE =
+  "This client's QuickBooks customer is inactive in QuickBooks — make it active again there, or link this client to a different QuickBooks customer from the client's QuickBooks section.";
+
+export class QboInactiveCustomerError extends Error {
+  constructor() {
+    super(QBO_INACTIVE_CUSTOMER_MESSAGE);
+    this.name = "QboInactiveCustomerError";
+  }
+}
+
+/**
+ * What customer matching needs to know about the Landscapt side, so two
+ * different clients that happen to share a name never end up on ONE
+ * QuickBooks customer (their invoices and payments would merge there).
+ */
+export interface CustomerMatchContext {
+  /** True when a DIFFERENT (non-deleted) client in the org is already linked to this QuickBooks customer. */
+  isLinkedToOtherClient: (customerId: string) => Promise<boolean>;
+  /** The name to create this client's customer under when its plain name is taken: "<name> (acct #<number>)". */
+  disambiguatedName: string;
+}
+
+/** "<name> (acct #123)", or "<name> (ref 1a2b3c4d)" for a client with no account number. */
+export function disambiguatedCustomerName(displayName: string, accountNumber: string | number | null | undefined, clientId: string): string {
+  const acct = accountNumber == null ? "" : String(accountNumber).trim();
+  const suffix = acct ? `acct #${acct}` : `ref ${clientId.replace(/-/g, "").slice(0, 8)}`;
+  return `${displayName.trim()} (${suffix})`;
+}
+
+/**
+ * Builds the matching context for one client. `db` only needs read access to
+ * the org's clients (a signed-in user's client works).
+ */
+export function customerMatchContextFor(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  client: { id: string; display_name: string; account_number?: string | number | null }
+): CustomerMatchContext {
+  return {
+    disambiguatedName: disambiguatedCustomerName(client.display_name, client.account_number, client.id),
+    isLinkedToOtherClient: async (customerId: string) => {
+      const { data, error } = await db
+        .from("clients")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("qbo_customer_id", customerId)
+        .neq("id", client.id)
+        .is("deleted_at", null)
+        .limit(1);
+      if (error) throw new Error(`Could not check existing QuickBooks links: ${error.message}`);
+      return (data ?? []).length > 0;
+    },
+  };
+}
+
+/** Customers with exactly this DisplayName — INCLUDING inactive ones (a plain query only returns active). */
+async function findCustomersByExactName(conn: QuickBooksConnection, displayName: string): Promise<{ Id: string; Active?: boolean }[]> {
+  return qboQuery(
+    conn,
+    `SELECT Id, DisplayName, Active FROM Customer WHERE DisplayName = '${escapeQboString(displayName)}' AND Active IN (true, false)`,
+    "Customer"
+  );
+}
+
+/**
+ * Creates the client's customer under its disambiguated name — or reuses a
+ * customer already carrying that exact name and linked to no other client
+ * (created by an earlier attempt whose link didn't save).
+ */
+async function createDisambiguatedCustomer(
+  conn: QuickBooksConnection,
+  input: CreateCustomerInput,
+  ctx: CustomerMatchContext
+): Promise<string> {
+  const existing = await findCustomersByExactName(conn, ctx.disambiguatedName);
+  if (existing.length === 1 && !(await ctx.isLinkedToOtherClient(existing[0].Id))) {
+    if (existing[0].Active === false) throw new QboInactiveCustomerError();
+    return existing[0].Id;
+  }
+  return createCustomer(conn, { ...input, displayName: ctx.disambiguatedName });
+}
+
+/**
+ * Creates a customer under the client's plain name; when QuickBooks already
+ * has that name (code 6240 — a vendor, an employee, or an inactive customer),
+ * retries once under the disambiguated name instead of failing.
+ */
+export async function createCustomerWithFallback(
+  conn: QuickBooksConnection,
+  input: CreateCustomerInput,
+  ctx: CustomerMatchContext
+): Promise<string> {
+  try {
+    return await createCustomer(conn, input);
+  } catch (err) {
+    if (!(err instanceof QboDuplicateNameError)) throw err;
+    return createDisambiguatedCustomer(conn, input, ctx);
+  }
+}
+
 export async function createCustomer(conn: QuickBooksConnection, input: CreateCustomerInput): Promise<string> {
   const body: Record<string, unknown> = { DisplayName: input.displayName };
   if (input.email) body.PrimaryEmailAddr = { Address: input.email };
@@ -360,13 +463,25 @@ export async function customerExists(conn: QuickBooksConnection, customerId: str
 
 export async function findOrCreateCustomer(
   conn: QuickBooksConnection,
-  input: CreateCustomerInput
+  input: CreateCustomerInput,
+  ctx: CustomerMatchContext
 ): Promise<FindOrCreateResult> {
   const escaped = escapeQboString(input.displayName);
 
-  const exact = await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName = '${escaped}'`, "Customer");
+  // Inactive customers included: QuickBooks still reserves their names, so a
+  // client whose customer was made inactive used to miss here and then fail
+  // the create with 6240, reported as "a vendor or employee has this name".
+  const exact = await findCustomersByExactName(conn, input.displayName);
   if (exact.length === 1) {
-    return { status: "matched", customerId: exact[0].Id };
+    const match = exact[0];
+    // Same name, but ANOTHER client already owns that customer (two "John
+    // Smith" accounts): linking this one too would merge their invoices and
+    // payments in QuickBooks. Give this client its own customer instead.
+    if (await ctx.isLinkedToOtherClient(match.Id)) {
+      return { status: "created", customerId: await createDisambiguatedCustomer(conn, input, ctx) };
+    }
+    if (match.Active === false) throw new QboInactiveCustomerError();
+    return { status: "matched", customerId: match.Id };
   }
 
   // `%` is the QuickBooks query wildcard: a name containing one ("100% Lawn") must not widen
@@ -376,7 +491,7 @@ export async function findOrCreateCustomer(
     ? await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName LIKE '%${fuzzyTerm}%'`, "Customer")
     : [];
   if (fuzzy.length === 0) {
-    const customerId = await createCustomer(conn, input);
+    const customerId = await createCustomerWithFallback(conn, input, ctx);
     return { status: "created", customerId };
   }
 
@@ -957,7 +1072,8 @@ async function resolveCustomerId(
   db: any,
   conn: QuickBooksConnection,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  client: any
+  client: any,
+  orgId: string
 ): Promise<{ customerId: string } | { ambiguous: true }> {
   if (client.qbo_customer_id) return { customerId: client.qbo_customer_id };
 
@@ -969,11 +1085,14 @@ async function resolveCustomerId(
     billingCity: client.billing_city,
     billingState: client.billing_state,
     billingZip: client.billing_zip,
-  });
+  }, customerMatchContextFor(db, orgId, client));
   if (match.status === "ambiguous") return { ambiguous: true };
 
   const customerId = match.customerId!;
-  await db.from("clients").update({ qbo_customer_id: customerId }).eq("id", client.id);
+  // One client per QuickBooks customer is also a unique index; losing a race
+  // for the same customer surfaces as this error rather than a silent double link.
+  const { error } = await db.from("clients").update({ qbo_customer_id: customerId }).eq("id", client.id);
+  if (error) throw new Error(`Matched QuickBooks customer #${customerId} but the link could not be saved: ${error.message}`);
   return { customerId };
 }
 
@@ -1129,7 +1248,7 @@ export async function pushInvoiceToQuickBooks(
     .from("crm_invoices")
     .select(`
       id, client_id, status, invoice_number, invoice_date, due_date, terms, description, qbo_invoice_id, discount_cents, tax_cents, tax_rate_bps, total_cents,
-      clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id, default_terms),
+      clients (id, display_name, account_number, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id, default_terms),
       crm_invoice_line_items (name, description, qty, rate_cents, total_cents, discount_cents, is_taxable, sort_order)
     `)
     .eq("id", invoiceId)
@@ -1150,16 +1269,6 @@ export async function pushInvoiceToQuickBooks(
   const attemptedAt = new Date().toISOString();
 
   try {
-    const resolved = await resolveCustomerId(db, conn, client);
-    if ("ambiguous" in resolved) {
-      await recordSyncResult(db, orgId, "error");
-      await db
-        .from("crm_invoices")
-        .update({ qbo_sync_error: "Client match is ambiguous — resolve it from the client's QuickBooks section.", qbo_sync_attempted_at: attemptedAt })
-        .eq("id", invoiceId);
-      return { status: "error", reason: "ambiguous_client_match" };
-    }
-
     /**
      * QuickBooks accepted the write, but if it computed a different total (tax
      * rounding, a rate it treats differently) the two books disagree — record
@@ -1198,12 +1307,34 @@ export async function pushInvoiceToQuickBooks(
         await db.from("crm_invoices").update({ qbo_sync_error: message, qbo_sync_attempted_at: attemptedAt }).eq("id", invoiceId);
         return { status: "error", reason: "voided_in_quickbooks", qboInvoiceId };
       }
-      const updateInput = await buildInvoicePushInput(db, conn, orgId, invoice, resolved.customerId);
+      // Keep the customer QuickBooks already has on this invoice. After Merge
+      // Clients the invoice belongs to the surviving client here, whose
+      // QuickBooks customer can differ — and QuickBooks rejects changing the
+      // customer of an invoice that has payments, so every later push failed.
+      const currentCustomerId = String((current.CustomerRef as { value?: string } | undefined)?.value ?? "");
+      let updateCustomerId = currentCustomerId;
+      if (!updateCustomerId) {
+        const resolvedForUpdate = await resolveCustomerId(db, conn, client, orgId);
+        if ("ambiguous" in resolvedForUpdate) throw new Error("Client match is ambiguous — resolve it from the client's QuickBooks section.");
+        updateCustomerId = resolvedForUpdate.customerId;
+      }
+      const updateInput = await buildInvoicePushInput(db, conn, orgId, invoice, updateCustomerId);
       // A lowered total moved payments off this invoice: shrink/void those in QuickBooks first.
       await reconcileInvoicePaymentLinks(db, orgId, invoiceId);
       const updated = await updateInvoice(conn, qboInvoiceId, updateInput);
       await markOk(driftMessage(updateInput, updated));
       return { status: "updated", qboInvoiceId };
+    }
+
+    // ── not yet in QuickBooks: find (or create) the client's customer first ──
+    const resolved = await resolveCustomerId(db, conn, client, orgId);
+    if ("ambiguous" in resolved) {
+      await recordSyncResult(db, orgId, "error");
+      await db
+        .from("crm_invoices")
+        .update({ qbo_sync_error: "Client match is ambiguous — resolve it from the client's QuickBooks section.", qbo_sync_attempted_at: attemptedAt })
+        .eq("id", invoiceId);
+      return { status: "error", reason: "ambiguous_client_match" };
     }
 
     // ── not yet linked: QuickBooks may already have it (sent before a disconnect/reconnect, or
@@ -1334,18 +1465,22 @@ export async function pushPaymentToQuickBooks(
   if (!client) return { status: "error", reason: "client_not_found" };
 
   const attemptedAt = new Date().toISOString();
-  let resolved: Awaited<ReturnType<typeof resolveCustomerId>>;
-  try {
-    resolved = await resolveCustomerId(db, conn, client);
-  } catch (err) {
-    log.error("QuickBooks payment push failed resolving customer", { err, paymentId, orgId });
-    await recordSyncResult(db, orgId, "error");
-    return { status: "error", reason: "quickbooks_api_error" };
-  }
-  if ("ambiguous" in resolved) {
-    await recordSyncResult(db, orgId, "error");
-    return { status: "error", reason: "ambiguous_client_match" };
-  }
+
+  // A payment is applied to an invoice QuickBooks already has, so it goes to
+  // THAT invoice's customer — not whatever the paying client resolves to now.
+  // After Merge Clients the two can differ (the duplicate's invoices keep the
+  // duplicate's QuickBooks customer), and QuickBooks rejects a payment whose
+  // customer doesn't own the invoice it is applied to, forever.
+  const invoiceCustomers = new Map<string, string>();
+  const customerForInvoice = async (qboInvoiceId: string): Promise<string> => {
+    const cached = invoiceCustomers.get(qboInvoiceId);
+    if (cached) return cached;
+    const qboInvoice = await getQboInvoice(conn, qboInvoiceId);
+    const customerId = String((qboInvoice.CustomerRef as { value?: string } | undefined)?.value ?? "");
+    if (!customerId) throw new Error(`QuickBooks invoice #${qboInvoiceId} has no customer`);
+    invoiceCustomers.set(qboInvoiceId, customerId);
+    return customerId;
+  };
 
   // Neither an AR write-off nor a staff-issued account credit is money received: both go to
   // QuickBooks as a credit memo applied to the invoice, never as a cash Payment. (Applying an
@@ -1382,9 +1517,10 @@ export async function pushPaymentToQuickBooks(
       // id also carries the amount: when an applied credit's amount changes, the
       // old memo is voided and a new one created for the same allocation, and
       // reusing the old requestid would hand back the voided memo.
+      const invoiceCustomerId = await customerForInvoice(qboInvoiceId);
       const qboPaymentId = asCreditMemo
         ? await createCreditMemoApplied(conn, {
-            customerId: resolved.customerId,
+            customerId: invoiceCustomerId,
             qboInvoiceId,
             amountCents: alloc.amount_cents,
             txnDate: payment.payment_date,
@@ -1392,7 +1528,7 @@ export async function pushPaymentToQuickBooks(
             requestId: `${String(alloc.id).replace(/-/g, "")}-${alloc.amount_cents}`,
           })
         : await createPayment(conn, {
-            customerId: resolved.customerId,
+            customerId: invoiceCustomerId,
             qboInvoiceId,
             amountCents: alloc.amount_cents,
             paymentDate: payment.payment_date,

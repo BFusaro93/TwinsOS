@@ -24,7 +24,7 @@ import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { EntityCombobox } from "@/components/shared/EntityCombobox";
 import { useCreateRequest, useUpdateRequest } from "@/lib/hooks/use-requests";
-import { useUsers } from "@/lib/hooks/use-users";
+import { toast } from "sonner";
 import type { MaintenanceRequest } from "@/types";
 
 interface NewRequestDialogProps {
@@ -43,7 +43,6 @@ export function NewRequestDialog({ open, onOpenChange, initialData }: NewRequest
 
   const { data: assets } = useAssets();
   const { data: vehicles } = useVehicles();
-  const { data: users } = useUsers();
   const createRequest = useCreateRequest();
   const updateRequest = useUpdateRequest();
 
@@ -51,13 +50,27 @@ export function NewRequestDialog({ open, onOpenChange, initialData }: NewRequest
     if (open && initialData) {
       setTitle(initialData.title);
       setPriority(initialData.priority);
-      // Requests only stored assetId — we don't know if it was a vehicle; default to asset prefix
+      // asset_id is polymorphic (asset OR vehicle); start as an asset and let
+      // the effect below switch it once the vehicle list is known.
       setEntityKey(initialData.assetId ? `asset:${initialData.assetId}` : "none");
       setDescription(initialData.description ?? "");
     }
   }, [open, initialData]);
 
-  const isValid = title.trim() && description.trim() && priority;
+  // A request linked to a vehicle stores the vehicle id in asset_id. Load it
+  // under the vehicle: key so the picker shows it (it was blank before, and
+  // saving then dropped the link).
+  const initialAssetId = initialData?.assetId ?? null;
+  const initialIsVehicle = !!initialAssetId && (vehicles ?? []).some((v) => v.id === initialAssetId);
+  useEffect(() => {
+    if (open && initialAssetId && initialIsVehicle) {
+      setEntityKey((k) => (k === `asset:${initialAssetId}` ? `vehicle:${initialAssetId}` : k));
+    }
+  }, [open, initialAssetId, initialIsVehicle]);
+
+  // Portal / field requests may have no description; don't make an edit
+  // (e.g. fixing the priority) impossible because of it.
+  const isValid = title.trim() && priority && (isEditing || description.trim());
 
   function handleClose() {
     onOpenChange(false);
@@ -75,7 +88,14 @@ export function NewRequestDialog({ open, onOpenChange, initialData }: NewRequest
     const vehicle = (vehicles ?? []).find((v) => v.id === entityId);
     const entityName = asset?.name ?? vehicle?.name ?? undefined;
     const resolvedAssetId = entityId || null;
+    const onError = (err: unknown) =>
+      toast.error(err instanceof Error ? err.message : "Could not save the request");
     if (isEditing && initialData) {
+      // Keep the name the request already has when nothing new was picked:
+      // portal / field requests often carry a typed equipment name with no
+      // linked record, and a linked unit may no longer be in the pickers.
+      const keptName =
+        resolvedAssetId === (initialData.assetId ?? null) ? initialData.assetName ?? null : null;
       updateRequest.mutate(
         {
           id: initialData.id,
@@ -83,23 +103,21 @@ export function NewRequestDialog({ open, onOpenChange, initialData }: NewRequest
           description,
           priority: priority as import("@/types/cmms").WorkOrderPriority,
           assetId: resolvedAssetId,
-          assetName: entityName ?? null,
+          assetName: entityName ?? keptName,
         },
-        { onSuccess: () => handleClose() }
+        { onSuccess: () => handleClose(), onError }
       );
     } else {
-      // Resolve current user name for requestedByName
-      const currentUserName = users?.[0]?.name ?? "Unknown";
+      // The requester is resolved from the signed-in user inside the hook.
       createRequest.mutate(
         {
           title,
           description,
           priority: priority as import("@/types/cmms").WorkOrderPriority,
-          requestedByName: currentUserName,
           assetId: resolvedAssetId,
           assetName: entityName,
         },
-        { onSuccess: () => handleClose() }
+        { onSuccess: () => handleClose(), onError }
       );
     }
   }
@@ -161,7 +179,7 @@ export function NewRequestDialog({ open, onOpenChange, initialData }: NewRequest
             {/* Description */}
             <div className="grid gap-1.5">
               <Label htmlFor="req-description">
-                Description <span className="text-red-500 dark:text-red-400">*</span>
+                Description {!isEditing && <span className="text-red-500 dark:text-red-400">*</span>}
               </Label>
               <Textarea
                 id="req-description"

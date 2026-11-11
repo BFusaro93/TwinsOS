@@ -47,10 +47,20 @@ async function handleRun(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { data: triggers } = await supabase
-    .from("crm_sequence_triggers")
-    .select("id, sequence_id, trigger_type, config, crm_automation_sequences(is_active, allow_reentry, reentry_after_minutes, crm_automations(is_active, org_id))")
-    .in("trigger_type", ["estimate_expiring", "estimate_no_response"]);
+  // Every org's date-gap triggers, paged: one select stops at 1,000 rows, which
+  // silently dropped the rest once enough orgs configured these triggers.
+  const triggers = await fetchAllRows<{
+    id: string;
+    sequence_id: string;
+    trigger_type: string;
+    config: unknown;
+    crm_automation_sequences: unknown;
+  }>(() =>
+    supabase
+      .from("crm_sequence_triggers")
+      .select("id, sequence_id, trigger_type, config, crm_automation_sequences(is_active, deleted_at, allow_reentry, reentry_after_minutes, crm_automations(is_active, deleted_at, org_id))")
+      .in("trigger_type", ["estimate_expiring", "estimate_no_response"])
+      .order("id"));
 
   let enrolled = 0;
   let stoppedEarly = false;
@@ -67,7 +77,7 @@ async function handleRun(request: Request) {
     const seq = trigger.crm_automation_sequences as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const auto = seq?.crm_automations as any;
-    if (!seq?.is_active || !auto?.is_active) continue;
+    if (!seq?.is_active || !auto?.is_active || seq.deleted_at || auto.deleted_at) continue;
 
     const orgId = auto.org_id as string;
     if (await orgCanceled(orgId)) continue; // canceled orgs get no automated enrollments
@@ -143,6 +153,7 @@ async function handleRun(request: Request) {
         orgId,
         clientId: est.client_id,
         estimateId: est.id,
+        triggerType: trigger.trigger_type,
       });
       if (ok) enrolled++;
     }

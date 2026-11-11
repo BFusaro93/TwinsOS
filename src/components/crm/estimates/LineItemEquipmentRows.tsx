@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { EyeOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { centsToDisplay, bpsToPercent } from "@/lib/estimate-calc";
+import { centsToDisplay, bpsToPercent, lineEquipmentCostCents, lineVisits } from "@/lib/estimate-calc";
 import {
   EQUIPMENT_UNIT_LABELS,
   effectiveChargeCents,
@@ -20,6 +20,10 @@ import { mutationErrorMessage } from "@/lib/utils/mutation-error";
  * proposal, PDF, portal or invoice — it only moves the line's cost and margin.
  * Name/unit/rate are a snapshot of the catalog entry, so editing a rate in
  * Settings never rewrites an estimate that was already priced.
+ *
+ * Equipment is PER VISIT: qty × rate is what one visit uses, and the line's
+ * equipment cost is that × the line's visits (sub-items, by contrast, are for
+ * the whole line).
  */
 
 function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId: string }) {
@@ -100,20 +104,20 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
             <>
               <span
                 className="tabular-nums font-semibold text-slate-800 dark:text-neutral-100"
-                title="What the line price should cover = qty × charge rate"
+                title="What the line price should cover per visit = qty × charge rate"
               >
-                charge {centsToDisplay(chargeCents)}
+                charge {centsToDisplay(chargeCents)} per visit
               </span>
               <span
                 className="tabular-nums text-muted-foreground"
-                title={`Internal cost = qty × rate. Charge ${centsToDisplay(chargeCents)} − cost ${centsToDisplay(row.totalCostCents)}`}
+                title={`Internal cost per visit = qty × rate. Charge ${centsToDisplay(chargeCents)} − cost ${centsToDisplay(row.totalCostCents)}`}
               >
-                cost {centsToDisplay(row.totalCostCents)} · margin {centsToDisplay(chargeCents - row.totalCostCents)}
+                cost {centsToDisplay(row.totalCostCents)} · margin {centsToDisplay(chargeCents - row.totalCostCents)} per visit
               </span>
             </>
           ) : (
-            <span className="tabular-nums font-semibold text-slate-800 dark:text-neutral-100" title="Internal cost = qty × rate (no markup set, so the charge is the same)">
-              {centsToDisplay(row.totalCostCents)}
+            <span className="tabular-nums font-semibold text-slate-800 dark:text-neutral-100" title="Internal cost per visit = qty × rate (no markup set, so the charge is the same)">
+              {centsToDisplay(row.totalCostCents)} per visit
             </span>
           )}
           <button
@@ -131,10 +135,13 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
 
 export function LineItemEquipmentRows({
   lineItemId,
+  visits,
   revenueCents,
   lineCostCents,
 }: {
   lineItemId: string;
+  /** The line's visits — equipment cost is per visit. */
+  visits: number;
   /** The line's total, the same basis the grid's GM% column uses. */
   revenueCents: number;
   /** The line's own modeled cost (labor/production rate), before equipment. */
@@ -146,9 +153,11 @@ export function LineItemEquipmentRows({
   const [picking, setPicking] = useState("");
 
   const active = catalog.filter((e) => e.isActive);
-  const equipmentCostCents = rows.reduce((s, r) => s + r.totalCostCents, 0);
+  const visitCount = lineVisits(visits);
+  // Whole-line figures: each row is per visit.
+  const equipmentCostCents = rows.reduce((s, r) => s + lineEquipmentCostCents(r.totalCostCents, visitCount), 0);
   const equipmentChargeCents = rows.reduce(
-    (s, r) => s + Math.round(r.qty * effectiveChargeCents(r.rateCents, r.chargeRateCents)),
+    (s, r) => s + lineEquipmentCostCents(Math.round(r.qty * effectiveChargeCents(r.rateCents, r.chargeRateCents)), visitCount),
     0
   );
 
@@ -211,6 +220,7 @@ export function LineItemEquipmentRows({
             {rows.length > 0 && (
               <span className="tabular-nums text-muted-foreground">
                 Equipment cost {centsToDisplay(equipmentCostCents)}
+                {visitCount > 1 && <> ({visitCount} visits)</>}
                 {equipmentChargeCents !== equipmentCostCents && (
                   <> · charge {centsToDisplay(equipmentChargeCents)} (line price should cover it)</>
                 )}{" "}

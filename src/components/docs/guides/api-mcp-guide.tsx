@@ -55,6 +55,7 @@ export function ApiMcpGuide() {
           <TOCLink href="#docs-tools">Answering &quot;how do I&hellip;&quot; from the help docs</TOCLink>
           <TOCLink href="#why-one-system">Why REST and MCP share one key</TOCLink>
           <TOCLink href="#managing-keys">Rate limits, errors & revoking</TOCLink>
+          <TOCLink href="#idempotency">Retrying safely (Idempotency-Key)</TOCLink>
         </div>
       </div>
 
@@ -462,6 +463,29 @@ export function ApiMcpGuide() {
           resubscribes.
         </p>
         <p>
+          <strong>Errors you can act on.</strong> When a request breaks one of your account&apos;s
+          rules — creating a job for a lead that was closed as lost, setting a former client back to
+          lead — the response is a <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">409</code>{" "}
+          (or <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">403</code> for a permission rule,{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">400</code> for a reference to a record that doesn&apos;t exist) with the rule&apos;s
+          own explanation in <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">error</code>. Only a genuine server problem is a{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">500</code>, which is safe to retry. A{" "}
+          &quot;Client not found&quot; for a client that was merged into another one includes{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">mergedIntoClientId</code>, the client to use instead.
+        </p>
+        <p>
+          <strong>Jobs.</strong> Creating a job for a client that is still a lead converts the lead to a
+          client first, exactly like the <strong>Convert</strong> button (client-since date, timeline note,
+          and your &quot;Lead converted to client&quot; automations run once); a closed-lost lead is
+          refused. When updating a job, <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">scheduledDate</code>{" "}
+          moves the job <em>and</em> its visit — but only for a job with a single visit that hasn&apos;t
+          been dispatched, started or completed. A job with several visits is rescheduled visit by visit
+          in the app. <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">rateCents</code>{" "}
+          sets the rate of the job&apos;s service line when it has exactly one; a job with several lines
+          is changed line by line in the app. Contract <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">signedAt</code>{" "}
+          given as a bare date is recorded as that date in your company&apos;s time zone.
+        </p>
+        <p>
           <strong>Revoking</strong> a key (from the same Public API Keys card) takes effect
           immediately — any REST client or MCP connection using it loses access right away, mid-session
           included. This cannot be undone; if the integration needs access again, issue a new key.
@@ -476,6 +500,27 @@ export function ApiMcpGuide() {
           <strong>Remove</strong> button next to it lets you clear it from the list entirely if it&apos;s
           just clutter — that only hides it from view, it doesn&apos;t erase the underlying audit record.
         </Callout>
+      </Section>
+
+      <Section id="idempotency" title="Retrying safely (Idempotency-Key)">
+        <p>
+          Every create (<code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">POST</code>) accepts an optional{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">Idempotency-Key</code>{" "}
+          header — any unique value up to 255 characters; a UUID per record you mean to create is ideal.
+          If a request times out and you aren&apos;t sure whether it went through, send it again with
+          the same key:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>Same key, same request, within 24 hours → you get the first response back (marked with an{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">Idempotent-Replayed: true</code> header), and nothing new is created.</li>
+          <li>Same key, different request → <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">422</code>. Use a new key for a new record.</li>
+          <li>Same key while the first request is still running → <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">409</code>; wait a moment and retry.</li>
+          <li>A request that failed (a validation error, a 409, a server error) doesn&apos;t use up its key — fix the problem and retry with the same key.</li>
+        </ul>
+        <p>
+          Over MCP, every <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">create_*</code> tool takes an optional{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">idempotencyKey</code> argument that does the same thing.
+        </p>
       </Section>
     </DocsFontScope>
   );

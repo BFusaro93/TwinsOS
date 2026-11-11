@@ -107,6 +107,49 @@ export function invoiceLinePricingFromEstimateLine(
 }
 
 /**
+ * The number of visits a line is priced, costed and scheduled for. Visits are
+ * a whole number, at least 1 (the grid only accepts that). A stored 0 / blank
+ * is read as 1 everywhere — revenue, hours and cost alike — so a per-unit
+ * line can't bill nothing while its cost is still counted, and a fixed line
+ * can't bill its full price while its cost is counted at a different visit
+ * count.
+ */
+export function lineVisits(visits: number | null | undefined): number {
+  return typeof visits === "number" && Number.isFinite(visits) && visits >= 1 ? Math.round(visits) : 1;
+}
+
+/**
+ * An equipment row's cost for its whole line. The stored total_cost_cents is
+ * qty × rate for ONE visit (equipment runs on every visit), so it is
+ * multiplied by the line's visits. Sub-items are not — they are for the whole
+ * line.
+ */
+export function lineEquipmentCostCents(perVisitCostCents: number, visits: number | null | undefined): number {
+  return Math.round(perVisitCostCents * lineVisits(visits));
+}
+
+/**
+ * True when a line's cost is the org BREAK-EVEN auto cost: no cost typed in
+ * (cost_cents 0 is the "never manually set" convention, see computeLineItem),
+ * no line labor rate from the man-hour calculator, and a non-zero modelled
+ * cost (budgeted hours × the break-even rate). The break-even rate already
+ * recovers overhead and labor burden, so these lines get NO labor overhead /
+ * burden (or flat overhead %) added on top — see estimateOverheadCents.
+ *
+ * Note this is about where the line's COST comes from, not how its hours are
+ * budgeted: crm_services.budget_method ('manual' | 'production_rate') decides
+ * the hours, and either kind of line can be costed at break-even (cost left
+ * at 0) or by hand (a typed cost).
+ */
+export function isBreakevenCosted(li: {
+  costCents: number | null | undefined;
+  laborCostRateCents?: number | null;
+  totalCostCents: number | null | undefined;
+}): boolean {
+  return (li.costCents ?? 0) === 0 && !((li.laborCostRateCents ?? 0) > 0) && (li.totalCostCents ?? 0) > 0;
+}
+
+/**
  * The hours a line ACTUALLY consumes: the stored, user-entered base hours
  * scaled by the line's complexity.
  *
@@ -182,6 +225,7 @@ export function computeLineItem(
     unitType?: string | null;
     productionRateSqftPerHr?: number | null;
     complexityBps?: number | null;
+    laborCostRateCents?: number | null;
   },
   breakevenRateCents?: number
 ): Pick<
@@ -195,10 +239,12 @@ export function computeLineItem(
 > & { budgetedHours: number } {
   const effectiveRate = item.adjRateCents ?? item.rateCents;
   const factor = complexityFactor(item.complexityBps);
+  // One visit rule for revenue, hours and cost alike (see lineVisits).
+  const visits = lineVisits(item.visits);
 
   const totalCents = Math.round(
     (item.calcType === 1
-      ? item.qty * effectiveRate * item.visits
+      ? item.qty * effectiveRate * visits
       : effectiveRate) * factor // fixed: total IS the rate
   );
 
@@ -227,7 +273,7 @@ export function computeLineItem(
   // so the next recompute starts from the same base instead of compounding.
   const scaledBudgetedHours = effectiveBudgetedHours({ budgetedHours, complexityBps: item.complexityBps });
 
-  const totalBudgetedHours = scaledBudgetedHours * item.visits;
+  const totalBudgetedHours = scaledBudgetedHours * visits;
 
   // `costCents === 0` is this type's "never manually set" convention (see
   // this function's docstring) — costCents is left at 0 for as long as the
@@ -248,8 +294,14 @@ export function computeLineItem(
   // responsible for computing a separate, display-only per-unit figure
   // (totalCostCents ÷ qty ÷ visits) if it wants to show one, without
   // feeding that back in as costCents.
+  // A line labor rate (the man-hour calculator's "Adjust Cost") takes the
+  // break-even rate's place for this line: cost = hours × that rate, exactly,
+  // instead of being squeezed into a whole-cent per-unit cost (1¢/sq ft on a
+  // 12,000 sq ft line turned $134.28 into $120.00).
+  const hourlyCostRateCents =
+    (item.laborCostRateCents ?? 0) > 0 ? (item.laborCostRateCents as number) : breakevenRateCents;
   let totalCostCents: number;
-  if (item.costCents === 0 && breakevenRateCents && scaledBudgetedHours > 0) {
+  if (item.costCents === 0 && hourlyCostRateCents && scaledBudgetedHours > 0) {
     // Costed off the COMPLEXITY-SCALED hours, not the stored base — a 125%
     // line really does burn 25% more labour. Using the scaled local here is
     // what keeps cost moving with the slider now that the stored hours no
@@ -260,11 +312,11 @@ export function computeLineItem(
     // them), and totalBudgetedHours above already counts N × the hours. Costing
     // only one occurrence understated a 3-visit fixed line's cost by 2/3 and
     // inflated its margin.
-    const perOccurrenceCostCents = Math.round(scaledBudgetedHours * breakevenRateCents);
-    totalCostCents = Math.round(perOccurrenceCostCents * Math.max(1, item.visits || 1));
+    const perOccurrenceCostCents = Math.round(scaledBudgetedHours * hourlyCostRateCents);
+    totalCostCents = Math.round(perOccurrenceCostCents * visits);
   } else {
     totalCostCents = Math.round(
-      (item.calcType === 1 ? item.costCents * item.qty * item.visits : item.costCents) * factor
+      (item.calcType === 1 ? item.costCents * item.qty * visits : item.costCents) * factor
     );
   }
   const costCents = item.costCents;
@@ -455,6 +507,13 @@ export function computeInstallmentSchedule(
  * Every writer of total_cents re-derives it through here, and
  * recalcEstimateTotals re-derives it as the backstop. Flat discounts are
  * clamped to the total so a line can never contribute negative revenue.
+ *
+ * A flat discount's INTENDED amount is discount_value (cents); discount_cents
+ * only holds what applied last time. Reading the amount back from
+ * discount_cents shrank it for good after one clamp (lower the qty so the
+ * total dips below the discount, raise it again, and the discount stayed
+ * small) — the same trap intendedEstimateDiscountCents avoids for the header
+ * discount. Legacy rows with no discount_value fall back to discount_cents.
  */
 export function resolveLineDiscountCents(li: {
   totalCents: number;
@@ -465,8 +524,66 @@ export function resolveLineDiscountCents(li: {
   const total = Math.max(0, li.totalCents ?? 0);
   const raw = li.discountType === "percent"
     ? Math.round(total * ((li.discountValue ?? 0) / 10000))
-    : (li.discountCents ?? 0);
+    : li.discountType === "flat" && li.discountValue != null
+      ? li.discountValue
+      : (li.discountCents ?? 0);
   return Math.max(0, Math.min(raw, total));
+}
+
+/**
+ * resolveLineDiscountCents plus intent preservation: a LEGACY flat discount
+ * (no discount_type / discount_value, only discount_cents) that is about to be
+ * clamped records its intended amount as discount_type 'flat' /
+ * discount_value first, so raising the total later restores it.
+ */
+export function clampLineDiscount(li: {
+  totalCents: number;
+  discountCents: number | null | undefined;
+  discountType: string | null | undefined;
+  discountValue: number | null | undefined;
+}): { discountCents: number; discountType: string | null; discountValue: number | null } {
+  const discountCents = resolveLineDiscountCents(li);
+  const legacy = li.discountType == null && li.discountValue == null;
+  if (legacy && (li.discountCents ?? 0) > discountCents) {
+    return { discountCents, discountType: "flat", discountValue: li.discountCents ?? 0 };
+  }
+  return { discountCents, discountType: li.discountType ?? null, discountValue: li.discountValue ?? null };
+}
+
+/**
+ * Overhead dollars on an estimate's costs. Shared by recalcEstimateTotals and
+ * anything that explains its figure, so they can't drift.
+ *
+ *  - Lines costed at the org BREAK-EVEN rate (isBreakevenCosted) get nothing
+ *    added: that rate already includes overhead recovery and labor burden.
+ *  - Other line labor cost (typed cost or a line labor rate) and sub-service
+ *    sub-items: labor overhead + labor burden.
+ *  - Product sub-items: materials overhead.
+ *  - Equipment: equipment overhead.
+ *  - Direct costs: their own cost type's overhead.
+ * With no per-type overhead configured, the estimate's flat overhead % applies
+ * to every cost except the break-even-costed lines.
+ */
+export function estimateOverheadCents(args: {
+  settings: OverheadSettings;
+  flatOverheadRateBps: number;
+  /** Line labor cost NOT at the break-even rate, plus sub-service sub-items. */
+  otherLaborCostCents: number;
+  productSubitemCostCents: number;
+  equipmentCostCents: number;
+  directCosts: { costType: DirectCostType; totalCents: number }[];
+}): number {
+  const directTotal = args.directCosts.reduce((s, dc) => s + dc.totalCents, 0);
+  if (hasPerTypeOverhead(args.settings)) {
+    return (
+      args.directCosts.reduce((sum, dc) => sum + computeDirectCostOverhead(dc.costType, dc.totalCents, args.settings), 0) +
+      computeDirectCostOverhead("labor", args.otherLaborCostCents, args.settings) +
+      computeDirectCostOverhead("product_material", args.productSubitemCostCents, args.settings) +
+      computeDirectCostOverhead("asset_equipment", args.equipmentCostCents, args.settings)
+    );
+  }
+  const overheadBase = args.otherLaborCostCents + args.productSubitemCostCents + args.equipmentCostCents + directTotal;
+  return Math.round((overheadBase * (args.flatOverheadRateBps ?? 0)) / 10000);
 }
 
 /**
@@ -587,7 +704,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
 
   const { data: rawLineItems, error: liError } = await supabase
     .from("estimate_line_items")
-    .select("id, status, tier, total_cents, discount_cents, discount_type, discount_value, total_cost_cents, total_budgeted_hours")
+    .select("id, status, tier, total_cents, discount_cents, discount_type, discount_value, total_cost_cents, total_budgeted_hours, cost_cents, labor_cost_rate_cents, visits")
     .eq("estimate_id", estimateId)
     .not("status", "in", "(lost,draft)")
     .is("deleted_at", null);
@@ -598,19 +715,31 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // the proposal and job conversion all read the same figure.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const li of (rawLineItems ?? []) as any[]) {
-    const resolved = resolveLineDiscountCents({
+    const clamped = clampLineDiscount({
       totalCents: li.total_cents,
       discountCents: li.discount_cents,
       discountType: li.discount_type,
       discountValue: li.discount_value,
     });
-    if (resolved !== (li.discount_cents ?? 0)) {
-      const { error: dErr } = await supabase
+    if (clamped.discountCents !== (li.discount_cents ?? 0)) {
+      const recordsIntent = clamped.discountType !== (li.discount_type ?? null);
+      let { error: dErr } = await supabase
         .from("estimate_line_items")
-        .update({ discount_cents: resolved })
+        .update({
+          discount_cents: clamped.discountCents,
+          ...(recordsIntent ? { discount_type: clamped.discountType, discount_value: clamped.discountValue } : {}),
+        })
         .eq("id", li.id);
+      // A line already on a job refuses discount_type / discount_value changes
+      // (guard_converted_estimate_line); the applied amount still syncs.
+      if (dErr && recordsIntent) {
+        ({ error: dErr } = await supabase
+          .from("estimate_line_items")
+          .update({ discount_cents: clamped.discountCents })
+          .eq("id", li.id));
+      }
       if (dErr) throw dErr;
-      li.discount_cents = resolved;
+      li.discount_cents = clamped.discountCents;
     }
   }
 
@@ -623,7 +752,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // have no status of their own to filter on.
   const { data: rawSubitems, error: siError } = await supabase
     .from("estimate_line_item_subitems")
-    .select("line_item_id, total_cents, cost_cents, qty, estimate_line_items!inner(estimate_id, status, deleted_at)")
+    .select("line_item_id, type, total_cents, cost_cents, qty, estimate_line_items!inner(estimate_id, status, deleted_at)")
     .eq("estimate_line_items.estimate_id", estimateId)
     .not("estimate_line_items.status", "in", "(lost,draft)")
     .is("estimate_line_items.deleted_at", null)
@@ -661,9 +790,12 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // joins labor/material cost in the margin and gets equipment overhead, but is
   // never billed or shown to the client. Same inner-join + parent-status
   // filtering as sub-items above, for the same reason (no estimate_id column).
+  // An equipment row's total_cost_cents is qty × rate for ONE visit — the
+  // mower runs on every visit — so it is multiplied by the line's visits here
+  // (lineEquipmentCostCents). Sub-items, by contrast, are for the whole line.
   const { data: rawEquipment, error: eqError } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .from("estimate_line_item_equipment")
-    .select("line_item_id, total_cost_cents, estimate_line_items!inner(estimate_id, status, deleted_at)")
+    .select("line_item_id, total_cost_cents, estimate_line_items!inner(estimate_id, status, deleted_at, visits)")
     .eq("estimate_line_items.estimate_id", estimateId)
     .not("estimate_line_items.status", "in", "(lost,draft)")
     .is("estimate_line_items.deleted_at", null)
@@ -672,7 +804,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const equipmentCostCents = ((rawEquipment ?? []) as any[])
     .filter((eq) => countedLineIds.has(eq.line_item_id))
-    .reduce((s: number, eq) => s + (eq.total_cost_cents ?? 0), 0);
+    .reduce((s: number, eq) => s + lineEquipmentCostCents(eq.total_cost_cents ?? 0, eq.estimate_line_items?.visits), 0);
 
   const { data: overheadRow } = await supabase
     .from("crm_overhead_settings")
@@ -696,11 +828,23 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const subitemRevenueCents = subitems.reduce((s: number, si: any) => s + (si.total_cents ?? 0), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subitemCostCents = subitems.reduce((s: number, si: any) => s + Math.round((si.cost_cents ?? 0) * (si.qty ?? 1)), 0);
+  const subitemCost = (si: any) => Math.round((si.cost_cents ?? 0) * (si.qty ?? 1));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const productSubitemCostCents = subitems.filter((si: any) => si.type === "product").reduce((s: number, si: any) => s + subitemCost(si), 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subserviceSubitemCostCents = subitems.filter((si: any) => si.type !== "product").reduce((s: number, si: any) => s + subitemCost(si), 0);
   const subtotalCents = lineItemSubtotalCents + subitemRevenueCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const laborAndSubitemCostCents = lineItems.reduce((s: number, li: any) => s + li.total_cost_cents, 0) + subitemCostCents;
-  const totalCostCents = laborAndSubitemCostCents + equipmentCostCents;
+  const lineCost = (li: any) => Number(li.total_cost_cents ?? 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const breakevenLines = lineItems.filter((li: any) =>
+    isBreakevenCosted({ costCents: li.cost_cents, laborCostRateCents: li.labor_cost_rate_cents, totalCostCents: li.total_cost_cents }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const breakevenLaborCostCents = breakevenLines.reduce((s: number, li: any) => s + lineCost(li), 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allLineCostCents = lineItems.reduce((s: number, li: any) => s + lineCost(li), 0);
+  const otherLaborCostCents = allLineCostCents - breakevenLaborCostCents + subserviceSubitemCostCents;
+  const totalCostCents = allLineCostCents + productSubitemCostCents + subserviceSubitemCostCents + equipmentCostCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
   // A "percent" discount is a % of the subtotal at whatever it is NOW, not a
@@ -729,27 +873,21 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     est.discount_type !== "percent" && est.discount_value == null && (est.discount_cents ?? 0) > discountCents;
   const approvalAmountCents = estimateApprovalAmountCents(!!est.tiers_enabled, tierLines, discountShape, totalCents);
 
-  // Overhead must be based on the estimate's FULL cost base — line items'
-  // own modeled cost (total_cost_cents) AND estimate_direct_costs rows —
-  // not just one or the other. Previously the flat-rate branch only looked
-  // at totalCostCents (line items) and ignored directTotal entirely, while
-  // the per-type branch only looked at directCosts and ignored line items'
-  // cost entirely: an estimate whose cost lives mostly in Direct Costs
-  // (materials/subcontract/equipment entered there rather than modeled on
-  // line items) showed a configured flat overhead rate (e.g. 15%) but $0
-  // actual Overhead Cost and no gross→net deduction, since totalCostCents
-  // alone was 0. Line items' cost has no cost_type of its own — it's
-  // modeled/production-rate labor cost, so it's treated as 'labor' here,
-  // matching how EstimateSummaryPanel's own cost-breakdown display already
-  // buckets it (costByType.labor += line items' totalCostCents).
-  const overheadCostCents = hasPerTypeOverhead(overheadSettings)
-    ? (directCosts ?? []).reduce(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (sum: number, dc: any) => sum + computeDirectCostOverhead(dc.cost_type, dc.total_cents, overheadSettings),
-        0
-      ) + computeDirectCostOverhead("labor", laborAndSubitemCostCents, overheadSettings)
-        + computeDirectCostOverhead("asset_equipment", equipmentCostCents, overheadSettings)
-    : Math.round(((totalCostCents + directTotal) * (est.overhead_rate_bps ?? 0)) / 10000);
+  // Overhead is based on the estimate's FULL cost base — line items' own
+  // modeled cost, sub-items, equipment AND estimate_direct_costs rows — with
+  // one exception: lines costed at the org break-even rate already carry
+  // their overhead recovery and labor burden (that is what the break-even
+  // rate IS), so adding labor overhead / burden or the flat overhead % on top
+  // charged overhead twice. See estimateOverheadCents for the buckets.
+  const overheadCostCents = estimateOverheadCents({
+    settings: overheadSettings,
+    flatOverheadRateBps: est.overhead_rate_bps ?? 0,
+    otherLaborCostCents,
+    productSubitemCostCents,
+    equipmentCostCents,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    directCosts: ((directCosts ?? []) as any[]).map((dc) => ({ costType: dc.cost_type as DirectCostType, totalCents: dc.total_cents ?? 0 })),
+  });
 
   const grossProfitCents = revenueCents - totalCostCents - directTotal;
   const netProfitCents = grossProfitCents - overheadCostCents;

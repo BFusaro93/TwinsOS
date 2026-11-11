@@ -10,6 +10,9 @@ import { COMPLEXITY_BPS_DEFAULT, COMPLEXITY_BPS_MAX, COMPLEXITY_BPS_MIN, clampCo
 interface Props {
   complexityBps: number;
   onSave: (complexityBps: number) => void;
+  /** Read-only (e.g. the line is already on a job): shows the value, can't open. */
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 // Drag-to-adjust range: 50%-200%, matching Aspire's complexity slider. 10000
@@ -20,7 +23,7 @@ interface Props {
 const MIN_PCT = COMPLEXITY_BPS_MIN / 100;
 const MAX_PCT = COMPLEXITY_BPS_MAX / 100;
 
-export function LineItemComplexityPopover({ complexityBps, onSave }: Props) {
+export function LineItemComplexityPopover({ complexityBps, onSave, disabled = false, disabledReason }: Props) {
   const [open, setOpen] = useState(false);
   // Seed from the CLAMPED stored value. Nothing in the database bounds
   // complexity_bps, so a row written by an API caller or an older build could
@@ -30,6 +33,7 @@ export function LineItemComplexityPopover({ complexityBps, onSave }: Props) {
   const [draftPct, setDraftPct] = useState(clampComplexityBps(complexityBps) / 100);
 
   function handleOpen(o: boolean) {
+    if (o && disabled) return;
     if (o) setDraftPct(clampComplexityBps(complexityBps) / 100);
     setOpen(o);
   }
@@ -61,7 +65,8 @@ export function LineItemComplexityPopover({ complexityBps, onSave }: Props) {
               ? "text-brand-600 dark:text-brand-400"
               : "w-6 text-slate-400 dark:text-neutral-500 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
           )}
-          title={isAdjusted ? `Complexity ${(complexityBps / 100).toFixed(0)}% — scales this line's price and cost` : "Complexity adjustment"}
+          disabled={disabled}
+          title={disabled && disabledReason ? disabledReason : isAdjusted ? `Complexity ${(complexityBps / 100).toFixed(0)}% — scales this line's price and cost` : "Complexity adjustment"}
         >
           <Gauge className="h-3.5 w-3.5" />
           {isAdjusted && (

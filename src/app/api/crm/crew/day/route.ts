@@ -3,7 +3,9 @@ import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getRouteAuth, resolveCallerCrewId, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { todayInZone } from "@/lib/time/zone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
+import { resolveOccurredAt } from "@/lib/crew/occurred-at";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { resolveWorkingMemberIds, stopPunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { memberWorksOn } from "@/lib/crew/roster-days";
 import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
@@ -24,6 +26,12 @@ const Body = z.object({
   crewMemberId: z.string().uuid().optional(),
   /** The stop's anchor visit, when one is in progress — keeps its job punch in step. */
   visitId: z.string().uuid().optional(),
+  /**
+   * When the leader actually tapped (ISO). The web crew app queues these taps
+   * with no signal and replays them on reconnect; without this a 7:00 Start Day
+   * that synced at 9:30 paid from 9:30. Bounded by resolveOccurredAt.
+   */
+  occurredAt: z.string().optional(),
 });
 
 async function context(request: Request) {
@@ -36,8 +44,9 @@ async function context(request: Request) {
   const orgId = profile.org_id as string;
   const crewId = await resolveCallerCrewId(supabase, user.id, orgId);
   if (!crewId) return { response: NextResponse.json({ error: "This login isn't attached to a crew" }, { status: 403 }) };
-  const workDate = todayInZone(await getOrgTimeZone(supabase, orgId));
-  return { db, user, orgId, crewId, workDate };
+  const timeZone = await getOrgTimeZone(supabase, orgId);
+  const workDate = todayInZone(timeZone);
+  return { db, user, orgId, crewId, workDate, timeZone };
 }
 
 export async function GET(request: Request) {
@@ -109,12 +118,16 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const ctx = await context(request);
   if ("response" in ctx) return ctx.response;
-  const { db, user, orgId, crewId, workDate } = ctx;
+  const { db, user, orgId, crewId, timeZone } = ctx;
 
   const parsed = Body.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   const { action, crewMemberId, visitId } = parsed.data;
-  const now = new Date().toISOString();
+  // The tap time, bounded (48h back / 2 min ahead), else the server's clock.
+  const now = resolveOccurredAt(parsed.data.occurredAt).toISOString();
+  // The work date is the TAP's org-local date: a Start Day tapped at 11:58pm
+  // that syncs after midnight still belongs to the day it was tapped on.
+  const workDate = isoInZone(new Date(now), timeZone);
   // Shift and punch WRITES go through the service client: crew logins can't
   // write crm_crew_day_shifts / crm_crew_member_times directly (RLS), so the
   // only way to change their times is through the checks in this route. Every
@@ -168,7 +181,7 @@ export async function POST(request: Request) {
     let punchVisitId: string | null = null;
     if (visitId) {
       const { data: visit } = await db.from("crm_job_visits")
-        .select("id, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, crm_jobs(crew_id)")
+        .select("id, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, crm_jobs:crew_job(crew_id)")
         .eq("id", visitId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
       if (!(await assertCallerOwnsVisit(db, user.id, orgId, visit))) {
@@ -248,7 +261,9 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Failed";
+    // Inside the payroll lock: say so plainly (409), it isn't a server fault.
+    return NextResponse.json({ error: message }, { status: isPayrollLockedError(message) ? 409 : 500 });
   }
 }
 

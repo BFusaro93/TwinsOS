@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -101,7 +102,7 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
     if (isEditing && initialData) {
       updateMeter.mutate(
         { id: initialData.id, name, unit, assetId: entityId, assetName: entityName, source, kind, capacity: kind === "level" && capacity !== "" ? Number(capacity) : null },
-        { onSuccess: () => handleClose() }
+        { onSuccess: () => handleClose(), onError: (err) => toast.error(err instanceof Error ? err.message : "Could not save the meter") }
       );
     } else {
       createMeter.mutate(
@@ -116,7 +117,7 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
           currentValue: currentReading !== "" ? parseFloat(currentReading) : 0,
           lastReadingAt: now,
         },
-        { onSuccess: () => handleClose() }
+        { onSuccess: () => handleClose(), onError: (err) => toast.error(err instanceof Error ? err.message : "Could not save the meter") }
       );
     }
   }

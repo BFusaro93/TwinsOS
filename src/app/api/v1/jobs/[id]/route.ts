@@ -73,6 +73,90 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .maybeSingle();
   if (!before) return jsonError("Job not found", 404);
 
+  // scheduledDate used to rewrite only crm_jobs.scheduled_date — the job's
+  // ORIGINAL start date — while the visit on the dispatch board stayed put, so
+  // the API reported a reschedule that never happened. A job with a single
+  // untouched visit moves that visit too; anything else is a per-visit
+  // decision for the app.
+  type MovableVisit = { id: string; occurrence_date: string | null; job_service_id: string | null };
+  let visitToMove: MovableVisit | null = null;
+  if (body.scheduledDate !== undefined) {
+    const { data: visits, error: visitsError } = await db
+      .from("crm_job_visits")
+      .select("id, status, dispatched_at, clocked_in_at, completed_at, occurrence_date, job_service_id")
+      .eq("org_id", auth.orgId)
+      .eq("job_id", id)
+      .is("deleted_at", null)
+      .not("status", "in", "(cancelled,skipped)");
+    if (visitsError) return jsonServerError("PATCH /api/v1/jobs/[id] (visits)", visitsError);
+    const live = visits ?? [];
+    if (live.length > 1) {
+      return jsonError(
+        "This job has more than one visit, so scheduledDate can't say which one to move. Reschedule the individual visits in the app (Dispatch Board, or the job's visits).",
+        400
+      );
+    }
+    if (live.length === 1) {
+      const v = live[0];
+      const untouched = v.status === "scheduled" && !v.dispatched_at && !v.clocked_in_at && !v.completed_at;
+      if (!untouched) {
+        return jsonError("This job's visit is already dispatched, started or completed, so it can't be rescheduled through the API. Reschedule it in the app.", 400);
+      }
+      if (body.scheduledDate === null) {
+        return jsonError("scheduledDate can't be cleared while the job has a scheduled visit. Cancel the visit in the app instead.", 400);
+      }
+      visitToMove = { id: v.id as string, occurrence_date: v.occurrence_date as string | null, job_service_id: v.job_service_id as string | null };
+    }
+  }
+
+  // rateCents used to rewrite only crm_jobs.rate_cents, which a job with
+  // service lines ignores (each line carries its own rate). One line: the rate
+  // is that line's. Several: there's no single rate to set.
+  let serviceToReprice: string | null = null;
+  if (body.rateCents !== undefined) {
+    const { data: services, error: servicesError } = await db
+      .from("crm_job_services")
+      .select("id")
+      .eq("org_id", auth.orgId)
+      .eq("job_id", id);
+    if (servicesError) return jsonServerError("PATCH /api/v1/jobs/[id] (services)", servicesError);
+    if ((services ?? []).length > 1) {
+      return jsonError("This job has more than one service line, so a single rateCents is ambiguous. Change each service's rate in the app.", 400);
+    }
+    if ((services ?? []).length === 1) serviceToReprice = services![0].id as string;
+  }
+
+  // Children first, so a failure here leaves the job exactly as it was.
+  if (visitToMove && body.scheduledDate) {
+    const { data: moved, error: moveError } = await db
+      .from("crm_job_visits")
+      .update({
+        scheduled_date: body.scheduledDate,
+        // A recurring/package visit is identified by its occurrence; keep the
+        // two in step or the generator re-creates a visit on the old date.
+        ...(visitToMove.occurrence_date && { occurrence_date: body.scheduledDate }),
+      })
+      .eq("id", visitToMove.id)
+      .eq("org_id", auth.orgId)
+      // Re-checked in the write: a crew may have been dispatched meanwhile.
+      .eq("status", "scheduled")
+      .is("dispatched_at", null)
+      .is("clocked_in_at", null)
+      .select("id");
+    if (moveError) return jsonServerError("PATCH /api/v1/jobs/[id] (move visit)", moveError);
+    if ((moved ?? []).length === 0) {
+      return jsonError("This job's visit was dispatched or started while the request ran, so it was not rescheduled. Reschedule it in the app.", 409);
+    }
+  }
+  if (serviceToReprice) {
+    const { error: repriceError } = await db
+      .from("crm_job_services")
+      .update({ rate_cents: body.rateCents })
+      .eq("id", serviceToReprice)
+      .eq("org_id", auth.orgId);
+    if (repriceError) return jsonServerError("PATCH /api/v1/jobs/[id] (service rate)", repriceError);
+  }
+
   const { data, error } = await db
     .from("crm_jobs")
     .update({
@@ -136,6 +220,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   } catch (e) {
     log.error("visit propagation threw", { jobId: id, error: e instanceof Error ? e.message : String(e) });
+  }
+
+  // Moving the visit is a visit date change, as in the app (useUpdateVisit).
+  if (visitToMove && before.client_id) {
+    try {
+      let matchValues: string[] | undefined;
+      if (visitToMove.job_service_id) {
+        const { data: svc } = await db.from("crm_job_services").select("service_id").eq("id", visitToMove.job_service_id).maybeSingle();
+        if (svc?.service_id) matchValues = [svc.service_id as string];
+      }
+      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "visit_date_changed", matchValues, recordId: visitToMove.id });
+    } catch {
+      // enrollment failure must not fail the update
+    }
   }
 
   // The app's job status change fires job_cancelled (useUpdateJobStatus);

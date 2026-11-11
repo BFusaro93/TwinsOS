@@ -199,7 +199,9 @@ async function processItem(item: QueueItem): Promise<boolean> {
         // item.visitId here is the individual service visit id, not the
         // stop's anchor — see enqueueSkipVisit().
         const payload = item.payload as SkipServicePayload;
-        await skipVisit(item.visitId, payload.reason);
+        // The queue item's creation time is the tap — the server closes the
+        // crew's punches then, not when the phone found signal.
+        await skipVisit(item.visitId, payload.reason, item.createdAt);
         break;
       }
     }

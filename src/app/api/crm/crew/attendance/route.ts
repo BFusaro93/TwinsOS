@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
+import { getRouteAuth, resolveCallerCrewId, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { todayInZone } from "@/lib/time/zone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { closeMemberOpenShift } from "@/lib/crew/day-shifts";
+import { stopPunchOwnerVisitId } from "@/lib/crew/stop-punches";
+import { resolveOccurredAt } from "@/lib/crew/occurred-at";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
+import { assertOrgWritable } from "@/lib/org-writable";
 import { createServiceClient } from "@/lib/supabase/server";
 
 /**
@@ -20,6 +24,8 @@ const Body = z.object({
   absent: z.boolean(),
   /** The stop's anchor visit, when there is one — an open punch on it is closed. */
   visitId: z.string().uuid().optional(),
+  /** When the leader tapped (ISO) — a queued offline tap replays later. Bounded by resolveOccurredAt. */
+  occurredAt: z.string().optional(),
 });
 
 export async function GET(request: Request) {
@@ -57,6 +63,10 @@ export async function POST(request: Request) {
   const { data: profile } = await db.from("profiles").select("org_id, role").eq("id", user.id).maybeSingle();
   if (!profile?.org_id) return NextResponse.json({ error: "No organization for this user" }, { status: 403 });
   const orgId = profile.org_id as string;
+  // Shift / punch writes below may use the service role, which skips the
+  // read-only-when-canceled RLS — a canceled org's crew must not keep clocking time.
+  const readOnly = await assertOrgWritable(createServiceClient(), orgId);
+  if (readOnly) return readOnly;
 
   const { data: member } = await db
     .from("crm_crew_members")
@@ -67,7 +77,9 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (!member) return NextResponse.json({ error: "Crew member not found" }, { status: 404 });
 
-  const workDate = todayInZone(await getOrgTimeZone(supabase, orgId));
+  // The tap time (bounded), and the work date it falls on in the org's zone.
+  const now = resolveOccurredAt(parsed.data.occurredAt).toISOString();
+  const workDate = isoInZone(new Date(now), await getOrgTimeZone(supabase, orgId));
 
   // A crew login can only mark members of its own crew (today's roster, so a
   // same-day reassignment onto this crew counts).
@@ -86,7 +98,22 @@ export async function POST(request: Request) {
     }
   }
 
-  const now = new Date().toISOString();
+  // The visit whose punch is closed must be one this caller may act on — a
+  // crew login only its own crew's (RLS on crm_job_visits checks the org, not
+  // the crew) — and the punch lives on whichever of the stop's visits owns the
+  // punches, which need not be the one the app sent (same as crew/day).
+  let punchVisitId: string | null = null;
+  if (visitId && absent) {
+    const { data: visit } = await db.from("crm_job_visits")
+      .select("id, org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id)")
+      .eq("id", visitId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
+    if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+    if (profile.role === "crew" && !(await assertCallerOwnsVisit(db, user.id, orgId, visit))) {
+      return NextResponse.json({ error: "That visit isn't on your crew" }, { status: 403 });
+    }
+    punchVisitId = await stopPunchOwnerVisitId(db, visitId);
+  }
+
   // Crew logins can't write shifts / punches directly (RLS) — their time writes
   // go through the service client, after the own-crew check above. Office users
   // keep writing under their own RLS.
@@ -111,15 +138,16 @@ export async function POST(request: Request) {
     try {
       await closeMemberOpenShift(timeWriter, { orgId, crewMemberId, workDate, at: now });
     } catch (err) {
-      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to close shift" }, { status: 500 });
+      const message = err instanceof Error ? err.message : "Failed to close shift";
+      return NextResponse.json({ error: message }, { status: isPayrollLockedError(message) ? 409 : 500 });
     }
-    if (visitId) {
+    if (punchVisitId) {
       // Ends an in-progress punch: the member isn't on this job any more.
       await timeWriter
         .from("crm_crew_member_times")
         .update({ clocked_out_at: now, updated_at: now })
         .eq("org_id", orgId)
-        .eq("visit_id", visitId)
+        .eq("visit_id", punchVisitId)
         .eq("crew_member_id", crewMemberId)
         .is("deleted_at", null)
         .is("clocked_out_at", null)

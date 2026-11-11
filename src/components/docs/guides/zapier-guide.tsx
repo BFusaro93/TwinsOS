@@ -13,15 +13,15 @@ const CRM_TRIGGERS: [string, string][] = [
   ["New Client", "A client record is created."],
   ["New Lead", "A client is created with status “lead” (before they’ve converted)."],
   ["Lead Converted to Client", "A lead’s status changes to “active.”"],
-  ["Client Cancelled", "A client’s status changes to “cancelled.”"],
+  ["Client Cancelled", "A client’s status changes to “cancelled” — again each time, if the client is reactivated and later cancelled again."],
   ["New Estimate", "An estimate is created."],
-  ["Estimate Won", "An estimate’s stage changes to “won.”"],
+  ["Estimate Won", "An estimate is accepted (by the customer or in the app)."],
   ["Estimate Lost", "An estimate’s stage changes to “lost.”"],
   ["New Job", "A job (recurring, one-time, snow, project, etc.) is created."],
   ["New Ticket", "A support/service ticket is created."],
   ["Ticket Closed", "A ticket’s status changes to “closed.”"],
   ["New Invoice", "An invoice is created."],
-  ["Invoice Paid", "An invoice’s status changes to “paid.”"],
+  ["Invoice Paid", "An invoice’s status changes to “paid” — again if it’s paid again after a refund."],
   ["Contract Signed", "A contract’s signed-date is set."],
   ["New Damage Case", "A damage case is logged."],
   ["Visit Dispatched", "A scheduled job visit is dispatched to a crew."],
@@ -42,8 +42,8 @@ const CMMS_TRIGGERS: [string, string, boolean][] = [
 
 const ACTIONS: [string, string, string, string][] = [
   ["Create Client", "A new client (Landscapt)", "Display Name", "First/Last Name, Email, Phone, Account Type, Source, Service Address/City/State/Zip"],
-  ["Create Job", "A scheduled job (Landscapt)", "Client", "Job Type, Scheduled Date, Notes"],
-  ["Create Ticket", "A support ticket, attached to a client", "Client, Subject", "Body, Priority, Category, Type, Due Date"],
+  ["Create Job", "A scheduled job (Landscapt). A lead is converted to a client first.", "Client", "Job Type, Scheduled Date, Notes"],
+  ["Create Ticket", "A support ticket, attached to a client", "Client, Subject", "Body, Priority, Category, Type (note, call, event or text), Due Date"],
   ["Add Note to Client", "An entry on a client’s activity timeline", "Client, Note text", "Subject"],
   ["Create Work Order", "An Equipt work order", "Title", "Asset, Description, Priority, Type, Due Date"],
   ["Create Requisition", "An Equipt purchase requisition (starts as a draft)", "Title", "Vendor, linked Work Order, Notes"],
@@ -69,6 +69,7 @@ export function ZapierGuide() {
           <TOCLink href="#cmms-triggers">Equipt triggers</TOCLink>
           <TOCLink href="#meter-threshold">Meter Threshold, in detail</TOCLink>
           <TOCLink href="#actions">Actions</TOCLink>
+          <TOCLink href="#errors-retries">Errors and retries</TOCLink>
           <TOCLink href="#open-questions">Not yet supported</TOCLink>
         </div>
       </div>
@@ -132,6 +133,9 @@ export function ZapierGuide() {
         <p>
           All instant — these piggyback on the same internal event dispatch that runs Landscapt&apos;s
           own automations feature, so a Zap fires at the same moment an internal automation would.
+          An instant delivery carries the same fields as the sample Zapier shows you in the
+          &quot;Test&quot; step (the client&apos;s name, the job number, the amount paid, and so on),
+          so anything you map from that sample is filled in when the Zap runs for real.
         </p>
         <Table>
           <thead>
@@ -243,9 +247,32 @@ export function ZapierGuide() {
         email (client, billing or contact email) or phone; if exactly one matches, that client is
         returned unchanged (with <code>existing: true</code>) instead of creating a duplicate, and no
         &ldquo;Lead created&rdquo; automation runs. A job from <strong>Create Job</strong> enrolls in &ldquo;Job was
-        created&rdquo; automations. Actions ignore clients, vendors, work orders and products that have
-        been deleted. Each company can keep up to 100 active Zapier webhook subscriptions.
+        created&rdquo; automations. Because Create Client makes a lead, a Zap that creates a client and then a
+        job for it just works: Create Job converts the lead to a client first, the same as the{" "}
+        <strong>Convert</strong> button (the client gets today as its client-since date, a timeline note, and
+        your &ldquo;Lead converted to client&rdquo; automations run once). A lead that was closed as lost is
+        not converted — Create Job is refused with a message saying so; reopen it in the app first. Actions
+        ignore clients, vendors, work orders and products that have been deleted. If a client was merged
+        into another one, the &ldquo;Client not found&rdquo; error includes the id of the client it was
+        merged into (<code>mergedIntoClientId</code>). Each company can keep up to 100 active Zapier
+        webhook subscriptions.
       </p>
+
+      <Section id="errors-retries" title="Errors and retries">
+        <p>
+          When a request breaks one of your account&apos;s rules — creating a job for a lost lead, a
+          value a field doesn&apos;t allow — the step fails with that rule&apos;s own explanation and a
+          4xx status, so Zapier shows you what to fix. Only a genuine server problem comes back as a
+          500, which is safe to retry.
+        </p>
+        <p>
+          The Equipt/Landscapt Zapier actions don&apos;t send a retry key of their own. If you call our
+          API from a <strong>Webhooks by Zapier</strong> (or other custom request) step, add an{" "}
+          <code>Idempotency-Key</code> header mapped from something unique to the triggering event —
+          the trigger record&apos;s id, a form submission id — and a replayed step returns the first
+          result instead of creating the record twice. Details are in the API guide.
+        </p>
+      </Section>
 
       <Section id="open-questions" title="Not yet supported">
         <ul className="list-disc space-y-2 pl-5">

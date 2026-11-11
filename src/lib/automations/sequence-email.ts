@@ -49,28 +49,24 @@ export function isMarketingEmailCategory(category: string | null | undefined): b
   return !SERVICE_EMAIL_CATEGORIES.has((category ?? "").toLowerCase());
 }
 
-/** Resolves an email step's `to`/`from` selections and [mergetag] placeholders against the client/org/estimate context. */
-export async function resolveEmailStepContent(
+/**
+ * Who an email step may go to right now: the client's addresses for the step's
+ * "To" selection, minus hard-bounced addresses and (for marketing-category
+ * steps) addresses a Do Not Market client in the org uses — or the reason
+ * nobody can be emailed. Shared by step resolution and by the approval route /
+ * processor, which re-run it before sending a step that sat in the approval
+ * queue (suppression can change while it waits).
+ */
+export async function resolveEmailRecipients(
   supabase: AnyClient,
-  params: {
-    orgId: string;
-    clientId: string;
-    estimateId: string | null;
-    invoiceId?: string | null;
-    meetingId?: string | null;
-    subjectTemplate: string;
-    bodyTemplate: string;
-    toSelection?: string[];
-    fromSelection?: string;
-    /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
-    cardExpiryContext?: CardExpiryContext | null;
-    /** The step's Email Category; see isMarketingEmailCategory. */
-    category?: string | null;
-  }
-): Promise<ResolvedEmailContent | { error: string }> {
+  params: { orgId: string; clientId: string; toSelection?: string[]; category?: string | null }
+): Promise<
+  | { toEmails: string[]; loaded: NonNullable<Awaited<ReturnType<typeof loadAutomationClient>>> }
+  | { error: string }
+> {
   const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
   if (!loaded) return { error: "client not found" };
-  const { client, orgName: loadedOrgName } = loaded;
+  const { client } = loaded;
   // Same opt-out flag Sales Campaigns checks before sending — a client who
   // used the unsubscribe link should stop getting MARKETING automation emails
   // too, not just campaign blasts. Service-category steps (transactional,
@@ -83,20 +79,6 @@ export async function resolveEmailStepContent(
   // category; transactional notices (invoice/estimate/receipt emails) go
   // through their own routes and are unaffected.
   if (client.ok_to_email === false) return { error: "client is marked not OK to email (ok_to_email)" };
-
-  // An email step saved with no subject and no body (e.g. a step dropped in and
-  // never filled out) would send a blank "(no subject)" email to every client
-  // it reaches. Skip it instead; the execution log records why.
-  // The editor saves an untouched body as empty markup (<p></p>), so test the
-  // visible text, not the raw string.
-  const visibleBody = (params.bodyTemplate ?? "")
-    .replace(/<(img|hr)\b[^>]*>/gi, "x")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .trim();
-  if (!params.subjectTemplate?.trim() && !visibleBody) {
-    return { error: "email step has no subject or body (fill it in to enable it)" };
-  }
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
   // Keyed by trimmed lowercase address: the same mailbox typed with different
@@ -142,6 +124,47 @@ export async function resolveEmailStepContent(
       return { error: "every recipient address has opted out of marketing emails (on this or another client account)" };
     }
   }
+
+  return { toEmails: [...toByKey.values()], loaded };
+}
+
+/** Resolves an email step's `to`/`from` selections and [mergetag] placeholders against the client/org/estimate context. */
+export async function resolveEmailStepContent(
+  supabase: AnyClient,
+  params: {
+    orgId: string;
+    clientId: string;
+    estimateId: string | null;
+    invoiceId?: string | null;
+    meetingId?: string | null;
+    subjectTemplate: string;
+    bodyTemplate: string;
+    toSelection?: string[];
+    fromSelection?: string;
+    /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
+    cardExpiryContext?: CardExpiryContext | null;
+    /** The step's Email Category; see isMarketingEmailCategory. */
+    category?: string | null;
+  }
+): Promise<ResolvedEmailContent | { error: string }> {
+  // An email step saved with no subject and no body (e.g. a step dropped in and
+  // never filled out) would send a blank "(no subject)" email to every client
+  // it reaches. Skip it instead; the execution log records why.
+  // The editor saves an untouched body as empty markup (<p></p>), so test the
+  // visible text, not the raw string.
+  const visibleBody = (params.bodyTemplate ?? "")
+    .replace(/<(img|hr)\b[^>]*>/gi, "x")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .trim();
+
+  const recipients = await resolveEmailRecipients(supabase, params);
+  if ("error" in recipients) return recipients;
+  if (!params.subjectTemplate?.trim() && !visibleBody) {
+    return { error: "email step has no subject or body (fill it in to enable it)" };
+  }
+  const { client, orgName: loadedOrgName } = recipients.loaded;
+  const toByKey = new Map(recipients.toEmails.map((e) => [e.toLowerCase(), e] as const));
 
   const { data: orgRow } = await supabase
     .from("organizations")
