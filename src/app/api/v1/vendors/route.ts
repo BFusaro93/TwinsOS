@@ -4,6 +4,7 @@ import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-hel
 import { VENDOR_SELECT, shapeVendor } from "./shape";
 import { createVendorSchema } from "./validation";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { withIdempotency } from "@/lib/api/idempotency";
 
 /** GET /api/v1/vendors — list the org's vendors. Requires scope "vendors:read". */
 export async function GET(request: Request) {
@@ -32,33 +33,35 @@ export async function POST(request: Request) {
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "vendors:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // Idempotency-Key: a retried create returns the first result instead of a duplicate.
+  return withIdempotency(db, auth.orgId, request, async () => {
+    const parsed = createVendorSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
+    const body = parsed.data;
 
-  const parsed = createVendorSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
-  const body = parsed.data;
+    const { data, error } = await db
+      .from("vendors")
+      .insert({
+        org_id: auth.orgId,
+        name: body.name,
+        contact_name: body.contactName ?? "",
+        email: body.email ?? "",
+        phone: body.phone ?? "",
+        address: body.address ?? "",
+        city: body.city ?? "",
+        state: body.state ?? "",
+        zip: body.zip ?? "",
+        website: body.website ?? null,
+        notes: body.notes ?? null,
+        vendor_type: body.vendorType ?? null,
+        w9_status: body.w9Status ?? "not_requested",
+        w9_received_date: body.w9ReceivedDate ?? null,
+        w9_expiration_date: body.w9ExpirationDate ?? null,
+      })
+      .select(VENDOR_SELECT)
+      .single();
 
-  const { data, error } = await db
-    .from("vendors")
-    .insert({
-      org_id: auth.orgId,
-      name: body.name,
-      contact_name: body.contactName ?? "",
-      email: body.email ?? "",
-      phone: body.phone ?? "",
-      address: body.address ?? "",
-      city: body.city ?? "",
-      state: body.state ?? "",
-      zip: body.zip ?? "",
-      website: body.website ?? null,
-      notes: body.notes ?? null,
-      vendor_type: body.vendorType ?? null,
-      w9_status: body.w9Status ?? "not_requested",
-      w9_received_date: body.w9ReceivedDate ?? null,
-      w9_expiration_date: body.w9ExpirationDate ?? null,
-    })
-    .select(VENDOR_SELECT)
-    .single();
-
-  if (error || !data) return jsonServerError("POST /api/v1/vendors", error);
-  return NextResponse.json(shapeVendor(data), { status: 201 });
+    if (error || !data) return jsonServerError("POST /api/v1/vendors", error);
+    return NextResponse.json(shapeVendor(data), { status: 201 });
+  });
 }

@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { bpsToPercent } from "@/lib/estimate-calc";
+import { bpsToPercent, isBreakevenCosted, tierBasis } from "@/lib/estimate-calc";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { useEstimateEquipmentCost } from "@/lib/hooks/use-equipment";
 import { useEstimateSubitemCosts } from "@/lib/hooks/use-line-item-subitems";
 import { hasPerTypeOverhead } from "@/lib/estimate-calc";
+import { useEstimateSubitemTotals } from "@/lib/hooks/use-estimates";
 import {
   Select,
   SelectContent,
@@ -19,13 +20,14 @@ import {
 import type { Estimate } from "@/types/crm-estimates";
 import type { DiscountType } from "@/types/crm-discounts";
 
+/** Only the settings the user changed here — anything left out is not written. */
 interface RecalcParams {
-  taxRateBps: number;
-  overheadRateBps: number;
-  discountCents: number;
-  discountType: DiscountType | null;
-  discountValue: number | null;
-  appliedDiscountId: string | null;
+  taxRateBps?: number;
+  overheadRateBps?: number;
+  discountCents?: number;
+  discountType?: DiscountType | null;
+  discountValue?: number | null;
+  appliedDiscountId?: string | null;
 }
 
 interface Props {
@@ -109,7 +111,21 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   // its own cost breakdown client-side and must apply the identical filter
   // or its rows silently include stale/deleted totals the server total
   // never counted.
-  const lineItems   = (estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft");
+  const openLines   = (estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft");
+  // Good/Better/Best: only the basis tier counts (the chosen one, else the
+  // cheapest open one), exactly as recalcEstimateTotals picks it — with
+  // sub-items in each line's net. Summing every tier showed the costs of
+  // options the client can't all buy.
+  const { data: subitemTotals = {} } = useEstimateSubitemTotals(estimate.id);
+  const basis = tierBasis(
+    !!estimate.tiersEnabled,
+    openLines.map((li) => ({
+      tier: li.tier ?? null,
+      status: li.status,
+      netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)) + (subitemTotals[li.id] ?? 0),
+    })),
+  );
+  const lineItems   = openLines.filter((li) => !basis || !li.tier || li.tier === basis);
   const directCosts = estimate.directCosts ?? [];
   // Equipment attached to the counted lines — internal cost, folded into the Asset/Equipment row.
   const { data: equipmentCostCents = 0 } = useEstimateEquipmentCost(lineItems.map((li) => li.id));
@@ -134,6 +150,23 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   const [discountValue,      setDiscountValue]      = useState<number | null>(estimate.discountValue);
   const [appliedDiscountId,  setAppliedDiscountId]  = useState<string | null>(estimate.appliedDiscountId);
 
+  // Which settings this user has edited since the last save. Only those are
+  // sent: the panel's other fields are seeded copies, and writing them back
+  // used to undo a tax rate or discount someone else had changed meanwhile.
+  // Untouched fields follow the saved estimate as it refreshes.
+  const touched = useRef({ tax: false, overhead: false, discount: false });
+  useEffect(() => {
+    if (!touched.current.tax) setTaxRateStr((estimate.taxRateBps / 100).toFixed(2));
+    if (!touched.current.overhead) setOverheadRateStr((estimate.overheadRateBps / 100).toFixed(2));
+    if (!touched.current.discount) {
+      const flat = estimate.discountType === "flat" && estimate.discountValue != null ? estimate.discountValue : null;
+      setDiscountStr(((flat ?? estimate.discountCents) / 100).toFixed(2));
+      setDiscountType(estimate.discountType);
+      setDiscountValue(estimate.discountValue);
+      setAppliedDiscountId(estimate.appliedDiscountId);
+    }
+  }, [estimate.taxRateBps, estimate.overheadRateBps, estimate.discountType, estimate.discountValue, estimate.discountCents, estimate.appliedDiscountId]);
+
   async function handleRecalc(
     discountOverrideStr?: string,
     discountOverride?: { type: DiscountType | null; value: number | null; appliedId: string | null }
@@ -148,14 +181,34 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     setTaxRateStr((taxRateBps / 100).toFixed(2));
     setOverheadRateStr((overheadRateBps / 100).toFixed(2));
     const discountCents   = Math.max(0, Math.round((parseFloat(discountOverrideStr ?? discountStr) || 0) * 100));
-    await onRecalculate({
-      taxRateBps,
-      overheadRateBps,
-      discountCents,
-      discountType: discountOverride ? discountOverride.type : discountType,
-      discountValue: discountOverride ? discountOverride.value : discountValue,
-      appliedDiscountId: discountOverride ? discountOverride.appliedId : appliedDiscountId,
-    });
+    const t = touched.current;
+    const discountChanged = t.discount || !!discountOverride;
+    const params: RecalcParams = {
+      ...(t.tax && taxRateBps !== estimate.taxRateBps ? { taxRateBps } : {}),
+      ...(t.overhead && overheadRateBps !== estimate.overheadRateBps ? { overheadRateBps } : {}),
+      ...(discountChanged
+        ? {
+            discountCents,
+            discountType: discountOverride ? discountOverride.type : discountType,
+            discountValue: discountOverride ? discountOverride.value : discountValue,
+            appliedDiscountId: discountOverride ? discountOverride.appliedId : appliedDiscountId,
+          }
+        : {}),
+    };
+    touched.current = { tax: false, overhead: false, discount: false };
+    // Nothing changed (a blur with no edit): no write at all.
+    if (Object.keys(params).length === 0) return;
+    await onRecalculate(params);
+  }
+
+  function onTaxChange(v: string) {
+    touched.current.tax = true;
+    setTaxRateStr(v);
+  }
+
+  function onOverheadChange(v: string) {
+    touched.current.overhead = true;
+    setOverheadRateStr(v);
   }
 
   // A manual edit to the raw $ amount decouples it from whatever saved
@@ -169,6 +222,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     // lost it for good once lines were added back. The note below the field
     // shows when only part of it applies.
     const rawCents = Math.max(0, Math.round((parseFloat(v) || 0) * 100));
+    touched.current.discount = true;
     setDiscountStr(v);
     setDiscountType("flat");
     setDiscountValue(rawCents);
@@ -212,10 +266,14 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   directCosts.forEach((dc) => {
     costByType[dc.costType] = (costByType[dc.costType] ?? 0) + dc.totalCents;
   });
-  costByType.labor += lineItems.reduce((s, li) => s + li.totalCostCents, 0);
+  // Same buckets as recalcEstimateTotals' overhead (estimateOverheadCents):
+  // line labor and sub-services are labor, product sub-items are materials.
+  costByType.labor += lineItems.reduce((s, li) => s + li.totalCostCents, 0) + subitemCosts.subservice;
   costByType.asset_equipment += equipmentCostCents;
   costByType.product_material += subitemCosts.product;
-  costByType.service += subitemCosts.subservice;
+  // Lines costed at the break-even rate already include overhead and labor
+  // burden, so no overhead is added on them.
+  const breakevenLaborCents = lineItems.filter((li) => isBreakevenCosted(li)).reduce((s, li) => s + li.totalCostCents, 0);
 
   const totalDirectCents  = directCosts.reduce((s, dc) => s + dc.totalCents, 0);
   const totalCostCents    = lineItems.reduce((s, li) => s + li.totalCostCents, 0) + totalDirectCents + equipmentCostCents + subitemCosts.product + subitemCosts.subservice;
@@ -256,13 +314,13 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
         <RateRow
           label="Tax Rate"
           value={taxRateStr}
-          onChange={setTaxRateStr}
+          onChange={onTaxChange}
           onBlur={() => handleRecalc()}
         />
         <RateRow
           label="Overhead Rate"
           value={overheadRateStr}
-          onChange={setOverheadRateStr}
+          onChange={onOverheadChange}
           onBlur={() => handleRecalc()}
         />
         {perTypeOverheadActive && (
@@ -334,6 +392,12 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
           Costs
         </p>
         <PnlRow label="Labor / Line Items:" cents={costByType.labor}          bps={pct(costByType.labor)} />
+        {breakevenLaborCents > 0 && (
+          <p className="-mt-0.5 mb-0.5 text-[10px] leading-tight text-slate-400 dark:text-neutral-500">
+            {formatCurrency(breakevenLaborCents)} of it is costed at your break-even rate, which already covers
+            overhead — no overhead is added on that part.
+          </p>
+        )}
         <PnlRow label="Sub Contract:"     cents={costByType.sub_contract}     bps={pct(costByType.sub_contract)} />
         <PnlRow label="Service:"          cents={costByType.service}          bps={pct(costByType.service)} />
         <PnlRow label="Product/Materials:"cents={costByType.product_material} bps={pct(costByType.product_material)} />

@@ -116,3 +116,22 @@ export async function runningPauseClockOut(
     return p.now;
   }
 }
+
+/**
+ * The instant a stop should be treated as clocked out when the crew's Stop Job
+ * (or Skip) lands, paused or not. Paused: see runningPauseClockOut. Not paused:
+ * the same evidence, measured from the stop's clock-in — if every member still
+ * punched in on it has ended their day (End Day / left for the day) after the
+ * stop started, or every punch is already closed, the stop ended then. Without
+ * this, End Day with a stop still running followed by Stop Job the next
+ * morning credited the whole night as time on the job. Falls back to `now`
+ * whenever someone is still on the clock. Non-throwing.
+ */
+export async function stopClockOutCap(
+  supabase: AnySupabase,
+  p: { orgId: string; punchVisitId: string; pausedAt: string | null; clockedInAt: string | null; now: string }
+): Promise<string> {
+  const since = p.pausedAt ?? p.clockedInAt;
+  if (!since) return p.now;
+  return runningPauseClockOut(supabase, { orgId: p.orgId, punchVisitId: p.punchVisitId, pausedAt: since, now: p.now });
+}

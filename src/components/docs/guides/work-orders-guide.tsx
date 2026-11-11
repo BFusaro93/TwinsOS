@@ -20,7 +20,7 @@ const REQUEST_STATUSES: [string, string][] = [
   ["Open", "Just submitted."],
   ["In Review", "A manager/admin has picked it up to triage."],
   ["Approved", "Confirmed as real, legitimate work. Only status the Convert button appears on."],
-  ["Rejected", "Not going to be actioned. Can be reopened back to Open."],
+  ["Rejected", "Not going to be actioned. Can be reopened back to Open. Open requests for an asset or vehicle that is deleted, disposed or sold are closed as Rejected automatically, with a note added to the description."],
   ["Converted to WO", "Turned into a Work Order. Terminal — read-only from here."],
 ];
 
@@ -160,17 +160,35 @@ export function WorkOrdersGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>In-app</strong>, for admins/managers/staff: CMMS &gt; Requests &gt; + New
-            Request — title, priority, optional asset/vehicle, description.
+            <strong>In-app</strong>, for anyone who can submit requests (including Requestors and
+            Purchasers): CMMS &gt; Requests &gt; + New Request — title, priority, optional
+            asset/vehicle, description. The request is credited to whoever is signed in.
           </li>
           <li>
             <strong>A no-login submission path</strong> — the actual &ldquo;anyone can flag a
             problem&rdquo; story. A branded public form (linked by your org&apos;s own slug) and an
             internal field-repair-request page both feed the same submission handler, requiring no
-            CMMS access at all. New submissions email your org&apos;s admins/managers automatically
-            (if that notification preference is on).
+            CMMS access at all. Typing the exact name of one of your assets <em>or vehicles</em>{" "}
+            links the request to it, so converting it later attaches that asset or vehicle to the
+            work order. New submissions email your org&apos;s admins/managers automatically (if
+            that notification preference is on) — except the person who submitted it.
           </li>
         </ul>
+        <p>
+          <strong>Who can change a request.</strong> Admins, managers and staff triage requests:
+          they move it through the statuses below and can edit any request. Requestors and
+          Purchasers can edit only their <em>own</em> requests — title, description, priority and
+          asset/vehicle — and only while the request is still <strong>Open</strong>; the same goes
+          for deleting it. Once someone starts reviewing it, it&apos;s locked for them. Editing a
+          request keeps the equipment name it was submitted with unless you pick a different asset
+          or vehicle, and the description is optional when editing.
+        </p>
+        <p>
+          Status buttons only act on the status you&apos;re looking at: if someone else changed the
+          request in the meantime you&apos;ll see &ldquo;This request changed — refresh and try
+          again&rdquo; and nothing is saved. Once a request is linked to a work order its status
+          can no longer be changed.
+        </p>
         <Table>
           <thead>
             <TableHeadRow>
@@ -193,8 +211,8 @@ export function WorkOrdersGuide() {
         <p>
           The <strong>Convert to Work Order</strong> button only appears once a request reaches{" "}
           <strong>Approved</strong> — that&apos;s the real triage gate. Converting creates a new
-          Work Order (always typed Reactive) carrying over the title, description, priority, and
-          asset link, and flips the request to <strong>Converted to WO</strong>, a terminal state
+          Work Order (typed Reactive, or Preventive when a meter rule raised the request) carrying
+          over the title, description, priority, and asset or vehicle link, and flips the request to <strong>Converted to WO</strong>, a terminal state
           with a link back to the resulting Work Order.
         </p>
       </Section>

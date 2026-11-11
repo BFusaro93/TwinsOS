@@ -4,6 +4,7 @@ import { roundHours } from "@/lib/utils";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { jobActivityLabel } from "@/lib/utils/job-activity-label";
+import { findMergedIntoClientId, mapDbGuardError } from "@/lib/api/route-helpers";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = SupabaseClient<any, any, any>;
@@ -34,8 +35,11 @@ export interface CreateCrmJobInput {
 
 export type CreateCrmJobResult =
   | { ok: true; job: Record<string, unknown> }
-  /** Caller-facing 4xx (validation / not found). */
-  | { ok: false; status: 400 | 404; error: string }
+  /**
+   * Caller-facing 4xx (validation / not found / a database rule said no).
+   * mergedIntoClientId: the client id given was merged into this one.
+   */
+  | { ok: false; status: 400 | 403 | 404 | 409; error: string; mergedIntoClientId?: string }
   /** Server-side failure: log `cause`, return a generic 500. */
   | { ok: false; status: 500; context: string; cause: unknown };
 
@@ -47,20 +51,32 @@ export type CreateCrmJobResult =
  * stored as its window (never a board visit), a service line + visit when a
  * service is given, a compensating rollback if a child insert fails, the
  * client-timeline row and the job_created trigger.
+ *
+ * A LEAD is converted to a client first, exactly as the app's Convert button
+ * does (owner decision 2026-11): Zapier's Create Client always makes a lead,
+ * so "create client, then create job" used to fail every time on the
+ * database rule that jobs belong to clients, not leads. A closed-lost lead is
+ * still refused (409, with the rule's own message) — reopening a lost deal is
+ * a human decision.
  */
 export async function createCrmJob(
   db: AnyClient,
   orgId: string,
   input: CreateCrmJobInput,
-  opts: { select: string; context: string }
+  opts: { select: string; context: string; /** Where the request came from, for the client timeline ("the API", "Zapier"). */ via?: string }
 ): Promise<CreateCrmJobResult> {
   const { data: client } = await db
     .from("clients")
-    .select("org_id")
+    .select("org_id, status, client_since")
     .eq("id", input.clientId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (!client || client.org_id !== orgId) return { ok: false, status: 404, error: "Client not found" };
+  if (!client || client.org_id !== orgId) {
+    const mergedIntoClientId = await findMergedIntoClientId(db, orgId, input.clientId);
+    return mergedIntoClientId
+      ? { ok: false, status: 404, error: `Client not found — it was merged into client ${mergedIntoClientId}`, mergedIntoClientId }
+      : { ok: false, status: 404, error: "Client not found" };
+  }
 
   if (input.propertyId) {
     const { data: property } = await db
@@ -119,6 +135,21 @@ export async function createCrmJob(
   const isWaitingList = jobType === "waiting_list";
   const scheduledDate = isWaitingList ? null : (input.scheduledDate ?? null);
 
+  // Every id above checked out, so the job is about to be created: convert a
+  // lead now (see the function comment). Done last so a request rejected for
+  // a bad crew/service id never converts anyone.
+  if (client.status === "lead") {
+    const converted = await convertLeadForJob(db, orgId, input.clientId, {
+      stampClientSince: !client.client_since,
+      via: opts.via ?? "the API",
+    });
+    if (converted.error) {
+      const guard = mapDbGuardError(converted.error);
+      if (guard) return { ok: false, status: guard.status, error: guard.message };
+      return { ok: false, status: 500, context: `${opts.context} (convert lead)`, cause: converted.error };
+    }
+  }
+
   const { data, error } = await db
     .from("crm_jobs")
     .insert({
@@ -152,7 +183,13 @@ export async function createCrmJob(
     .select(opts.select)
     .single();
 
-  if (error || !data) return { ok: false, status: 500, context: opts.context, cause: error };
+  if (error || !data) {
+    // A database rule (e.g. the "jobs are for clients, not leads" guard on a
+    // closed-lost lead) is the caller's problem, with a message written for them.
+    const guard = mapDbGuardError(error);
+    if (guard) return { ok: false, status: guard.status, error: guard.message };
+    return { ok: false, status: 500, context: opts.context, cause: error };
+  }
   const job = data as unknown as Record<string, unknown>;
   const jobId = job.id as string;
 
@@ -254,10 +291,56 @@ export async function createCrmJob(
   // hooks); without it a job made through the API never enrolled in
   // job_created automations. Best-effort.
   try {
-    await fireSimpleTrigger(db, { orgId, clientId: input.clientId, triggerType: "job_created", matchValues: [jobType] });
+    await fireSimpleTrigger(db, { orgId, clientId: input.clientId, triggerType: "job_created", matchValues: [jobType], recordId: jobId });
   } catch {
     // enrollment failure must not fail the create
   }
 
   return { ok: true, job };
+}
+
+/**
+ * The app's lead → client conversion (useConvertLeadToClient /
+ * the Leads bulk "activate"): status active, client_since stamped with the
+ * org's date, any old closure cleared, a timeline note, and
+ * lead_converted_to_client fired. The update is conditioned on the row still
+ * being a lead, so a concurrent conversion (another request, a user clicking
+ * Convert) can't fire the trigger a second time — only the writer that
+ * actually flipped the status fires it.
+ */
+async function convertLeadForJob(
+  db: AnyClient,
+  orgId: string,
+  clientId: string,
+  opts: { stampClientSince: boolean; via: string }
+): Promise<{ error: unknown }> {
+  const { data, error } = await db
+    .from("clients")
+    .update({
+      status: "active",
+      cancellation_reason: null,
+      closed_at: null,
+      ...(opts.stampClientSince && { client_since: todayInZone(await getOrgTimeZone(db, orgId)) }),
+    })
+    .eq("id", clientId)
+    .eq("org_id", orgId)
+    .eq("status", "lead")
+    .is("deleted_at", null)
+    .select("id");
+  if (error) return { error };
+  if ((data ?? []).length === 0) return { error: null };
+
+  await db.from("client_activity").insert({
+    org_id: orgId,
+    client_id: clientId,
+    activity_type: "note",
+    subject: "Converted from lead to client",
+    body: `Converted automatically when a job was created through ${opts.via}.`,
+  });
+  try {
+    await fireSimpleTrigger(db, { orgId, clientId, triggerType: "lead_converted_to_client" });
+  } catch {
+    // enrollment failure must not fail the create
+  }
+  return { error: null };
 }

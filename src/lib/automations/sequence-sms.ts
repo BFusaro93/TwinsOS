@@ -5,7 +5,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
 import { instantToZoneWallClock, shiftYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 import type { CardExpiryContext } from "./card-expiry-context";
-import { buildAutomationMergeVars, loadAutomationClient } from "./client-merge-vars";
+import { buildAutomationMergeVars, loadAutomationClient, type AutomationClientRow } from "./client-merge-vars";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -39,21 +39,16 @@ export async function nextSmsSendTime(
   return { tz, sendAt };
 }
 
-/** Resolves a text-message step's [mergetag] placeholders against the client/org context. */
-export async function resolveSmsStepContent(
+/**
+ * Which numbers a text step may go to right now — the client's numbers for the
+ * step's "Send To" selection minus numbers that replied STOP — or why nobody can
+ * be texted. Shared by step resolution and by the approval route / processor,
+ * which re-run it before sending a step that sat in the approval queue.
+ */
+export async function resolveSmsRecipients(
   supabase: AnyClient,
-  params: {
-    orgId: string;
-    clientId: string;
-    meetingId?: string | null;
-    invoiceId?: string | null;
-    bodyTemplate: string;
-    /** The step's "Send To" selection (client_primary_phone | billing_phone | all_contacts). Defaults to the client's primary phone. */
-    toSelection?: string[];
-    /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
-    cardExpiryContext?: CardExpiryContext | null;
-  }
-): Promise<ResolvedSmsContent | { error: string }> {
+  params: { orgId: string; clientId: string; toSelection?: string[] }
+): Promise<{ toPhones: string[]; client: AutomationClientRow } | { error: string }> {
   const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
   const client = loaded?.client;
 
@@ -107,6 +102,27 @@ export async function resolveSmsStepContent(
     if (last10 && optedOut.has(last10)) phonesByKey.delete(key);
   }
   if (phonesByKey.size === 0) return { error: "every recipient number has replied STOP" };
+  return { toPhones: [...phonesByKey.values()], client };
+}
+
+/** Resolves a text-message step's [mergetag] placeholders against the client/org context. */
+export async function resolveSmsStepContent(
+  supabase: AnyClient,
+  params: {
+    orgId: string;
+    clientId: string;
+    meetingId?: string | null;
+    invoiceId?: string | null;
+    bodyTemplate: string;
+    /** The step's "Send To" selection (client_primary_phone | billing_phone | all_contacts). Defaults to the client's primary phone. */
+    toSelection?: string[];
+    /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
+    cardExpiryContext?: CardExpiryContext | null;
+  }
+): Promise<ResolvedSmsContent | { error: string }> {
+  const recipients = await resolveSmsRecipients(supabase, params);
+  if ("error" in recipients) return recipients;
+  const { client } = recipients;
 
   let meetingDate = "";
   let meetingTime = "";
@@ -158,7 +174,7 @@ export async function resolveSmsStepContent(
       return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
     });
 
-  const toPhones = [...phonesByKey.values()];
+  const toPhones = recipients.toPhones;
   return {
     toPhone: toPhones.join(", "),
     toPhones,

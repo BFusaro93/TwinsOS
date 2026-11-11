@@ -8,7 +8,6 @@ import { useAuth } from '@/lib/auth-context';
 import { C } from '@/lib/colors';
 import { useCrewStops } from '@/lib/hooks/use-crew-stops';
 import { supabase } from '@/lib/supabase';
-import { todayLocalDate } from '@/lib/api';
 import {
   elapsedSince,
   formatStopAddress,
@@ -25,12 +24,11 @@ import { notesToPlainText } from '@/lib/rich-notes';
 import { t } from '@/lib/i18n';
 import { LanguageToggle } from '@/components/language-toggle';
 
-const TODAY = todayLocalDate();
-
 export default function HomeScreen() {
   const { session } = useAuth();
   const { stops: serverStops, crewName, drive: serverDrive, isLoading, isRefetching, error, refetch } =
-    useCrewStops(TODAY);
+    // No date: the server answers for the org's today on every load.
+    useCrewStops();
   const { items, itemsForVisit, enqueueStartDrive, enqueueEndDrive } = useOfflineQueue();
   const crewDay = useCrewDay();
   const [editCrewOpen, setEditCrewOpen] = useState(false);

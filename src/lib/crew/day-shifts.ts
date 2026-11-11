@@ -1,5 +1,6 @@
 import { resolveWorkingMemberIds } from "@/lib/crew/stop-punches";
 import { shiftYmd } from "@/lib/time/zone";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
@@ -186,6 +187,10 @@ export async function endCrewDay(
     // Never end before the start (clock skew / an offline-queued tap).
     const end = new Date(s.started_at).getTime() > atMs ? s.started_at : p.at;
     const { error } = await supabase.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", s.id).is("ended_at", null);
+    // A shift dated inside the payroll lock can't be closed by anyone (see
+    // payroll-lock.ts): leave it open for the office to see on the Payroll tab
+    // rather than failing End Day for the rest of the crew.
+    if (error && isPayrollLockedError(error.message)) continue;
     if (error) throw new Error(error.message);
     closed += 1;
   }

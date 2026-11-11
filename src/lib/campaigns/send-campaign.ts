@@ -96,35 +96,31 @@ function isStaleSending(campaign: CampaignRow): boolean {
   return Date.now() - new Date(campaign.updated_at).getTime() > STUCK_SENDING_THRESHOLD_MS;
 }
 
+/** One campaign copy goes to each address; this is the key (trimmed, lowercased). */
+const addressKey = (email: string) => email.trim().toLowerCase();
+
 export type SendCampaignResult =
   | { ok: true; totalRecipients: number; delivered: number; failed: number }
   | { ok: false; error: string };
 
 /**
- * Sends an email campaign to its resolved audience and updates its status —
- * shared by the interactive "Send Now" route (session-scoped) and the
- * scheduled-send cron (service-role, iterates many orgs/campaigns). `db` may
- * be either kind of Supabase client; both expose the same query builder.
- * `createdBy` is the acting user's id for the client_activity log, or null
- * when triggered by the cron (no human actor).
+ * The clients an email campaign goes to — ONE per email address — exactly as
+ * the send resolves them: the target segment (or custom list), not deleted,
+ * not Do Not Market, OK to Email, primary email present and not hard-bounced,
+ * minus any address a Do Not Market client in the org uses, de-duplicated by
+ * address. The "Send to N recipients" confirmation counts this same list, so
+ * the number shown is the number that will be sent.
  */
-export async function sendCampaignEmails(
+export async function resolveCampaignRecipients(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
-  campaign: CampaignRow,
-  orgId: string,
-  createdBy: string | null
-): Promise<SendCampaignResult> {
-  if (campaign.type !== "email") {
-    return { ok: false, error: "Only email campaigns can be sent from here" };
-  }
-  if (!["draft", "scheduled"].includes(campaign.status) && !isStaleSending(campaign)) {
-    return { ok: false, error: "Campaign has already been sent" };
-  }
-  if (!campaign.subject?.trim() || !campaign.body?.trim()) {
-    return { ok: false, error: "Campaign needs a subject and body before sending" };
-  }
-
+  campaign: Pick<CampaignRow, "target_segment" | "audience_client_ids">,
+  orgId: string
+): Promise<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | { ok: true; recipients: any[]; sharedBy: Map<string, any[]> }
+  | { ok: false; error: string }
+> {
   // A custom audience is a list of client ids that goes into the request URL
   // (`id=in.(...)`); a few hundred UUIDs exceeds the API gateway's URL limit and
   // the whole send failed. Query it in chunks instead.
@@ -212,7 +208,6 @@ export async function sendCampaignEmails(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Could not check marketing opt-outs" };
   }
-  const addressKey = (email: string) => email.trim().toLowerCase();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sharedBy = new Map<string, any[]>();
   for (const r of recipients) {
@@ -224,6 +219,38 @@ export async function sendCampaignEmails(
   }
   recipients.length = 0;
   for (const group of sharedBy.values()) recipients.push(group[0]);
+
+  return { ok: true, recipients, sharedBy };
+}
+
+/**
+ * Sends an email campaign to its resolved audience and updates its status —
+ * shared by the interactive "Send Now" route (session-scoped) and the
+ * scheduled-send cron (service-role, iterates many orgs/campaigns). `db` may
+ * be either kind of Supabase client; both expose the same query builder.
+ * `createdBy` is the acting user's id for the client_activity log, or null
+ * when triggered by the cron (no human actor).
+ */
+export async function sendCampaignEmails(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  campaign: CampaignRow,
+  orgId: string,
+  createdBy: string | null
+): Promise<SendCampaignResult> {
+  if (campaign.type !== "email") {
+    return { ok: false, error: "Only email campaigns can be sent from here" };
+  }
+  if (!["draft", "scheduled"].includes(campaign.status) && !isStaleSending(campaign)) {
+    return { ok: false, error: "Campaign has already been sent" };
+  }
+  if (!campaign.subject?.trim() || !campaign.body?.trim()) {
+    return { ok: false, error: "Campaign needs a subject and body before sending" };
+  }
+
+  const resolved = await resolveCampaignRecipients(db, campaign, orgId);
+  if (!resolved.ok) return resolved;
+  const { recipients, sharedBy } = resolved;
 
   if (recipients.length === 0) {
     // The scheduled-send cron (createdBy === null) retried an empty audience

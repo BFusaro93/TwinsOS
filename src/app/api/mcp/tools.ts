@@ -290,10 +290,13 @@ const RESOURCE_TOOLS: ResourceToolDef[] = [
     resource: "jobs",
     createDescription:
       "Schedules a Landscapt service job for a client. With a serviceId it also creates the job's service line and — for a dated job type — the dispatch-board visit. " +
+      "If the client is still a LEAD it is converted to a client first (as the app's Convert button does); a closed-lost lead is refused. " +
       "budgetedHours is TOTAL MAN-HOURS (hours on site x crew size), not hours per person. Dates are YYYY-MM-DD: passing a timestamp risks landing on the previous day. " +
       "A 'waiting_list' job deliberately gets NO dispatch-board visit — its date becomes an availability window instead. rateCents is in CENTS.",
     updateDescription:
-      "Updates a job's status, schedule, crew, rate or notes. Dates are YYYY-MM-DD and rateCents is in CENTS. Pass null to clear a nullable field.",
+      "Updates a job's status, schedule, crew, rate or notes. Dates are YYYY-MM-DD and rateCents is in CENTS. Pass null to clear a nullable field. " +
+      "scheduledDate moves the job AND its visit, but only for a job with a single visit that hasn't been dispatched, started or completed; a job with several visits is rejected — those are rescheduled visit by visit in the app. " +
+      "rateCents sets the rate of the job's service line when it has exactly one; a job with several service lines is rejected.",
     list: listJobs,
     listScope: "jobs:read",
     get: getJob,
@@ -358,7 +361,7 @@ function buildRequest(
   authHeader: string,
   method: string,
   path: string,
-  opts: { query?: Record<string, unknown>; body?: unknown } = {}
+  opts: { query?: Record<string, unknown>; body?: unknown; idempotencyKey?: string } = {}
 ): Request {
   const url = new URL(`http://internal${path}`);
   for (const [key, value] of Object.entries(opts.query ?? {})) {
@@ -369,10 +372,25 @@ function buildRequest(
     headers: {
       Authorization: authHeader,
       ...(opts.body !== undefined && { "Content-Type": "application/json" }),
+      ...(opts.idempotencyKey && { "Idempotency-Key": opts.idempotencyKey }),
     },
     ...(opts.body !== undefined && { body: JSON.stringify(opts.body) }),
   });
 }
+
+/**
+ * Sent as the REST route's Idempotency-Key header (src/lib/api/idempotency.ts),
+ * never as part of the record. Lets an agent safely retry a create whose
+ * response it didn't see.
+ */
+const IDEMPOTENCY_KEY_FIELD = z
+  .string()
+  .min(1)
+  .max(255)
+  .optional()
+  .describe(
+    "Optional. A unique value (e.g. a UUID) for this create. Retrying with the same key and the same input within 24 hours returns the first result instead of creating a duplicate; reusing it with different input is rejected."
+  );
 
 const PAGINATION_SHAPE = {
   limit: z.number().int().positive().max(200).optional().describe("Max results to return (default 50, max 200)."),
@@ -417,9 +435,17 @@ export function registerResourceTools(server: McpServer, request: Request, scope
         {
           title: `Create a ${def.resource.replace(/_/g, " ")}`,
           description: def.createDescription ?? `Creates a new ${def.resource.replace(/_/g, " ")}.`,
-          inputSchema: def.createSchema.shape,
+          inputSchema: { ...def.createSchema.shape, idempotencyKey: IDEMPOTENCY_KEY_FIELD },
         },
-        async (args) => toToolResult(await def.create!(buildRequest(authHeader, "POST", path, { body: args })))
+        async ({ idempotencyKey, ...args }) =>
+          toToolResult(
+            await def.create!(
+              buildRequest(authHeader, "POST", path, {
+                body: args,
+                idempotencyKey: typeof idempotencyKey === "string" ? idempotencyKey : undefined,
+              })
+            )
+          )
       );
     }
 

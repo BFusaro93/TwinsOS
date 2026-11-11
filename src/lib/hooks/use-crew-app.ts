@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type UseMutationResult } from "@tanstack/react-query";
 import { openPendingTab, showInPendingTab } from "@/lib/utils/pending-tab";
 import { useQuery } from "@/lib/hooks/use-query";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
@@ -123,6 +123,13 @@ async function getCallerCrew(): Promise<CallerCrew | null> {
  * Enumerating also means a newly added column is not automatically exposed to
  * crew — the right default for this surface. Anything genuinely needed here
  * has to be added on purpose, and mapVisit()/mapJobRow() are the checklist.
+ *
+ * The job and its services come through the crew_job / crew_job_services
+ * computed relationships (aliased back to crm_jobs / crm_job_services so the
+ * row shape is unchanged), not the crm_jobs / crm_job_services tables: a crew
+ * login can't read those (20261231000340), and the computed ones carry no
+ * job-level price or total and return the service rate only when the org
+ * lets crews see pricing. A job column used here must exist on crm_crew_jobs.
  */
 function crewVisitSelect(hidePricing: boolean): string {
   const serviceCols = [
@@ -164,7 +171,7 @@ function crewVisitSelect(hidePricing: boolean): string {
     ${visitCols},
     clients(display_name, primary_phone, gate_lock_code, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
     crm_crews(name),
-    crm_jobs(${jobCols}, ${jobEmbeds}, crm_job_services(${serviceCols}, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
+    crm_jobs:crew_job(${jobCols}, ${jobEmbeds}, crm_job_services:crew_job_services(${serviceCols}, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
   `;
 }
 
@@ -1004,6 +1011,24 @@ export function crewTap(timeZone: string): CrewTap {
   return { occurredAt: now.toISOString(), localTime: instantToZoneWallClock(now, timeZone).time };
 }
 
+/**
+ * Stamps `occurredAt` when mutate() is CALLED — the tap — rather than inside
+ * mutationFn, which TanStack runs only once the phone has signal again. The
+ * stamp is part of the mutation's variables, so a parked request replays with
+ * the original tap time. An explicit occurredAt from the caller wins.
+ */
+function stampTapTime<TData, TVars extends { occurredAt?: string }>(
+  m: UseMutationResult<TData, Error, TVars>
+): UseMutationResult<TData, Error, TVars> {
+  const stamp = (v: TVars): TVars => ({ ...v, occurredAt: v.occurredAt ?? new Date().toISOString() });
+  return {
+    ...m,
+    // (TanStack types variables as optional when TVars could be void; ours never is.)
+    mutate: (v, opts) => m.mutate(stamp(v as TVars), opts),
+    mutateAsync: (v, opts) => m.mutateAsync(stamp(v as TVars), opts),
+  } as UseMutationResult<TData, Error, TVars>;
+}
+
 /** Returns a tap stamp in the org's timezone; call it inside the click handler. */
 export function useCrewTap(): () => CrewTap {
   const tz = useOrgTimeZone();
@@ -1113,6 +1138,11 @@ export function useStopClockIn() {
     onSuccess: (data, { anchorVisitId }) => {
       if ((data as { warnings?: string[] } | null)?.warnings?.includes("crew_roster_empty")) {
         toast.warning("Nobody is on your crew today, so no time is being recorded for payroll. Tap Edit Crew to add the people working, or ask the office.", { duration: 10000 });
+      }
+      // Another stop was still running (Stop Job never tapped): the server stopped
+      // its clock at this start so nobody is on two jobs at once.
+      if ((data as { warnings?: string[] } | null)?.warnings?.includes("other_stop_auto_stopped")) {
+        toast.info("Your other job was still running, so its time was stopped when this one started. Open it and tap Stop Job to finish it.", { duration: 10000 });
       }
       // The server also opens the day shift and member punches on the first Start Job.
       qc.invalidateQueries({ queryKey: ["crew-day"] });
@@ -1263,12 +1293,14 @@ export function useStopClockOut() {
 
 export function useSkipVisit() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ visitId, reason }: { visitId: string; reason: string }) => {
+  return stampTapTime(useMutation({
+    mutationFn: async ({ visitId, reason, occurredAt }: { visitId: string; reason: string; occurredAt?: string }) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/skip`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
+        // The tap time (stamped in mutate) — a skip queued offline closes the
+        // crew's punches when it happened, not when it synced.
+        body: JSON.stringify({ reason, occurredAt }),
       });
       if (!res.ok) throw await crewRequestError(res, "Failed to skip service");
       return res.json();
@@ -1280,7 +1312,7 @@ export function useSkipVisit() {
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
     onError: (err) => crewActionFailed(qc, err, "Failed to skip service — try again"),
-  });
+  }));
 }
 
 export function useAcknowledgeNotes() {
@@ -1503,7 +1535,7 @@ export function useUpsertCrewMemberTime() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ crewMemberId, clockedInAt, clockedOutAt, breakMinutes }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to save crew member time");
       return res.json();
     },
     onSuccess: (_data, { visitId }) => {
@@ -1511,7 +1543,7 @@ export function useUpsertCrewMemberTime() {
       // ["crew-member-times", "date", ...] query, which a per-visit key misses.
       qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
-    onError: () => toast.error("Failed to save crew member time"),
+    onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to save crew member time"),
   });
 }
 
@@ -1541,8 +1573,11 @@ export function useCrewDay() {
 
 export function useCrewDayAction() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: { action: "start_day" | "end_day" | "member_in" | "member_out" | "add_member"; crewMemberId?: string; visitId?: string }) => {
+  // Start Day / End Day / member in-out are paid time: the tap time travels
+  // with the request (stampTapTime), so a tap queued with no signal pays from
+  // the tap, not from whenever the phone reconnected.
+  return stampTapTime(useMutation({
+    mutationFn: async (input: { action: "start_day" | "end_day" | "member_in" | "member_out" | "add_member"; crewMemberId?: string; visitId?: string; occurredAt?: string }) => {
       const res = await fetch("/api/crm/crew/day", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1557,7 +1592,7 @@ export function useCrewDayAction() {
       qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
     onError: (err) => crewActionFailed(qc, err, "Couldn't update the crew's day — try again"),
-  });
+  }));
 }
 
 // ── Crew attendance (who is working today) ────────────────────────────────────
@@ -1577,14 +1612,15 @@ export function useCrewAbsences() {
 
 export function useSetCrewMemberAbsent() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ crewMemberId, absent, visitId }: { crewMemberId: string; absent: boolean; visitId?: string }) => {
+  return stampTapTime(useMutation({
+    mutationFn: async ({ crewMemberId, absent, visitId, occurredAt }: { crewMemberId: string; absent: boolean; visitId?: string; occurredAt?: string }) => {
       const res = await fetch("/api/crm/crew/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ crewMemberId, absent, visitId }),
+        // Tap time, stamped in mutate (see stampTapTime).
+        body: JSON.stringify({ crewMemberId, absent, visitId, occurredAt }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to update who is working today");
       return res.json();
     },
     onSuccess: () => {
@@ -1592,8 +1628,8 @@ export function useSetCrewMemberAbsent() {
       qc.invalidateQueries({ queryKey: ["crew-day"] });
       qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
-    onError: () => toast.error("Failed to update who is working today"),
-  });
+    onError: (err) => crewActionFailed(qc, err, "Failed to update who is working today"),
+  }));
 }
 
 /**
@@ -1630,7 +1666,7 @@ export function useDeleteCrewMemberTime() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ crewMemberId }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to remove crew member time");
       return res.json();
     },
     onSuccess: (_data, { visitId }) => {
@@ -1638,7 +1674,7 @@ export function useDeleteCrewMemberTime() {
       // ["crew-member-times", "date", ...] query, which a per-visit key misses.
       qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
-    onError: () => toast.error("Failed to remove crew member time"),
+    onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to remove crew member time"),
   });
 }
 

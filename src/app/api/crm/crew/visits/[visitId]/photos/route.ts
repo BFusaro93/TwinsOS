@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
+import { assertOrgWritable } from "@/lib/org-writable";
 import { validateImageUpload } from "@/lib/utils/image-upload";
 import { heicToJpeg, isHeic, HEIC_MAX_BYTES, HEIC_ERROR_MESSAGE } from "@/lib/utils/convert-heic";
 
@@ -38,7 +39,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("job_id, org_id, crew_id, crew_unassigned, crm_jobs(crew_id)")
+    .select("job_id, org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -49,6 +50,10 @@ export async function POST(
   if (!(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
+  // Before anything reaches storage: the service-role upload below would
+  // otherwise store photos for a read-only (canceled) org.
+  const readOnly = await assertOrgWritable(createServiceClient(), visit.org_id);
+  if (readOnly) return readOnly;
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
@@ -131,7 +136,21 @@ export async function POST(
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // 23505: a concurrent retry of the same photo (same client id → same path)
+    // inserted first — the unique index on storage_path keeps one row. Answer
+    // with that row, exactly like the existing-photo check above.
+    if ((error as { code?: string }).code === "23505") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: winner } = await (supabase as any)
+        .from("crm_visit_photos").select("*").eq("storage_path", storagePath).maybeSingle();
+      if (winner) {
+        const { data: signed } = await photoStorage().createSignedUrl(storagePath, 3600);
+        return NextResponse.json({ ...winner, signedUrl: signed?.signedUrl ?? null }, { status: 201 });
+      }
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   const { data: signed } = await photoStorage().createSignedUrl(storagePath, 3600);
 
@@ -150,7 +169,7 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
     .from("crm_job_visits")
-    .select("org_id, crew_id, crew_unassigned, crm_jobs(crew_id)")
+    .select("org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();

@@ -4,6 +4,7 @@ import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-hel
 import { PM_SCHEDULE_SELECT, shapePmSchedule } from "./shape";
 import { createPmScheduleSchema } from "./validation";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { withIdempotency } from "@/lib/api/idempotency";
 
 /** GET /api/v1/pm-schedules — list the org's PM schedules. Requires scope "pm_schedules:read". */
 export async function GET(request: Request) {
@@ -17,8 +18,10 @@ export async function GET(request: Request) {
     .select(PM_SCHEDULE_SELECT)
     .eq("org_id", auth.orgId)
     .is("deleted_at", null)
-    .order("next_due_date", { ascending: true })
-    .order("id", { ascending: true })
+    // Stable creation order like every other list endpoint: next_due_date moves every
+    // time a schedule generates, so offset paging over it skipped or repeated rows.
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) return jsonServerError("GET /api/v1/pm-schedules", error);
@@ -30,73 +33,75 @@ export async function POST(request: Request) {
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "pm_schedules:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // Idempotency-Key: a retried create returns the first result instead of a duplicate.
+  return withIdempotency(db, auth.orgId, request, async () => {
+    const parsed = createPmScheduleSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
+    const body = parsed.data;
 
-  const parsed = createPmScheduleSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
-  const body = parsed.data;
-
-  let assetName = "";
-  if (body.assetId) {
-    const { data: asset } = await db
-      .from("assets")
-      .select("org_id, name")
-      .eq("id", body.assetId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (!asset || asset.org_id !== auth.orgId) return jsonError("Asset not found", 404);
-    assetName = asset.name as string;
-  }
-
-  let assignedToName: string | null = null;
-  if (body.assignedToId) {
-    const { data: emp } = await db
-      .from("crm_employees")
-      .select("org_id, first_name, last_name")
-      .eq("id", body.assignedToId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (!emp || emp.org_id !== auth.orgId) return jsonError("Employee not found", 404);
-    assignedToName = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();
-  }
-
-  const { data, error } = await db
-    .from("pm_schedules")
-    .insert({
-      org_id: auth.orgId,
-      title: body.title,
-      asset_id: body.assetId ?? null,
-      asset_name: assetName,
-      frequency: body.frequency,
-      next_due_date: body.nextDueDate,
-      description: body.description ?? null,
-      assigned_to_id: body.assignedToId ?? null,
-      assigned_to_name: assignedToName,
-    })
-    .select(PM_SCHEDULE_SELECT)
-    .single();
-
-  if (error || !data) return jsonServerError("POST /api/v1/pm-schedules", error);
-
-  // pm_schedule_assets is the source of truth for which equipment a schedule
-  // covers (the app's own form writes it, the Assets tab lists it and
-  // generate-wo reads it; pm_schedules.asset_id is only a legacy column).
-  // Without this row a schedule created here showed no assets and could never
-  // generate work orders ("No assets linked to this PM schedule").
-  if (body.assetId) {
-    const { error: linkError } = await db.from("pm_schedule_assets").insert({
-      org_id: auth.orgId,
-      pm_schedule_id: data.id,
-      asset_id: body.assetId,
-      asset_name: assetName,
-    });
-    if (linkError) {
-      await db
-        .from("pm_schedules")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", data.id)
-        .eq("org_id", auth.orgId);
-      return jsonServerError("POST /api/v1/pm-schedules (asset link)", linkError);
+    let assetName = "";
+    if (body.assetId) {
+      const { data: asset } = await db
+        .from("assets")
+        .select("org_id, name")
+        .eq("id", body.assetId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (!asset || asset.org_id !== auth.orgId) return jsonError("Asset not found", 404);
+      assetName = asset.name as string;
     }
-  }
-  return NextResponse.json(shapePmSchedule(data), { status: 201 });
+
+    let assignedToName: string | null = null;
+    if (body.assignedToId) {
+      const { data: emp } = await db
+        .from("crm_employees")
+        .select("org_id, first_name, last_name")
+        .eq("id", body.assignedToId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (!emp || emp.org_id !== auth.orgId) return jsonError("Employee not found", 404);
+      assignedToName = `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim();
+    }
+
+    const { data, error } = await db
+      .from("pm_schedules")
+      .insert({
+        org_id: auth.orgId,
+        title: body.title,
+        asset_id: body.assetId ?? null,
+        asset_name: assetName,
+        frequency: body.frequency,
+        next_due_date: body.nextDueDate,
+        description: body.description ?? null,
+        assigned_to_id: body.assignedToId ?? null,
+        assigned_to_name: assignedToName,
+      })
+      .select(PM_SCHEDULE_SELECT)
+      .single();
+
+    if (error || !data) return jsonServerError("POST /api/v1/pm-schedules", error);
+
+    // pm_schedule_assets is the source of truth for which equipment a schedule
+    // covers (the app's own form writes it, the Assets tab lists it and
+    // generate-wo reads it; pm_schedules.asset_id is only a legacy column).
+    // Without this row a schedule created here showed no assets and could never
+    // generate work orders ("No assets linked to this PM schedule").
+    if (body.assetId) {
+      const { error: linkError } = await db.from("pm_schedule_assets").insert({
+        org_id: auth.orgId,
+        pm_schedule_id: data.id,
+        asset_id: body.assetId,
+        asset_name: assetName,
+      });
+      if (linkError) {
+        await db
+          .from("pm_schedules")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", data.id)
+          .eq("org_id", auth.orgId);
+        return jsonServerError("POST /api/v1/pm-schedules (asset link)", linkError);
+      }
+    }
+    return NextResponse.json(shapePmSchedule(data), { status: 201 });
+  });
 }

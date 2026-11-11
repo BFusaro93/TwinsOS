@@ -42,7 +42,6 @@ import {
   fetchUpsellServices,
   fetchVisitPhotos,
   fetchVisitRequisitions,
-  todayLocalDate,
 } from '@/lib/api';
 import { notesToPlainText } from '@/lib/rich-notes';
 import { C } from '@/lib/colors';
@@ -101,11 +100,24 @@ const REQUISITION_STATUS_COLOR: Record<VisitRequisition['status'], string> = {
   closed: '#8a8a8a',
 };
 
-const TODAY = todayLocalDate();
-
-/** HH:mm in the device's local time, captured at the moment of the tap. */
-function localTimeNow(): string {
-  return new Date().toTimeString().slice(0, 5);
+/**
+ * HH:mm on the ORG's wall clock (the visit's start/end time), captured at the
+ * moment of the tap; the phone's own clock until the server has said which
+ * timezone the company runs on.
+ */
+function localTimeNow(timeZone: string | null): string {
+  const now = new Date();
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+      const hh = parts.find((p) => p.type === 'hour')?.value;
+      const mm = parts.find((p) => p.type === 'minute')?.value;
+      if (hh && mm) return `${hh.padStart(2, '0')}:${mm}`;
+    } catch {
+      // An unknown zone name: fall back to the phone's clock.
+    }
+  }
+  return now.toTimeString().slice(0, 5);
 }
 
 /**
@@ -122,7 +134,8 @@ export default function StopDetailScreen() {
   // Today's schedule is the only data source this phase has — there's no
   // single-stop GET route yet, so this screen shares useCrewStops() with
   // home.tsx and looks its stop up by anchorVisitId.
-  const { stops, photoRules, isLoading, error, refetch } = useCrewStops(TODAY);
+  // No date: the org's today, decided by the server on every load.
+  const { stops, photoRules, timeZone, isLoading, error, refetch } = useCrewStops();
   const {
     itemsForVisit,
     enqueueClockIn,
@@ -379,12 +392,12 @@ export default function StopDetailScreen() {
     // Written to the local queue immediately — this resolves synchronously
     // from the UI's perspective (no network wait), which is what makes the
     // "Clocked In" state below reflect the tap right away.
-    void enqueueClockIn(stop.anchorVisitId, localTimeNow());
+    void enqueueClockIn(stop.anchorVisitId, localTimeNow(timeZone));
   };
 
   const handleClockOut = () => {
     if (!stop) return;
-    void enqueueClockOut(stop.anchorVisitId, localTimeNow(), notes.trim() || undefined);
+    void enqueueClockOut(stop.anchorVisitId, localTimeNow(timeZone), notes.trim() || undefined);
   };
 
   const handlePause = () => {

@@ -118,13 +118,34 @@ aren't affected by anything you set up in Zapier.
 | Action | Creates | Required fields | Optional fields |
 |---|---|---|---|
 | **Create Client** | A new client (Landscapt) | Display Name | First/Last Name, Email, Phone, Account Type (residential/commercial), Source, Service Address/City/State/Zip |
-| **Create Ticket** | A support ticket, attached to a client | Client, Subject | Body, Priority (low/normal/high/urgent), Category, Type, Due Date |
+| **Create Ticket** | A support ticket, attached to a client | Client, Subject | Body, Priority (low/normal/high/urgent), Category, Type (note/call/event/text), Due Date |
 | **Add Note to Client** | An entry on a client's activity timeline | Client, Note text | Subject |
 | **Create Work Order** | An Equipt work order | Title | Asset, Description, Priority, Type, Due Date |
 | **Create Requisition** | An Equipt purchase requisition (starts as a draft) | Title | Vendor, linked Work Order, Notes |
 
 A "Create Job" action for Landscapt jobs also exists (job type, client,
-scheduled date) if you need to schedule work directly from a Zap.
+scheduled date) if you need to schedule work directly from a Zap. Create
+Client always makes a lead, so Create Job converts a lead to a client first
+(same as the in-app Convert button, firing "Lead converted to client" once);
+a closed-lost lead is refused with a 409. Create Ticket's Type must be note,
+call, event or text.
+
+Errors: a request a database rule rejects returns a 4xx with the rule's own
+message (409 business rule, 403 permission, 400 missing reference); only real
+server faults are 500. "Client not found" for a merged-away client includes
+`mergedIntoClientId`.
+
+Retries: every action accepts an optional `Idempotency-Key` header (24h
+replay; same key + different body = 422; in flight = 409). The Zapier app's
+own actions don't send one — Zapier has no stable per-run header — so it's
+for Webhooks-by-Zapier / custom request steps, where the Zap author maps a
+unique value (the trigger record id) into the header.
+
+Live (REST hook) payloads for Landscapt triggers are the record in the same
+shape as the polling sample (`POLLING_TRIGGERS[type].map`), with the record's
+own id, plus the older `triggerType/clientId/firedAt/...` fields. Client
+Cancelled and Invoice Paid ids are `<id>:<event time>` for events after the
+cutoff in zapier-triggers.ts, so a re-cancel / re-payment fires again.
 
 Every action validates that any client/vendor/work-order/asset ID you pass in
 actually belongs to your org before creating anything — a Zap can't

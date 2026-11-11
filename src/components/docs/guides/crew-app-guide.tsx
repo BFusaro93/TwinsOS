@@ -75,7 +75,10 @@ export function CrewAppGuide() {
           The native app has the same crew tools as the browser version: Start Day and End Day, Edit
           Crew (per-person attendance), Suggest Work, and Request Materials. A shared stop shows who the
           other crew is (&quot;With &hellip;&quot;), and tapping a push notification for a new job or a
-          visit note opens that stop.
+          visit note opens that stop. &ldquo;Today&rdquo; is always the company&apos;s day (its time
+          zone in Settings), checked every time the schedule loads and whenever the app comes back to
+          the screen &mdash; a phone left open overnight, or set to another time zone, shows the
+          right day&apos;s route.
         </p>
         <p>
           <strong>Office staff in the field.</strong> An owner or office employee doesn&apos;t need a
@@ -97,11 +100,13 @@ export function CrewAppGuide() {
           are larger for gloved or one-handed use.
         </p>
         <p>
-          If an action is queued without signal (clock in/out, pause, resume, drive start/end), a banner
+          If an action is queued without signal (clock in/out, pause, resume, skip, drive start/end,
+          Start Day, End Day, and marking someone in, out or not working), a banner
           says it&apos;s saved on the phone and will send when signal returns, and it is
           recorded at the moment it was tapped, not when the phone reconnects &mdash; so a lunch pause
-          that syncs hours later still subtracts the right minutes. Taps older than 48 hours, or from
-          a clearly wrong phone clock, fall back to the sync time.
+          that syncs hours later still subtracts the right minutes, and a 7:00 Start Day that syncs at
+          9:30 still pays from 7:00. Taps older than 48 hours, or from a clearly wrong phone clock,
+          fall back to the sync time.
         </p>
         <Callout>
           <strong>The login belongs to the crew, not to a person.</strong> When you create a crew
@@ -133,10 +138,12 @@ export function CrewAppGuide() {
           Individual people&apos;s times are handled by the office, not on the phone.
         </p>
         <p>
-          Whether crews see prices is your choice: <strong>Hide pricing from crews</strong> under
-          Landscapt Settings removes rates and amounts from everything they can reach. It&apos;s worth
+          Whether crews see service prices is your choice: <strong>Hide pricing from crews</strong>{" "}
+          under Landscapt Settings removes them from everything they can reach. It&apos;s worth
           turning on if you&apos;d rather the crew not be drawn into a pricing conversation on a
-          driveway.
+          driveway. Job totals, labor and material costs, and material prices are never available
+          to a crew login, whatever the setting — not in the app and not by reading the data
+          directly with the crew&apos;s login.
         </p>
       </Section>
 
@@ -216,7 +223,9 @@ export function CrewAppGuide() {
           phone starts the day for <strong>everyone working on the crew</strong> that day; once it&apos;s
           running the card reads &quot;Day started 7:02 AM &mdash; 3 on the clock&quot; with an{" "}
           <strong>End Day</strong> button that clocks everyone out at once. If a job is still in
-          progress the app asks you to confirm before ending the day.
+          progress the app asks you to confirm before ending the day; the job&apos;s time then stops
+          when the day ended, even if Stop Job is only tapped the next morning, so the night is never
+          counted as time on the job. Tap Stop Job on it when you can so it&apos;s completed and billed.
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -357,7 +366,30 @@ export function CrewAppGuide() {
           in, the crew&apos;s Clock Out closes those leftover punches so they don&apos;t stay open on the Timesheet. If a crew already started the stop (Start Job
           clocked them in) and then skips it, their clocks stop at the skip &mdash; as long as no
           other service at the same stop is still running &mdash; so the hours still reach the
-          Timesheet and Job Costing instead of staying open.
+          Timesheet and Job Costing instead of staying open. Those clocks stop at the moment Skip was
+          tapped (or when the crew ended the day, if that came first), not when the phone next had signal.
+        </p>
+        <p>
+          <strong>One job at a time.</strong> If the crew taps Start Job while another of its stops is
+          still running (Stop Job was never tapped), the other stop&apos;s time is stopped
+          automatically at the moment the new job starts (or when it was paused, if it was on a break),
+          so nobody is clocked in on two jobs at once. The crew sees a message, the office sees a
+          comment on that visit saying it was stopped automatically when the crew started the new
+          stop, and the stop stays in progress until someone finishes it: open it and tap Stop Job
+          (the photo and chemical checks still apply) or the office marks it complete. Its hours are
+          the time up to when it was stopped. Only the crew&apos;s own stops are affected; another crew
+          on a shared stop keeps running.
+        </p>
+        <p>
+          <strong>Stop Job after the office already completed the stop.</strong> The crew&apos;s
+          punches close at the moment Stop Job was tapped, and anything typed in the closing notes is
+          kept on the visit &mdash; added to the office&apos;s completion notes if there are some.
+        </p>
+        <p>
+          <strong>Changing a job&apos;s crew mid-day.</strong> A stop that a crew has already started
+          stays with that crew when the office moves the job to another crew, so they can still pause,
+          skip and stop it, and their time closes normally. Finished visits keep the crew that did
+          them. Only the job&apos;s upcoming, not-yet-started visits move to the new crew.
         </p>
         <p>
           If the stop has chemicals, a <strong>Confirm chemicals applied</strong> card lists each one
@@ -493,6 +525,20 @@ export function CrewAppGuide() {
           and every Payroll correction, is kept in the audit history.
         </p>
         <p>
+          <strong>Locked pay periods.</strong> Once an admin locks payroll through a date (Report
+          Center → Payroll), nothing dated on or before it can change &mdash; not from the crew app, the
+          dispatch board or Payroll. A crew tap that lands in a locked day (for example a shift from
+          before the lock that was never ended) is refused with &ldquo;Payroll is locked through
+          &hellip;; ask an admin to move the lock date&rdquo;, and End Day leaves that one shift open
+          for the office while still ending everyone else&apos;s day.
+        </p>
+        <p>
+          <strong>Read-only accounts.</strong> When a company&apos;s subscription is canceled or its
+          trial has ended, the crew app can still show the schedule, but Start Job, Stop Job, pauses,
+          skips, photos, checklists, crew times and attendance are refused with a message instead of
+          appearing to save.
+        </p>
+        <p>
           <strong>Once a visit&apos;s invoice is sent, its punches are locked for crew.</strong> Stop
           Job usually puts the visit straight onto a <em>draft</em> invoice, and while that invoice is
           still a draft the crew can keep correcting member punches (Edit Crew, Time Summary). Once the
@@ -597,8 +643,8 @@ export function CrewAppGuide() {
         </p>
         <p>
           Dashboards are scoped separately. A crew only sees dashboards that have been explicitly
-          marked visible to crews, so you can give them a job-count or hours board without exposing
-          revenue.
+          marked visible to crews. Reports built on jobs and visits carry prices, so they show a
+          crew login no data even on a crew-visible dashboard.
         </p>
         <p>
           For the office&apos;s half of this — stop order, route optimisation, and exactly how actual

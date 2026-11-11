@@ -5,23 +5,23 @@ import { Calculator } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { bpsToPercent, centsToDisplay, complexityFactor } from "@/lib/estimate-calc";
+import { bpsToPercent, centsToDisplay, complexityFactor, lineVisits } from "@/lib/estimate-calc";
 
 export interface BudgetedHoursPatch {
   budgetedHours: number;
-  /** Only set when the user chose "Adjust Cost" (or the cost had to be
-   *  pinned to keep "Adjust B.Hrs" honest — see handleAdjustHours below). */
+  /** Set to 0 when the cost should follow hours × a labor rate (see below). */
   costCents?: number;
+  /** "Adjust Cost" / "Adjust B.Hrs" cost the line at exactly the man-hour rate
+   *  typed here: the line keeps that rate (labor_cost_rate_cents) and its cost
+   *  is hours × rate. It used to be squeezed into a whole-cent per-UNIT cost,
+   *  which on a 12,000 sq ft line rounded $134.28 down to $120.00. */
+  laborCostRateCents?: number | null;
 }
 
 interface Props {
   /** Current per-occurrence budgeted hours (row.budgetedHours). */
   budgetedHours: number;
-  /** Qty and calc type, needed to translate an occurrence dollar cost back
-   *  into the per-unit costCents the row actually stores (see estimate-calc.ts). */
-  qty: number;
   visits: number;
-  calcType: 0 | 1;
   /** The line's complexity adjustment (10000 = 100%). `budgetedHours` above is
    *  the UNSCALED base (estimate-calc.ts keeps the stored value pure), but
    *  `totalCostCents` below is already scaled by it — so the two have to be put
@@ -44,20 +44,12 @@ function occurrenceCostCents(totalCostCents: number, visits: number): number {
   // Mirrors computeLineItem: a line's cost covers all of its visits for both
   // calc types (a multi-visit fixed line is the same work repeated), so one
   // occurrence is the total ÷ visits.
-  return totalCostCents / (visits || 1);
-}
-
-function costCentsFromOccurrence(occurrenceCents: number, qty: number, visits: number, calcType: 0 | 1): number {
-  // Per-unit cost (× qty × visits in computeLineItem) for "per unit" lines;
-  // a fixed line's Cost is the line's whole cost, i.e. every occurrence.
-  return calcType === 1 ? occurrenceCents / (qty || 1) : occurrenceCents * (visits || 1);
+  return totalCostCents / lineVisits(visits);
 }
 
 export function BudgetedHoursPopover({
   budgetedHours,
-  qty,
   visits,
-  calcType,
   complexityBps,
   totalCostCents,
   isAutoCost,
@@ -108,11 +100,14 @@ export function BudgetedHoursPopover({
   const currentRateCentsPerHr = hoursDraft > 0 ? occCostCents / hoursDraft : 0;
   const targetRateCents = Math.round((parseFloat(targetRate) || 0) * 100);
 
+  // Cost = hours × the typed rate, kept exactly: the line stores the RATE
+  // (labor_cost_rate_cents) with cost_cents 0, and computeLineItem costs it as
+  // complexity-scaled hours × rate × visits. Setting a per-unit cost instead
+  // rounds to whole cents per unit (1¢/sq ft on 12,000 sq ft = $120 for a
+  // $134.28 target). qty / calcType no longer matter here for that reason.
   function handleAdjustCost() {
-    if (hoursDraft <= 0) return;
-    const newOccCostCents = Math.round(targetRateCents * hoursDraft);
-    const newCostCents = Math.round(costCentsFromOccurrence(newOccCostCents, qty, visits, calcType));
-    onApply({ budgetedHours: hoursDraft, costCents: newCostCents });
+    if (hoursDraft <= 0 || targetRateCents <= 0) return;
+    onApply({ budgetedHours: hoursDraft, costCents: 0, laborCostRateCents: targetRateCents });
     setOpen(false);
   }
 
@@ -121,12 +116,14 @@ export function BudgetedHoursPopover({
     const newHours = occCostCents / targetRateCents;
     if (newHours <= 0) return;
     const patch: BudgetedHoursPatch = { budgetedHours: newHours };
-    // If cost is still auto-derived from budgetedHours × breakeven, changing
-    // budgetedHours alone would just re-derive cost from the SAME breakeven
-    // rate and land back at the old ratio, not the target typed above — pin
-    // cost to its current occurrence value first so the target actually holds.
+    // If cost is still auto-derived (hours × the break-even or line rate),
+    // changing the hours alone would re-derive cost from the SAME rate and
+    // land back at the old ratio. Pin the line's rate to the target instead:
+    // newHours × target = the current cost, so the cost holds and the target
+    // man-hour rate is exactly what the line now shows.
     if (isAutoCost) {
-      patch.costCents = Math.round(costCentsFromOccurrence(occCostCents, qty, visits, calcType));
+      patch.costCents = 0;
+      patch.laborCostRateCents = targetRateCents;
     }
     onApply(patch);
     setOpen(false);

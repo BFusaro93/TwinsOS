@@ -4,7 +4,7 @@ import { Resend } from "resend";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { EMAIL_FROM } from "@/lib/email/send";
+import { EMAIL_FROM, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
 import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
@@ -199,7 +199,7 @@ export async function GET(request: Request) {
     for (const r of recipients) {
       if (!r.email || r.prefs.emailContractExpiring === false) continue;
       try {
-        const { error: sendErr } = await resend.emails.send({
+        const { error: sendErr } = await sendEmailRetryingRateLimit(resend, {
           from: EMAIL_FROM,
           to: r.email,
           subject: `Contract ${expiryPhrase(daysLeft)} — ${contract.title}`,

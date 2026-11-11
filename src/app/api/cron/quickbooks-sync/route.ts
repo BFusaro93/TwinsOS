@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks, syncPaymentToQuickBooks, retryPendingQuickBooksVoids, QBO_DUPLICATE_NAME_MESSAGE } from "@/lib/integrations/quickbooks";
+import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks, syncPaymentToQuickBooks, retryPendingQuickBooksVoids, QBO_DUPLICATE_NAME_MESSAGE, QBO_INACTIVE_CUSTOMER_MESSAGE } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
@@ -105,12 +105,14 @@ export async function GET(request: Request) {
         .or(`qbo_sync_attempted_at.is.null,qbo_sync_attempted_at.lt.${retryBefore}`)
         .order("created_at", { ascending: true })
         .limit(MAX_CREATES);
-      // A client whose name exists as a vendor/employee in QuickBooks can't be created there
+      // A client whose name exists as a vendor/employee in QuickBooks, or whose QuickBooks
+      // customer is inactive, can't be pushed there
       // until someone renames or links it: don't retry that invoice every run, only once the
       // invoice or its client has been edited since the failed attempt.
       type CreateRow = { id: string; updated_at: string; qbo_sync_error: string | null; qbo_sync_attempted_at: string | null; clients: { updated_at: string } | null };
       const toCreate = ((toCreateRaw ?? []) as CreateRow[]).filter((r) => {
-        if (r.qbo_sync_error !== QBO_DUPLICATE_NAME_MESSAGE || !r.qbo_sync_attempted_at) return true;
+        const needsUserFix = r.qbo_sync_error === QBO_DUPLICATE_NAME_MESSAGE || r.qbo_sync_error === QBO_INACTIVE_CUSTOMER_MESSAGE;
+        if (!needsUserFix || !r.qbo_sync_attempted_at) return true;
         const lastEdit = [r.updated_at, r.clients?.updated_at ?? ""].sort().pop() ?? "";
         return lastEdit > r.qbo_sync_attempted_at;
       });

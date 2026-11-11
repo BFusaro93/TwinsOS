@@ -23,7 +23,7 @@ const OUTCOMES: [string, string, string][] = [
   ["Late", "Done after its due date", "Done"],
   ["Skipped", "Work order marked Skipped", "Missed"],
   ["Overdue", "Still open past its due date", "Missed"],
-  ["Not generated", "The schedule's due date passed and no work order was ever generated — or a meter request sat unconverted for more than 7 days", "Missed"],
+  ["Not generated", "The schedule's due date passed and no work order was ever generated — or a meter request sat unconverted for more than 7 days (not counted once its asset or vehicle is deleted, disposed or sold — those open requests are closed automatically)", "Missed"],
   ["Pending", "Open and not yet due", "Not counted"],
   ["Paused", "Due inside a pause window", "Not counted (not due at all)"],
 ];

@@ -136,6 +136,26 @@ export function useUpdateCampaign() {
   });
 }
 
+/**
+ * How many emails "Send Now" would send for a saved campaign — counted by the
+ * send's own recipient logic on the server (bounces, opt-outs on any account
+ * sharing the address and one copy per address included), so the confirmation
+ * matches what actually goes out. Disabled until a campaign id is given.
+ */
+export function useCampaignRecipientCount(campaignId: string | null) {
+  return useQuery({
+    queryKey: ["crm-campaigns", "recipient-count", campaignId],
+    enabled: !!campaignId,
+    staleTime: 0,
+    queryFn: async (): Promise<number> => {
+      const res = await fetch(`/api/crm/campaigns/${campaignId}/recipient-count`);
+      const json = (await res.json().catch(() => ({}))) as { count?: number; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Could not count recipients");
+      return json.count ?? 0;
+    },
+  });
+}
+
 export function useSendCampaign() {
   const qc = useQueryClient();
   return useMutation({

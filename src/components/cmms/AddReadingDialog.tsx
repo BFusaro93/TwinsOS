@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAddMeterReading, levelReadingError } from "@/lib/hooks/use-meter-readings";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { zoneWallClockToInstant } from "@/lib/time/zone";
 import type { Meter } from "@/types";
 
 interface AddReadingDialogProps {
@@ -22,18 +24,10 @@ interface AddReadingDialogProps {
   meter: Meter;
 }
 
-function todayISODate(): string {
-  // Use local date components (not UTC) so the default date matches the user's
-  // calendar day — new Date().toISOString() returns UTC which rolls to the next
-  // day in US timezones after ~7–8pm ET.
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialogProps) {
+  // "Today" is the company's calendar day (org timezone), not the browser's —
+  // the same day the database checks a reading date against.
+  const { today: todayISODate, timeZone } = useOrgDates();
   const [readingValue, setReadingValue] = useState("");
   const [readingDate, setReadingDate] = useState(todayISODate());
   const [notes, setNotes] = useState("");
@@ -49,11 +43,14 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
   // (previous/next readings) when saved, not against today's value — a missed
   // reading from last week is legitimately lower than the current one.
   const isBackdated = readingDate !== "" && readingDate < todayISODate();
+  // A reading can't be dated after today.
+  const isFutureDated = readingDate !== "" && readingDate > todayISODate();
   const isValid =
     parsedValue !== null &&
     !isNaN(parsedValue) &&
     (isLevel ? levelError === null : isBackdated ? parsedValue >= 0 : parsedValue >= meter.currentValue) &&
-    readingDate !== "";
+    readingDate !== "" &&
+    !isFutureDated;
 
   function handleClose() {
     onOpenChange(false);
@@ -69,11 +66,13 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
     // reading logged earlier today at a later hour (e.g. a meter's starting reading
     // created that evening), so the newer reading would never become current and a
     // same-day higher reading would be rejected as "higher than a later reading".
-    // Past dates use T12:00:00 so Postgres stores noon local-ish time — a bare
+    // Past dates are stamped at noon on the company's clock — a bare
     // YYYY-MM-DD string is parsed as UTC midnight which shifts back a day in
     // US timezones when displayed.
     const readingAtISO =
-      readingDate === todayISODate() ? new Date().toISOString() : readingDate + "T12:00:00";
+      readingDate === todayISODate()
+        ? new Date().toISOString()
+        : (zoneWallClockToInstant(readingDate, "12:00", timeZone)?.toISOString() ?? readingDate + "T12:00:00");
     addReading.mutate(
       {
         meterId: meter.id,
@@ -148,9 +147,13 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
               <Input
                 id="reading-date"
                 type="date"
+                max={todayISODate()}
                 value={readingDate}
                 onChange={(e) => setReadingDate(e.target.value)}
               />
+              {isFutureDated && (
+                <p className="text-xs text-destructive">A reading can&apos;t be dated in the future.</p>
+              )}
             </div>
 
             {/* Notes */}

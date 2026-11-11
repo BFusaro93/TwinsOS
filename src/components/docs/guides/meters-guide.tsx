@@ -140,16 +140,23 @@ export function MetersGuide() {
             the readings before and after that date (&quot;Must fit between the readings before and
             after this date&quot;) and can be lower than today&apos;s value. Several readings on the
             same day are ordered by when you entered them, so the latest one is always the current
-            value.
+            value. A reading can&apos;t be dated after today (your company&apos;s calendar day, set by
+            the organization timezone).
           </li>
           <li>
             The meter&apos;s current value always reflects the latest reading — there&apos;s no
-            separate &quot;current value&quot; field to keep in sync manually.
+            separate &quot;current value&quot; field to keep in sync manually. The reading history
+            and its 12-month chart cover every reading, however many the meter has.
+          </li>
+          <li>
+            A meter shows the name of its asset or vehicle, and follows it if the asset or vehicle
+            is renamed.
           </li>
         </ol>
         <Callout>
-          Every reading you add — manual or synced — runs the automations engine instantly in the
-          background. If the new value crosses a threshold on an enabled automation, the resulting
+          Every reading you add — manual, synced, a new meter&apos;s starting value, or a value
+          typed straight into the meter&apos;s edit dialog — runs the automations engine instantly
+          in the background. If the new value crosses a threshold on an enabled automation, the resulting
           work order or request is created right away, not on the next poll or batch job.
         </Callout>
       </Section>

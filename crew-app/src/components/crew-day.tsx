@@ -8,11 +8,10 @@ import { t } from '@/lib/i18n';
 
 // The crew's paid day (shop to shop) and per-member attendance — the native
 // counterpart of the web crew home's Start Day / End Day banner and Edit Crew
-// dialog (src/app/(crm)/crm/crew/page.tsx, EditCrewDialog.tsx). Deliberately
-// online-only: /api/crm/crew/day and /attendance stamp the server's own `now`
-// (no occurredAt / Idempotency-Key), so replaying one from an offline queue
-// hours later would credit the wrong time against payroll. A failed tap shows
-// its error and can simply be tapped again.
+// dialog (src/app/(crm)/crm/crew/page.tsx, EditCrewDialog.tsx). Online-only:
+// each tap sends its own time (occurredAt, bounded by the server), but there is
+// no offline queue or Idempotency-Key for these, so a failed tap shows its
+// error and can simply be tapped again.
 
 function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });

@@ -441,7 +441,7 @@ async function handleRun(request: Request) {
         }
 
         const advOutcome = await executeAction(adminClient as AdminClient, auto, {
-          orgId, assetId: meter.asset_id ?? null, assetName: meter.asset_name ?? null,
+          orgId, assetId: meter.asset_id ?? null, assetName: meter.asset_name || null,
         });
         if ("skipReason" in advOutcome) {
           // Nothing happened — put the threshold back so the next run retries.
@@ -497,7 +497,7 @@ async function handleRun(request: Request) {
       }
 
       const outcome = await executeAction(adminClient as AdminClient, auto, {
-        orgId, assetId: meter.asset_id ?? null, assetName: meter.asset_name ?? null,
+        orgId, assetId: meter.asset_id ?? null, assetName: meter.asset_name || null,
       });
       if ("skipReason" in outcome) {
         // Nothing was created — give the claim back so the next run retries.

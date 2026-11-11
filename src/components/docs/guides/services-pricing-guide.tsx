@@ -148,9 +148,10 @@ export function ServicesPricingGuide() {
         </p>
         <p>
           On an estimate, expand a line and choose <strong>+ Add Equipment</strong>. Set the quantity
-          and rate on each row; quantity times rate counts as internal cost and lowers that line&apos;s
-          margin. The line&apos;s footer shows equipment cost, the charge (your line price should cover
-          it) and the margin after equipment. Equipment is internal only: it never appears on the
+          and rate on each row for <strong>one visit</strong>; quantity times rate, times the
+          line&apos;s visits, counts as internal cost and lowers that line&apos;s margin (an aerator at
+          $40 a visit on a 6-visit line costs $240). The line&apos;s footer shows the equipment cost for
+          the whole line, the charge (your line price should cover it) and the margin after equipment. Equipment is internal only: it never appears on the
           proposal, the PDF, the client portal or the invoice, and it doesn&apos;t change the line&apos;s
           price. Name, unit and rate are copied onto the line when you add it, so later edits to the
           catalog don&apos;t change estimates you already priced. Duplicating an estimate copies its

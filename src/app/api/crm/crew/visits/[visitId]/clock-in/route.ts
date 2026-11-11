@@ -40,7 +40,7 @@ export async function POST(
     .select(`
       clocked_in_at, org_id, crew_id, crew_unassigned, status, scheduled_date,
       notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
-      crm_jobs(crew_id, notes_to_crew, notes_to_crew_updated_at)
+      crm_jobs:crew_job(crew_id, notes_to_crew, notes_to_crew_updated_at)
     `)
     .eq("id", visitId)
     .is("deleted_at", null)

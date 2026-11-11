@@ -155,8 +155,8 @@ export function SamsaraGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>No miles meter exists yet</strong> — one is auto-created, named &quot;Odometer,&quot;
-            starting at 0. You don&apos;t need to create a meter by hand before syncing a vehicle
-            for the first time.
+            starting at 0, labelled as a Samsara meter and carrying the vehicle&apos;s name. You
+            don&apos;t need to create a meter by hand before syncing a vehicle for the first time.
           </li>
           <li>
             <strong>The incoming mileage is less than the meter&apos;s current value</strong> — the

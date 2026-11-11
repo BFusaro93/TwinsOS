@@ -23,7 +23,7 @@ export async function closeMemberPunchesOnOtherCrews(
   const { memberId, newCrewId, at } = args;
   const { data: open, error } = await supabase
     .from("crm_crew_member_times")
-    .select("id, clocked_in_at, crm_job_visits(crew_id, crew_unassigned, crm_jobs(crew_id))")
+    .select("id, clocked_in_at, crm_job_visits(crew_id, crew_unassigned, crm_jobs:crew_job(crew_id))")
     .eq("crew_member_id", memberId)
     .is("deleted_at", null)
     .is("clocked_out_at", null)

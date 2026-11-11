@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { isUuid } from "../../id-param";
-import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
+import { clientNotFoundResponse, jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .maybeSingle();
 
   if (error) return jsonServerError("GET /api/v1/clients/[id]", error);
-  if (!data) return jsonError("Client not found", 404);
+  if (!data) return clientNotFoundResponse(db, auth.orgId, id);
   return NextResponse.json(shapeClient(data));
 }
 
@@ -102,7 +102,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .eq("id", id)
       .is("deleted_at", null)
       .maybeSingle();
-    if (!current) return jsonError("Client not found", 404);
+    if (!current) return clientNotFoundResponse(db, auth.orgId, id);
     previousStatus = current.status as string;
     previousSmsOptIn = (current.sms_opt_in as boolean | null) ?? false;
     const lastDigits = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(-10);
@@ -200,7 +200,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .maybeSingle();
 
   if (error) return jsonServerError("PATCH /api/v1/clients/[id]", error);
-  if (!data) return jsonError("Client not found", 404);
+  if (!data) return clientNotFoundResponse(db, auth.orgId, id);
 
   if (phoneChanged && previousSmsOptIn && body.smsOptIn === undefined) {
     await db.from("client_activity").insert({

@@ -50,7 +50,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("clocked_in_at, clocked_out_at, org_id, crew_id, crew_unassigned, status, paused_at, break_minutes, crm_jobs(crew_id)")
+    .select("clocked_in_at, clocked_out_at, org_id, crew_id, crew_unassigned, status, paused_at, break_minutes, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -161,7 +161,10 @@ export async function POST(
   // the clock-out response.
   if (transitioned) {
     try {
-      await recalcNextPackageVisitDate(supabase, data?.job_service_id as string | null,
+      // Service client: this reads the job's other services (crm_job_services),
+      // which a crew login can't read (20261231000340) — same as the stop
+      // clock-out route. The visit's ownership was proven above.
+      await recalcNextPackageVisitDate(createServiceClient(), data?.job_service_id as string | null,
         isoInZone(new Date(now), await getOrgTimeZone(supabase, existing.org_id as string)));
     } catch (err) {
       log.error("package min_days recalc failed", { visitId, error: err instanceof Error ? err.message : String(err) });

@@ -1,4 +1,4 @@
-import type { ZapierTriggerType } from "@/lib/integrations/zapier";
+import type { ZapierCrmTriggerType, ZapierTriggerType } from "@/lib/integrations/zapier";
 
 /**
  * Polling-trigger definition for one ZapierTriggerType — the fallback path
@@ -29,6 +29,21 @@ export interface PollingTriggerConfig {
   postFilter?: (row: any, searchParams: URLSearchParams, ctx: { orgToday: string }) => boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   map: (row: any) => Record<string, unknown>;
+}
+
+/**
+ * Re-firing events (a client cancelled again, an invoice paid again) need an
+ * id that changes per occurrence, or Zapier's dedupe swallows the second one.
+ * Events from before this cutoff keep the bare record id they were already
+ * delivered under — switching every listed item's id at once would make
+ * existing Zaps re-run for the whole page. Set to the release date.
+ */
+const EVENT_KEYED_IDS_FROM = "2026-11-11T00:00:00Z";
+
+/** `<recordId>:<event time>` for events at/after the cutoff, the bare id before it. */
+function eventKeyedId(recordId: string, eventAt: string | null | undefined): string {
+  if (!eventAt || Date.parse(eventAt) < Date.parse(EVENT_KEYED_IDS_FROM)) return recordId;
+  return `${recordId}:${eventAt}`;
 }
 
 export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> = {
@@ -74,9 +89,11 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     filters: { status: "cancelled" },
     hasSoftDelete: true,
     orderBy: "updated_at",
+    // One event per cancellation (closed_at is stamped each time), so a client
+    // reactivated and cancelled again triggers again; clientId is the client.
     map: (c) => ({
-      id: c.id, displayName: c.display_name, cancellationReason: c.cancellation_reason,
-      closedAt: c.closed_at, updatedAt: c.updated_at,
+      id: eventKeyedId(c.id, c.closed_at), clientId: c.id, displayName: c.display_name,
+      cancellationReason: c.cancellation_reason, closedAt: c.closed_at, updatedAt: c.updated_at,
     }),
   },
   estimate_created: {
@@ -91,10 +108,13 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
   },
   estimate_won: {
     table: "estimates",
-    columns: "id, estimate_number, client_id, description, estimate_date, updated_at",
-    filters: { stage: "won" },
+    columns: "id, estimate_number, client_id, stage, description, estimate_date, updated_at",
     hasSoftDelete: true,
     orderBy: "updated_at",
+    // There is no "won" stage: a won estimate is "accepted" (or "invoiced" once
+    // the accept flow converts it straight on) — the same rule the app's
+    // estimate_won trigger checks. Filtering on stage "won" matched nothing.
+    postFilter: (e) => e.stage === "accepted" || e.stage === "invoiced",
     map: (e) => ({
       id: e.id, estimateNumber: e.estimate_number, clientId: e.client_id,
       description: e.description, estimateDate: e.estimate_date, updatedAt: e.updated_at,
@@ -155,18 +175,30 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
   },
   invoice_paid: {
     table: "crm_invoices",
-    columns: "id, invoice_number, client_id, invoice_date, due_date, status, amount_paid_cents, balance_cents, created_at",
+    columns:
+      "id, invoice_number, client_id, invoice_date, due_date, status, amount_paid_cents, balance_cents, created_at, crm_payment_allocations(created_at)",
     filters: { status: "paid" },
     hasSoftDelete: true,
     // crm_invoices has no paid_at; updated_at is when it last changed, which
     // includes going paid. Ordering by invoice_date never surfaced an old
-    // invoice paid today. (id is unchanged, so later edits don't re-fire.)
+    // invoice paid today.
     orderBy: "updated_at",
-    map: (i) => ({
-      id: i.id, invoiceNumber: i.invoice_number, clientId: i.client_id, invoiceDate: i.invoice_date,
-      dueDate: i.due_date, status: i.status, amountPaidCents: i.amount_paid_cents,
-      balanceCents: i.balance_cents, createdAt: i.created_at,
-    }),
+    // The event time is the newest payment applied to it — not updated_at, so
+    // an edit to a paid invoice doesn't re-fire, but a refund followed by a new
+    // payment does (a bare invoice id fired once ever). invoiceId is the invoice.
+    map: (i) => {
+      const paidAt =
+        ((i.crm_payment_allocations ?? []) as { created_at: string | null }[])
+          .map((a) => a.created_at)
+          .filter((t): t is string => !!t)
+          .sort()
+          .pop() ?? null;
+      return {
+        id: eventKeyedId(i.id, paidAt), invoiceId: i.id, invoiceNumber: i.invoice_number, clientId: i.client_id,
+        invoiceDate: i.invoice_date, dueDate: i.due_date, status: i.status, amountPaidCents: i.amount_paid_cents,
+        balanceCents: i.balance_cents, paidAt, createdAt: i.created_at,
+      };
+    },
   },
   contract_signed: {
     table: "crm_contracts",
@@ -340,3 +372,72 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     }),
   },
 };
+
+// ── Live (REST hook) payloads ────────────────────────────────────────────────
+
+/** The ids fireSimpleTrigger knows about an event. */
+export interface LiveTriggerIds {
+  clientId: string;
+  estimateId?: string | null;
+  ticketId?: string | null;
+  invoiceId?: string | null;
+  /** The job / visit / contract / damage case, for triggers about one of those. */
+  recordId?: string | null;
+}
+
+/** Which of the event's ids is the trigger's own record. */
+const LIVE_RECORD_ID: Record<ZapierCrmTriggerType, keyof LiveTriggerIds> = {
+  client_created: "clientId",
+  lead_created: "clientId",
+  lead_converted_to_client: "clientId",
+  client_cancelled: "clientId",
+  estimate_created: "estimateId",
+  estimate_won: "estimateId",
+  estimate_lost: "estimateId",
+  job_created: "recordId",
+  ticket_created: "ticketId",
+  ticket_closed: "ticketId",
+  invoice_created: "invoiceId",
+  invoice_paid: "invoiceId",
+  contract_signed: "recordId",
+  damage_case_created: "recordId",
+  visit_dispatched: "recordId",
+};
+
+/** Tables whose rows carry client_id (everything here but clients itself and damage_cases). */
+const CLIENT_SCOPED_TABLES = new Set(["estimates", "crm_jobs", "crm_tickets", "crm_invoices", "crm_contracts", "crm_job_visits"]);
+
+/**
+ * The record a live CRM event is about, mapped exactly as the polling
+ * trigger maps it (so a REST-hook delivery matches the sample the Zap was
+ * built from, id included). When the caller didn't know the record's own id
+ * (some app paths fire job_created / visit_dispatched / contract_signed /
+ * damage_case_created with only the client), falls back to that client's
+ * newest matching record — the event has just happened, so it is the one.
+ * Returns null when nothing can be found; the caller then sends the bare event.
+ */
+export async function loadLiveTriggerRecord(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  triggerType: ZapierCrmTriggerType,
+  ids: LiveTriggerIds
+): Promise<Record<string, unknown> | null> {
+  const config = POLLING_TRIGGERS[triggerType];
+  const recordId = ids[LIVE_RECORD_ID[triggerType]];
+
+  let query = db.from(config.table).select(config.columns).eq("org_id", orgId);
+  if (config.hasSoftDelete) query = query.is("deleted_at", null);
+  if (recordId) {
+    query = query.eq("id", recordId);
+  } else {
+    for (const [column, value] of Object.entries(config.filters ?? {})) query = query.eq(column, value);
+    for (const column of config.requireNotNull ?? []) query = query.not(column, "is", null);
+    if (CLIENT_SCOPED_TABLES.has(config.table)) query = query.eq("client_id", ids.clientId);
+    query = query.order(config.orderBy, { ascending: false });
+  }
+  const { data, error } = await query.limit(1);
+  if (error) throw error;
+  const row = (data ?? [])[0];
+  return row ? config.map(row) : null;
+}

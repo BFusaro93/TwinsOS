@@ -12,6 +12,7 @@ import {
   useDeleteLineItem,
   useDeleteEstimate,
   useEstimateShareTokens,
+  useEstimateSubitemTotals,
   useEstimateShareLink,
   useEnsureEstimateShareLink,
   useEstimateVersions,
@@ -37,8 +38,7 @@ import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useDocumentTemplates } from "@/lib/hooks/use-crm-documents";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule, resolveLineDiscountCents, tierBasis, invoiceLinePricingFromEstimateLine } from "@/lib/estimate-calc";
-import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { computeLineItem, getBreakevenRateCents, computeInstallmentSchedule, clampLineDiscount, lineVisits, tierBasis, invoiceLinePricingFromEstimateLine } from "@/lib/estimate-calc";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
 import { EstimateDirectCostsGrid } from "./EstimateDirectCostsGrid";
@@ -395,6 +395,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // lines, then recurring lines). Convert stays available while accepted
   // lines remain unconverted.
   const { data: convertedInfo } = useEstimateConvertedLines(estimateId);
+  // Priced sub-items per line — real revenue the Invoice button has to bill.
+  const { data: subitemTotals, isLoading: subitemTotalsLoading } = useEstimateSubitemTotals(estimateId);
   const unconvertedLineCount = convertedInfo?.legacyConverted
     ? 0
     : (estimate?.lineItems ?? []).filter(
@@ -411,7 +413,6 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: deleteEstimate, isPending: deletingEstimate } = useDeleteEstimate();
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
-  const { data: overheadSettings } = useOverheadSettings();
   const { data: orgSettings } = useOrgSettings();
   const { today: orgToday } = useOrgDates();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
@@ -727,6 +728,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             visits: li.visits,
             budgetedHours: li.budgetedHours,
             costCents: li.costCents,
+            laborCostRateCents: li.laborCostRateCents ?? null,
             adjRateCents: newAdjRate,
             unitType: li.unitType ?? undefined,
             productionRateSqftPerHr: li.productionRateSqftPerHr ?? undefined,
@@ -744,12 +746,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           // A flat line discount can't survive a rate DECREASE unclamped, and a
           // percent one has to follow the new total — same rule the grid
           // applies on every other write path.
-          const clampedDiscountCents = resolveLineDiscountCents({
+          const clamped = clampLineDiscount({
             totalCents: updated.totalCents,
             discountCents: li.discountCents,
             discountType: li.discountType,
             discountValue: li.discountValue,
           });
+          const clampedDiscountCents = clamped.discountCents;
           return upsertLineItem({
             estimateId: estimate.id,
             item: {
@@ -763,7 +766,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               total_cost_cents: updated.totalCostCents,
               margin_bps: updated.marginBps,
               markup_bps: updated.markupBps,
-              ...(clampedDiscountCents !== (li.discountCents ?? 0) ? { discount_cents: clampedDiscountCents } : {}),
+              ...(clampedDiscountCents !== (li.discountCents ?? 0)
+                ? {
+                    discount_cents: clampedDiscountCents,
+                    // A legacy flat discount records its intended amount before it is clamped.
+                    ...(clamped.discountType !== (li.discountType ?? null)
+                      ? { discount_type: clamped.discountType, discount_value: clamped.discountValue }
+                      : {}),
+                  }
+                : {}),
             },
           });
         })
@@ -873,11 +884,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             : undefined;
           const budgetMethod = matchedService?.budgetMethod ?? "manual";
           const productionRate = matchedService?.productionRateSqftPerHr ?? null;
+          const visits = lineVisits(item.visits);
           const computed = computeLineItem({
             calcType: 1,
             qty: item.qty,
             rateCents: item.rateCents,
-            visits: item.visits,
+            visits,
             budgetedHours: 0,
             costCents: 0,
             adjRateCents: null,
@@ -895,7 +907,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               calc_type: 1,
               qty: item.qty,
               rate_cents: item.rateCents,
-              visits: item.visits,
+              visits,
               cost_cents: computed.costCents,
               adj_rate_cents: null,
               sort_order: existingCount + idx,
@@ -932,21 +944,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     if (!estimate) return;
     setRecalcPending(true);
     try {
-      await saveFinancials({
-        id: estimate.id,
-        lineItems: estimate.lineItems ?? [],
-        directCosts: estimate.directCosts ?? [],
-        taxRateBps:      overrides?.taxRateBps      ?? estimate.taxRateBps,
-        overheadRateBps: overrides?.overheadRateBps ?? estimate.overheadRateBps,
-        discountCents:   overrides?.discountCents   ?? estimate.discountCents,
-        discountType:       overrides && "discountType" in overrides       ? overrides.discountType       : estimate.discountType,
-        discountValue:      overrides && "discountValue" in overrides      ? overrides.discountValue      : estimate.discountValue,
-        appliedDiscountId:  overrides && "appliedDiscountId" in overrides  ? overrides.appliedDiscountId  : estimate.appliedDiscountId,
-        // Per-cost-type overhead (crm_overhead_settings) takes priority over the
-        // flat overheadRateBps once an org has actually configured it; otherwise
-        // fall back to the existing flat-rate behavior.
-        perTypeOverhead: overheadSettings && hasPerTypeOverhead(overheadSettings) ? overheadSettings : undefined,
-      });
+      // Only the fields the summary panel actually changed are written. The
+      // rest used to be filled in from this page's copy of the estimate, which
+      // put back a tax rate or discount someone else had just changed. With
+      // nothing given it is a plain recalculation.
+      await saveFinancials({ id: estimate.id, ...(overrides ?? {}) });
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Recalculation failed"));
     } finally {
@@ -1113,9 +1115,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              disabled={creatingInvoice}
+              disabled={creatingInvoice || subitemTotalsLoading}
               onClick={async () => {
-                if (!estimate) return;
+                if (!estimate || !subitemTotals) return;
                 try {
                   // The org's calendar day, not the browser's — the invoice date
                   // feeds due-date terms and every dated report.
@@ -1136,31 +1138,44 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   const liveLines = (estimate.lineItems ?? []).filter(
                     (li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft" && li.rowType !== "section"
                   );
+                  // Priced sub-items are part of what the client was quoted
+                  // (recalcEstimateTotals adds them to the subtotal). They are
+                  // folded into their parent line here — the same way Convert
+                  // to Job does (ConvertToJobDialog.netByLine) — and the same
+                  // nets pick the tier, so the invoice bills the tier the
+                  // estimate's total is based on.
+                  const subitemsOf = (id: string) => subitemTotals[id] ?? 0;
                   const basis = tierBasis(
                     !!estimate.tiersEnabled,
                     liveLines.map((li) => ({
                       tier: li.tier ?? null,
                       status: li.status,
-                      netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)),
+                      netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)) + subitemsOf(li.id),
                     }))
                   );
                   const invoiceLines = liveLines
                     .filter((li) => !basis || !li.tier || li.tier === basis)
                     .map((li) => {
+                      const subCents = subitemsOf(li.id);
+                      const lineTotalCents = li.totalCents + subCents;
                       // qty × rate must equal the line total, or the invoice
                       // re-prices the line on its first edit (it recomputes
                       // total = qty × rate). See invoiceLinePricingFromEstimateLine.
-                      const pricing = invoiceLinePricingFromEstimateLine(li);
+                      const pricing = invoiceLinePricingFromEstimateLine({ ...li, totalCents: lineTotalCents });
+                      // With sub-items folded in, a percent line discount would
+                      // re-derive against the bigger total on the invoice; carry
+                      // the amount the estimate actually took off as flat.
+                      const keepPercent = subCents === 0 || li.discountType !== "percent";
                       return {
                       serviceId: li.serviceId ?? null,
                       name: li.serviceName ?? li.serviceId ?? "Service",
                       description: li.invoiceDesc ?? "",
                       qty: pricing.qty,
                       rateCents: pricing.rateCents,
-                      totalCents: li.totalCents,
+                      totalCents: lineTotalCents,
                       discountCents: li.discountCents,
-                      discountType: li.discountType,
-                      discountValue: li.discountValue,
+                      discountType: keepPercent ? li.discountType : ("flat" as const),
+                      discountValue: keepPercent ? li.discountValue : li.discountCents,
                       isTaxable,
                       };
                     });
@@ -1172,11 +1187,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   // produced an invoice whose stored header disagreed with its
                   // own lines, so the first edit "recalculated" the client's
                   // total to a different number.
-                  //
-                  // Note: estimate subitem revenue is not carried onto the
-                  // invoice (there are no subitem rows in any org today). If
-                  // subitems ever ship, they need their own invoice lines here —
-                  // otherwise this subtotal would under-bill them.
+                  // Sub-item revenue is already in each line's total above.
                   const netLine = (li: { totalCents: number; discountCents?: number }) =>
                     li.totalCents - (li.discountCents ?? 0);
                   const subtotalCents = invoiceLines.reduce((s, li) => s + netLine(li), 0);
@@ -1927,6 +1938,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 onSelectionChange={setSelectedLineItemIds}
                 tiersEnabled={estimate.tiersEnabled}
                 onItemStatusChange={promptMarkAcceptedIfWon}
+                convertedLineIds={convertedInfo?.convertedLineIds}
+                allLinesConverted={!!convertedInfo?.legacyConverted}
               />
 
               {/* Direct costs */}
@@ -2254,7 +2267,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             <AlertDialogDescription>
               The whole estimate is removed from your estimate lists, its proposal link stops working and its follow-up
               sequences stop. If it was made from a ticket, the ticket can be converted again. An estimate with a job,
-              invoice, contract, payment or project made from it can&apos;t be deleted — cancel or delete those first.
+              invoice, contract, payment or project made from it can&apos;t be deleted — cancel or delete those first —
+              and neither can one whose online deposit is still processing.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -13,12 +13,15 @@ import { useTrialStatus } from "@/lib/hooks/use-trial-status";
  * (crm_roles permissions via usePermissions), not these.
  *
  *   viewer    — read-only in Equipt.
- *   requestor — may create maintenance requests (edit/delete their own) and
- *               keep their OWN requisitions in draft (plus line items);
+ *   requestor — may create maintenance requests (edit/delete their own
+ *               while still Open — title, description, priority and
+ *               asset/vehicle only) and keep their OWN requisitions in
+ *               draft (plus line items);
  *               can't submit for approval; may comment/attach on their own
  *               records; everything else read-only.
  *   purchaser — work orders (parts, labor, vendor charges, status) are
- *               read-only; everything else unchanged.
+ *               read-only; maintenance requests follow the requestor rule
+ *               (own, while Open); everything else unchanged.
  *
  * Admin / manager / technician / crew are unrestricted here.
  *
@@ -76,8 +79,10 @@ export interface RoleCapabilities {
   isOwn: (record: OwnedRecord | null | undefined) => boolean;
   /** Edit / delete a requisition header or its line items. */
   canEditRequisition: (req: OwnedDraftRecord | null | undefined) => boolean;
-  /** Edit / delete a maintenance request. */
-  canEditMaintenanceRequest: (req: OwnedRecord | null | undefined) => boolean;
+  /** Edit / delete a maintenance request. Triage roles: any request.
+   * Requestor / purchaser: their own, only while it is still Open (mirrors
+   * the maintenance_requests_limited_role_guard trigger). */
+  canEditMaintenanceRequest: (req: OwnedDraftRecord | null | undefined) => boolean;
   /** Comment on / attach to a record. `record` is the parent (e.g. the
    * requisition) — a requestor may only do so on their own records. */
   canComment: (record?: OwnedRecord | null) => boolean;
@@ -127,8 +132,9 @@ export function useRoleCapabilities(): RoleCapabilities {
       return isOwn(req) && req.status === "draft";
     },
     canEditMaintenanceRequest: (req) => {
-      if (canWriteEquipt) return true;
-      return isRequestor && !noWrites && isOwn(req);
+      if (canEditWorkOrders) return true;
+      if (noWrites || !req || !(isRequestor || isPurchaser)) return false;
+      return isOwn(req) && req.status === "open";
     },
     canComment: (record) => {
       if (canWriteEquipt) return true;

@@ -281,7 +281,7 @@ export default function CrewSchedulePage() {
               variant="outline"
               className="gap-1.5 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400"
               onClick={() => {
-                if (anyJobActive && !window.confirm(t("A job is still in progress. End the day anyway?"))) return;
+                if (anyJobActive && !window.confirm(t("A job is still in progress. Its time stops when you end the day — tap Stop Job on it when you can. End the day anyway?"))) return;
                 dayAction.mutate({ action: "end_day" });
               }}
               disabled={dayAction.isPending}

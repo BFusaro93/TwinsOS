@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { isOrgInactive, isOrgDemo } from "@/lib/orgs/org-canceled";
 import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
 import { SMS_NOT_REGISTERED_REASON } from "@/lib/sms/send";
+import { phoneLast10 } from "@/lib/sms/opt-outs";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -141,6 +142,14 @@ export async function emailSendDeferral(
     return { fireAt: windowFireAt, reason: `email held until its send window opens at ${windowFireAt.toISOString()}` };
   }
   return null;
+}
+
+/** The numbers in a stored comma-joined recipient list that are also in `current`
+ *  (compared on their last 10 digits). */
+export function intersectPhones(stored: string, current: readonly string[]): string[] {
+  const key = (p: string) => phoneLast10(p) ?? p.replace(/\D/g, "");
+  const allowed = new Set(current.map(key));
+  return stored.split(",").map((p) => p.trim()).filter((p) => p && allowed.has(key(p)));
 }
 
 /**
@@ -287,12 +296,9 @@ async function handleSendFailure(
   });
 
   if (attempt >= MAX_SEND_ATTEMPTS) {
-    await adminClient
-      .from("crm_sequence_enrollments")
-      .update({ stopped_at: ctx.nowIso, updated_at: ctx.nowIso })
-      .eq("id", ctx.enrollId);
-    await logSequenceExecution(adminClient, {
-      ...logBase, action: "stopped_send_failed", detail: `gave up after ${attempt} attempts: ${reason}`,
+    await stopEnrollment(adminClient, {
+      orgId: ctx.orgId, enrollId: ctx.enrollId, sequenceId: ctx.sequenceId, clientId: ctx.clientId, nowIso: ctx.nowIso,
+      action: "stopped_send_failed", detail: `gave up after ${attempt} attempts: ${reason}`,
     });
     return { skipped: { enrollmentId: ctx.enrollId, reason: `${reason} — gave up after ${attempt} attempts, enrollment stopped` } };
   }
@@ -396,7 +402,7 @@ export async function processDueEnrollment(
  * this enrollment was created for (logged as "meeting_scheduled_at" at enrollment).
  * An enrollment with no logged time (pre-dating that log) is only checked for status.
  */
-async function meetingNoLongerMatches(
+export async function meetingNoLongerMatches(
   adminClient: AnyClient,
   enrollmentId: string,
   meetingId: string
@@ -423,6 +429,123 @@ async function meetingNoLongerMatches(
   return null;
 }
 
+/**
+ * Why an invoice/estimate/ticket-scoped run is over, or null when it still applies:
+ * the record was deleted or voided, or has left the state the run's start trigger
+ * implies (an unpaid-invoice reminder after the invoice is paid in full, an estimate
+ * follow-up after it was won or lost, a ticket follow-up after it was closed). The
+ * rule lives in the database (sequence_enrollment_record_stop_reason) so the record
+ * triggers that stop runs immediately and this execution-time check never disagree.
+ * A failed lookup doesn't stop anything.
+ */
+export async function recordNoLongerMatches(adminClient: AnyClient, enrollmentId: string): Promise<string | null> {
+  const { data, error } = await adminClient.rpc("sequence_enrollment_record_stop_reason", { p_enrollment_id: enrollmentId });
+  if (error) {
+    logger.error("record auto-stop check failed", { enrollmentId, error: error.message });
+    return null;
+  }
+  return typeof data === "string" && data ? data : null;
+}
+
+/** The enrollment columns the "should this run still go on" checks need. */
+export interface EnrollmentGateRow {
+  id: string;
+  sequence_id: string;
+  client_id: string | null;
+  estimate_id: string | null;
+  ticket_id: string | null;
+  invoice_id: string | null;
+  meeting_id: string | null;
+}
+
+/**
+ * Why this run must end now, or null when it may go on. One list for the step
+ * processor and the approval route (a queued step being approved must pass the
+ * same checks a step that never needed approval does):
+ *  - its sequence or parent automation was turned off or deleted,
+ *  - its client was deleted,
+ *  - its meeting was cancelled, completed, deleted or moved,
+ *  - its invoice/estimate/ticket left the state the start trigger implies.
+ * Stop conditions are checked separately (shouldStopSequence) because the
+ * processor completes a run with no steps left before evaluating them.
+ */
+export async function enrollmentEndReason(
+  adminClient: AnyClient,
+  enrollment: EnrollmentGateRow
+): Promise<{ action: string; detail: string } | null> {
+  // Disabling (or deleting) a sequence/automation must stop work already in
+  // flight, not just block new enrollments — otherwise a client enrolled
+  // before the switch-off keeps getting emails/texts. Checked at execution
+  // time, per step.
+  const { data: seqRow } = await adminClient
+    .from("crm_automation_sequences")
+    .select("is_active, deleted_at, crm_automations(is_active, deleted_at)")
+    .eq("id", enrollment.sequence_id)
+    .maybeSingle();
+  const parentRaw = seqRow?.crm_automations as
+    | { is_active: boolean; deleted_at: string | null }
+    | { is_active: boolean; deleted_at: string | null }[]
+    | null
+    | undefined;
+  const parent = Array.isArray(parentRaw) ? parentRaw[0] : parentRaw;
+  if (
+    !seqRow ||
+    seqRow.is_active === false || seqRow.deleted_at ||
+    (parent && (parent.is_active === false || parent.deleted_at))
+  ) {
+    return { action: "stopped_sequence_inactive", detail: "sequence or automation was disabled/deleted" };
+  }
+
+  // A deleted client's sequence must end, not just skip its messages: the email/SMS
+  // loaders refuse a deleted client (a permanent failure that advances the sequence),
+  // so the ticket/alert/update/tag steps after it used to run against the deleted
+  // record and notify staff about it.
+  if (enrollment.client_id) {
+    const { data: clientRow } = await adminClient
+      .from("clients")
+      .select("deleted_at")
+      .eq("id", enrollment.client_id)
+      .maybeSingle();
+    if (!clientRow || clientRow.deleted_at) {
+      return { action: "stopped_client_deleted", detail: "client was deleted" };
+    }
+  }
+
+  // A meeting reminder is about one scheduled time. If the meeting was cancelled,
+  // deleted, completed or moved, the reminders still queued for it are wrong — stop
+  // them; the 5-minute sales-meeting cron re-enrolls a moved meeting for its new time
+  // (meetingRescheduledSinceEnrollment).
+  if (enrollment.meeting_id) {
+    const meetingStop = await meetingNoLongerMatches(adminClient, enrollment.id, enrollment.meeting_id);
+    if (meetingStop) return { action: "stopped_meeting_changed", detail: meetingStop };
+  }
+
+  if (enrollment.invoice_id || enrollment.estimate_id || enrollment.ticket_id) {
+    const recordStop = await recordNoLongerMatches(adminClient, enrollment.id);
+    if (recordStop) return { action: "stopped_record_changed", detail: recordStop };
+  }
+  return null;
+}
+
+/** Ends a run without finishing it (stopped_at — the "ended early" state that frees
+ *  the client's slot), records why, and logs it. A queued approval for the run is
+ *  rejected by the database when the run stops. */
+export async function stopEnrollment(
+  adminClient: AnyClient,
+  params: { orgId: string; enrollId: string; sequenceId: string; clientId: string | null; nowIso: string; action: string; detail: string }
+): Promise<void> {
+  await adminClient
+    .from("crm_sequence_enrollments")
+    .update({ stopped_at: params.nowIso, stop_reason: params.detail, awaiting_approval: false, updated_at: params.nowIso })
+    .eq("id", params.enrollId)
+    .is("completed_at", null)
+    .is("stopped_at", null);
+  await logSequenceExecution(adminClient, {
+    orgId: params.orgId, enrollmentId: params.enrollId, sequenceId: params.sequenceId, clientId: params.clientId,
+    action: params.action, detail: params.detail,
+  });
+}
+
 async function runClaimedStep(
   adminClient: AnyClient,
   enrollment: DueEnrollmentRow
@@ -438,78 +561,14 @@ async function runClaimedStep(
     .is("deleted_at", null)
     .order("position", { ascending: true });
 
-  // Disabling (or deleting) a sequence/automation must stop work already in
-  // flight, not just block new enrollments — otherwise a client enrolled
-  // before the switch-off keeps getting emails/texts. Checked at execution
-  // time, per step. The enrollment ends via stopped_at (the existing
-  // "ended without finishing" state) so it no longer occupies the slot.
-  const { data: seqRow } = await adminClient
-    .from("crm_automation_sequences")
-    .select("is_active, deleted_at, crm_automations(is_active, deleted_at)")
-    .eq("id", sequence_id)
-    .maybeSingle();
-  const parentRaw = seqRow?.crm_automations as
-    | { is_active: boolean; deleted_at: string | null }
-    | { is_active: boolean; deleted_at: string | null }[]
-    | null
-    | undefined;
-  const parent = Array.isArray(parentRaw) ? parentRaw[0] : parentRaw;
-  if (
-    !seqRow ||
-    seqRow.is_active === false || seqRow.deleted_at ||
-    (parent && (parent.is_active === false || parent.deleted_at))
-  ) {
-    await adminClient
-      .from("crm_sequence_enrollments")
-      .update({ stopped_at: nowIso, updated_at: nowIso })
-      .eq("id", enrollId);
-    await logSequenceExecution(adminClient, {
-      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-      action: "stopped_sequence_inactive", detail: "sequence or automation was disabled/deleted",
+  // Sequence/automation off, client deleted, meeting changed, or the run's
+  // invoice/estimate/ticket has moved on (see enrollmentEndReason).
+  const endReason = await enrollmentEndReason(adminClient, enrollment);
+  if (endReason) {
+    await stopEnrollment(adminClient, {
+      orgId, enrollId, sequenceId: sequence_id, clientId: client_id, nowIso, ...endReason,
     });
-    return { fired: { enrollmentId: enrollId, action: "stopped (sequence/automation inactive)" } };
-  }
-
-  // A deleted client's sequence must end, not just skip its messages: the email/SMS
-  // loaders refuse a deleted client (a permanent failure that advances the sequence),
-  // so the ticket/alert/update/tag steps after it used to run against the deleted
-  // record and notify staff about it.
-  if (client_id) {
-    const { data: clientRow } = await adminClient
-      .from("clients")
-      .select("deleted_at")
-      .eq("id", client_id)
-      .maybeSingle();
-    if (!clientRow || clientRow.deleted_at) {
-      await adminClient
-        .from("crm_sequence_enrollments")
-        .update({ stopped_at: nowIso, updated_at: nowIso })
-        .eq("id", enrollId);
-      await logSequenceExecution(adminClient, {
-        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-        action: "stopped_client_deleted", detail: "client was deleted",
-      });
-      return { fired: { enrollmentId: enrollId, action: "stopped (client deleted)" } };
-    }
-  }
-
-  // A meeting reminder is about one scheduled time. If the meeting was cancelled,
-  // deleted, completed or moved, the reminders still queued for it are wrong — stop
-  // them; the 5-minute sales-meeting cron re-enrolls a moved meeting for its new time
-  // (meetingRescheduledSinceEnrollment).
-  if (meeting_id) {
-    const meetingStop = await meetingNoLongerMatches(adminClient, enrollId, meeting_id);
-    if (meetingStop) {
-      await adminClient
-        .from("crm_sequence_enrollments")
-        .update({ stopped_at: nowIso, updated_at: nowIso })
-        .eq("id", enrollId);
-      await logSequenceExecution(adminClient, {
-        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
-        action: "stopped_meeting_changed", detail: meetingStop,
-      });
-      return { fired: { enrollmentId: enrollId, action: `stopped (${meetingStop})` } };
-    }
+    return { fired: { enrollmentId: enrollId, action: `stopped (${endReason.detail})` } };
   }
 
   // Positions aren't guaranteed contiguous: deleting or deactivating a step
@@ -543,12 +602,9 @@ async function runClaimedStep(
 
   const stopped = await shouldStopSequence(adminClient, sequence_id, client_id ?? null, estimate_id ?? null, ticket_id ?? null, invoice_id ?? null);
   if (stopped) {
-    await adminClient
-      .from("crm_sequence_enrollments")
-      .update({ stopped_at: nowIso, updated_at: nowIso })
-      .eq("id", enrollId);
-    await logSequenceExecution(adminClient, {
-      orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id, action: "stopped_by_condition",
+    await stopEnrollment(adminClient, {
+      orgId, enrollId, sequenceId: sequence_id, clientId: client_id, nowIso,
+      action: "stopped_by_condition", detail: "a stop condition was met",
     });
     return { fired: { enrollmentId: enrollId, action: "stopped by condition" } };
   }
@@ -667,8 +723,18 @@ async function runClaimedStep(
         .limit(1)
         .maybeSingle();
       if (approvedRow?.body_html && approvedRow?.to_email) {
+        // The step sat in the queue between approval and this send: only the
+        // approved addresses that may still be emailed right now (not bounced,
+        // not opted out, still on the client) get it — `built` was resolved just
+        // above with today's suppression rules.
+        const stillDeliverable = new Set(built.toEmails.map((e) => e.trim().toLowerCase()));
+        const approvedTo = (approvedRow.to_email as string).split(",").map((e) => e.trim()).filter(Boolean)
+          .filter((e) => stillDeliverable.has(e.toLowerCase()));
+        if (approvedTo.length === 0) {
+          return handleSendFailure(adminClient, failureCtx, "the approved recipients can no longer be emailed (opted out, bounced or removed)", true);
+        }
         approvedEmail = {
-          toEmails: (approvedRow.to_email as string).split(",").map((e) => e.trim()).filter(Boolean),
+          toEmails: approvedTo,
           toName: (approvedRow.to_name as string | null) ?? null,
           subject: (approvedRow.subject as string) ?? "",
           bodyHtml: approvedRow.body_html as string,
@@ -753,7 +819,7 @@ async function runClaimedStep(
     await logSequenceExecution(adminClient, {
       orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
       eventId: currentEvent.id, eventType: "email", action: "email_sent",
-      detail: `${built.subject} → ${built.toEmails.join(", ")}`,
+      detail: `${approvedEmail?.subject ?? built.subject} → ${(approvedEmail?.toEmails ?? built.toEmails).join(", ")}`,
     });
     const action = await advanceEnrollmentPastStep(adminClient, {
       enrollmentId: enrollId,
@@ -819,7 +885,12 @@ async function runClaimedStep(
         .limit(1)
         .maybeSingle();
       if (approvedRow?.body_text && approvedRow?.to_phone) {
-        approvedText = { bodyText: approvedRow.body_text as string, toPhone: approvedRow.to_phone as string };
+        // Only approved numbers still on the client and not opted out (STOP) since.
+        const approvedTo = intersectPhones(String(approvedRow.to_phone), built.toPhones);
+        if (approvedTo.length === 0) {
+          return handleSendFailure(adminClient, failureCtx, "the approved number can no longer be texted (replied STOP or removed)", true);
+        }
+        approvedText = { bodyText: approvedRow.body_text as string, toPhone: approvedTo.join(", ") };
       }
     }
 

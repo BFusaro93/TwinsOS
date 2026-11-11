@@ -1,6 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { mapMeterReading } from "@/lib/supabase/mappers";
 import type { MeterReading } from "@/types/cmms";
 
@@ -9,15 +12,18 @@ export function useMeterReadings(meterId: string | null) {
     queryKey: ["meter-readings", meterId],
     queryFn: async () => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("meter_readings")
-        .select("*")
-        .eq("meter_id", meterId!)
-        .is("deleted_at", null)
-        .order("reading_at", { ascending: true })
-        .order("created_at", { ascending: true });
-      if (error) throw error;
+      // Every page, oldest first. PostgREST caps a response at 1,000 rows, so a
+      // meter with a daily Samsara feed only ever showed its OLDEST 1,000
+      // readings — the newest (and the 12-month chart / stats) went missing.
+      const data = await fetchAllRows<Parameters<typeof mapMeterReading>[0]>(() =>
+        supabase
+          .from("meter_readings")
+          .select("*")
+          .eq("meter_id", meterId!)
+          .is("deleted_at", null)
+          .order("reading_at", { ascending: true })
+          .order("created_at", { ascending: true })
+      );
       return (data.map(mapMeterReading)) as MeterReading[];
     },
     enabled: !!meterId,
@@ -57,8 +63,18 @@ export async function addMeterReadingCore(input: NewMeterReadingInput): Promise<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const readDb = supabase as any;
   const { data: meterRow, error: meterErr } = await readDb
-    .from("meters").select("kind, capacity, unit").eq("id", input.meterId).single();
+    .from("meters").select("kind, capacity, unit, org_id").eq("id", input.meterId).single();
   if (meterErr) throw meterErr;
+
+  // A reading can't be dated after today on the company's calendar (the
+  // database refuses it too). A future-dated reading would become the meter's
+  // "latest" value and fire or block automations on a reading not yet taken.
+  const readingInstant = new Date(input.readingAt);
+  if (Number.isNaN(readingInstant.getTime())) throw new Error("Enter a valid reading date.");
+  const orgTz = await getOrgTimeZone(readDb, meterRow?.org_id);
+  if (isoInZone(readingInstant, orgTz) > todayInZone(orgTz)) {
+    throw new Error("A reading can't be dated in the future.");
+  }
   const isLevel = meterRow?.kind === "level";
   const levelError = isLevel ? levelReadingError(Number(input.value), meterRow.capacity, meterRow.unit) : null;
   if (levelError) throw new Error(levelError);
@@ -141,6 +157,23 @@ export async function addMeterReadingCore(input: NewMeterReadingInput): Promise<
   return mapMeterReading(data);
 }
 
+/**
+ * Fire-and-forget: ask the automation runner to re-check the org's rules now
+ * that a meter value changed. Every path that records a reading calls this
+ * (add reading, a direct value edit, a new meter's starting reading) so a
+ * threshold crossed by any of them fires right away instead of on the next
+ * cron sweep. Errors are non-fatal.
+ */
+export function runMeterAutomations(queryClient: ReturnType<typeof useQueryClient>): void {
+  fetch("/api/automations/run", { method: "POST" })
+    .then(() => {
+      queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["requests"] });
+      queryClient.invalidateQueries({ queryKey: ["automations"] });
+    })
+    .catch(() => {});
+}
+
 export function useAddMeterReading() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -148,15 +181,7 @@ export function useAddMeterReading() {
     onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ["meter-readings", input.meterId] });
       queryClient.invalidateQueries({ queryKey: ["meters"] });
-      // Fire-and-forget: check if any automations should trigger for this org
-      // now that the meter value has changed. Errors are non-fatal.
-      fetch("/api/automations/run", { method: "POST" })
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["work-orders"] });
-          queryClient.invalidateQueries({ queryKey: ["requests"] });
-          queryClient.invalidateQueries({ queryKey: ["automations"] });
-        })
-        .catch(() => {});
+      runMeterAutomations(queryClient);
     },
   });
 }

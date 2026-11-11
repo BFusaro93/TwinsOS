@@ -12,10 +12,10 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const STAFF_ROLES: [string, string][] = [
   ["Admin", "Full access to everything — all modules, all records, settings, approval flows, and user management."],
   ["Manager", "Full operational access across purchasing and maintenance — everything except organization settings and user management."],
-  ["Purchaser", "Manages the full procurement lifecycle from requisition to receiving. Read-only on work orders."],
+  ["Purchaser", "Manages the full procurement lifecycle from requisition to receiving. Read-only on work orders. Can submit maintenance requests and edit or delete their own while they're still Open, but can't review or convert requests."],
   ["Staff", "Standard Equipt access — creates and manages work orders (not limited to ones assigned to them), and can initiate procurement for parts."],
   ["Viewer", "Read-only in Equipt. No create, edit, delete, or approve access there. Landscapt access follows their Landscapt role."],
-  ["Requestor", "Submits maintenance requests and draft purchase requisitions only — can't approve, edit, or delete, and has no access to assets, vendors, or inventory."],
+  ["Requestor", "Submits maintenance requests and draft purchase requisitions only. Can edit or delete their own maintenance request (title, description, priority, asset/vehicle) only while it's still Open — once it's being reviewed it's locked. Can't approve, review or convert anything, and has no access to assets, vendors, or inventory."],
   ["Crew", "A shared login for a field crew team (e.g. MAINT1, ENHANCE1), not an individual person — confined to the crew field surface, not the full dashboard."],
 ];
 
@@ -25,7 +25,7 @@ const MATRIX_ROWS: [string, string, string, string, string, string, string][] = 
   ["Purchaser",  "No",  "No", "No", "Requisitions/POs/receiving/vendors full; work orders read-only", "None by default", "N/A"],
   ["Staff",      "No",  "No", "No", "Work orders, PM, parts, meters full; can create requisitions/POs for parts", "None by default", "N/A"],
   ["Viewer",     "No",  "No", "No", "Read-only", "None by default", "N/A"],
-  ["Requestor",  "No",  "No", "No", "Maintenance requests + draft requisitions only", "None by default", "N/A"],
+  ["Requestor",  "No",  "No", "No", "Maintenance requests (own, editable while Open) + draft requisitions only", "None by default", "N/A"],
   ["Crew",       "No",  "No", "No", "None — confined to crew field surface", "None — confined to /crm/crew", "N/A"],
 ];
 
@@ -468,15 +468,28 @@ export function UsersRolesGuide() {
               visits belonging to its own crew, and cannot move a visit to a different crew. Jobs and
               job service lines are read-only to a crew account, so a crew can never alter a
               service&apos;s price — pricing is only editable by staff roles with the relevant
-              permission. Invoices and payments are not readable by a crew login at all.
+              permission. Nor can a crew change the price or quantity on one of its own visits.
+              Invoices and payments are not readable by a crew login at all.
+            </p>
+            <p className="mt-2">
+              What a crew login can <em>see</em> about money is limited to what the crew app shows.
+              Job prices and totals, labor and material costs, and the price and cost of materials on
+              a job are never available to a crew login — not on screen and not by querying the
+              database directly with the crew&apos;s credentials. The one exception is each
+              service&apos;s price on a stop, and only while <strong>Hide pricing from crew
+              accounts</strong> is off. For the same reason, reports built on jobs and visits
+              (revenue, rates, job costing, budget vs. actual) return no data to a crew login, even on
+              a dashboard marked visible to crews.
             </p>
           </li>
           <li>
             <strong>Hiding prices from crews.</strong>{" "}
             <strong>Settings → Landscapt → Hide pricing from crew accounts</strong> stops service
             prices from being sent to crew devices at all — not merely hidden on screen. With it on,
-            no rate is included in the data the crew app requests, so prices can&apos;t be recovered
-            from a shared tablet. Leave it off if you want crews to see what a job is worth.
+            the database won&apos;t return a service price to a crew login, so prices can&apos;t be
+            recovered from a shared tablet. Leave it off if you want crews to see each
+            service&apos;s price on their stops. Job totals and costs are never shown to crews either
+            way.
           </li>
           <li>
             <strong>Client portal accounts</strong> — an entirely different login system for

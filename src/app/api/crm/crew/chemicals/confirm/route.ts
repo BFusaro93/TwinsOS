@@ -121,7 +121,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, org_id, status, crew_id, crew_unassigned, clocked_in_at, crm_jobs(crew_id)")
+    .select("id, org_id, status, crew_id, crew_unassigned, clocked_in_at, crm_jobs:crew_job(crew_id)")
     .in("id", visitIds)
     .is("deleted_at", null);
   const visitById = new Map<string, { id: string; org_id: string; status: string | null; clocked_in_at: string | null }>(

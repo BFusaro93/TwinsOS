@@ -7,6 +7,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { computeSalesTax } from "@/lib/utils/po-tax";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { withIdempotency } from "@/lib/api/idempotency";
 
 /** GET /api/v1/purchase-orders — list the org's purchase orders. Requires scope "purchase_orders:read". */
 export async function GET(request: Request) {
@@ -42,176 +43,178 @@ export async function POST(request: Request) {
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "purchase_orders:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // Idempotency-Key: a retried create returns the first result instead of a duplicate.
+  return withIdempotency(db, auth.orgId, request, async () => {
+    const parsed = createPurchaseOrderSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
+    const body = parsed.data;
 
-  const parsed = createPurchaseOrderSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
-  const body = parsed.data;
-
-  // deleted_at IS NULL on every FK check here: a PO pointing at a
-  // soft-deleted vendor, requisition, product or project is a dangling
-  // reference the rest of the app will not resolve.
-  const { data: vendor } = await db
-    .from("vendors")
-    .select("org_id, name, is_active")
-    .eq("id", body.vendorId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!vendor || vendor.org_id !== auth.orgId) return jsonError("Vendor not found", 404);
-  // The app's vendor picker hides deactivated vendors; the API shouldn't create POs against one.
-  if (vendor.is_active === false) return jsonError("Vendor is inactive", 409);
-
-  if (body.requisitionId) {
-    const { data: req } = await db
-      .from("requisitions")
-      .select("org_id")
-      .eq("id", body.requisitionId)
+    // deleted_at IS NULL on every FK check here: a PO pointing at a
+    // soft-deleted vendor, requisition, product or project is a dangling
+    // reference the rest of the app will not resolve.
+    const { data: vendor } = await db
+      .from("vendors")
+      .select("org_id, name, is_active")
+      .eq("id", body.vendorId)
       .is("deleted_at", null)
       .maybeSingle();
-    if (!req || req.org_id !== auth.orgId) return jsonError("Requisition not found", 404);
-  }
+    if (!vendor || vendor.org_id !== auth.orgId) return jsonError("Vendor not found", 404);
+    // The app's vendor picker hides deactivated vendors; the API shouldn't create POs against one.
+    if (vendor.is_active === false) return jsonError("Vendor is inactive", 409);
 
-  const productIds = [...new Set(body.lineItems.map((li) => li.productItemId))];
-  const { data: products } = await db
-    .from("product_items")
-    .select("id, org_id, name, part_number, unit_cost, category")
-    .in("id", productIds)
-    .is("deleted_at", null);
-  const productMap = new Map((products ?? []).map((p) => [p.id as string, p]));
-  for (const id of productIds) {
-    const product = productMap.get(id);
-    if (!product || product.org_id !== auth.orgId) return jsonError(`Product item ${id} not found`, 404);
-  }
+    if (body.requisitionId) {
+      const { data: req } = await db
+        .from("requisitions")
+        .select("org_id")
+        .eq("id", body.requisitionId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (!req || req.org_id !== auth.orgId) return jsonError("Requisition not found", 404);
+    }
 
-  // Same rule as requisitions (see CLAUDE.md "Project cost tracking"): only
-  // project_material/stocked_material may carry a project_id.
-  const projectIds = [...new Set(body.lineItems.map((li) => li.projectId).filter((id): id is string => !!id))];
-  const projectMap = new Map<string, { org_id: string }>();
-  if (projectIds.length > 0) {
-    const { data: projects } = await db
-      .from("projects")
-      .select("id, org_id")
-      .in("id", projectIds)
+    const productIds = [...new Set(body.lineItems.map((li) => li.productItemId))];
+    const { data: products } = await db
+      .from("product_items")
+      .select("id, org_id, name, part_number, unit_cost, category")
+      .in("id", productIds)
       .is("deleted_at", null);
-    for (const p of projects ?? []) projectMap.set(p.id as string, p as { org_id: string });
-  }
-  for (const li of body.lineItems) {
-    if (!li.projectId) continue;
-    const product = productMap.get(li.productItemId)!;
-    if (product.category === "maintenance_part") {
-      return jsonError(`Product item ${li.productItemId} is a maintenance_part and cannot carry a projectId`, 400);
+    const productMap = new Map((products ?? []).map((p) => [p.id as string, p]));
+    for (const id of productIds) {
+      const product = productMap.get(id);
+      if (!product || product.org_id !== auth.orgId) return jsonError(`Product item ${id} not found`, 404);
     }
-    const project = projectMap.get(li.projectId);
-    if (!project || project.org_id !== auth.orgId) return jsonError(`Project ${li.projectId} not found`, 404);
-  }
 
-  // guard_line_item_maint_part_integer_quantity() raises 23514 on a
-  // fractional quantity for a maintenance_part. That fired on the po_line_items
-  // INSERT — i.e. AFTER next_po_number had already handed out a number and
-  // the header had committed — so the request 500'd, the route hard-deleted
-  // the header (against CLAUDE.md's soft-deletes-only rule), and the org's
-  // PO sequence was left permanently gapped. Check it here instead, before
-  // anything is written and before a number is consumed, and say plainly
-  // what's wrong.
-  for (const li of body.lineItems) {
-    const product = productMap.get(li.productItemId)!;
-    if (product.category === "maintenance_part" && !Number.isInteger(li.quantity)) {
-      return jsonError(
-        `Product item ${li.productItemId} is a maintenance_part and cannot be ordered in a fractional quantity (got ${li.quantity})`,
-        400
-      );
+    // Same rule as requisitions (see CLAUDE.md "Project cost tracking"): only
+    // project_material/stocked_material may carry a project_id.
+    const projectIds = [...new Set(body.lineItems.map((li) => li.projectId).filter((id): id is string => !!id))];
+    const projectMap = new Map<string, { org_id: string }>();
+    if (projectIds.length > 0) {
+      const { data: projects } = await db
+        .from("projects")
+        .select("id, org_id")
+        .in("id", projectIds)
+        .is("deleted_at", null);
+      for (const p of projects ?? []) projectMap.set(p.id as string, p as { org_id: string });
     }
-  }
+    for (const li of body.lineItems) {
+      if (!li.projectId) continue;
+      const product = productMap.get(li.productItemId)!;
+      if (product.category === "maintenance_part") {
+        return jsonError(`Product item ${li.productItemId} is a maintenance_part and cannot carry a projectId`, 400);
+      }
+      const project = projectMap.get(li.projectId);
+      if (!project || project.org_id !== auth.orgId) return jsonError(`Project ${li.projectId} not found`, 404);
+    }
 
-  const lineItemRows = body.lineItems.map((li) => {
-    const product = productMap.get(li.productItemId)!;
-    const unitCost = li.unitCostCents ?? (product.unit_cost as number);
-    return {
-      product_item_id: li.productItemId,
-      product_item_name: product.name as string,
-      part_number: (product.part_number as string | null) ?? "",
-      quantity: li.quantity,
-      unit_cost: unitCost,
-      total_cost: Math.round(unitCost * li.quantity),
-      project_id: li.projectId ?? null,
-      notes: li.notes ?? null,
-      taxable: li.taxable ?? true,
-    };
-  });
+    // guard_line_item_maint_part_integer_quantity() raises 23514 on a
+    // fractional quantity for a maintenance_part. That fired on the po_line_items
+    // INSERT — i.e. AFTER next_po_number had already handed out a number and
+    // the header had committed — so the request 500'd, the route hard-deleted
+    // the header (against CLAUDE.md's soft-deletes-only rule), and the org's
+    // PO sequence was left permanently gapped. Check it here instead, before
+    // anything is written and before a number is consumed, and say plainly
+    // what's wrong.
+    for (const li of body.lineItems) {
+      const product = productMap.get(li.productItemId)!;
+      if (product.category === "maintenance_part" && !Number.isInteger(li.quantity)) {
+        return jsonError(
+          `Product item ${li.productItemId} is a maintenance_part and cannot be ordered in a fractional quantity (got ${li.quantity})`,
+          400
+        );
+      }
+    }
 
-  const subtotal = lineItemRows.reduce((sum, li) => sum + li.total_cost, 0);
-  // Only taxable line items form the tax base — NewPODialog.tsx does the
-  // same taxableSubtotalDollars filter. The `taxable` field was already
-  // accepted per line item but never actually affected the tax calculation.
-  const taxableSubtotal = lineItemRows.filter((li) => li.taxable).reduce((sum, li) => sum + li.total_cost, 0);
-  const taxRatePercent = body.taxRatePercent ?? 0;
-  // Clamp the discount to the subtotal. An unclamped discount produced a
-  // NEGATIVE grand_total that flowed straight into the spend reports as
-  // money the org apparently got back from a vendor.
-  const discountCost = Math.min(body.discountCostCents ?? 0, subtotal);
-  const discountReducesTax = body.discountReducesTax ?? false;
-  // The shared helper, not a local `base * (rate / 100)`: dividing the rate
-  // first picks up float error (8.25 / 100) that can land a half-cent on the
-  // wrong side, so the API total would drift a cent from the same PO built in
-  // the app.
-  const salesTax = computeSalesTax({ taxableSubtotal, subtotal, taxRatePercent, discountCost, discountReducesTax });
-  const shippingCost = body.shippingCostCents ?? 0;
-  const grandTotal = subtotal - discountCost + salesTax + shippingCost;
+    const lineItemRows = body.lineItems.map((li) => {
+      const product = productMap.get(li.productItemId)!;
+      const unitCost = li.unitCostCents ?? (product.unit_cost as number);
+      return {
+        product_item_id: li.productItemId,
+        product_item_name: product.name as string,
+        part_number: (product.part_number as string | null) ?? "",
+        quantity: li.quantity,
+        unit_cost: unitCost,
+        total_cost: Math.round(unitCost * li.quantity),
+        project_id: li.projectId ?? null,
+        notes: li.notes ?? null,
+        taxable: li.taxable ?? true,
+      };
+    });
 
-  // Atomic per-org/year counter, not Date.now() — same as work orders/requisitions.
-  const { data: poNumber, error: numErr } = await db.rpc("next_po_number", { p_org_id_override: auth.orgId });
-  if (numErr || !poNumber) return jsonServerError("POST /api/v1/purchase-orders (next_po_number)", numErr);
+    const subtotal = lineItemRows.reduce((sum, li) => sum + li.total_cost, 0);
+    // Only taxable line items form the tax base — NewPODialog.tsx does the
+    // same taxableSubtotalDollars filter. The `taxable` field was already
+    // accepted per line item but never actually affected the tax calculation.
+    const taxableSubtotal = lineItemRows.filter((li) => li.taxable).reduce((sum, li) => sum + li.total_cost, 0);
+    const taxRatePercent = body.taxRatePercent ?? 0;
+    // Clamp the discount to the subtotal. An unclamped discount produced a
+    // NEGATIVE grand_total that flowed straight into the spend reports as
+    // money the org apparently got back from a vendor.
+    const discountCost = Math.min(body.discountCostCents ?? 0, subtotal);
+    const discountReducesTax = body.discountReducesTax ?? false;
+    // The shared helper, not a local `base * (rate / 100)`: dividing the rate
+    // first picks up float error (8.25 / 100) that can land a half-cent on the
+    // wrong side, so the API total would drift a cent from the same PO built in
+    // the app.
+    const salesTax = computeSalesTax({ taxableSubtotal, subtotal, taxRatePercent, discountCost, discountReducesTax });
+    const shippingCost = body.shippingCostCents ?? 0;
+    const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
-  const { data: po, error: poErr } = await db
-    .from("purchase_orders")
-    .insert({
-      org_id: auth.orgId,
-      po_number: poNumber,
-      // Default to the OWNING ORG's calendar day, not UTC's — an integration
-      // POSTing a PO in the evening would otherwise get tomorrow's po_date.
-      // po_date deliberately has no DB-side default (it is nullable, and the
-      // PO CSV import writes NULL on purpose), so it is resolved here.
-      po_date: body.poDate ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
-      invoice_number: body.invoiceNumber ?? null,
-      status: "requested",
-      vendor_id: body.vendorId,
-      vendor_name: vendor.name,
-      subtotal,
-      tax_rate_percent: taxRatePercent,
-      sales_tax: salesTax,
-      shipping_cost: shippingCost,
-      discount_cost: discountCost,
-      discount_reduces_tax: discountReducesTax,
-      grand_total: grandTotal,
-      requisition_id: body.requisitionId ?? null,
-      notes: body.notes ?? null,
-    })
-    .select(PURCHASE_ORDER_SELECT)
-    .single();
+    // Atomic per-org/year counter, not Date.now() — same as work orders/requisitions.
+    const { data: poNumber, error: numErr } = await db.rpc("next_po_number", { p_org_id_override: auth.orgId });
+    if (numErr || !poNumber) return jsonServerError("POST /api/v1/purchase-orders (next_po_number)", numErr);
 
-  if (poErr || !po) return jsonServerError("POST /api/v1/purchase-orders", poErr);
-
-  const { data: lineItems, error: lineItemsError } = await db
-    .from("po_line_items")
-    .insert(lineItemRows.map((li) => ({ ...li, org_id: auth.orgId, po_id: po.id })))
-    .select(PO_LINE_ITEM_SELECT);
-
-  if (lineItemsError) {
-    // Line items failed after the header committed. Every cause we can see
-    // coming is now rejected above, before next_po_number is called, so this
-    // is a genuine last resort (a concurrent schema/trigger failure).
-    // Soft delete per CLAUDE.md rather than a hard DELETE: the po_number is
-    // spent either way, and a retired header at least leaves the gap
-    // explained instead of unaccounted for.
-    await db
+    const { data: po, error: poErr } = await db
       .from("purchase_orders")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", po.id)
-      .eq("org_id", auth.orgId);
-    return jsonServerError("POST /api/v1/purchase-orders (line items)", lineItemsError);
-  }
+      .insert({
+        org_id: auth.orgId,
+        po_number: poNumber,
+        // Default to the OWNING ORG's calendar day, not UTC's — an integration
+        // POSTing a PO in the evening would otherwise get tomorrow's po_date.
+        // po_date deliberately has no DB-side default (it is nullable, and the
+        // PO CSV import writes NULL on purpose), so it is resolved here.
+        po_date: body.poDate ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
+        invoice_number: body.invoiceNumber ?? null,
+        status: "requested",
+        vendor_id: body.vendorId,
+        vendor_name: vendor.name,
+        subtotal,
+        tax_rate_percent: taxRatePercent,
+        sales_tax: salesTax,
+        shipping_cost: shippingCost,
+        discount_cost: discountCost,
+        discount_reduces_tax: discountReducesTax,
+        grand_total: grandTotal,
+        requisition_id: body.requisitionId ?? null,
+        notes: body.notes ?? null,
+      })
+      .select(PURCHASE_ORDER_SELECT)
+      .single();
 
-  return NextResponse.json(
-    { ...shapePurchaseOrder(po), lineItems: (lineItems ?? []).map(shapePoLineItem) },
-    { status: 201 }
-  );
+    if (poErr || !po) return jsonServerError("POST /api/v1/purchase-orders", poErr);
+
+    const { data: lineItems, error: lineItemsError } = await db
+      .from("po_line_items")
+      .insert(lineItemRows.map((li) => ({ ...li, org_id: auth.orgId, po_id: po.id })))
+      .select(PO_LINE_ITEM_SELECT);
+
+    if (lineItemsError) {
+      // Line items failed after the header committed. Every cause we can see
+      // coming is now rejected above, before next_po_number is called, so this
+      // is a genuine last resort (a concurrent schema/trigger failure).
+      // Soft delete per CLAUDE.md rather than a hard DELETE: the po_number is
+      // spent either way, and a retired header at least leaves the gap
+      // explained instead of unaccounted for.
+      await db
+        .from("purchase_orders")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", po.id)
+        .eq("org_id", auth.orgId);
+      return jsonServerError("POST /api/v1/purchase-orders (line items)", lineItemsError);
+    }
+
+    return NextResponse.json(
+      { ...shapePurchaseOrder(po), lineItems: (lineItems ?? []).map(shapePoLineItem) },
+      { status: 201 }
+    );
+  });
 }

@@ -11,6 +11,8 @@ import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
+import { assertOrgWritable } from "@/lib/org-writable";
+import { autoStopOtherRunningStops } from "@/lib/crew/auto-stop";
 
 const log = logger.child("crew/stops/clock-in");
 
@@ -70,7 +72,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, status, clocked_in_at,
   notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
-  crm_jobs(crew_id, status, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at, client_properties(notes_to_crew))
+  crm_jobs:crew_job(crew_id, status, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at, client_properties(notes_to_crew))
 `;
 
 /** The notes-to-crew this visit contributes to its stop, visit-level overriding job-level (same rule as groupVisitsIntoStops). */
@@ -125,6 +127,10 @@ export async function POST(
   if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
+  // A canceled / expired-trial org is read-only: the visit update below would
+  // match 0 rows under RLS and answer 200 "alreadyClockedIn" with nothing saved.
+  const readOnly = await assertOrgWritable(createServiceClient(), anchor.org_id);
+  if (readOnly) return readOnly;
 
   // A visit dated in the future can't be started. The crew list shows today's visits plus clocked-in
   // visits from BEFORE today, so a clocked-in future-dated visit drops off the list mid-stop and the
@@ -278,6 +284,29 @@ export async function POST(
     });
   }
 
+  // One job at a time: another of this crew's stops still clocked in (Stop Job
+  // never tapped) is stopped at this instant, so nobody is punched in twice.
+  // Before the punches below open. See crew/auto-stop.ts.
+  let autoStopped: string[] = [];
+  const ownCrewId = effectiveVisitCrewId(anchor);
+  if (ownCrewId) {
+    const { data: client } = anchor.client_id
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? await (supabase as any).from("clients").select("display_name").eq("id", anchor.client_id).maybeSingle()
+      : { data: null };
+    const label = [client?.display_name as string | undefined, anchor.crm_jobs?.service_address ?? undefined]
+      .filter(Boolean).join(" — ") || "another job";
+    autoStopped = await autoStopOtherRunningStops(supabase, {
+      orgId: anchor.org_id,
+      crewId: ownCrewId,
+      exceptVisitIds: stopRows.map((r) => r.id),
+      at: now,
+      newStopLabel: label,
+      timeZone: await getOrgTimeZone(supabase, anchor.org_id),
+      userId: user.id,
+    });
+  }
+
   // If nobody tapped Start Day, the first job opens the day so payroll still
   // has a shift (flagged auto_first_job — the true start was earlier, at the shop).
   try {
@@ -329,7 +358,11 @@ export async function POST(
   return NextResponse.json({
     visitIds: siblingIds,
     visits: data,
-    // Nobody is on the crew today, so no member punches (and no payroll time) were recorded.
-    ...(rosterEmpty ? { warnings: ["crew_roster_empty"] } : {}),
+    // Nobody is on the crew today, so no member punches (and no payroll time) were recorded;
+    // and/or another running stop was stopped automatically (autoStoppedVisitIds).
+    ...(rosterEmpty || autoStopped.length > 0
+      ? { warnings: [...(rosterEmpty ? ["crew_roster_empty"] : []), ...(autoStopped.length > 0 ? ["other_stop_auto_stopped"] : [])] }
+      : {}),
+    ...(autoStopped.length > 0 ? { autoStoppedVisitIds: autoStopped } : {}),
   });
 }

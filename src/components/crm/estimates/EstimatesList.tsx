@@ -826,8 +826,8 @@ export function EstimatesList({ clientId }: Props) {
             </AlertDialogTitle>
             <AlertDialogDescription>
               Each whole estimate is removed from your lists, its proposal link stops working and its follow-up
-              sequences stop. An estimate with a job, invoice, contract, payment or project made from it is skipped
-              — cancel or delete those first.
+              sequences stop. An estimate with a job, invoice, contract, payment or project made from it, or with an
+              online deposit still processing, is skipped — cancel or delete those first.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

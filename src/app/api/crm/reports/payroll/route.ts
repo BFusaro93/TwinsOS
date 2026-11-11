@@ -5,6 +5,7 @@ import { computePayroll } from "@/lib/payroll/compute";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 
 /**
  * GET  /api/crm/reports/payroll?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -96,7 +97,10 @@ export async function PUT(request: Request) {
   if (isEmpty) {
     // Back to the computed figures — soft delete, never a hard delete.
     if (existing) {
-      await auth.db.from("crm_payroll_adjustments").update({ deleted_at: now, updated_by: auth.user.id }).eq("id", existing.id);
+      const { error: clearErr } = await auth.db.from("crm_payroll_adjustments").update({ deleted_at: now, updated_by: auth.user.id }).eq("id", existing.id);
+      if (clearErr) {
+        return NextResponse.json({ error: clearErr.message }, { status: isPayrollLockedError(clearErr.message) ? 409 : 500 });
+      }
     }
     return NextResponse.json({ ok: true, cleared: true });
   }
@@ -143,6 +147,7 @@ export async function PUT(request: Request) {
         work_date: b.workDate,
         created_by: auth.user.id,
       });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // A day inside the payroll lock (organizations.payroll_locked_through) is refused by the database.
+  if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
   return NextResponse.json({ ok: true });
 }

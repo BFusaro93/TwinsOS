@@ -487,6 +487,20 @@ export function ReportCenterGuide() {
             Daily sheet), CSV of totals by employee, CSV of daily detail, and PDF. Hours are numbers,
             so Excel and payroll uploads can add them up.
           </li>
+          <li>
+            <strong>Lock a pay period.</strong> After a period is exported and paid, an admin sets{" "}
+            <strong>Lock payroll through</strong> at the top of the tab to its last day and taps{" "}
+            <strong>Lock</strong>. From then on nothing dated on or before that day can change
+            &mdash; day shifts, job punches and corrections alike, whether from Payroll, the dispatch
+            board&apos;s Edit Job Times or the crew app. Locked days show a <em>Locked</em> badge and
+            can&apos;t be edited; anyone who tries is told &ldquo;Payroll is locked through &hellip;;
+            ask an admin to move the lock date&rdquo;. The lock date must be before today. To fix a
+            locked day, an admin moves the lock back (<strong>Move lock</strong>) or taps{" "}
+            <strong>Unlock</strong>, makes the change, and locks again. Every move of the lock date is
+            in the organization&apos;s change history. Only admins can move it; everyone with Payroll
+            sees it. A shift from a locked day that was never ended stays open (End Day can&apos;t close
+            it) until an admin unlocks the day to fix it.
+          </li>
         </ul>
         <Callout>
           Payroll reads the crew&apos;s roster, so an employee has to be on a crew (Team → Crews → Team
@@ -495,8 +509,7 @@ export function ReportCenterGuide() {
           off the crew partway through a day still has that day&apos;s shift closed by End Day, and
           the office can still correct the punches they already had. Every change to a shift and
           every correction made here is kept in the audit history. Payroll doesn&apos;t calculate
-          overtime and doesn&apos;t lock a pay period once exported &mdash; do both in your payroll
-          system.
+          overtime &mdash; do that in your payroll system.
         </Callout>
       </Section>
 

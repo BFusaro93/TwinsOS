@@ -85,8 +85,15 @@ async function authedFetch(path: string, init?: RequestInit): Promise<unknown> {
 }
 
 /** GET /api/crm/crew/visits?date=YYYY-MM-DD — today's schedule for the signed-in crew. */
-export async function fetchCrewVisits(date: string): Promise<CrewVisitsResponse> {
-  return authedFetch(`/api/crm/crew/visits?date=${encodeURIComponent(date)}`) as Promise<CrewVisitsResponse>;
+/**
+ * GET /api/crm/crew/visits. Without `date` the server answers for the ORG's
+ * today (in the org's timezone, returned as `date` / `timeZone`) — what the
+ * schedule screens use, so "today" is never the phone's own date nor frozen at
+ * the moment the app launched.
+ */
+export async function fetchCrewVisits(date?: string): Promise<CrewVisitsResponse> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  return authedFetch(`/api/crm/crew/visits${query}`) as Promise<CrewVisitsResponse>;
 }
 
 /**
@@ -384,24 +391,27 @@ export async function fetchCrewDay(): Promise<CrewDay> {
 }
 
 /**
- * POST /api/crm/crew/day — Start/End Day and per-member in/out/add. The server
- * stamps its own `now` (no occurredAt / Idempotency-Key), so these are
- * deliberately NOT queued offline: a replay hours later would credit the wrong
- * time against payroll. `visitId` is the in-progress stop's anchor visit, which
- * keeps that stop's job punch in step with the member's shift.
+ * POST /api/crm/crew/day — Start/End Day and per-member in/out/add. Sends the
+ * tap time as `occurredAt` (the server bounds it: 48h back, 2 min ahead), so a
+ * slow request still records when the leader tapped. Still NOT queued offline
+ * here (no Idempotency-Key) — a failed tap shows its error and is tapped again.
+ * `visitId` is the in-progress stop's anchor visit, which keeps that stop's job
+ * punch in step with the member's shift.
  */
 export async function postCrewDay(
   action: CrewDayAction,
   opts: { crewMemberId?: string; visitId?: string } = {}
 ): Promise<unknown> {
-  return authedFetch(`/api/crm/crew/day`, { method: 'POST', body: JSON.stringify({ action, ...opts }) });
+  const occurredAt = new Date().toISOString();
+  return authedFetch(`/api/crm/crew/day`, { method: 'POST', body: JSON.stringify({ action, ...opts, occurredAt }) });
 }
 
-/** POST /api/crm/crew/attendance — mark a member "Not working" today (or back). Online-only, same reason as postCrewDay(). */
+/** POST /api/crm/crew/attendance — mark a member "Not working" today (or back). Online-only; sends the tap time like postCrewDay(). */
 export async function setMemberAbsent(crewMemberId: string, absent: boolean, visitId?: string): Promise<unknown> {
+  const occurredAt = new Date().toISOString();
   return authedFetch(`/api/crm/crew/attendance`, {
     method: 'POST',
-    body: JSON.stringify({ crewMemberId, absent, ...(visitId ? { visitId } : {}) }),
+    body: JSON.stringify({ crewMemberId, absent, ...(visitId ? { visitId } : {}), occurredAt }),
   });
 }
 
@@ -504,10 +514,15 @@ export async function addCrewNote(
  * individual crm_job_visits row's id, not the stop's anchor — matching the
  * web stop page, where each service row can be skipped independently.
  */
-export async function skipVisit(visitId: string, reason: string): Promise<unknown> {
+export async function skipVisit(
+  visitId: string,
+  reason: string,
+  /** ISO time of the tap — a queued skip replays later; the server closes the crew's punches at this time (bounded). */
+  occurredAt?: string
+): Promise<unknown> {
   return authedFetch(`/api/crm/crew/visits/${visitId}/skip`, {
     method: 'POST',
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ reason, ...(occurredAt ? { occurredAt } : {}) }),
   });
 }
 
@@ -538,14 +553,6 @@ export async function unregisterPushTokenApi(): Promise<void> {
   await authedFetch(`/api/crm/crew/push-token`, { method: 'DELETE' });
 }
 
-/** Returns today's date as YYYY-MM-DD in the device's local timezone. */
-export function todayLocalDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
 /** GET /api/crm/crew/reference — Reference Library documents the crew may open. */
 export async function fetchReferenceDocuments(): Promise<ReferenceDocument[]> {

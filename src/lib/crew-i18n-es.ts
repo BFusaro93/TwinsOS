@@ -16,6 +16,7 @@ export const CREW_ES: Record<string, string> = {
   "({n} skipped)": "({n} omitidos)",
   "A finish time must be after its start.": "La hora de fin debe ser posterior a la de inicio.",
   "A job is still in progress. End the day anyway?": "Todavía hay un trabajo en curso. ¿Terminar el día de todos modos?",
+  "A job is still in progress. Its time stops when you end the day — tap Stop Job on it when you can. End the day anyway?": "Todavía hay un trabajo en curso. Su tiempo se detiene al terminar el día; toque Detener trabajo cuando pueda. ¿Terminar el día de todos modos?",
   "A photo usually saves the office a trip out to quote it.": "Una foto suele ahorrarle a la oficina un viaje para cotizarlo.",
   Active: "Activo",
   Add: "Agregar",

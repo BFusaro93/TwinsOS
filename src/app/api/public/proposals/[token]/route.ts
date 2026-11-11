@@ -15,10 +15,13 @@ const serviceClient = () =>
 // Stages that mean the proposal has been accepted (by any route).
 const ACCEPTED_STAGES = ["accepted", "won", "invoiced"];
 
-function stripPricingInternals<T extends { adjRateCents?: unknown; complexityBps?: unknown }>(li: T): Omit<T, "adjRateCents" | "complexityBps"> {
+// The client sees the rate the line is actually priced at (Adj Rate when the
+// office set one, as the PDF prints it) without learning that it was adjusted.
+// "Hide $0 prices" keys on this same effective rate.
+function stripPricingInternals<T extends { rateCents?: unknown; adjRateCents?: unknown; complexityBps?: unknown }>(li: T): Omit<T, "adjRateCents" | "complexityBps"> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { adjRateCents, complexityBps, ...rest } = li;
-  return rest;
+  return typeof adjRateCents === "number" ? { ...rest, rateCents: adjRateCents } : rest;
 }
 
 export async function GET(

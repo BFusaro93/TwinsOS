@@ -228,8 +228,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Cannot fire ${body.triggerType}: the client has no such contract` }, { status: 409 });
       }
     }
-    const recordKey = body.invoiceId ?? body.estimateId ?? body.ticketId ?? matchValues[0] ?? body.clientId;
-    if (!(await checkAuthRateLimit(`fire:${user.id}:${body.triggerType}:${recordKey}`, 3, 600))) {
+    // Keyed per client AND record: with a match value alone (a tag name, a package)
+    // tagging four different leads "Spring Promo" in ten minutes shared one key, so
+    // the fourth lead's real event was refused (and the caller swallows the 429).
+    const recordKey = body.invoiceId ?? body.estimateId ?? body.ticketId ?? matchValues[0] ?? "client";
+    if (!(await checkAuthRateLimit(`fire:${user.id}:${body.triggerType}:${body.clientId}:${recordKey}`, 3, 600))) {
       return NextResponse.json({ error: "This automation was just triggered for this record. Try again in a few minutes." }, { status: 429 });
     }
   }

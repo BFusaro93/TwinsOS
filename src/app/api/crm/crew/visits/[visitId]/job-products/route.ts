@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { createServiceClient } from "@/lib/supabase/server";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { crewGroupVisitIds } from "@/lib/crew/crew-group-visits";
@@ -33,7 +34,7 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, job_id, org_id, crew_id, crew_unassigned, crew_group_id, scheduled_date, crm_jobs(crew_id)")
+    .select("id, job_id, org_id, crew_id, crew_unassigned, crew_group_id, scheduled_date, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -43,10 +44,14 @@ export async function GET(
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
+  // Service client: a crew login can't read crm_job_products (it carries the
+  // material's price and cost — 20261231000340). The visit's ownership was
+  // proven above, and only price-free columns are selected.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (createServiceClient() as any)
     .from("crm_job_products")
     .select("id, product_name, planned_qty, qty, status, updated_at, visit_id")
+    .eq("org_id", visit.org_id as string)
     .eq("job_id", visit.job_id as string)
     .is("deleted_at", null)
     .order("created_at");

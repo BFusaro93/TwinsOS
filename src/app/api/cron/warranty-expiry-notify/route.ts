@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
-import { EMAIL_FROM } from "@/lib/email/send";
+import { EMAIL_FROM, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
 import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
@@ -188,7 +188,7 @@ export async function GET(request: Request) {
 
       let emailedAny = false;
       for (const target of emailTargets) {
-        const { error: sendErr } = await resend.emails.send({
+        const { error: sendErr } = await sendEmailRetryingRateLimit(resend, {
           from: EMAIL_FROM,
           to: target.email,
           subject: title,

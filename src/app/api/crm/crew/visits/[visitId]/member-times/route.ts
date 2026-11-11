@@ -4,6 +4,8 @@ import { recomputeStopLabor } from "@/lib/crew/visit-labor";
 import { stopPunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
+import { assertOrgWritable } from "@/lib/org-writable";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 
 /**
  * Per-crew-member punches for a visit (crm_crew_member_times). Written by the
@@ -41,7 +43,7 @@ const Body = z.object({
 
 const DeleteBody = z.object({ crewMemberId: z.string().uuid() });
 
-const VISIT_SELECT = "id, org_id, crew_id, crew_unassigned, scheduled_date, crm_jobs(crew_id)";
+const VISIT_SELECT = "id, org_id, crew_id, crew_unassigned, scheduled_date, crm_jobs:crew_job(crew_id)";
 
 interface VisitRow {
   id: string;
@@ -224,6 +226,9 @@ export async function POST(
   const auth = await authorizeVisit(supabase, user.id, visitId);
   if ("response" in auth) return auth.response;
   const { visit, isCrew } = auth;
+  // Crew edits write with the service role (no read-only-when-canceled RLS).
+  const readOnly = await assertOrgWritable(createServiceClient(), visit.org_id);
+  if (readOnly) return readOnly;
 
   // Crew can't rewrite punches once the visit's invoice is issued (a draft is
   // fine); office keeps the ability.
@@ -293,7 +298,8 @@ export async function POST(
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Inside the payroll lock period: the database's own sentence, as a 409.
+  if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
   // Keep an already-closed stop's stored labor cost in step with the edit.
   await recomputeStopLabor(supabase, visit.id);
   return NextResponse.json(data);
@@ -312,6 +318,8 @@ export async function DELETE(
 
   const auth = await authorizeVisit(supabase, user.id, visitId);
   if ("response" in auth) return auth.response;
+  const readOnly = await assertOrgWritable(createServiceClient(), auth.visit.org_id);
+  if (readOnly) return readOnly;
   if (auth.isCrew && (await visitIsInvoiced(supabase, auth.visit.id))) {
     return NextResponse.json({ error: INVOICED_PUNCH_MESSAGE, code: "invoiced_visit_locked" }, { status: 409 });
   }
@@ -327,7 +335,8 @@ export async function DELETE(
     .eq("crew_member_id", parsed.data.crewMemberId)
     .is("deleted_at", null);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Inside the payroll lock period: the database's own sentence, as a 409.
+  if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
   await recomputeStopLabor(supabase, auth.visit.id);
   return NextResponse.json({ ok: true });
 }
@@ -348,6 +357,8 @@ export async function PATCH(
   const { visitId } = await params;
   const auth = await authorizeVisit(supabase, user.id, visitId);
   if ("response" in auth) return auth.response;
+  const readOnly = await assertOrgWritable(createServiceClient(), auth.visit.org_id);
+  if (readOnly) return readOnly;
 
   await recomputeStopLabor(supabase, auth.visit.id);
   return NextResponse.json({ ok: true });
@@ -372,6 +383,7 @@ export async function GET(
     .is("deleted_at", null)
     .order("created_at");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Inside the payroll lock period: the database's own sentence, as a 409.
+  if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
   return NextResponse.json(data);
 }

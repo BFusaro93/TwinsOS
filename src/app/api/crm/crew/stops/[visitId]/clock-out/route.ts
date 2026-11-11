@@ -14,7 +14,8 @@ import { closeStopPunches, resolvePunchOwnerVisitId } from "@/lib/crew/stop-punc
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, isoInZone, todayInZone } from "@/lib/time/zone";
-import { runningPauseClockOut } from "@/lib/crew/visit-pause";
+import { stopClockOutCap } from "@/lib/crew/visit-pause";
+import { assertOrgWritable } from "@/lib/org-writable";
 
 const log = logger.child("crew/stops/clock-out");
 
@@ -77,7 +78,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, job_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, job_service_id, status,
   men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
-  crm_jobs(crew_id, status, property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
+  crm_jobs:crew_job(crew_id, status, property_id, service_address, service_city, crm_job_services:crew_job_services(id, budgeted_hours, team_size))
 `;
 
 /**
@@ -120,6 +121,11 @@ export async function POST(
   if (!(await assertCallerOwnsVisit(supabase, user.id, anchor.org_id, anchor))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
+  // A canceled / expired-trial org is read-only: the visit updates below would
+  // match 0 rows under RLS and the route used to answer 200 "alreadyClockedOut",
+  // while the punch closes (service role) went through anyway.
+  const readOnly = await assertOrgWritable(createServiceClient(), anchor.org_id);
+  if (readOnly) return readOnly;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidateQuery = (supabase as any)
@@ -172,7 +178,19 @@ export async function POST(
   // path finishes a visit without ever setting clocked_out_at, and sweeping
   // those up here re-completed them and re-fired their completion side
   // effects (invoice line, timeline row, automations).
-  const openRows = stopRows.filter((r) => !r.clocked_out_at && r.status !== "completed");
+  let openRows = stopRows.filter((r) => !r.clocked_out_at && r.status !== "completed");
+  // A stop the server stopped automatically when the crew started another one
+  // (see crew/auto-stop.ts): its clock already ended (clocked_out_at set) but it
+  // was left in progress so it is finished HERE, through the same photo /
+  // chemical gates and completion side effects, at the time its clock ended.
+  let autoStoppedAt: string | null = null;
+  if (openRows.length === 0) {
+    const stopped = stopRows.filter((r) => !!r.clocked_out_at && r.status === "in_progress");
+    if (stopped.length > 0) {
+      openRows = stopped;
+      autoStoppedAt = stopped.map((r) => r.clocked_out_at as string).sort().pop() ?? null;
+    }
+  }
   if (openRows.length === 0) {
     // Every visit of the stop is already finished: this is a replay of a
     // clock-out that landed (the offline queue retries after a lost response,
@@ -183,9 +201,36 @@ export async function POST(
       // in (Mark Complete never closes punches). The crew's Clock Out is then the
       // only thing that will, or those punches stay open on the Timesheet forever.
       // No-op when there are none (a true replay).
+      // Closed at the crew's TAP (bounded, never before the stop's clock-in) —
+      // server time paid everyone until an offline tap synced — and no later
+      // than the end of the crew's day if they ended it first.
+      const stopClockIn = stopRows.map((r) => r.clocked_in_at).filter((v): v is string => !!v).sort()[0] ?? null;
+      const tapped = resolveOccurredAt(rawOccurredAt, { notBefore: stopClockIn }).toISOString();
+      const closeAt = anchor.clocked_out_at ?? await stopClockOutCap(supabase, {
+        orgId: anchor.org_id, punchVisitId, pausedAt: null, clockedInAt: stopClockIn, now: tapped,
+      });
       // Service client: crew logins can no longer write punches directly (the
       // stop was authorized above).
-      await closeStopPunches(createServiceClient(), punchVisitId, anchor.clocked_out_at ?? new Date().toISOString());
+      await closeStopPunches(createServiceClient(), punchVisitId, closeAt);
+      // The crew's closing notes used to be dropped here. Keep them on the
+      // stop's visit: set when it has none, appended when the office already
+      // wrote some — and not again when this is a replay that already saved them.
+      const typed = notes?.trim();
+      if (typed) {
+        const target = stopRows.find((r) => r.id === anchor.id) ?? stopRows[0];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: cur } = await (supabase as any)
+          .from("crm_job_visits").select("completion_notes").eq("id", target.id).maybeSingle();
+        const existingNotes = ((cur?.completion_notes as string | null) ?? "").trim();
+        if (!existingNotes.includes(typed)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: notesErr } = await (supabase as any)
+            .from("crm_job_visits")
+            .update({ completion_notes: existingNotes ? `${existingNotes}\n\n${typed}` : typed })
+            .eq("id", target.id);
+          if (notesErr) log.error("saving late crew notes failed", { visitId: target.id, error: notesErr.message });
+        }
+      }
       // ...and file the hours those punches represent (Job Costing showed 0 hours
       // for a stop the office completed while the crew was still punched in).
       await recomputeStopLabor(supabase, punchVisitId).catch((err: unknown) => {
@@ -216,19 +261,28 @@ export async function POST(
   // The clock-out moment, bounded to after the earliest clock-in. Server time here
   // credited every hour between an offline tap and its sync as time on site.
   const earliestClockIn = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0] ?? null;
-  const tappedAt = resolveOccurredAt(rawOccurredAt, { notBefore: earliestClockIn }).toISOString();
+  // An auto-stopped stop finishes at the moment its clock was stopped.
+  const tappedAt = autoStoppedAt ?? resolveOccurredAt(rawOccurredAt, { notBefore: earliestClockIn }).toISOString();
   // Clocked out while still PAUSED (never tapped Resume): no work happened after
   // the pause began, and counting the pause up to the tap docked an overnight
   // pause (paused 4pm, Stop Job next morning) from punches and a day shift that
   // ended at 5pm — zeroing the day. The stop is clocked out when the crew's day
   // actually ended (End Day / the last punch-out) instead; see runningPauseClockOut.
+  // Not paused, but the crew ended the day (End Day / everyone left) with the
+  // stop still running and tapped Stop Job the next morning: the same rule
+  // applies from the stop's clock-in, so the night isn't credited to the job.
   const runningPausedAt = openRows.map((r) => r.paused_at).filter((v): v is string => !!v).sort()[0] ?? null;
-  const now = runningPausedAt
-    ? await runningPauseClockOut(supabase, { orgId: anchor.org_id, punchVisitId, pausedAt: runningPausedAt, now: tappedAt })
-    : tappedAt;
-  const endLocalTime = now !== tappedAt
-    ? instantToZoneWallClock(new Date(now), await getOrgTimeZone(supabase, anchor.org_id)).time
-    : localTime;
+  const now = autoStoppedAt
+    ? autoStoppedAt
+    : await stopClockOutCap(supabase, {
+        orgId: anchor.org_id, punchVisitId, pausedAt: runningPausedAt, clockedInAt: earliestClockIn, now: tappedAt,
+      });
+  // An auto-stopped stop already carries its end time; leave it.
+  const endLocalTime = autoStoppedAt
+    ? undefined
+    : now !== tappedAt
+      ? instantToZoneWallClock(new Date(now), await getOrgTimeZone(supabase, anchor.org_id)).time
+      : localTime;
   const anchorIsOpen = openRows.some((r) => r.id === anchor.id);
   const punchVisitIsOpen = openRows.some((r) => r.id === punchVisitId);
   const startedAt = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0]
@@ -317,7 +371,9 @@ export async function POST(
         updated_at: now,
       })
       .eq("id", row.id)
-      .is("clocked_out_at", null)
+      // Still in the state read above (open, or auto-stopped at that instant),
+      // so a concurrent clock-out can't transition the same visit twice.
+      .filter("clocked_out_at", row.clocked_out_at ? "eq" : "is", row.clocked_out_at ?? null)
       .not("status", "in", TERMINAL_STATUS_FILTER)
       .select("id");
     if (error) updateErrors.push(`${row.id}: ${error.message}`);

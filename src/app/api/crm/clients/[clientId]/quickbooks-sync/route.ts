@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createClient } from "@/lib/supabase/server";
-import { getValidConnection, findOrCreateCustomer, createCustomer, customerExists } from "@/lib/integrations/quickbooks";
+import {
+  getValidConnection,
+  findOrCreateCustomer,
+  createCustomerWithFallback,
+  customerExists,
+  customerMatchContextFor,
+  QboDuplicateNameError,
+  QboInactiveCustomerError,
+} from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
@@ -38,6 +46,12 @@ const log = logger.child("quickbooks-client-sync");
  * status "ambiguous" and the user picked one); or { forceCreate: true } to
  * skip matching entirely and create a new customer (the "none of these are
  * right" option on that same ambiguous picker).
+ *
+ * One QuickBooks customer belongs to one client: a customer already linked to
+ * a different client is never auto-linked or force-linked. When the client's
+ * plain name is taken (by that other client's customer, a vendor, an
+ * employee, or an inactive customer), the new customer is created as
+ * "<name> (acct #<account number>)".
  */
 export async function POST(req: Request, { params }: { params: Promise<{ clientId: string }> }) {
   const supabase = await createClient();
@@ -63,7 +77,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
 
   const { data: client } = await supabase
     .from("clients")
-    .select("id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip")
+    .select("id, display_name, account_number, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip")
     .eq("id", clientId)
     .eq("org_id", effOrgId)
     .is("deleted_at", null)
@@ -84,6 +98,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
       billingZip: client.billing_zip,
     };
 
+    const ctx = customerMatchContextFor(supabase, effOrgId, client);
     let customerId: string;
 
     if (forcedCustomerId) {
@@ -94,11 +109,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
       if (!(await customerExists(conn, forcedCustomerId))) {
         return NextResponse.json({ error: "That QuickBooks customer could not be found" }, { status: 400 });
       }
+      if (await ctx.isLinkedToOtherClient(forcedCustomerId)) {
+        return NextResponse.json(
+          { error: "That QuickBooks customer is already linked to another client. Pick a different one, or create a new customer." },
+          { status: 409 }
+        );
+      }
       customerId = forcedCustomerId;
     } else if (forceCreate) {
-      customerId = await createCustomer(conn, customerInput);
+      customerId = await createCustomerWithFallback(conn, customerInput, ctx);
     } else {
-      const result = await findOrCreateCustomer(conn, customerInput);
+      const result = await findOrCreateCustomer(conn, customerInput, ctx);
       if (result.status === "ambiguous") {
         return NextResponse.json({ status: "ambiguous", candidates: result.candidates });
       }
@@ -110,6 +131,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
 
     return NextResponse.json({ status: "linked", qboCustomerId: customerId });
   } catch (err) {
+    // Fixable by the user, with a message that says how.
+    if (err instanceof QboDuplicateNameError || err instanceof QboInactiveCustomerError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     log.error("QuickBooks client sync failed", { err, clientId, orgId: effOrgId });
     return NextResponse.json({ error: "Failed to sync with QuickBooks" }, { status: 500 });
   }

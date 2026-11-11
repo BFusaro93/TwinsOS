@@ -4,6 +4,7 @@ import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-hel
 import { ASSET_SELECT, shapeAsset } from "./shape";
 import { createAssetSchema } from "./validation";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { withIdempotency } from "@/lib/api/idempotency";
 
 /** GET /api/v1/assets — list the org's assets. Requires scope "assets:read". */
 export async function GET(request: Request) {
@@ -32,34 +33,36 @@ export async function POST(request: Request) {
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "assets:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // Idempotency-Key: a retried create returns the first result instead of a duplicate.
+  return withIdempotency(db, auth.orgId, request, async () => {
+    const parsed = createAssetSchema.safeParse(await request.json().catch(() => ({})));
+    if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
+    const body = parsed.data;
 
-  const parsed = createAssetSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
-  const body = parsed.data;
+    const { data, error } = await db
+      .from("assets")
+      .insert({
+        org_id: auth.orgId,
+        name: body.name,
+        asset_tag: body.assetTag ?? "",
+        equipment_number: body.equipmentNumber ?? null,
+        asset_type: body.assetType ?? "",
+        status: body.status ?? "active",
+        make: body.make ?? null,
+        model: body.model ?? null,
+        year: body.year ?? null,
+        serial_number: body.serialNumber ?? null,
+        division: body.division ?? null,
+        location: body.location ?? null,
+        notes: body.notes ?? null,
+      })
+      .select(ASSET_SELECT)
+      .single();
 
-  const { data, error } = await db
-    .from("assets")
-    .insert({
-      org_id: auth.orgId,
-      name: body.name,
-      asset_tag: body.assetTag ?? "",
-      equipment_number: body.equipmentNumber ?? null,
-      asset_type: body.assetType ?? "",
-      status: body.status ?? "active",
-      make: body.make ?? null,
-      model: body.model ?? null,
-      year: body.year ?? null,
-      serial_number: body.serialNumber ?? null,
-      division: body.division ?? null,
-      location: body.location ?? null,
-      notes: body.notes ?? null,
-    })
-    .select(ASSET_SELECT)
-    .single();
-
-  // uq_assets_org_asset_tag: an assetTag must be unique per org. Say so rather
-  // than a bare 500 (which is what a duplicate tag used to return).
-  if (error?.code === "23505") return jsonError("Another asset already uses that assetTag", 409);
-  if (error || !data) return jsonServerError("POST /api/v1/assets", error);
-  return NextResponse.json(shapeAsset(data), { status: 201 });
+    // uq_assets_org_asset_tag: an assetTag must be unique per org. Say so rather
+    // than a bare 500 (which is what a duplicate tag used to return).
+    if (error?.code === "23505") return jsonError("Another asset already uses that assetTag", 409);
+    if (error || !data) return jsonServerError("POST /api/v1/assets", error);
+    return NextResponse.json(shapeAsset(data), { status: 201 });
+  });
 }

@@ -10,6 +10,7 @@ import { logger } from "@/lib/logger";
 import { conditionRecordKind } from "./condition-applicability";
 import { applyWaitAdvancedSettings } from "./wait-schedule";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 
 const log = logger.child("sequence-enrollment");
 
@@ -46,11 +47,33 @@ export function computeWaitFireAt(
   const days = part(config?.days);
   const hours = part(config?.hours);
   const minutes = part(config?.minutes);
-  const d = new Date(from);
-  d.setDate(d.getDate() + days);
-  d.setHours(d.getHours() + hours);
-  d.setMinutes(d.getMinutes() + minutes);
+  // Whole days land on the same wall-clock time on the ORG's calendar: adding
+  // 24h × days on the server's UTC clock drifted an hour across a daylight-
+  // saving change ("wait 7 days" at 9:00 fired at 8:00 or 10:00). Hours and
+  // minutes are elapsed time, so they're added as plain milliseconds.
+  let d = new Date(from);
+  if (days > 0) {
+    const shifted = timeZone ? shiftOnOrgCalendar(d, days, timeZone) : null;
+    if (shifted) {
+      d = shifted;
+    } else {
+      d.setDate(d.getDate() + days);
+    }
+  }
+  d = new Date(d.getTime() + hours * 3_600_000 + minutes * 60_000);
   return timeZone ? applyWaitAdvancedSettings(d, config, timeZone) : d;
+}
+
+/** `from` moved `days` calendar days on `timeZone`'s calendar, keeping its wall-clock time
+ *  (seconds included); null when the zone lookup fails. */
+function shiftOnOrgCalendar(from: Date, days: number, timeZone: string): Date | null {
+  const wall = instantToZoneWallClock(from, timeZone);
+  const target = zoneWallClockToInstant(shiftYmd(wall.date, Math.floor(days)), wall.time, timeZone);
+  if (!target) return null;
+  // The wall clock is minute-precision; carry the seconds/ms over, plus any
+  // fractional day as elapsed time.
+  const subMinuteMs = from.getTime() - Math.floor(from.getTime() / 60_000) * 60_000;
+  return new Date(target.getTime() + subMinuteMs + (days - Math.floor(days)) * 86_400_000);
 }
 
 /**
@@ -198,6 +221,9 @@ export async function enrollClientInSequence(
     ticketId?: string | null;
     invoiceId?: string | null;
     meetingId?: string | null;
+    /** The start trigger that created this run — decides when a record-scoped run
+     *  ends on its own (sequence_enrollment_record_stop_reason). */
+    triggerType?: string | null;
   }
 ): Promise<string | null> {
   const { data: firstEvent } = await supabase
@@ -226,6 +252,7 @@ export async function enrollClientInSequence(
       ticket_id: params.ticketId ?? null,
       invoice_id: params.invoiceId ?? null,
       meeting_id: params.meetingId ?? null,
+      trigger_type: params.triggerType ?? null,
       enrolled_at: new Date().toISOString(),
       // Start at the first ACTIVE step's real position (positions can have
       // gaps from deleted/deactivated steps), past it when it's a wait whose
@@ -350,6 +377,38 @@ const INVOICE_FIELD_GETTERS: Partial<Record<ConditionField, (invoice: Record<str
   // this object from a separate crm_payments query below.
   invoice_was_paid_days: (i) => daysSince(i.last_payment_date),
 };
+
+/**
+ * The most recent date a (non-deleted) payment was applied to this invoice. Payments
+ * reach an invoice through crm_payment_allocations — crm_payments.invoice_id is NULL for
+ * a payment split across several invoices, an imported payment or an applied credit —
+ * so allocations are the source; a legacy payment carrying invoice_id with no
+ * allocation rows still counts.
+ */
+async function getInvoiceLastPaymentDate(supabase: AnyClient, invoiceId: string): Promise<string | null> {
+  const [{ data: allocated }, { data: direct }] = await Promise.all([
+    supabase
+      .from("crm_payment_allocations")
+      .select("crm_payments!inner(payment_date, deleted_at)")
+      .eq("invoice_id", invoiceId)
+      .is("crm_payments.deleted_at", null),
+    supabase
+      .from("crm_payments")
+      .select("payment_date")
+      .eq("invoice_id", invoiceId)
+      .is("deleted_at", null)
+      .order("payment_date", { ascending: false })
+      .limit(1),
+  ]);
+  const dates: string[] = [];
+  for (const row of (allocated ?? []) as { crm_payments: { payment_date: string | null } | { payment_date: string | null }[] | null }[]) {
+    const pays = Array.isArray(row.crm_payments) ? row.crm_payments : row.crm_payments ? [row.crm_payments] : [];
+    for (const p of pays) if (p.payment_date) dates.push(p.payment_date);
+  }
+  for (const p of (direct ?? []) as { payment_date: string | null }[]) if (p.payment_date) dates.push(p.payment_date);
+  if (dates.length === 0) return null;
+  return dates.reduce((a, b) => (new Date(b).getTime() > new Date(a).getTime() ? b : a));
+}
 
 const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
 const CURRENT_JOB_STATUSES = new Set(["scheduled", "in_progress", "hold"]);
@@ -580,8 +639,7 @@ export async function evaluateConditionSet(
           .then((r: { data: { product_id: string | null }[] | null }) => new Set((r.data ?? []).map((l) => l.product_id?.toLowerCase()).filter((v): v is string => !!v)))
       : Promise.resolve(new Set<string>()),
     needsInvoicePayments && invoiceId
-      ? supabase.from("crm_payments").select("payment_date").eq("invoice_id", invoiceId).order("payment_date", { ascending: false }).limit(1).maybeSingle()
-          .then((r: { data: { payment_date: string } | null }) => r.data?.payment_date ?? null)
+      ? getInvoiceLastPaymentDate(supabase, invoiceId)
       : Promise.resolve(null),
     needsJobFacts && clientId
       ? getClientJobFacts(supabase, clientId)
@@ -880,6 +938,7 @@ export async function fireServiceVisitCompletedTriggers(
       sequenceId: trigger.sequence_id,
       orgId: params.orgId,
       clientId: params.clientId,
+      triggerType: "service_visit_completed",
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
   }
@@ -915,6 +974,14 @@ export async function fireSimpleTrigger(
      * whether this is passed.
      */
     matchValues?: string[];
+    /**
+     * The record the event is about when it isn't the client/estimate/ticket/
+     * invoice above — the job for job_created, the visit for visit_dispatched,
+     * the contract for contract_signed, the damage case for
+     * damage_case_created. Only used to build the Zapier REST-hook payload
+     * (the same record shape the trigger's polling sample shows).
+     */
+    recordId?: string | null;
   },
   /** The org's triggers of this type, already loaded by a caller that fires many events for
    *  one org (the past-due crons) — saves a paged trigger query per row. */
@@ -979,6 +1046,7 @@ export async function fireSimpleTrigger(
       ticketId: params.ticketId ?? null,
       invoiceId: params.invoiceId ?? null,
       meetingId: params.meetingId ?? null,
+      triggerType: params.triggerType,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
   }
@@ -987,17 +1055,34 @@ export async function fireSimpleTrigger(
   // independent of whether any internal sequence matched above, since a Zap
   // may be the only thing configured for this event.
   if (isZapierTriggerType(params.triggerType)) {
-    await notifyZapierSubscribers(supabase, params.orgId, params.triggerType, {
-      // Zapier dedupes REST Hook items on `id`; without one every firing collapses into one.
-      id: `${params.triggerType}-${crypto.randomUUID()}`,
-      triggerType: params.triggerType,
-      clientId: params.clientId,
-      estimateId: params.estimateId ?? null,
-      ticketId: params.ticketId ?? null,
-      invoiceId: params.invoiceId ?? null,
-      matchValues: params.matchValues ?? null,
-      firedAt: new Date().toISOString(),
-    });
+    await notifyZapierSubscribers(
+      supabase,
+      params.orgId,
+      params.triggerType,
+      {
+        // Fallback id when the record can't be loaded (Zapier dedupes on `id`).
+        id: `${params.triggerType}-${crypto.randomUUID()}`,
+        triggerType: params.triggerType,
+        clientId: params.clientId,
+        estimateId: params.estimateId ?? null,
+        ticketId: params.ticketId ?? null,
+        invoiceId: params.invoiceId ?? null,
+        matchValues: params.matchValues ?? null,
+        firedAt: new Date().toISOString(),
+      },
+      // The live payload is the record itself, in the same shape as the
+      // trigger's polling sample the Zap was built from (see
+      // notifyZapierSubscribers) — the fields above stay on it, additively.
+      {
+        record: {
+          clientId: params.clientId,
+          estimateId: params.estimateId ?? null,
+          ticketId: params.ticketId ?? null,
+          invoiceId: params.invoiceId ?? null,
+          recordId: params.recordId ?? null,
+        },
+      }
+    );
   }
 
   return enrolledIds;

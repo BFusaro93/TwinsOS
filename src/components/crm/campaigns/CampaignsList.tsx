@@ -7,6 +7,7 @@ import {
   useUpdateCampaign,
   useDeleteCampaign,
   useSendCampaign,
+  useCampaignRecipientCount,
 } from "@/lib/hooks/use-crm-campaigns";
 import { useClientCount } from "@/lib/hooks/use-clients";
 import type { FilterRow } from "@/lib/client-filters";
@@ -615,18 +616,14 @@ export function CampaignsList() {
   const { mutateAsync: deleteCampaign, isPending: delPending } = useDeleteCampaign();
   const { mutateAsync: sendCampaign, isPending: sendPending } = useSendCampaign();
 
-  // Same eligibility as the send: not Do Not Market, OK to email, has an email.
-  const { data: recipientCount = 0 } = useClientCount(
-    {
-      filters: [
-        ...(sending ? segmentFilters(sending.targetSegment) : []),
-        { id: "dnm", field: "do_not_market", operator: "eq", value: "no" },
-        { id: "ok", field: "ok_to_email", operator: "eq", value: "yes" },
-      ],
-    },
-    { withEmail: true, ids: sending?.targetSegment === "custom" ? sending.audienceClientIds : undefined },
-    !!sending,
-  );
+  // Counted on the server by the send's own recipient logic, so the number on the
+  // button is the number of emails that go out (bounced addresses, addresses
+  // opted out on another account and duplicate addresses are all left out).
+  const {
+    data: recipientCount = 0,
+    isLoading: recipientCountLoading,
+    isError: recipientCountError,
+  } = useCampaignRecipientCount(sending?.id ?? null);
 
   const filtered = campaigns.filter((c: CRMCampaign) => {
     if (statusTab !== "all" && c.status !== statusTab) return false;
@@ -821,14 +818,18 @@ export function CampaignsList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Send &ldquo;{sending?.name}&rdquo; now?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will immediately email {recipientCount} client{recipientCount !== 1 ? "s" : ""}
-              {" "}(Do Not Market clients and clients with no email on file are always excluded). This can&apos;t be undone.
+              {recipientCountLoading
+                ? "Counting recipients…"
+                : recipientCountError
+                  ? "Couldn't count the recipients right now."
+                  : `This will immediately send ${recipientCount} email${recipientCount !== 1 ? "s" : ""}.`}
+              {" "}Do Not Market clients, clients not OK to email, addresses that bounced and clients with no email on file are left out, and an address shared by several clients gets one copy. This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={sendPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSend} disabled={sendPending || recipientCount === 0}>
-              {sendPending ? "Sending…" : `Send to ${recipientCount}`}
+            <AlertDialogAction onClick={handleSend} disabled={sendPending || recipientCountLoading || recipientCount === 0}>
+              {sendPending ? "Sending…" : recipientCountLoading ? "Send" : `Send to ${recipientCount}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

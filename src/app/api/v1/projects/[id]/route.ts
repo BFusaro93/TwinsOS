@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { isUuid } from "../../id-param";
-import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
+import { clientNotFoundResponse, jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { PROJECT_SELECT, shapeProject } from "../shape";
 import { updateProjectSchema } from "../validation";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
@@ -50,7 +50,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .eq("id", body.clientId)
       .is("deleted_at", null)
       .maybeSingle();
-    if (!client || client.org_id !== auth.orgId) return jsonError("Client not found", 404);
+    if (!client || client.org_id !== auth.orgId) return clientNotFoundResponse(db, auth.orgId, body.clientId);
   }
 
   // Note on NOT NULL columns: city/state/zip/customer_name/address/

@@ -42,6 +42,10 @@ function DirectCostRow({
   function update<K extends keyof EstimateDirectCost>(key: K, val: EstimateDirectCost[K]) {
     setRow((prev) => {
       const next = { ...prev, [key]: val };
+      // A cost is never negative: a negative qty or rate used to save a
+      // negative cost row that silently raised the estimate's profit.
+      next.qty = Math.max(0, Number(next.qty) || 0);
+      next.rateCents = Math.max(0, Math.round(Number(next.rateCents) || 0));
       const totalCents = Math.round(next.qty * next.rateCents);
       const overheadCents = computeDirectCostOverhead(next.costType, totalCents, overheadSettings);
       return { ...next, totalCents, overheadCents };
@@ -160,6 +164,7 @@ function DirectCostRow({
       <td className="w-24 px-3 py-1.5">
         <input
           type="number"
+          min={0}
           value={row.qty}
           onChange={(e) => update("qty", Number(e.target.value) || 0)}
           onBlur={save}
@@ -171,6 +176,7 @@ function DirectCostRow({
       <td className="w-28 px-3 py-1.5">
         <input
           type="number"
+          min={0}
           value={row.rateCents / 100}
           onChange={(e) => update("rateCents", Math.round((Number(e.target.value) || 0) * 100))}
           onBlur={save}

@@ -317,7 +317,8 @@ const ENDPOINTS: EndpointDef[] = [
     path: "/jobs",
     summary:
       "Create a job (with its service line and, for a dated job type, its dispatch-board visit). " +
-      "budgetedHours is TOTAL MAN-HOURS, not per person; dates are YYYY-MM-DD; a waiting_list job deliberately gets no visit.",
+      "budgetedHours is TOTAL MAN-HOURS, not per person; dates are YYYY-MM-DD; a waiting_list job deliberately gets no visit. " +
+      "A lead client is converted to a client first (as the app's Convert does); a closed-lost lead is a 409.",
     scope: "jobs:write:safe",
     agentTier: "write:safe",
     requestSchema: createJobSchema,
@@ -333,7 +334,9 @@ const ENDPOINTS: EndpointDef[] = [
   {
     method: "patch",
     path: "/jobs/{id}",
-    summary: "Update a job",
+    summary:
+      "Update a job. scheduledDate also moves the job's visit, for a job with a single visit not yet dispatched/started/completed (otherwise 400 — reschedule visits in the app); " +
+      "rateCents sets the rate of the job's one service line (a job with several lines is a 400).",
     scope: "jobs:write:safe",
     agentTier: "write:safe",
     requestSchema: updateJobSchema,
@@ -397,6 +400,16 @@ const ENDPOINTS: EndpointDef[] = [
   },
 ];
 
+/** Optional on every create — see src/lib/api/idempotency.ts. */
+const IDEMPOTENCY_KEY_PARAMETER = {
+  name: "Idempotency-Key",
+  in: "header",
+  required: false,
+  schema: { type: "string", minLength: 1, maxLength: 255 },
+  description:
+    "Makes the create safe to retry: the same key with the same request within 24 hours returns the first response instead of creating a duplicate.",
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildOpenApiDocument(): Record<string, any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -409,8 +422,11 @@ export function buildOpenApiDocument(): Record<string, any> {
       security: [{ apiKey: [] }],
       "x-required-scope": endpoint.scope,
       "x-agent-tier": endpoint.agentTier,
-      ...(endpoint.hasIdParam && {
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      ...((endpoint.hasIdParam || endpoint.method === "post") && {
+        parameters: [
+          ...(endpoint.hasIdParam ? [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }] : []),
+          ...(endpoint.method === "post" ? [IDEMPOTENCY_KEY_PARAMETER] : []),
+        ],
       }),
       ...(endpoint.requestSchema && {
         requestBody: {
@@ -426,7 +442,14 @@ export function buildOpenApiDocument(): Record<string, any> {
         "400": { description: "Invalid request body" },
         "401": { description: "Missing or invalid API key" },
         "403": { description: "Missing required scope" },
-        "404": { description: "Not found" },
+        "404": { description: "Not found (for a client merged into another, the body includes mergedIntoClientId)" },
+        ...(endpoint.method !== "get" && {
+          "409": {
+            description:
+              "Rejected by a data rule (e.g. a job for a closed-lost lead, setting a former client back to lead), a duplicate, or — with Idempotency-Key — the same key still in progress",
+          },
+        }),
+        ...(endpoint.method === "post" && { "422": { description: "Idempotency-Key already used for a different request" } }),
         "429": { description: "Rate limit exceeded" },
       },
     };
@@ -447,7 +470,12 @@ export function buildOpenApiDocument(): Record<string, any> {
         "it is not an annualised or monthly-equivalent figure that gets scaled per cadence. An annual contract stores its full yearly price " +
         "and is invoiced once a year. billing_frequency (weekly, biweekly, monthly, quarterly, annual, one_time) genuinely drives the cadence, " +
         "anchored on start_date (falling back to signed_at), and re-running a billing pass inside the same period never produces a second invoice. " +
-        "Contracts created through this API default to status \"draft\", which does not bill.",
+        "Contracts created through this API default to status \"draft\", which does not bill.\n\n" +
+        "Errors: a request a database rule rejects comes back as a 4xx with that rule's own explanation in `error` " +
+        "(409 for a business rule, 403 for a permission rule, 400 for a reference to a record that doesn't exist); only a genuine server fault is a 500, which is safe to retry.\n\n" +
+        "Retries: every POST accepts an optional Idempotency-Key header (any unique string up to 255 characters, e.g. a UUID). " +
+        "The same key with the same request within 24 hours returns the first response (with header Idempotent-Replayed: true) instead of creating a second record; " +
+        "the same key with a different request is a 422; a retry while the first request is still running is a 409. A request that failed does not use up its key.",
     },
     servers: [{ url: "/api/v1" }],
     components: {

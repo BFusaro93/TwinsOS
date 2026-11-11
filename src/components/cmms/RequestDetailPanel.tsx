@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, Trash2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -94,7 +94,7 @@ function DetailsTab({
           isTerminalError={isError}
         />
         <div className="mt-3 flex flex-wrap gap-2">
-          {canTriageMaintenanceRequests && (<>
+          {canTriageMaintenanceRequests && !request.linkedWorkOrderId && (<>
           {status === "open" && (
             <Button size="sm" onClick={() => onStatusChange("in_review")}>Begin Review</Button>
           )}
@@ -197,6 +197,12 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [woSheetOpen, setWoSheetOpen] = useState(false);
   const [status, setStatus] = useState<MaintenanceRequestStatus>(request.status);
+  // Keep the local (optimistic) status in step with the record: a realtime
+  // update, another user's change or a refetch must not leave a stale status
+  // (and stale action buttons) on screen.
+  useEffect(() => {
+    setStatus(request.status);
+  }, [request.id, request.status]);
   const { data: workOrders = [] } = useWorkOrders();
   const { data: vehicles = [] } = useVehicles();
   const linkedWO = request.linkedWorkOrderId
@@ -214,8 +220,18 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
   const { data: automations = [] } = useAutomations();
 
   function handleStatusChange(s: MaintenanceRequestStatus) {
+    const from = status;
     setStatus(s);
-    syncStatus({ id: request.id, status: s });
+    syncStatus(
+      { id: request.id, status: s, from },
+      {
+        onError: (err) => {
+          // Don't leave a status on screen that wasn't saved.
+          setStatus(request.status);
+          toast.error(err instanceof Error ? err.message : "Could not update the request");
+        },
+      }
+    );
   }
 
   async function handleConvertToWO() {
@@ -266,7 +282,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         onError: (err) => {
           toast.error(`Failed to create work order: ${err instanceof Error ? err.message : "unknown error"}`);
           // WO creation failed — release the claim so the request can be retried.
-          syncStatus({ id: request.id, status: previousStatus });
+          syncStatus({ id: request.id, status: previousStatus, from: "converted" });
         },
         onSuccess: (wo) => {
           setStatus("converted");
@@ -353,6 +369,10 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
                   onSuccess: () => {
                     setDeleteConfirmOpen(false);
                     setSelectedRequestId(null);
+                  },
+                  onError: (err) => {
+                    setDeleteConfirmOpen(false);
+                    toast.error(err instanceof Error ? err.message : "Could not delete the request");
                   },
                 })
               }

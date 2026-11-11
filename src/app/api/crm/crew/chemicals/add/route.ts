@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, org_id, job_id, status, crew_id, crew_unassigned, clocked_in_at, crm_jobs(crew_id)")
+    .select("id, org_id, job_id, status, crew_id, crew_unassigned, clocked_in_at, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();

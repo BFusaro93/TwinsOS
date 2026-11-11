@@ -105,7 +105,7 @@ export async function GET(request: Request) {
   const crew = ((crewRows ?? []) as { id: string; name: string }[])[0] ?? null;
   if (!crew) {
     return NextResponse.json({
-      date, crewId: null, crewName: null, visits: [], stops: [],
+      date, timeZone: orgTimeZone, crewId: null, crewName: null, visits: [], stops: [],
       drive: { openSegment: null, totalMinutes: 0 },
     });
   }
@@ -122,10 +122,10 @@ export async function GET(request: Request) {
       acknowledged_notes_at, notes_to_crew_updated_at, completed_at, created_at, updated_at,
       clients(display_name, primary_phone, service_address, service_city, service_state, service_zip,
         billing_address, billing_city, billing_state, billing_zip),
-      crm_jobs(crew_id, job_type, status, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
+      crm_jobs:crew_job(crew_id, job_type, status, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
         notes_to_crew, notes_to_crew_updated_at,
         client_properties(address, city, state, zip),
-        crm_job_services(id, service_name, budgeted_hours, team_size, sort_order, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
+        crm_job_services:crew_job_services(id, service_name, budgeted_hours, team_size, sort_order, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
     `;
   const { data: unsorted, error } = await selectEffectiveCrewVisits(
     supabase,
@@ -391,6 +391,9 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     date,
+    // The org's zone, so the native app can compute "today" (and the wall-clock
+    // time it sends with a tap) the way the office does, not by the phone's zone.
+    timeZone: orgTimeZone,
     crewId: crew.id as string,
     crewName: crew.name as string,
     visits,

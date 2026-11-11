@@ -34,7 +34,7 @@ const TRIGGER_GROUPS: [string, string][] = [
 ];
 
 const EVENT_TYPES: [string, string][] = [
-  ["Wait", "Pauses the sequence for a set number of days, hours, and minutes before the next event runs. Two optional settings refine when it resumes, both read on your company clock: Then wait until a time of day (e.g. wait 1 day, then continue at 9:00 AM — if that time has already passed today it rolls to tomorrow), and Weekdays only (a Saturday or Sunday result moves to Monday at the same time)."],
+  ["Wait", "Pauses the sequence for a set number of days, hours, and minutes before the next event runs. Days are counted on your company calendar, so a 7-day wait that starts at 9:00 AM resumes at 9:00 AM even across a daylight-saving change; hours and minutes are elapsed time. Two optional settings refine when it resumes, both read on your company clock: Then wait until a time of day (e.g. wait 1 day, then continue at 9:00 AM — if that time has already passed today it rolls to tomorrow), and Weekdays only (a Saturday or Sunday result moves to Monday at the same time)."],
   [
     "Email",
     "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template. Beyond the client tags, email and text steps can use invoice tags — [invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink] — which fill in for automations started by an invoice trigger (and are blank otherwise), and service tags — [servicename], [servicedate] for the client's last completed service, [nextservicename], [nextservicedate] for their next scheduled one, plus [chemicalnotice], the compact Notice of Treatment for that last completed visit (blank when it logged no chemicals). The Email Category decides who is suppressed: Marketing, General and Follow-up emails are not sent to clients marked Do Not Market (and carry an unsubscribe link), while Transactional and Reminder emails still reach those clients. A hard-bounced address or a client marked not OK to email blocks every category.",
@@ -473,17 +473,23 @@ export function AutomationsGuide() {
           that address: the client&apos;s other addresses keep getting email.
         </p>
         <p>
-          <strong>I approved an automation email and it was refused. Why?</strong> The client&apos;s
-          status is re-checked at the moment you approve. If they unsubscribed while the step was
-          waiting, the approval is blocked — reject the step instead. A recipient address that
-          bounced in the meantime is dropped and the email goes to the others; if every recipient
-          bounced, the approval is blocked.
+          <strong>I approved an automation step and it said &quot;Not sent&quot;. Why?</strong> A step can
+          wait in the approval queue for days, so approving it runs the same checks the step would
+          have passed if it had never needed approval: the automation and sequence are still on, the
+          client still exists, the invoice, estimate, ticket or meeting it is about still applies, no
+          stop condition is met, and the step itself hasn&apos;t been removed or switched off. The
+          recipients are also checked again &mdash; anyone who unsubscribed, was marked not OK to email,
+          bounced, replied STOP or is no longer on the client is dropped, and the step goes to the
+          approved recipients who are left. If a check fails, the step is rejected automatically, you
+          see the reason, and it leaves the queue. When the whole run should end (the automation was
+          turned off, the invoice was paid&hellip;) the run stops; when only this message can&apos;t go out
+          (every recipient opted out, say) the step is skipped and the rest of the sequence carries on.
         </p>
         <p>
-          <strong>I approved a queued step and was told the automation was stopped.</strong> Turning an
-          automation off, or deleting it, stops its enrollments but leaves their approval requests
-          waiting. Approving one is refused (&quot;reject this step instead&quot;) so the email or text
-          you meant to halt doesn&apos;t go out. <strong>Empty email steps:</strong> an email step with no
+          <strong>Why did a step disappear from the approval queue?</strong> The queue only lists steps
+          whose run is still going. Turning an automation or sequence off (or deleting it), deleting the
+          client, or the run ending on its own (its invoice was paid, its estimate decided, its ticket
+          closed) rejects its queued step automatically. <strong>Empty email steps:</strong> an email step with no
           subject and no visible body text is skipped rather than sent as &quot;(no subject)&quot;, so fill in at
           least one of them.
         </p>
@@ -523,6 +529,22 @@ export function AutomationsGuide() {
             <strong>Cancelled or moved meetings.</strong> If a meeting is cancelled, deleted or rescheduled, the reminders still waiting for it stop (shown as “Stopped (meeting changed)” in the activity log). A rescheduled meeting gets fresh reminders for its new time.
           </li>
           <li>
+            <strong>Invoice, estimate and ticket sequences end on their own.</strong> A sequence started by an
+            invoice, estimate or ticket stops once that record has moved past the reason the sequence started:
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              <li>Invoice created, Invoice sent or Invoice past due &mdash; stops when the invoice is paid in full, voided or deleted.</li>
+              <li>Invoice paid &mdash; stops only if the invoice is voided or deleted.</li>
+              <li>Estimate created, Estimate sent, Estimate expiring or Estimate no response &mdash; stops when the estimate is won, lost or deleted.</li>
+              <li>Estimate won or Estimate lost &mdash; stops only if the estimate is deleted.</li>
+              <li>Ticket created, Ticket past due or Ticket reopened &mdash; stops when the ticket is closed or deleted.</li>
+              <li>Ticket closed &mdash; stops only if the ticket is deleted.</li>
+            </ul>
+            A sequence is never stopped by the change that started it. The run stops the moment the record
+            changes (shown with the reason, e.g. &quot;invoice was paid in full&quot;, in the execution log), and any
+            step of it waiting for approval is rejected. A partial payment doesn&apos;t stop anything. Use Stop
+            Conditions for anything else you want a sequence to end on.
+          </li>
+          <li>
             <strong>Deleted clients.</strong> Deleting a client stops every sequence they are in, including ticket, alert, field-update and tag steps (“Stopped (client deleted)”), and a deleted client is never enrolled again.
           </li>
           <li>
@@ -538,7 +560,18 @@ export function AutomationsGuide() {
             <strong>Scheduling a campaign.</strong> Saving a campaign with a Schedule Send date keeps it as a draft. Use <strong>Mark Scheduled</strong> on the campaign row to arm it; scheduled campaigns go out at the top of the hour. Scheduling or sending needs Send/Launch Campaign. <strong>Send Now</strong> follows the same rules as a scheduled send: it is refused for a company whose subscription is canceled or whose trial has ended, and for demo companies.
           </li>
           <li>
+            <strong>Send Now count.</strong> The Send Now confirmation shows how many emails will actually go out. It
+            leaves out Do Not Market clients, clients not OK to email, clients with no email, addresses that hard-bounced,
+            and addresses that are opted out on any client account, and counts an address shared by several clients once
+            (that address gets one copy).
+          </li>
+          <li>
             <strong>Approvals.</strong> Held messages can be approved or rejected by admins, managers, and anyone with Create/Modify Automation.
+          </li>
+          <li>
+            <strong>Several clients, same trigger.</strong> Tagging (or otherwise triggering) many different clients in a row
+            fires each client&apos;s automation. Firing the same trigger for the same client and record more than 3 times in
+            10 minutes from the app is held back, so a double-click can&apos;t send a client the same email twice.
           </li>
           <li>
             <strong>Demo companies.</strong> Demo or sandbox companies never send automated emails or texts (sequences, campaigns, reminders, expiry notices, scheduled reports). Visits and invoices still generate so demos look real.
