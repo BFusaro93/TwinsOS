@@ -135,7 +135,8 @@ export function groupIntoSections<T extends GroupableItem>(
     const carriesSubitems = (item.subitemTotalCents ?? 0) > 0 || (item.subitems?.length ?? 0) > 0;
     if (settings.hideZeroTotals && item.totalCents === 0 && !carriesSubitems) continue;
     current.items.push(item);
-    current.subtotalCents += item.totalCents;
+    // The section's subtotal is the line plus every priced sub-item under it, matching the estimate total.
+    current.subtotalCents += item.totalCents + (item.subitemTotalCents ?? 0);
     started = true;
   }
   sections.push(current);
