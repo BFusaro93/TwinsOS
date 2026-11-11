@@ -546,6 +546,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
    * A manual row holds the TOTAL budget steady too: the budget is the work involved, not the
    * crew, so 4 hrs/person x 3 becomes 2 hrs/person x 6 (still 12). Only the per-person
    * figure (what is stored) is re-derived; the Budget Hrs total never moves with crew size.
+   * The per-person figure is kept UNROUNDED in state (rounded to 4 decimals only when saved) so
+   * the total doesn't drift (0.25 / 3 x 3 showed 0.2499, 3 hrs over 7 showed 3.0002).
    */
   function updateTeamSize(i: number, teamSize: number) {
     const row = services[i];
@@ -553,7 +555,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     if (svc && rowIsAutoHrs(row?.serviceId ?? "")) {
       updateService(i, { teamSize, budgetedHours: autoHoursPerPerson(svc, row?.qty ?? 1, teamSize) });
     } else if (row && row.budgetedHours > 0 && row.teamSize > 0 && teamSize !== row.teamSize) {
-      updateService(i, { teamSize, budgetedHours: roundHours((row.budgetedHours * row.teamSize) / teamSize, 4) });
+      updateService(i, { teamSize, budgetedHours: (row.budgetedHours * row.teamSize) / teamSize });
     } else {
       updateService(i, { teamSize });
     }
@@ -1282,14 +1284,14 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         <DecimalInput
                           min={0}
                           className="h-7 text-xs"
-                          value={roundHours(svc.budgetedHours * svc.teamSize, 4)}
+                          value={roundHours(svc.budgetedHours * svc.teamSize, 2)}
                           selectOnFocus
-                          onCommit={(total) => updateService(i, { budgetedHours: roundHours(total / Math.max(1, svc.teamSize), 4) })}
+                          onCommit={(total) => updateService(i, { budgetedHours: total / Math.max(1, svc.teamSize) })}
                         />
                         <MenHoursCalcPopover
                           totalHours={svc.budgetedHours * svc.teamSize}
                           men={svc.teamSize}
-                          onApply={({ totalHours, men }) => updateService(i, { teamSize: men, budgetedHours: roundHours(totalHours / men, 4) })}
+                          onApply={({ totalHours, men }) => updateService(i, { teamSize: men, budgetedHours: totalHours / men })}
                         />
                       </div>
                     )}
