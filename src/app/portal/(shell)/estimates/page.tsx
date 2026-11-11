@@ -176,7 +176,17 @@ export default async function EstimatesPage() {
     if ((e.deposit_collected_cents ?? 0) > 0 || (e.deposit_pending_cents ?? 0) > 0) return 0;
     return e.total_price_cents > 0 ? Math.min(required, e.total_price_cents) : required;
   };
-  const dueIds = normalized.filter((e) => depositDue(e) > 0).map((e) => e.id);
+  // The pay link is looked up for every estimate that can owe a deposit, not only ones already
+  // accepted: a client who accepts here sees "Deposit due" immediately, and without the link
+  // already loaded it read "we'll be in touch" until they reloaded the page.
+  const dueIds = normalized
+    .filter((e) =>
+      (e.deposit_required_cents ?? 0) > 0 &&
+      (e.deposit_collected_cents ?? 0) === 0 &&
+      (e.deposit_pending_cents ?? 0) === 0 &&
+      !["lost", "declined"].includes(e.status)
+    )
+    .map((e) => e.id);
   const payUrlByEstimate = new Map<string, string>();
   if (dueIds.length) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
