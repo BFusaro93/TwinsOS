@@ -18,6 +18,7 @@ interface LineItemRow {
   status: string;
   row_type: "item" | "section" | null;
   section_name: string | null;
+  service_name?: string | null;
   tier: string | null;
   package_id: string | null;
   discount_cents: number | null;
@@ -84,7 +85,7 @@ export default async function EstimatesPage() {
           "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
             "discount_cents, discount_type, discount_value, tax_rate_bps, " +
             "deposit_required_cents, deposit_collected_cents, deposit_pending_cents, " +
-            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
+            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, service_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
         )
         .in("client_id", ids)
         .eq("org_id", ctx.orgId)
@@ -109,7 +110,10 @@ export default async function EstimatesPage() {
       const c = published.content;
       const toPortalLine = (li: (typeof c.lineItems)[number], status: string) => ({
         id: li.id,
-        description: li.estimateDesc ?? li.serviceName ?? "",
+        // Wording only; the service name travels separately so the page can follow the
+        // "Service name with description" toggle (a line with no wording falls back to its name).
+        description: li.estimateDesc ?? "",
+        service_name: li.serviceName ?? null,
         quantity: li.qty,
         unit_price_cents: li.rateCents,
         visits: li.visits,
