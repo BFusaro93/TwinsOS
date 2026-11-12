@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type MutableRefObject } from "react";
 import {
   useCRMJobProducts,
   useAddCRMJobProduct,
@@ -153,12 +153,30 @@ export interface JobProductServiceOption {
  * always attached to a service line rather than floating on its own) — the
  * Add/Edit rows won't submit without one picked from `services`.
  */
-export function JobProductsSection({ jobId, services }: { jobId: string; services: JobProductServiceOption[] }) {
+export function JobProductsSection({
+  jobId,
+  services,
+  visitId,
+  commitDraftRef,
+}: {
+  jobId: string;
+  services: JobProductServiceOption[];
+  /** When opened from one visit (dispatch slide-over): new products are scoped to that visit,
+   *  and this visit's own products are listed alongside the job-level ones. */
+  visitId?: string;
+  /** Lets a parent's Save button commit a half-finished "Add Product" row first, so clicking Save
+   *  doesn't silently discard a product the user picked but never confirmed with the check. Resolves
+   *  true when there is nothing to commit or it was saved, false when the draft is invalid or failed
+   *  (the parent should then abort its own save). */
+  commitDraftRef?: MutableRefObject<(() => Promise<boolean>) | null>;
+}) {
   const { data: allJobProducts = [] } = useCRMJobProducts(jobId);
   // Per-visit rows (a recurring service's sub-item products, one per visit) are the
   // crew's to record visit by visit and show up in Materials Needed; listing a
   // weekly job's dozens of them here would bury the materials the office planned.
-  const jobProducts = allJobProducts.filter((p) => !p.visitId);
+  const jobProducts = allJobProducts.filter(
+    (p) => !p.visitId || (!!visitId && p.visitId === visitId && !p.jobServiceSubitemId)
+  );
   const addJobProduct = useAddCRMJobProduct();
   const updateJobProduct = useUpdateCRMJobProduct();
   const deleteJobProduct = useDeleteCRMJobProduct();
@@ -176,6 +194,43 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
   const [editProductQty, setEditProductQty] = useState("");
   const [editProductInvoiceQty, setEditProductInvoiceQty] = useState("");
   const [editProductPrice, setEditProductPrice] = useState("");
+
+  async function commitNewProduct(): Promise<boolean> {
+    if (!newProductId) return true; // nothing picked yet — nothing to save
+    const prod = productCatalog.find((p) => p.id === newProductId);
+    if (!prod) return true;
+    if (!newProductServiceId) { toast.error("Select which service this product belongs to"); return false; }
+    const qty = parsePositive(newProductQty);
+    if (qty == null) { toast.error("Quantity must be greater than 0"); return false; }
+    const price = newProductPrice.trim() ? parseNonNegative(newProductPrice) : null;
+    if (newProductPrice.trim() && price == null) { toast.error("Unit price can't be negative"); return false; }
+    try {
+      await addJobProduct.mutateAsync({
+        jobId,
+        visitId,
+        jobServiceId: newProductServiceId,
+        productId: prod.id,
+        productName: prod.name,
+        qty,
+        unitPriceCents: price != null ? Math.round(price * 100) : prod.price,
+        unitCostCents: prod.unitCost ?? null,
+      });
+      setAddingProduct(false);
+      setNewProductId(""); setNewProductServiceId(""); setNewProductPrice(""); setNewProductQty("1");
+      toast.success("Product added");
+      return true;
+    } catch {
+      toast.error("Failed to add product");
+      return false;
+    }
+  }
+
+  // Expose the draft commit to the parent's Save button (latest closure every render).
+  useEffect(() => {
+    if (!commitDraftRef) return;
+    commitDraftRef.current = addingProduct ? commitNewProduct : null;
+    return () => { commitDraftRef.current = null; };
+  });
 
   return (
     <div className="flex flex-col gap-2">
@@ -383,33 +438,10 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex justify-end gap-1">
-                    <button onClick={async () => {
-                      if (!newProductId) return;
-                      const prod = productCatalog.find((p) => p.id === newProductId);
-                      if (!prod) return;
-                      if (!newProductServiceId) { toast.error("Select which service this product belongs to"); return; }
-                      const qty = parsePositive(newProductQty);
-                      if (qty == null) { toast.error("Quantity must be greater than 0"); return; }
-                      const price = newProductPrice.trim() ? parseNonNegative(newProductPrice) : null;
-                      if (newProductPrice.trim() && price == null) { toast.error("Unit price can't be negative"); return; }
-                      try {
-                        await addJobProduct.mutateAsync({
-                          jobId,
-                          jobServiceId: newProductServiceId,
-                          productId: prod.id,
-                          productName: prod.name,
-                          qty,
-                          unitPriceCents: price != null ? Math.round(price * 100) : prod.price,
-                          unitCostCents: prod.unitCost ?? null,
-                        });
-                        setAddingProduct(false);
-                        setNewProductId(""); setNewProductServiceId(""); setNewProductPrice(""); setNewProductQty("1");
-                        toast.success("Product added");
-                      } catch { toast.error("Failed to add product"); }
-                    }} className="rounded p-1 hover:bg-green-50 dark:hover:bg-green-950/40 text-green-600 dark:text-green-400">
+                    <button title="Click to add this product — it isn't saved until you do" aria-label="Add this product" onClick={() => { void commitNewProduct(); }} className="rounded p-1 hover:bg-green-50 dark:hover:bg-green-950/40 text-green-600 dark:text-green-400">
                       <Check className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => setAddingProduct(false)} className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500">
+                    <button title="Cancel" aria-label="Cancel" onClick={() => setAddingProduct(false)} className="rounded p-1 hover:bg-muted text-slate-400 dark:text-neutral-500">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>

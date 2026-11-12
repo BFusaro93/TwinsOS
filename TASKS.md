@@ -226,9 +226,9 @@ The Payroll tab (#466) shows marked-out gaps with start/end times, but lunch, br
 - [ ] **Equipment on the office dispatch sheet / client Activity:** crew photos are now on the job's Attachments tab only.
 
 ## Backlog — crew equipment load check-off (Pezz, 2026-11-10)
-Raised by Pezz (Salisbury, field user on the mobile crew app). Equipment dragged from the yard onto a crew on the crew board shows as an "Equipment today" list in the crew app (`GET /api/crm/crew/equipment`). Wanted: the crew can tick each piece off as "loaded" as it comes off the yard.
+Raised by Pezz (Salisbury, field user on the mobile crew app). **Promised to Harborscapes 2026-11-11** as a future update (tappable check on the "Equipment today" list in web + native apps with a "3 of 5 loaded" count, loaded state on the office crew board) — so this is a customer commitment, not just an idea. Equipment dragged from the yard onto a crew on the crew board shows as an "Equipment today" list in the crew app (`GET /api/crm/crew/equipment`). Wanted: the crew can tick each piece off as "loaded" as it comes off the yard.
 
-- [ ] Per-day, per-crew loaded flag for each equipment assignment (a `loaded_at` / `loaded_by` on the crew-board equipment assignment row, or a small join table; needs a migration on TEST + PROD) and a crew-app route to toggle it.
-- [ ] Tappable check / cross-off on the crew app's "Equipment today" list, web and native `crew-app/`; show a "3 of 5 loaded" count.
-- [ ] Show loaded state to the office on the crew board so dispatch can see a crew left without the skid steer. Decide whether un-loading is allowed and whether the flag resets daily.
+- [x] Built 2026-11-12 (uncommitted at time of writing): `crm_crew_load_checks` (migration `20270101000020_crew_load_checks.sql` — applied to PROD 2026-11-12; **still needs applying to TEST**), `GET /api/crm/crew/equipment` now returns `loaded`, new `GET /api/crm/crew/materials` and `POST /api/crm/crew/load-checks`, check-off lists on the web crew page and native home screen ("3 of 5 loaded"), loaded state on the Crew Board.
+- Decisions: un-loading is allowed (tap again; the row is deleted); the flag resets daily by construction (rows are per work_date); materials = pending non-chemical job products for the crew's dispatched stops (chemicals stay on the preload flow); native check-off is online-only, not queued.
+- [ ] Open: offline queueing for the native check-off if crews report dead zones in the yard; a "left without X" warning on the board when a crew clocks in with unchecked items.
 

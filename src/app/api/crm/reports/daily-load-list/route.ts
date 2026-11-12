@@ -20,13 +20,15 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Same gate as materials-needed — a Report Center report living on its own
-  // page (href), so the catalog's client-side permission check never covers
-  // this endpoint.
-  const { data: canView } = await supabase.rpc("has_settings_permission", {
-    p_key: "view_report_center",
-  });
-  if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // The load list is also shown on the Dispatch Board and Crew Board, so anyone who
+  // can open the dispatch board may read it, not just Report Center users. It is still
+  // scoped to the caller's org by RLS; a report page of its own stays gated by the
+  // catalog's client-side Report Center check.
+  const [{ data: canReport }, { data: canDispatch }] = await Promise.all([
+    supabase.rpc("has_settings_permission", { p_key: "view_report_center" }),
+    supabase.rpc("has_settings_permission", { p_key: "sched_dispatch_board" }),
+  ]);
+  if (!canReport && !canDispatch) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const date = request.nextUrl.searchParams.get("date") || todayInZone(await getMyTimeZone(supabase));
 

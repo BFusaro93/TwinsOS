@@ -28,7 +28,7 @@ import {
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
 import { JobAssetsSection } from "@/components/crm/jobs/JobAssetsSection";
 import { useAutoInvoiceCompletedJob, useCreateInvoiceFromJob, useInvoiceForJob } from "@/lib/hooks/use-invoices";
-import { BILLABLE_JOB_PRODUCT_STATUSES } from "@/lib/invoices/create-from-job";
+import { BILLABLE_JOB_PRODUCT_STATUSES, isBillableOnWholeJobInvoice } from "@/lib/invoices/create-from-job";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -490,7 +490,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       // owned by another change this sprint), so a literal === comparison
       // would be a "no overlap" type error rather than a behaviour change.
       // Rows from an estimate sub-item are already in the service price — never a line of their own.
-      .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status) && !p.invoiceLineItemId && !p.jobServiceSubitemId)
+      .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status) && !p.invoiceLineItemId && !p.jobServiceSubitemId && isBillableOnWholeJobInvoice(p))
       .map((p) => {
         // Bill the invoiceQty override when set (e.g. 5 bags used, only 4
         // invoiced) — the used qty still drives the inventory decrement via

@@ -2252,7 +2252,19 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I see what my crews need to load on the truck?",
-        a: "On the Dispatch Board, click Load List next to Stats. It shows the Daily Load List for the board's day, chemicals with concentrate and mix volume and other materials, grouped by crew, with Print and a link to the full report. It needs the View Report Center permission.",
+        a: "On the Dispatch Board, click Load List next to Stats. It shows the Daily Load List for the board's day, chemicals with concentrate and mix volume and other materials, grouped by crew, with Print and a link to the full report. Anyone who can open the Dispatch Board can use it; no Report Center permission is needed. The Crew Board also shows each crew's load in a Load lane under Equipment, with a +N more link that opens the full Load List.",
+      },
+      {
+        q: "How does my crew check off what they've loaded on the truck?",
+        a: "In the Crew App (browser or iOS/Android), the Equipment today list and the Materials to load list above the stops each have a checkbox on every row. Tap a row when it is on the truck; tap again to undo. The header shows a count such as '3 of 5 loaded'. Equipment is whatever the office put on the crew on the Crew Board (or the crew's default equipment); materials are the pending, non-chemical products on the crew's dispatched stops, added up per product with the clients they're for. Chemicals aren't listed — they're preloaded in the chemical step on each stop. The checks reset every day, and on the native app they need a connection. The office sees them on the Crew Board: equipment shows a green Loaded tag, checked materials get a green check, and the Equipment and Load lane headers count 'on truck'.",
+      },
+      {
+        q: "I added a product to a visit and it said saved, but it isn't there. Why?",
+        a: "Adding a product takes two steps: pick the product, service and quantity on the new row, then click the green check at the far end of that row. Pressing the visit sheet's Save does not by itself add a row you left unconfirmed. In current versions Save also saves a filled-in Add Product row first, or tells you what is missing. The product is added to that visit, so it shows on that day's Load List and Crew Board and is billed with that visit's invoice (on recurring and package jobs once the crew marks it Used; one-time jobs bill planned materials at completion).",
+      },
+      {
+        q: "Why doesn't a product show on the Load List?",
+        a: "The Load List counts only materials that are still Pending on a job with a dispatched visit that day, and not chemicals (those are estimated separately). A product already marked Invoiced, Used, Used not billed or Not Used is treated as done and left off. A product added to one specific visit shows only on that visit's day; a job-level product shows on every day of the job until it is resolved. Products that came from an estimate's direct costs are saved as Used, not billed, so they don't appear either.",
       },
       {
         q: "How do I schedule a job or visit?",
@@ -2781,6 +2793,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Does the WIP report include labor?",
         a: "Yes. Cost to Date is materials and subcontracts, plus labor (crew hours on the project's visits and any manual hours, times the project's labor rate), plus the estimate's overhead share. That matches how the project's cost estimate was built.",
+      },
+      {
+        q: "How do I add a vendor while entering a project cost?",
+        a: "On the project's cost entry dialog (Other Costs / Subcontracts tab, Add Cost Entry), open the Vendor picker and choose Add New Vendor at the bottom of the list. Fill in the vendor and save; it is selected on the cost entry automatically. It needs Equipt write access. Enter a negative amount for a vendor credit — hover the Amount label for the reminder.",
       },
       {
         q: "Why can't I delete a project?",
