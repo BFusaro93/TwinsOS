@@ -10,7 +10,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Check,
   Maximize2,
+  Package,
   Minimize2,
   Pin,
   PinOff,
@@ -32,6 +34,7 @@ import {
   useClearCrewDailyAsset,
   useClearCrewDefaultAsset,
   useCrewDailyAssets,
+  useCrewLoadChecks,
   useCrewDefaultAssets,
   useEquipment,
   useJobAssetsForJobs,
@@ -44,6 +47,10 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { EquipmentAvatar } from "./EquipmentAvatar";
 import { visitBudgetState } from "./budget-progress";
 import { crewColor, textOn, tint } from "./crew-color";
+import { useQuery } from "@/lib/hooks/use-query";
+import type { DailyLoadListResult } from "@/lib/reports/materials/daily-load-list";
+import { fetchDailyLoadList, loadLaneRows } from "@/components/crm/reports/DailyLoadListView";
+import { LoadListDialog } from "./LoadListDialog";
 
 type DragItem =
   | { kind: "member"; id: string; fromCrewId: string }
@@ -51,6 +58,8 @@ type DragItem =
   | { kind: "job"; jobId: string; visitIds: string[]; fromCrewId: string | null };
 
 const TV_REFRESH_MS = 30_000;
+/** Rows shown per crew in the Load lane before "+N more". */
+const LOAD_LANE_MAX = 6;
 
 /** Visits a crew move may still rewrite. Finished work stays credited to the crew that did
  *  it — moving a job used to rewrite crew_id on its completed (even invoiced) visits too. */
@@ -119,6 +128,7 @@ export function CrewBoard() {
   const { data: dailyMembers = [] } = useCrewDailyMembers(date);
   const { data: dailyAssets = [] } = useCrewDailyAssets(date);
   const { data: defaultAssets = [] } = useCrewDefaultAssets();
+  const { data: loadChecks } = useCrewLoadChecks(date);
   const equipment = useEquipment();
   const setMember = useSetCrewDailyMember();
   const clearMember = useClearCrewDailyMember();
@@ -127,6 +137,13 @@ export function CrewBoard() {
   const setDefaultAsset = useSetCrewDefaultAsset();
   const clearDefaultAsset = useClearCrewDefaultAsset();
   const updateVisit = useUpdateVisit();
+  // Same query key as the Load List dialog, so the lane and the dialog share one fetch.
+  const { data: loadList } = useQuery<DailyLoadListResult>({
+    queryKey: ["crm-daily-load-list-report", date],
+    queryFn: () => fetchDailyLoadList(date),
+    enabled: /^\d{4}-\d{2}-\d{2}$/.test(date),
+  });
+  const [loadListOpen, setLoadListOpen] = useState(false);
 
   const [drag, setDrag] = useState<DragItem | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
@@ -144,6 +161,8 @@ export function CrewBoard() {
       void qc.invalidateQueries({ queryKey: ["crm-crew-daily-assets"] });
       void qc.invalidateQueries({ queryKey: ["crm-crew-default-assets"] });
       void qc.invalidateQueries({ queryKey: ["crm-job-assets"] });
+      void qc.invalidateQueries({ queryKey: ["crm-daily-load-list-report"] });
+      void qc.invalidateQueries({ queryKey: ["crm-crew-load-checks"] });
     }, TV_REFRESH_MS);
     return () => clearInterval(t);
   }, [tv, qc]);
@@ -401,6 +420,8 @@ export function CrewBoard() {
         />
       )}
 
+      <LoadListDialog open={loadListOpen} onOpenChange={setLoadListOpen} date={date} />
+
       {held && !tv && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 dark:border-brand-800 dark:bg-brand-900/30">
           <p className="text-xs text-brand-800 dark:text-brand-300">
@@ -558,7 +579,13 @@ export function CrewBoard() {
                     ))}
                   </Lane>
 
-                  <Lane title="Equipment" icon={<Wrench className="h-3.5 w-3.5" />} color={color} big={big}>
+                  <Lane
+                    title="Equipment"
+                    icon={<Wrench className="h-3.5 w-3.5" />}
+                    color={color}
+                    big={big}
+                    badge={loaded.length > 0 ? `${loaded.filter((e) => loadChecks?.has(`${crew.id}|${e.key}`)).length}/${loaded.length} on truck` : undefined}
+                  >
                     {loaded.length === 0 && missing.length === 0 && <Empty big={big}>Nothing loaded</Empty>}
                     {loaded.map((e) => (
                       <EquipmentCard
@@ -568,6 +595,7 @@ export function CrewBoard() {
                         draggable={!tv}
                         needed={need.has(e.key)}
                         isDefault={defaultCrewByKey.get(e.key) === crew.id}
+                        onTruck={!!loadChecks?.has(`${crew.id}|${e.key}`)}
                         onToggleDefault={tv ? undefined : () => toggleDefault(e.key, crew.id)}
                         held={heldKey === `e:${e.key}`}
                         onClick={pickUp({ kind: "equipment", key: e.key, fromCrewId: crew.id }, e.name)}
@@ -600,6 +628,59 @@ export function CrewBoard() {
                       );
                     })}
                   </Lane>
+
+                  {(() => {
+                    const rows = loadLaneRows(loadList?.crews.find((g) => g.crewId === crew.id));
+                    const checkable = rows.filter((r) => r.checkKey);
+                    const ticked = (r: { checkKey?: string }) => !!r.checkKey && !!loadChecks?.has(`${crew.id}|${r.checkKey}`);
+                    return (
+                  <Lane
+                    title="Load"
+                    icon={<Package className="h-3.5 w-3.5" />}
+                    color={color}
+                    big={big}
+                    badge={checkable.length > 0 ? `${checkable.filter(ticked).length}/${checkable.length} on truck` : undefined}
+                  >
+                    {(() => {
+                      if (rows.length === 0) return <Empty big={big}>Nothing to load</Empty>;
+                      const shown = rows.slice(0, LOAD_LANE_MAX);
+                      return (
+                        <>
+                          {shown.map((r) => (
+                            <div
+                              key={r.key}
+                              title={r.warning ?? undefined}
+                              className={cn(
+                                "flex items-center gap-2 rounded-lg border bg-background px-2 py-1.5 shadow-sm",
+                                big ? "text-lg" : "text-xs",
+                                r.warning && "border-dashed border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+                              )}
+                            >
+                              {ticked(r) && <Check className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" aria-label="Loaded" />}
+                              <span className={cn("min-w-0 flex-1 truncate font-medium", ticked(r) && "text-muted-foreground line-through")}>{r.name}</span>
+                              {r.qty ? (
+                                <span className="shrink-0 tabular-nums font-semibold">{r.qty}</span>
+                              ) : (
+                                <span className="flex shrink-0 items-center gap-1 text-[10px]"><AlertTriangle className="h-3 w-3" /> Can&apos;t total</span>
+                              )}
+                            </div>
+                          ))}
+                          {rows.length > shown.length && (
+                            <button
+                              type="button"
+                              disabled={tv}
+                              onClick={() => setLoadListOpen(true)}
+                              className={cn("px-0.5 text-left font-medium text-brand-700 hover:underline dark:text-brand-400", big ? "text-base" : "text-xs")}
+                            >
+                              +{rows.length - shown.length} more — open Load List
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </Lane>
+                    );
+                  })()}
 
                   <Lane title="Jobs" icon={<ClipboardList className="h-3.5 w-3.5" />} color={color} big={big}>
                     {jobs.length === 0 && <Empty big={big}>No jobs scheduled</Empty>}
@@ -673,7 +754,7 @@ export function CrewBoard() {
   );
 }
 
-function Lane({ title, icon, color, big, children }: { title: string; icon: React.ReactNode; color: string; big: boolean; children: React.ReactNode }) {
+function Lane({ title, icon, color, big, badge, children }: { title: string; icon: React.ReactNode; color: string; big: boolean; badge?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <div
@@ -682,6 +763,7 @@ function Lane({ title, icon, color, big, children }: { title: string; icon: Reac
       >
         {icon}
         {title}
+        {badge && <span className="ml-auto font-semibold normal-case tracking-normal text-muted-foreground">{badge}</span>}
       </div>
       <div className="space-y-1.5">{children}</div>
     </div>
@@ -698,12 +780,15 @@ function EquipmentCard({
   draggable = true,
   needed,
   isDefault,
+  onTruck,
   onToggleDefault,
   held,
   onClick,
   onDragStart,
   onDragEnd,
 }: {
+  /** The crew ticked this off as loaded on the truck (crew app). */
+  onTruck?: boolean;
   item: EquipmentItem;
   big?: boolean;
   draggable?: boolean;
@@ -742,6 +827,7 @@ function EquipmentCard({
         )}
       </div>
       <span className="flex shrink-0 items-center gap-1">
+        {onTruck && <span title="The crew marked this as loaded" className="flex items-center gap-0.5 rounded bg-green-100 px-1 text-[10px] font-semibold uppercase text-green-700 dark:bg-green-900/40 dark:text-green-300"><Check className="h-3 w-3" />Loaded</span>}
         {needed && <span className="rounded bg-emerald-100 px-1 text-[10px] font-semibold uppercase text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Job needs</span>}
         {isDefault && !onToggleDefault && <Pin className="h-3 w-3 text-brand-600" />}
         {onToggleDefault && (

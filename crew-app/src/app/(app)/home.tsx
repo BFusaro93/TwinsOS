@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
 import { CrewDayBanner, EditCrewModal, useCrewDay } from '@/components/crew-day';
+import { LoadChecklists } from '@/components/load-checklist';
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { useAuth } from '@/lib/auth-context';
 import { C } from '@/lib/colors';
@@ -26,7 +27,7 @@ import { LanguageToggle } from '@/components/language-toggle';
 
 export default function HomeScreen() {
   const { session } = useAuth();
-  const { stops: serverStops, crewName, drive: serverDrive, isLoading, isRefetching, error, refetch } =
+  const { stops: serverStops, date: scheduleDate, crewName, drive: serverDrive, isLoading, isRefetching, error, refetch } =
     // No date: the server answers for the org's today on every load.
     useCrewStops();
   const { items, itemsForVisit, enqueueStartDrive, enqueueEndDrive } = useOfflineQueue();
@@ -166,17 +167,21 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       ) : stops.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>{t('No jobs today')}</Text>
-          <Text style={styles.emptyBody}>
-            {t('You\'re not scheduled for anything today. Pull down to refresh.')}
-          </Text>
-        </View>
+        <ScrollView>
+          <LoadChecklists date={scheduleDate} />
+          <View style={styles.centered}>
+            <Text style={styles.emptyTitle}>{t('No jobs today')}</Text>
+            <Text style={styles.emptyBody}>
+              {t('You\'re not scheduled for anything today. Pull down to refresh.')}
+            </Text>
+          </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={stops}
           keyExtractor={(item) => item.key}
           contentContainerStyle={styles.list}
+          ListHeaderComponent={<LoadChecklists date={scheduleDate} />}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />
           }

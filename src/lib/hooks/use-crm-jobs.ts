@@ -3733,11 +3733,15 @@ export function useAddCRMJobProduct() {
       qty: number;
       unitPriceCents: number;
       unitCostCents: number | null;
+      /** Set when added from a specific visit (the dispatch slide-over): the material is
+       *  for that day's stop only, so it lands on that day's load list and no other. */
+      visitId?: string | null;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_products').insert({
         job_id: p.jobId,
+        visit_id: p.visitId ?? null,
         job_service_id: p.jobServiceId,
         product_id: p.productId,
         product_name: p.productName,

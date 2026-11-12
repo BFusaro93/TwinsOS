@@ -200,6 +200,28 @@ export interface CrewDailyAsset {
   workDate: string;
 }
 
+/**
+ * What each crew has ticked off as physically loaded on the truck for a day (the crew app's
+ * load check-off). Keys are `${crewId}|${itemKey}` where itemKey is an equipment key
+ * ('vehicle:<id>' / 'asset:<id>') or a material ('product:<id>').
+ */
+export function useCrewLoadChecks(workDate: string) {
+  return useQuery({
+    queryKey: ["crm-crew-load-checks", workDate],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_crew_load_checks")
+        .select("crew_id, item_key")
+        .eq("work_date", workDate);
+      if (error) throw error;
+      return new Set(((data ?? []) as { crew_id: string; item_key: string }[]).map((r) => `${r.crew_id}|${r.item_key}`));
+    },
+    enabled: !!workDate,
+  });
+}
+
 export function useCrewDailyAssets(workDate: string) {
   return useQuery({
     queryKey: ["crm-crew-daily-assets", workDate],

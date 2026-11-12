@@ -472,12 +472,12 @@ export async function applyVisitCompletionSideEffects(
         // planned materials at completion as before.
         let productQuery = supabase
           .from("crm_job_products")
-          .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents")
+          .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents, visit_id")
           .eq("job_id", j.id);
         if (visitJobServiceId) {
           productQuery = productQuery.or(`job_service_id.eq.${visitJobServiceId},job_service_id.is.null`);
         }
-        const { data: pendingProductRows } = await productQuery
+        const { data: allProductRows } = await productQuery
           .in("status", billableJobProductStatusesForVisit(j.job_type))
           // A row already linked to a line (even if the status flip below failed)
           // is billed; sweeping it again would invoice the same material twice.
@@ -492,7 +492,14 @@ export async function applyVisitCompletionSideEffects(
           qty: number;
           invoice_qty: number | null;
           unit_price_cents: number;
+          visit_id: string | null;
         };
+        // A material added for one specific visit is billed with THAT visit only — otherwise
+        // whichever visit completes first would invoice another day's materials. Job-level
+        // rows (visit_id null) are shared by every visit, as before.
+        const pendingProductRows = ((allProductRows ?? []) as PendingProductRow[]).filter(
+          (r) => !r.visit_id || r.visit_id === visitId
+        );
         // Selling-tax flag lives on the catalog product (product_items.is_taxable).
         // Free-text job products with no catalog link stay non-taxable. A zero
         // tax rate (tax-exempt / no rate) still yields zero tax downstream.
