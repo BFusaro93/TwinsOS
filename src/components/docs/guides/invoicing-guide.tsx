@@ -452,6 +452,20 @@ export function InvoicingGuide() {
         </ul>
       </Section>
 
+      <Section id="subitems-on-invoice" title="Estimate sub-items on the invoice">
+        <p>
+          Sub-services and materials added under an estimate line are priced inside the service, so an
+          invoice normally shows one service line at the combined price. On the estimate, each sub-item has
+          an <strong>On invoice</strong> button (next to <em>On estimate</em>). With it on, and for{" "}
+          <strong>one-time and waiting-list jobs</strong>, the invoice lists that sub-item as its own row
+          under the service and takes its amount out of the service row &mdash; the total is unchanged.
+          Sub-items left off stay folded into the service price. The rows are ordinary invoice lines, so you
+          can still hide any of them with the eye icon described above. The choice is captured when the
+          estimate is converted to a job, so changing it later doesn&apos;t alter an existing job, and
+          recurring and package jobs always bill a single service line.
+        </p>
+      </Section>
+
       <Section id="invoice-template-options" title="Chemical record and technician notes on invoices">
         <p>
           In Settings &gt; Accounting &gt; <em>Invoice Templates</em>, each template has two optional

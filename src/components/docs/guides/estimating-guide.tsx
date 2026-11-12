@@ -425,6 +425,18 @@ export function EstimatingGuide() {
             include every priced sub-item, so they add up to the estimate total.
           </li>
           <li>
+            <strong>Print or fold into the service on the invoice.</strong> Beside it, the{" "}
+            <em>On invoice</em> / <em>Not on invoice</em> button decides how the sub-item appears on the
+            invoice once the estimate is converted to a job. By default (<em>Not on invoice</em>) its price
+            stays inside the service&apos;s price and the invoice shows one service line. Turn on{" "}
+            <em>On invoice</em> and, on <strong>one-time and waiting-list jobs</strong>, the invoice lists
+            the sub-item as its own row (quantity &times; rate) under the service, and that amount comes
+            out of the service row &mdash; the invoice total never changes. This applies to sub-services and
+            materials alike, and to jobs converted after the setting was made (a job keeps the choice it was
+            converted with). Recurring and package jobs keep a single service line, because a sub-item is
+            priced for the whole line while those services bill every visit.
+          </li>
+          <li>
             <strong>Names, descriptions and $0 lines.</strong> A line with a client-facing description prints just
             that description, so a cryptic service name stays internal. Turn on <strong>Service name with
             description</strong> in the estimate&apos;s client-view toggles (or the org default under Settings →

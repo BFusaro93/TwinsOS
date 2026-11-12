@@ -2792,11 +2792,11 @@ export function useCreateJobsFromEstimate() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: subRows, error: subErr } = await (supabase as any)
               .from("estimate_line_item_subitems")
-              .select("id, line_item_id, type, product_id, service_id, name, qty, cost_cents, sort_order")
+              .select("id, line_item_id, type, product_id, service_id, name, qty, rate_cents, cost_cents, print_on_invoice, sort_order")
               .in("line_item_id", [...lineToServiceId.keys()])
               .is("deleted_at", null);
             if (subErr) throw subErr;
-            const subList = (subRows ?? []) as { id: string; line_item_id: string; type: string; product_id: string | null; service_id: string | null; name: string; qty: number; cost_cents: number | null; sort_order: number | null }[];
+            const subList = (subRows ?? []) as { id: string; line_item_id: string; type: string; product_id: string | null; service_id: string | null; name: string; qty: number; rate_cents: number | null; cost_cents: number | null; print_on_invoice: boolean | null; sort_order: number | null }[];
             const copies = subList
               .map((r) => ({
                 job_service_id: lineToServiceId.get(r.line_item_id) as string,
@@ -2805,6 +2805,10 @@ export function useCreateJobsFromEstimate() {
                 service_id: r.service_id,
                 name: r.name,
                 qty: r.qty,
+                // Snapshot for the invoice: a sub-item ticked "On invoice" prints as its own
+                // row on a single-visit job's invoice (lib/invoices/printed-subitems.ts).
+                rate_cents: r.rate_cents ?? null,
+                print_on_invoice: r.print_on_invoice === true,
                 sort_order: r.sort_order ?? 0,
                 source_subitem_id: r.id,
               }));

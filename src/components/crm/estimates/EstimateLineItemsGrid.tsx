@@ -184,6 +184,25 @@ function SubitemRows({ lineItemId, onAddClick, readOnly = false }: { lineItemId:
               <Printer className="h-3 w-3" />
               {s.printOnEstimate ? "On estimate" : "Hidden"}
             </button>
+            {/* Same idea for the invoice: a ticked sub-item prints as its own row under the
+                service on a single-visit job's invoice (one-time / waiting list); unticked
+                ones stay folded into the service's price. Totals never change. */}
+            <button
+              type="button"
+              onClick={() => togglePrint({ id: s.id, lineItemId, field: "printOnInvoice", value: !s.printOnInvoice })}
+              title={s.printOnInvoice
+                ? "Printed on the invoice as its own row (one-time and waiting-list jobs) — click to fold it into the service price"
+                : "Folded into the service price on the invoice — click to print it as its own row (one-time and waiting-list jobs)"}
+              aria-pressed={s.printOnInvoice}
+              className={`ml-1 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium align-middle ${
+                s.printOnInvoice
+                  ? "border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                  : "border-slate-200 dark:border-neutral-700 text-slate-400 dark:text-neutral-500"
+              } hover:text-brand-700 dark:hover:text-brand-400`}
+            >
+              <Printer className="h-3 w-3" />
+              {s.printOnInvoice ? "On invoice" : "Not on invoice"}
+            </button>
           </td>
           <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400" title="Sub-items are for the whole line, not per visit">{s.qty}</td>
           <td colSpan={5} />
