@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRunVisualQuery } from "@/lib/hooks/use-report-center";
+import { useRunReportHeaderVisual, useRunVisualQuery } from "@/lib/hooks/use-report-center";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import type { ReportHeaderVisual } from "@/lib/reports/definition-types";
 import type { ReportResult } from "@/types/crm-reports";
@@ -38,12 +38,19 @@ export function chartInputFromResult(
  *  embed the same chart as a simple bar chart. */
 export function HeaderVisual({
   headerVisual,
+  prebuilt,
   onData,
 }: {
   headerVisual: ReportHeaderVisual;
+  /** Set for a prebuilt report's chart: the server rebuilds the query from
+   *  the report definition instead of running the client's config through
+   *  the custom-analysis endpoint (an Advanced Reporting feature). */
+  prebuilt?: { reportKey: string; params: Record<string, string>; index: number };
   onData?: (title: string, result: ReportResult) => void;
 }) {
-  const { data, isFetching, error } = useRunVisualQuery(headerVisual.visual);
+  const custom = useRunVisualQuery(prebuilt ? undefined : headerVisual.visual);
+  const fromReport = useRunReportHeaderVisual(prebuilt);
+  const { data, isFetching, error } = prebuilt ? fromReport : custom;
 
   useEffect(() => {
     if (data) onData?.(headerVisual.title, data);

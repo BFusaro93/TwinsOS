@@ -14,6 +14,7 @@ import {
 import { checkCallerCanScheduleAnalysis, dateWindowProblem } from "@/lib/reports/schedule-analysis-guard";
 import { withNextRun } from "@/lib/reports/schedule-rows";
 import { REPORT_SCHEDULE_COLUMNS, updateReportScheduleSchema } from "@/types/report-schedules";
+import { advancedReportingDenied } from "@/lib/reports/advanced-reporting";
 
 export async function PATCH(
   request: Request,
@@ -27,6 +28,8 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
 
   // The UI hides these controls behind manage_report_center, but that is only a
   // hint — this is the boundary (view-only roles could otherwise edit/delete).

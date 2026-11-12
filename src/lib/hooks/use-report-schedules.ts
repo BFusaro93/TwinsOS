@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
+import { useAdvancedReportingEnabled } from "@/lib/hooks/use-report-center";
 import type {
   CreateReportScheduleInput,
   ReportScheduleRow,
@@ -20,6 +21,8 @@ async function readError(res: Response): Promise<string> {
 }
 
 export function useReportSchedules(options: { enabled?: boolean } = {}) {
+  // Scheduled delivery is part of the Advanced Reporting add-on.
+  const advancedReporting = useAdvancedReportingEnabled();
   return useQuery<ReportSchedule[]>({
     queryKey: QUERY_KEY,
     queryFn: async () => {
@@ -28,7 +31,7 @@ export function useReportSchedules(options: { enabled?: boolean } = {}) {
       const body = (await res.json()) as { schedules: ReportSchedule[] };
       return body.schedules;
     },
-    enabled: options.enabled ?? true,
+    enabled: advancedReporting && (options.enabled ?? true),
   });
 }
 

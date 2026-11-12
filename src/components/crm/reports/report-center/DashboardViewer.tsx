@@ -39,6 +39,8 @@ import { computePresetRange, defaultFilterValues } from "./ReportFilterBar";
 import { VisualRenderer } from "./VisualRenderer";
 import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 import type { DashboardPanel, DashboardTab, ReportFieldType, ReportResult } from "@/types/crm-reports";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
+import { AdvancedReportingUpsell } from "./AdvancedReportingGate";
 
 const HUB_HREF = "/crm/admin/reports?tab=dashboards";
 
@@ -455,6 +457,9 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
 export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
   const router = useRouter();
   const { data: dashboard, isLoading, isError } = useDashboard(dashboardId);
+  // Built-in dashboards open on every plan; custom ones and editing need the
+  // Advanced Reporting add-on (the API answers 403 for a custom one).
+  const { allowed: hasAdvancedReporting, isLoading: addonLoading } = useAddonAccess("advanced_reporting");
 
   const tabs = useMemo(() => dashboard?.config.tabs ?? [], [dashboard]);
   const [activeTab, setActiveTab] = useState<string | undefined>(undefined);
@@ -473,6 +478,10 @@ export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
         </div>
       </div>
     );
+  }
+
+  if ((isError || !dashboard) && !addonLoading && !hasAdvancedReporting) {
+    return <AdvancedReportingUpsell feature="Custom dashboards" />;
   }
 
   if (isError || !dashboard) {
@@ -511,12 +520,14 @@ export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
               Back
             </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/crm/admin/reports/dashboards/${dashboardId}/edit`}>
-                <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                Edit
-              </Link>
-            </Button>
+            {hasAdvancedReporting && !addonLoading && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/crm/admin/reports/dashboards/${dashboardId}/edit`}>
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  Edit
+                </Link>
+              </Button>
+            )}
           </>
         }
       />

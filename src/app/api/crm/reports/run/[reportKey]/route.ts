@@ -81,11 +81,37 @@ export async function GET(
   url.searchParams.forEach((value, key) => {
     reportParams[key] = value;
   });
+  // `headerVisual=<index>` runs one of the report's own header charts
+  // instead of its table. The chart's query is built here from the
+  // definition — never taken from the client — so prebuilt charts keep
+  // working on every plan while the free-form analysis endpoint
+  // (analysis/run) is part of the Advanced Reporting add-on.
+  const headerVisualParam = reportParams.headerVisual;
+  delete reportParams.headerVisual;
 
   try {
     // Resolved once for the whole request: every date boundary this report
     // computes is the ORG's day, not the UTC server's.
     const timeZone = await getMyTimeZone(supabase);
+    if (headerVisualParam !== undefined) {
+      const index = Number(headerVisualParam);
+      const headerVisual = Number.isInteger(index)
+        ? def.headerVisuals?.(reportParams, timeZone)[index]
+        : undefined;
+      if (!headerVisual) {
+        return NextResponse.json({ error: "Unknown header visual" }, { status: 404 });
+      }
+      const config = headerVisual.visual.config;
+      const datasetKeys = DATASET_PERMISSION_KEYS[config.dataset];
+      if (datasetKeys && !(await hasAnyPermission(datasetKeys))) {
+        return NextResponse.json(
+          { error: "You don't have permission to query this dataset" },
+          { status: 403 }
+        );
+      }
+      const result = await runAnalysis(supabase as unknown as SupabaseClient, config);
+      return NextResponse.json(result);
+    }
     if (def.run) {
       const result = await def.run({
         supabase: supabase as unknown as SupabaseClient,
