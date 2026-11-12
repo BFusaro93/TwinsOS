@@ -13,6 +13,8 @@ import { runningPauseClockOut } from "@/lib/crew/visit-pause";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, isoInZone } from "@/lib/time/zone";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
+import { assertOrgWritable } from "@/lib/org-writable";
 
 const log = logger.child("crew/clock-out");
 
@@ -58,6 +60,10 @@ export async function POST(
   if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
+  // The visit writes below use the service role (a crew login can't write
+  // clock stamps / breaks directly), which skips the read-only-org RLS policy.
+  const readOnly = await assertOrgWritable(createServiceClient(), existing.org_id as string);
+  if (readOnly) return readOnly;
   if (existing?.clocked_out_at) {
     return NextResponse.json({ error: "Already clocked out" }, { status: 409 });
   }
@@ -127,8 +133,10 @@ export async function POST(
       );
     }
   }
+  // Service role after the ownership check above (a_crm_job_visits_crew_price_guard).
+  const visitWriter = createVisitWriter(user.id);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: clockedOut, error } = await (supabase as any)
+  const { data: clockedOut, error } = await (visitWriter as any)
     .from("crm_job_visits")
     .update({
       clocked_out_at:   now,
@@ -178,7 +186,7 @@ export async function POST(
       const visitLaborCents = await sumPunchLaborCents(supabase, visitId);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await (visitWriter as any)
         .from("crm_job_visits")
         .update({ actual_labor_cost_cents: visitLaborCents })
         .eq("id", visitId);

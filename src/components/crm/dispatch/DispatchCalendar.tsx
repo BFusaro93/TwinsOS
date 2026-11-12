@@ -14,6 +14,7 @@ import { useUpdateVisit, useVisitsForDate } from "@/lib/hooks/use-crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
 import { useCrews } from "@/lib/hooks/use-employees";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 import { visitBudgetState } from "./budget-progress";
 import { crewColor, textOn } from "./crew-color";
@@ -149,6 +150,7 @@ export function DispatchCalendar({
   useEffect(() => { setHeld(null); }, [from]);
   const { data: crews = [] } = useCrews(true);
   const updateVisit = useUpdateVisit();
+  const { today: orgToday } = useOrgDates();
   const [confirm, confirmDialog] = useConfirm();
 
   const rows: Row[] = useMemo(() => {
@@ -275,7 +277,9 @@ export function DispatchCalendar({
     commit(false);
   }
 
-  const today = toISODate(new Date());
+  // The company's calendar day (org timezone), like the rest of the board — the
+  // browser's clock highlighted the wrong column for a viewer in another zone.
+  const today = orgToday();
   const rangeLabel = `${new Date(`${from}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(`${to}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
   // Where the job page's Back button should return to: this week, this view.
   const returnTo = `/crm/scheduling/dispatch?view=calendar&date=${selectedDate}`;

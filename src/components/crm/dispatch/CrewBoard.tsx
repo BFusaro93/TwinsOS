@@ -47,6 +47,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { EquipmentAvatar } from "./EquipmentAvatar";
 import { visitBudgetState } from "./budget-progress";
 import { crewColor, textOn, tint } from "./crew-color";
+import { memberWorksOn } from "@/lib/crew/roster-days";
 import { useQuery } from "@/lib/hooks/use-query";
 import type { DailyLoadListResult } from "@/lib/reports/materials/daily-load-list";
 import { fetchDailyLoadList, loadLaneRows } from "@/components/crm/reports/DailyLoadListView";
@@ -183,25 +184,35 @@ export function CrewBoard() {
   const crewNameById = useMemo(() => new Map(crews.map((c) => [c.id, c.name])), [crews]);
   const colorByCrew = useMemo(() => new Map(crews.map((c, i) => [c.id, crewColor(c.color, i)])), [crews]);
 
-  // Who is on which crew today: default roster, then same-day overrides on top.
+  // Who is on which crew today: default roster (only on the weekdays the roster
+  // row works — days_of_week, like the Dispatch Board's Team Assignment, the
+  // crew app and Start Day), then same-day overrides on top.
   const membersByCrew = useMemo(() => {
     const override = new Map(dailyMembers.map((o) => [o.member_id, o.crew_id]));
     const m = new Map<string, { id: string; name: string; isForeman: boolean; moved: boolean }[]>();
     for (const c of crews) {
       for (const mem of c.members ?? []) {
-        const crewId = override.get(mem.id) ?? c.id;
+        const crewId = override.get(mem.id) ?? (memberWorksOn(mem.daysOfWeek, date) ? c.id : null);
+        if (!crewId) continue;
         const list = m.get(crewId) ?? [];
         list.push({ id: mem.id, name: mem.employeeName ?? "Member", isForeman: mem.isForeman, moved: crewId !== c.id });
         m.set(crewId, list);
       }
     }
     return m;
-  }, [crews, dailyMembers]);
+  }, [crews, dailyMembers, date]);
   const defaultCrewByMember = useMemo(() => {
     const m = new Map<string, string>();
     for (const c of crews) for (const mem of c.members ?? []) m.set(mem.id, c.id);
     return m;
   }, [crews]);
+  // Roster rows whose default crew works `date` (clearing an override only puts
+  // them back there on those weekdays).
+  const worksDefaultOnDate = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of crews) for (const mem of c.members ?? []) if (memberWorksOn(mem.daysOfWeek, date)) s.add(mem.id);
+    return s;
+  }, [crews, date]);
 
   // An asset's crew today: that day's row if there is one (crewId null = pulled
   // off every crew), otherwise its default crew.
@@ -306,8 +317,10 @@ export function CrewBoard() {
     if (!item) return;
     if (item.kind === "member") {
       if (item.fromCrewId === crewId) return;
-      // Dropping back on their default crew just clears the day's override.
-      const op = defaultCrewByMember.get(item.id) === crewId
+      // Dropping back on their default crew just clears the day's override —
+      // but only on a weekday that roster row works; otherwise clearing would
+      // leave them on no crew, so place them explicitly.
+      const op = defaultCrewByMember.get(item.id) === crewId && worksDefaultOnDate.has(item.id)
         ? clearMember.mutateAsync({ memberId: item.id, workDate: date })
         : setMember.mutateAsync({ memberId: item.id, crewId, workDate: date });
       op.catch(fail("Couldn't move that person"));
@@ -322,13 +335,29 @@ export function CrewBoard() {
       qc.setQueryData<CRMJobVisit[]>(key, (old) =>
         (old ?? []).map((v) => (ids.has(v.id) ? { ...v, crewId, crewUnassigned: false } : v))
       );
-      Promise.all(
+      const before = new Map((previous ?? []).filter((v) => ids.has(v.id)).map((v) => [v.id, v]));
+      void Promise.allSettled(
         item.visitIds.map((id) =>
           updateVisit.mutateAsync({ id, jobId: item.jobId, updates: { crew_id: crewId, crew_unassigned: false } })
         )
-      ).catch(() => {
-        qc.setQueryData(key, previous);
-        toast.error("Couldn't move that job");
+      ).then((results) => {
+        const failed = item.visitIds.filter((_, i) => results[i].status === "rejected");
+        if (failed.length === 0) return;
+        // Put back only the visits that did NOT move — the others really are on
+        // the new crew now, and showing them on the old one hid that.
+        const failedSet = new Set(failed);
+        qc.setQueryData<CRMJobVisit[]>(key, (old) =>
+          (old ?? []).map((v) => (failedSet.has(v.id) ? before.get(v.id) ?? v : v))
+        );
+        void qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+        const firstErr = results.find((r): r is PromiseRejectedResult => r.status === "rejected")?.reason;
+        const reason = firstErr instanceof Error && firstErr.message ? ` ${firstErr.message}` : "";
+        const moved = item.visitIds.length - failed.length;
+        toast.error(
+          moved === 0
+            ? `Couldn't move that job.${reason}`
+            : `Moved ${moved} of ${item.visitIds.length} visits to ${crewNameById.get(crewId) ?? "the crew"}; ${failed.length} stayed where ${failed.length === 1 ? "it was" : "they were"}.${reason}`
+        );
       });
     }
   }

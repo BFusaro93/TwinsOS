@@ -122,7 +122,7 @@ export function ContractsGuide() {
           <strong>Changing a signed contract&apos;s terms flags it &mdash; billing keeps running.</strong>{" "}
           If you actually change the monthly amount, the monthly-amounts grid, the invoice line
           items, the start/end dates, the client, the billing day / frequency, the
-          mid-cycle start setting or the storms-outside-the-contract-dates setting on a contract that&apos;s already Signed or Active, the contract
+          mid-cycle start setting or the storms-outside-the-contract-dates setting (or its price per storm) on a contract that&apos;s already Signed or Active, the contract
           stays Signed/Active and the daily invoicing cron bills the new terms from then on. A
           &quot;Changed since signed &mdash; needs client approval&quot; banner appears on the
           contract until you click <em>Client approved &mdash; clear flag</em> (which re-stamps the
@@ -347,11 +347,16 @@ export function ContractsGuide() {
         <p>
           <strong>Snow contracts and storms outside the dates.</strong> A contract with a linked
           snow job has a <strong>Storms outside the contract dates</strong> setting under its start
-          and end dates. With <strong>Bill per event</strong> (the default), a storm visit dated
-          before the start date or after the end date is billed per event in Snow Invoicing. With{" "}
-          <strong>Included in the contract</strong>, those storms are covered by the contract price
-          too. A cancelled, expired or inactive contract covers only storms inside a billing cycle
-          it already invoiced; later storms bill per event.
+          and end dates, for storms before the start date or after the end date:{" "}
+          <strong>Don&apos;t service</strong> (the contract&apos;s snow jobs aren&apos;t offered for
+          those storms on the Snow Jobs board), <strong>Included in the flat rate</strong>{" "}
+          (dispatched and covered by the contract price) or <strong>Bill per event</strong> (the
+          default — dispatched and billed in Snow Invoicing). With Bill per event, enter a{" "}
+          <strong>Price per storm</strong>: that&apos;s what a Monthly Flat Rate snow job bills for
+          each of those storms (a job with its own snow rate bills that rate instead). Without a
+          price, Snow Invoicing holds the storm with a warning rather than billing $0. A cancelled,
+          expired or inactive contract covers only storms inside a billing cycle it already
+          invoiced; later storms bill per event the same way.
         </p>
       </Section>
 

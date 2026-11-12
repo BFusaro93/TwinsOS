@@ -13,6 +13,7 @@ import { isoInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { autoStopOtherRunningStops } from "@/lib/crew/auto-stop";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
 
 const log = logger.child("crew/stops/clock-in");
 
@@ -34,6 +35,7 @@ interface VisitRow {
   client_id: string;
   scheduled_date: string;
   push_number?: number | null;
+  storm_event_id?: string | null;
   crew_id: string | null;
   status: string;
   clocked_in_at: string | null;
@@ -63,6 +65,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
     pushNumber: row.push_number,
+    stormEventId: row.storm_event_id,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
@@ -70,7 +73,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 }
 
 const VISIT_SELECT = `
-  id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, status, clocked_in_at,
+  id, org_id, client_id, scheduled_date, push_number, storm_event_id, crew_id, crew_unassigned, status, clocked_in_at,
   notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
   crm_jobs:crew_job(crew_id, status, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at, client_properties(notes_to_crew))
 `;
@@ -233,8 +236,11 @@ export async function POST(
   // Before photo from the library (see lib/crew/required-photos.ts).
 
   const now = resolveOccurredAt(parsed.data.occurredAt).toISOString();
+  // Service role: a crew login can't write clock stamps directly
+  // (a_crm_job_visits_crew_price_guard). siblingIds were derived above from the
+  // anchor whose ownership was proven, under the caller's own RLS.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (createVisitWriter(user.id) as any)
     .from("crm_job_visits")
     .update({
       clocked_in_at: now,

@@ -58,6 +58,9 @@ interface ProductRow {
  * counts `used` as a "used" status for its inventory logic, so the later
  * used -> invoiced transition does NOT decrement a second time.
  *
+ * Snow jobs record per STORM: the job-level row is the plan for every storm,
+ * and each storm visit gets its own usage record (see the snow branch below).
+ *
  * Only allowed from 'pending' — once a row has been recorded it's final
  * here; matches the existing qty-is-locked-once-left-pending rule already
  * enforced elsewhere for this table. An already-resolved row 409s and
@@ -182,6 +185,60 @@ export async function POST(
     }
   }
 
+  const newStatus = "notUsed" in parsed.data
+    ? "not_used"
+    : parsed.data.noInvoice
+      ? "used_no_invoice"
+      : "used";
+
+  // ── snow: one record per storm ────────────────────────────────────────────
+  // A snow job's job-level row is the per-storm plan ("10 bags each storm").
+  // Each storm visit records its OWN usage as a per-visit copy of the plan row
+  // (priced from it), the plan row stays pending for the next storm, and Snow
+  // Invoicing bills each storm's usage on that storm's invoice. Recording on
+  // the plan row itself would have been once per season.
+  if (!jobProduct.visit_id && (await jobIsSnow(admin, visit.job_id as string))) {
+    const recorded = await stormUsageRow(admin, visitId, jobProductId);
+    if (recorded) {
+      // A replayed / second tap for the same storm.
+      return NextResponse.json(
+        {
+          error: `This material was already recorded for this storm (${shapeStatusLabel(recorded.status, Number(recorded.qty))}).`,
+          material: shapeMaterial({ ...recorded, id: jobProductId }),
+        },
+        { status: 409 }
+      );
+    }
+    // As the caller: the RPC re-checks the crew owns the visit, and the stock
+    // adjustment and history name the crew login.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: stormError } = await (supabase as any).rpc("crew_record_storm_visit_product", {
+      p_visit_id: visitId,
+      p_template_id: jobProductId,
+      p_status: newStatus,
+      p_qty: "usedQty" in parsed.data ? parsed.data.usedQty : null,
+    });
+    if (stormError) {
+      const code = (stormError as { code?: string }).code;
+      if (code === "23505") {
+        const row = await stormUsageRow(admin, visitId, jobProductId);
+        return NextResponse.json(
+          { error: "This material was already recorded for this storm.", ...(row ? { material: shapeMaterial({ ...row, id: jobProductId }) } : {}) },
+          { status: 409 }
+        );
+      }
+      // check_violation: a sentence written for the crew (already invoiced, no quantity).
+      if (code === "23514") return NextResponse.json({ error: stormError.message }, { status: 422 });
+      if (code === "P0002") return NextResponse.json({ error: "Material not found on this job" }, { status: 404 });
+      if (code === "42501") return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+      log.error("crew_record_storm_visit_product failed", { visitId, jobProductId, error: stormError.message });
+      return NextResponse.json({ error: "Couldn't record this material. Try again, or tell the office." }, { status: 500 });
+    }
+    const row = await stormUsageRow(admin, visitId, jobProductId);
+    // Shown under the plan row's id: the crew's list keys this storm's record by it.
+    return NextResponse.json(row ? shapeMaterial({ ...row, id: jobProductId }) : shapeMaterial(jobProduct));
+  }
+
   // ── write ─────────────────────────────────────────────────────────────────
   // The RPC reads qty off the row, so qty has to land first; the two writes
   // can't share a transaction from here. If the status change then fails, the
@@ -199,12 +256,6 @@ export async function POST(
     });
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
-
-  const newStatus = "notUsed" in parsed.data
-    ? "not_used"
-    : parsed.data.noInvoice
-      ? "used_no_invoice"
-      : "used";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: rpcError } = await (supabase as any).rpc("set_job_product_status", {
@@ -243,6 +294,26 @@ export async function POST(
   if (reloadError) return NextResponse.json({ error: reloadError.message }, { status: 500 });
 
   return NextResponse.json(shapeMaterial(updated ?? jobProduct));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AdminClient = any;
+
+async function jobIsSnow(admin: AdminClient, jobId: string): Promise<boolean> {
+  const { data } = await admin.from("crm_jobs").select("job_type").eq("id", jobId).maybeSingle();
+  return (data?.job_type as string | undefined) === "snow";
+}
+
+/** This storm visit's own usage record of a snow plan row, if one was made. */
+async function stormUsageRow(admin: AdminClient, visitId: string, templateId: string): Promise<JobProductRow | null> {
+  const { data } = await admin
+    .from("crm_job_products")
+    .select("id, product_name, planned_qty, qty, status")
+    .eq("visit_id", visitId)
+    .eq("template_job_product_id", templateId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  return (data as JobProductRow | null) ?? null;
 }
 
 interface JobProductRow {

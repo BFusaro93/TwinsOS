@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { assertOrgWritable } from "@/lib/org-writable";
 import {
   renderBlocksToHtml,
   resolveMergeTags,
@@ -46,6 +47,10 @@ export async function POST(
   if (tplErr || !template || template.org_id !== profile.org_id) {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
+
+  // A read-only (canceled / expired-trial) org may only send collections.
+  const notWritable = await assertOrgWritable(createServiceClient(), template.org_id);
+  if (notWritable) return notWritable;
 
   const body = await req.json() as {
     subject: string | null;

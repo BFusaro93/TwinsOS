@@ -8,6 +8,7 @@ import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-
 import { checkPackageMinDaysViolation, overridePackageMinDays, PACKAGE_MIN_DAYS_CODE, revertPackageMinDaysOverrides } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
+import { CREW_GROUP_SIBLING_IN_PROGRESS_MESSAGE, findVisitsWithInProgressGroupSibling } from "@/lib/visits/crew-group-guards";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import {
   INVOICED_VISIT_LOCKED_CODE,
@@ -93,6 +94,15 @@ export async function PATCH(
       { error: "This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first." },
       { status: 409 }
     );
+  }
+
+  // A multi-crew stop moves as one (every crew's visit follows the date), so it
+  // can't move while any crew on it is clocked in.
+  if (
+    patch.scheduled_date && patch.scheduled_date !== prev.scheduled_date &&
+    (await findVisitsWithInProgressGroupSibling(supabase, [visitId])).has(visitId)
+  ) {
+    return NextResponse.json({ error: CREW_GROUP_SIBLING_IN_PROGRESS_MESSAGE }, { status: 409 });
   }
 
   // Same for a crew change: ownership checks key off the visit's crew, so re-crewing a
@@ -201,9 +211,11 @@ export async function PATCH(
   if (error) {
     await undoOverride();
     const locked = (error as { hint?: string }).hint === INVOICED_VISIT_LOCKED_CODE;
+    // 42501: the database's permission guard (enforce_crm_job_visit_schedule_write).
+    const forbidden = (error as { code?: string }).code === "42501";
     return NextResponse.json(
       { error: error.message, ...(locked ? { code: INVOICED_VISIT_LOCKED_CODE } : {}) },
-      { status: locked ? 409 : 500 }
+      { status: locked ? 409 : forbidden ? 403 : 500 }
     );
   }
 

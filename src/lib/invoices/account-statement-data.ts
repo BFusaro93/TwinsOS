@@ -45,11 +45,14 @@ interface PaymentRef {
 const isIssued = (inv: InvoiceRef | null | undefined): boolean =>
   !!inv && inv.status !== "void" && inv.status !== "draft" && !inv.deleted_at;
 
-/** An allocation's share of a payment, net of refunds (pro rata). */
-function netShare(shareCents: number, pay: { amount_cents: number | null; refunded_amount_cents: number | null }): number {
-  const gross = pay.amount_cents ?? 0;
-  const refunded = pay.refunded_amount_cents ?? 0;
-  return gross > 0 ? Math.round((shareCents * (gross - refunded)) / gross) : shareCents;
+/** What an allocation still applies to its invoice. A refund already comes off
+ *  the allocation rows themselves (refund_payment takes it from the payment's
+ *  unused credit first, then shrinks or deletes its allocations), so the stored
+ *  amount is net of refunds. Pro-rating it by the payment's refunded share again
+ *  subtracted the refund twice: a $100 parent payment on a child's $100 invoice
+ *  with $30 refunded showed $49 paid instead of $70. */
+function allocationCents(r: Row): number {
+  return (r.amount_cents as number) ?? 0;
 }
 
 /** Reconstructs a client's account activity as a dated, running-balance
@@ -198,7 +201,7 @@ export async function buildAccountStatementData(
       let applied = 0;
       for (const a of allocs) {
         const inv = a.crm_invoices as InvoiceRef;
-        const share = netShare((a.amount_cents as number) ?? 0, r as unknown as PaymentRef);
+        const share = allocationCents(a);
         applied += share;
         out.push({
           groupId: inv.client_id as string,
@@ -218,7 +221,7 @@ export async function buildAccountStatementData(
     ...paidFromOutside.map((r): LedgerEntry => {
       const pay = r.crm_payments as PaymentRef;
       const inv = r.crm_invoices as InvoiceRef;
-      const net = netShare((r.amount_cents as number) ?? 0, pay);
+      const net = allocationCents(r);
       return {
         groupId: inv.client_id as string,
         date: pay.payment_date,

@@ -7,6 +7,13 @@ import { planIncludesAddon, getModulesForPlan, type BundledAddonKey } from "@/li
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { removePurchasedBundledAddons } from "@/lib/stripe/bundled-addon-reconcile";
 import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
+import { releaseOrgSmsResources } from "@/lib/twilio/provisioning";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("billing addons");
+
+/** Stripe subscription statuses after which nothing more can be billed on it (see the webhook's DOWNGRADE_STATUSES). */
+const ENDED_SUBSCRIPTION_STATUSES = new Set(["canceled", "unpaid", "incomplete_expired", "paused"]);
 
 const ToggleAddonSchema = z.object({
   addon: z.string().refine(isAddonKey, { message: "Unknown addon" }),
@@ -58,6 +65,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `The "${addon}" add-on isn't available on your plan` }, { status: 422 });
   }
 
+  // A canceled org (or one whose subscription Stripe has stopped billing) has no
+  // live subscription to add an item to — Stripe refuses, and that used to
+  // surface as an uncaught 500.
+  if (enabled && org.plan === "canceled") {
+    return NextResponse.json(
+      { error: "Your subscription is canceled. Resubscribe to a plan first, then add add-ons." },
+      { status: 400 }
+    );
+  }
+
   const serviceClient = createServiceClient();
 
   // A plan that already bundles this add-on (or a trial, which bundles
@@ -91,7 +108,19 @@ export async function POST(request: Request) {
   }
 
   const stripe = getStripe();
-  const subscription = await stripe.subscriptions.retrieve(org.stripe_subscription_id);
+  let subscription;
+  try {
+    subscription = await stripe.subscriptions.retrieve(org.stripe_subscription_id);
+  } catch (err) {
+    log.error("subscription retrieve failed", { orgId: org.id, error: err instanceof Error ? err.message : err });
+    return NextResponse.json({ error: "Could not load your subscription — try again" }, { status: 502 });
+  }
+  if (enabled && ENDED_SUBSCRIPTION_STATUSES.has(subscription.status)) {
+    return NextResponse.json(
+      { error: "Your subscription has ended. Resubscribe to a plan first, then add add-ons." },
+      { status: 400 }
+    );
+  }
   const existingItem = subscription.items.data.find((item) => item.price.id === priceId);
 
   if (enabled) {
@@ -100,15 +129,23 @@ export async function POST(request: Request) {
     // leave the add-on billed but never recorded as enabled.
     let itemId = existingItem?.id;
     if (!itemId) {
-      const item = await stripe.subscriptionItems.create(
-        {
-          subscription: subscription.id,
-          price: priceId,
-          proration_behavior: "create_prorations",
-        },
-        { idempotencyKey: chargeIdempotencyKey(["addon_item", org.id, addon]) }
-      );
-      itemId = item.id;
+      try {
+        const item = await stripe.subscriptionItems.create(
+          {
+            subscription: subscription.id,
+            price: priceId,
+            proration_behavior: "create_prorations",
+          },
+          { idempotencyKey: chargeIdempotencyKey(["addon_item", org.id, addon]) }
+        );
+        itemId = item.id;
+      } catch (err) {
+        log.error("add-on item create failed", { orgId: org.id, addon, error: err instanceof Error ? err.message : err });
+        return NextResponse.json(
+          { error: err instanceof Error ? `Stripe couldn't add the add-on: ${err.message}` : "Stripe couldn't add the add-on" },
+          { status: 502 }
+        );
+      }
     }
     const { error: upsertErr } = await serviceClient
       .from("organization_addons")
@@ -119,7 +156,15 @@ export async function POST(request: Request) {
     if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 });
   } else {
     if (existingItem) {
-      await stripe.subscriptionItems.del(existingItem.id, { proration_behavior: "create_prorations" });
+      try {
+        await stripe.subscriptionItems.del(existingItem.id, { proration_behavior: "create_prorations" });
+      } catch (err) {
+        log.error("add-on item delete failed", { orgId: org.id, addon, error: err instanceof Error ? err.message : err });
+        return NextResponse.json(
+          { error: err instanceof Error ? `Stripe couldn't remove the add-on: ${err.message}` : "Stripe couldn't remove the add-on" },
+          { status: 502 }
+        );
+      }
     }
     const { error: upsertErr } = await serviceClient
       .from("organization_addons")
@@ -128,6 +173,12 @@ export async function POST(request: Request) {
         { onConflict: "org_id,addon_key" }
       );
     if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+
+    // Removing SMS stops paying for the org's own texting number: release the
+    // number and campaign at Twilio. Best-effort — logged, never fails the removal.
+    if (addon === "sms") {
+      await releaseOrgSmsResources(serviceClient, org.id, "sms_addon_removed");
+    }
   }
 
   return NextResponse.json({ enabled, bundled: false });

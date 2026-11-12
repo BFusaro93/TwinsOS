@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient as createServerClient } from "@/lib/supabase/server";
+import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
+import { orgHasPaidSmsAddon } from "@/lib/twilio/provisioning";
+import { requireSmsSetupAllowed } from "@/lib/twilio/sms-setup-gate";
 import { TWILIO_BUSINESS_INDUSTRIES } from "@/lib/twilio/industries";
 
 // Maps a Zod issue's dot-path to the label shown on the actual form field
@@ -86,14 +88,16 @@ export async function GET() {
   const { data, error } = await supabase
     .from("org_sms_registrations")
     .select(
-      "legal_business_name, ein, business_type, business_industry, business_website, business_address, business_regions_of_operation, contact_first_name, contact_last_name, contact_email, contact_phone, support_email, support_phone, opt_in_website_url, opt_in_checkbox_label, verbal_opt_in_script, status, twilio_phone_number, twilio_brand_failure_reason, twilio_campaign_failure_reason, last_synced_at"
+      "legal_business_name, ein, business_type, business_industry, business_website, business_address, business_regions_of_operation, contact_first_name, contact_last_name, contact_email, contact_phone, support_email, support_phone, opt_in_website_url, opt_in_checkbox_label, verbal_opt_in_script, status, twilio_phone_number, twilio_brand_failure_reason, twilio_campaign_failure_reason, last_synced_at, released_at, released_reason"
     )
     .eq("org_id", ctx.orgId)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ registration: data });
+  const smsAddon = await orgHasPaidSmsAddon(createServiceClient(), ctx.orgId);
+  return NextResponse.json({ registration: data, smsAddon });
 }
+
 
 /**
  * POST /api/sms-onboarding — saves (or edits, if rejected) the org's business
@@ -105,6 +109,8 @@ export async function POST(request: Request) {
   const supabase = await createServerClient();
   const ctx = await requireOrgAdmin(supabase);
   if ("error" in ctx) return ctx.error;
+  const blocked = await requireSmsSetupAllowed(ctx.orgId);
+  if (blocked) return blocked;
 
   const parsed = businessInfoSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {

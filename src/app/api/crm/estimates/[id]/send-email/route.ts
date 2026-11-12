@@ -23,6 +23,8 @@ import { loadLiveProposalContent, withProposalDocument } from "@/lib/estimates/p
 import { resolveEstimateDocument } from "@/lib/estimates/resolve-estimate-document";
 import { insertEstimateVersion } from "@/lib/estimates/versions";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { createServiceClient } from "@/lib/supabase/server";
+import { assertOrgWritable } from "@/lib/org-writable";
 import { embedEstimatePhoto } from "@/lib/estimate-photo-embed";
 import { buildClientMergeVars } from "@/lib/email/send";
 import { MERGE_CLIENT_COLUMNS, MERGE_PROPERTY_COLUMNS, clientMergeInput, employeeName, orgMergeInput } from "@/lib/email/merge-inputs";
@@ -214,6 +216,12 @@ export async function POST(
   // Fetch org
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile?.org_id;
+  // A read-only (canceled / expired-trial) org may only send collections
+  // (issued invoices, statements) — not estimates.
+  if (effOrgId) {
+    const notWritable = await assertOrgWritable(createServiceClient(), effOrgId);
+    if (notWritable) return notWritable;
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = effOrgId
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

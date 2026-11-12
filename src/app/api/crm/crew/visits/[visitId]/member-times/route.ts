@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recomputeStopLabor } from "@/lib/crew/visit-labor";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { stopPunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
@@ -301,7 +302,8 @@ export async function POST(
   // Inside the payroll lock period: the database's own sentence, as a 409.
   if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
   // Keep an already-closed stop's stored labor cost in step with the edit.
-  await recomputeStopLabor(supabase, visit.id);
+  // Visit hours / labor via the service role: a crew login can't write actual_hours itself.
+  await recomputeStopLabor(supabase, visit.id, createVisitWriter(user.id));
   return NextResponse.json(data);
 }
 
@@ -337,7 +339,7 @@ export async function DELETE(
 
   // Inside the payroll lock period: the database's own sentence, as a 409.
   if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
-  await recomputeStopLabor(supabase, auth.visit.id);
+  await recomputeStopLabor(supabase, auth.visit.id, createVisitWriter(user.id));
   return NextResponse.json({ ok: true });
 }
 
@@ -360,7 +362,7 @@ export async function PATCH(
   const readOnly = await assertOrgWritable(createServiceClient(), auth.visit.org_id);
   if (readOnly) return readOnly;
 
-  await recomputeStopLabor(supabase, auth.visit.id);
+  await recomputeStopLabor(supabase, auth.visit.id, createVisitWriter(user.id));
   return NextResponse.json({ ok: true });
 }
 

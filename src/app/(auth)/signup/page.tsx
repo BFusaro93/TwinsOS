@@ -170,11 +170,14 @@ export default function SignupPage() {
           {plans.map((p) => {
             const priceLabel = p.configured ? formatPrice(p.amountCents, p.currency, p.interval) : null;
             return (
+              // A plan with no Stripe price can't be checked out — picking it
+              // used to send the new admin into a checkout that always failed.
               <button
                 key={p.plan}
                 type="button"
+                disabled={!p.configured}
                 onClick={() => setSelectedPlan(p.plan as BillablePlan)}
-                className={`flex flex-col rounded-xl border-2 bg-white p-4 text-left shadow-sm transition-colors ${
+                className={`flex flex-col rounded-xl border-2 bg-white p-4 text-left shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   selectedPlan === p.plan ? "border-brand-500" : "border-transparent hover:border-slate-200"
                 }`}
               >

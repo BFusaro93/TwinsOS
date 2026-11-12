@@ -13,7 +13,7 @@ const WO_STATUSES: [string, string][] = [
   ["In Progress", "Work has started."],
   ["On Hold", "Paused — reachable from Open or In Progress."],
   ["Done", "Complete. A parent work order can't reach Done until every sub-work order is Done or Skipped."],
-  ["Skipped", "Sub-work orders only — this asset's portion of the job was intentionally not done. Any parts the work order had already deducted go back to inventory (once); reopening it deducts them again. Parts added or changed while it is skipped are recorded but not taken from stock until it is reopened."],
+  ["Skipped", "Intentionally not done this time. Available on sub-work orders (one asset of a multi-asset job), on a single-asset PM work order, and on a recurring work order. Any parts the work order had already deducted go back to inventory (once), at the cost they were used at; reopening it deducts them again. Parts added or changed while it is skipped are recorded but not taken from stock until it is reopened. A skipped work order counts as closed — it isn't open or overdue anywhere in the app."],
 ];
 
 const REQUEST_STATUSES: [string, string][] = [
@@ -101,14 +101,22 @@ export function WorkOrdersGuide() {
           Both Done and Skipped can be reopened back to Open with a single click if something was
           closed by mistake.
         </p>
+        <p>
+          <strong>Open</strong> means Open, In Progress or On Hold everywhere — the dashboard, the
+          reports, the Overdue filter and the notification bell. A work order is{" "}
+          <strong>overdue</strong> when it is open and its Due Date is before today on your
+          organization&apos;s calendar (its timezone, not your computer&apos;s).
+        </p>
       </Section>
 
       <Section id="recurring" title="Recurring work orders">
         <p>
-          When a Work Order with a Recurrence is marked <strong>Done</strong>, the next one is
-          created automatically — whether it was completed from the web app, the crew app, the API,
-          or an automation. A &ldquo;Next work order scheduled for &hellip;&rdquo; message confirms
-          it when you complete it in the web app, and the new one appears in the list right away.
+          When a Work Order with a Recurrence is marked <strong>Done</strong> — or{" "}
+          <strong>Skipped</strong> — the next one is created automatically, whether it was closed
+          from the web app, the crew app, the API, or an automation. A &ldquo;Next work order
+          scheduled for &hellip;&rdquo; message confirms it when you close it in the web app, and
+          the new one appears in the list right away. Skip an occurrence you won&apos;t do (say, a
+          weekly check during a shutdown week): the series carries on from the same calendar.
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -134,12 +142,13 @@ export function WorkOrdersGuide() {
           </li>
           <li>
             <strong>Multi-asset work orders</strong> recur as a whole: completing the parent creates
-            a new parent with a fresh sub-work order for each of its assets.
+            a new parent with a fresh sub-work order for each of its assets. A recurring parent can
+            be skipped once all of its sub-work orders are done or skipped.
           </li>
           <li>
-            <strong>One next occurrence per work order.</strong> Reopening a completed recurring
-            work order and marking it Done again doesn&apos;t create a second copy, and neither does
-            re-completing one whose next occurrence you deleted.
+            <strong>One next occurrence per work order.</strong> Reopening a completed (or skipped)
+            recurring work order and closing it again doesn&apos;t create a second copy, and neither
+            does re-completing one whose next occurrence you deleted.
           </li>
           <li>
             <strong>To end a series,</strong> edit the current work order and set Recurrence to
@@ -279,7 +288,19 @@ export function WorkOrdersGuide() {
         </ul>
         <p>
           Deleting the line, or lowering its quantity, only returns the units that were really taken
-          from stock — never the full quantity.
+          from stock — never the full quantity. Returned units go back at the line&apos;s own unit
+          cost (what the work order was charged), not at the part&apos;s price today.
+        </p>
+        <p>
+          <strong>Parts not tracked as inventory</strong> (&ldquo;Track as inventory item&rdquo; is
+          off on the part) can still be added to a Work Order for costing, but they
+          never move stock: nothing is deducted or returned, there is no &ldquo;short&rdquo;
+          warning, and they never show as used before received.
+        </p>
+        <p>
+          A physical <strong>shelf count</strong> on the part (see the Parts guide) also clears its
+          shortfalls: the counted number already reflects the parts used, so the next delivery
+          won&apos;t take them again.
         </p>
       </Section>
 
@@ -298,7 +319,9 @@ export function WorkOrdersGuide() {
           <li>
             <strong>A parent Work Order can&apos;t be completed until every sub-work-order is Done
             or Skipped.</strong> If a multi-asset Work Order won&apos;t let you mark it done, check
-            for an open sub-work-order first.
+            for an open sub-work-order first. A PM schedule&apos;s master work order completes
+            itself when its last asset work order is done or skipped (it is marked Skipped if every
+            asset was skipped).
           </li>
           <li>
             <strong>Priority is Low / Medium / High / Critical</strong> — if you&apos;re looking for
@@ -307,7 +330,9 @@ export function WorkOrdersGuide() {
           <li>
             <strong>Work Order, Maintenance Request, and Requisition numbers all use different
             prefixes</strong> (<code>WO-</code>, <code>MR-</code>, <code>REQ-</code>). Work
-            order numbers count up per organization each year (<code>WO-2026-000123</code>).
+            order numbers count up per organization each year (<code>WO-2026-000123</code>). If a
+            number is already taken (for example by a work order numbered by hand), generating from
+            a PM schedule moves on to the next free number.
           </li>
         </ul>
       </Section>

@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { useQuery } from "@/lib/hooks/use-query";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { OPEN_WO_STATUSES } from "@/lib/utils/work-order-status";
 
 /**
  * Narrow queries behind NotificationsBell's derived alerts. The bell is in
@@ -193,7 +195,8 @@ export function useWorkOrderAlerts({
       const { data, error } = await supabase
         .from("work_orders")
         .select("id, work_order_number, title, asset_name, due_date, assigned_to_ids, updated_at")
-        .neq("status", "done")
+        // Open / in progress / on hold only — a skipped WO is closed, not overdue.
+        .in("status", [...OPEN_WO_STATUSES])
         .is("deleted_at", null)
         .or(filters.join(","));
       if (error) throw error;
@@ -228,16 +231,22 @@ export function useLowStockPartAlerts(enabled: boolean) {
     queryKey: ["parts", ALERTS],
     queryFn: async (): Promise<LowStockPartAlertRow[]> => {
       const supabase = createClient();
-      // PostgREST can't compare two columns, so the quantity_on_hand <=
-      // minimum_stock test runs here — but over five narrow columns, not
-      // select("*").
-      const { data, error } = await supabase
-        .from("parts")
-        .select("id, name, part_number, quantity_on_hand, minimum_stock, updated_at")
-        .is("deleted_at", null);
-      if (error) throw error;
+      // Same rule as the Low Stock email (cron/low-stock-notify): only parts
+      // tracked as inventory with a minimum above zero — an untracked part, or
+      // one with no minimum set, is never "low". PostgREST can't compare two
+      // columns, so quantity_on_hand <= minimum_stock runs here, over every
+      // page (a response is capped at 1,000 rows) of narrow columns.
+      type Row = { id: string; name: string; part_number: string; quantity_on_hand: number; minimum_stock: number; updated_at: string };
+      const data = await fetchAllRows<Row>(() =>
+        supabase
+          .from("parts")
+          .select("id, name, part_number, quantity_on_hand, minimum_stock, updated_at")
+          .is("deleted_at", null)
+          .eq("is_inventory", true)
+          .gt("minimum_stock", 0)
+      );
       return data
-        .filter((p) => p.quantity_on_hand <= p.minimum_stock)
+        .filter((p) => Number(p.quantity_on_hand) <= p.minimum_stock)
         .map((p) => ({
           id: p.id,
           name: p.name,

@@ -12,7 +12,7 @@ const NEW_PART_FIELDS: [string, string][] = [
   ["Name", "What shows up everywhere — Parts list, Assets tab, PO line items."],
   ["Part number", "The manufacturer/vendor part number. Used to match incoming PO receipts."],
   ["Unit of measure", "Each, box, gallon, etc. — how the part is counted and ordered."],
-  ["Minimum stock level", "The reorder threshold. Quantity at or below this triggers Low Stock."],
+  ["Minimum stock level", "The reorder threshold. Quantity at or below this triggers Low Stock — for parts tracked as inventory with a minimum above 0. Leave it at 0 for parts you don't want low-stock alerts on."],
   ["Current quantity on hand", "Starting count. After creation, this should only move via receiving — see below."],
   ["Picture", "Optional. Helps techs confirm they grabbed the right part off the shelf."],
   ["Storage location", "Optional free text — bin, shelf, truck stock, etc."],
@@ -50,6 +50,8 @@ export function PartsInventoryGuide() {
           <TOCLink href="#lifecycle-example">Worked example: one part, start to finish</TOCLink>
           <TOCLink href="#interchangeable-parts">Interchangeable parts: split vs. alternate vendor</TOCLink>
           <TOCLink href="#replenishing">Replenishing stock</TOCLink>
+          <TOCLink href="#adjusting">Adjusting quantity on hand</TOCLink>
+          <TOCLink href="#untracked">Parts not tracked as inventory</TOCLink>
           <TOCLink href="#cost-sync">Cost sync with the Products catalog</TOCLink>
           <TOCLink href="#faq">FAQ</TOCLink>
         </div>
@@ -223,6 +225,43 @@ export function PartsInventoryGuide() {
           the count changes — a manual edit will drift out of sync with the actual PO/receipt history
           the next time something is received.
         </Callout>
+      </Section>
+
+      <Section id="adjusting" title="Adjusting quantity on hand">
+        <p>
+          When the shelf and the system disagree, change the quantity on the part&apos;s detail sheet
+          (the &minus; / + control under Quantity on Hand). Every adjustment needs a reason, and you
+          choose what kind of change it is:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Shelf count</strong> (the default) — you physically counted the part. Any work
+            orders that used it while it was out of stock (&ldquo;used before received&rdquo;) are
+            marked settled, because the count already reflects those parts being gone. Stock
+            isn&apos;t moved for them, and the next delivery won&apos;t deduct them again. Choose
+            this even when the count matches what&apos;s shown — it still clears the shortfalls.
+          </li>
+          <li>
+            <strong>Found / correction</strong> — you found extra stock or are fixing a typo. Work
+            orders still waiting on this part stay open, and the next delivery covers them as usual.
+          </li>
+        </ul>
+        <p>
+          If the part&apos;s stock changed while you had it open — a delivery was received or a work
+          order used it — the adjustment is refused with &ldquo;Stock changed since you opened this —
+          refresh&rdquo;, and the current number is reloaded. Check it and adjust again. The same
+          check applies when you change quantity on hand from the Edit Part form.
+        </p>
+      </Section>
+
+      <Section id="untracked" title="Parts not tracked as inventory">
+        <p>
+          Turn off <strong>Track as inventory item</strong> for consumables you don&apos;t count
+          (shop rags, zip ties). An untracked part can still go on work orders and POs for costing,
+          but nothing moves its stock: using it on a work order doesn&apos;t deduct anything, it never
+          shows a shortfall or a &ldquo;used before received&rdquo; badge, and it never raises a Low
+          Stock alert (in the bell or by email).
+        </p>
       </Section>
 
       <Section id="cost-sync" title="Cost sync with the Products catalog">

@@ -42,7 +42,8 @@ function mapContract(row: any): CRMContract {
     autoGenerate: row.auto_generate ?? true,
     isActive: row.is_active ?? true,
     includeSubProperties: row.include_sub_properties ?? true,
-    snowOutsideDates: row.snow_outside_dates === "included" ? "included" : "bill_per_event",
+    snowOutsideDates: row.snow_outside_dates === "included" || row.snow_outside_dates === "dont_service" ? row.snow_outside_dates : "bill_per_event",
+    snowOutsideEventPriceCents: row.snow_outside_event_price_cents ?? null,
     source: row.source ?? null,
     salesRepId: row.sales_rep_id ?? null,
     saleType: row.sale_type ?? null,
@@ -381,8 +382,10 @@ const CONTRACT_FINANCIAL_FIELDS = [
   "billing_frequency",
   "start_billing_mode",
   // Whether storms outside the contract dates are billed per event or
-  // included changes what the client pays for a snow season.
+  // included changes what the client pays for a snow season — and so does
+  // the per-storm price.
   "snow_outside_dates",
+  "snow_outside_event_price_cents",
 ] as const;
 
 /** Stable, null-tolerant equality for contract field values (dates, numbers, jsonb). */

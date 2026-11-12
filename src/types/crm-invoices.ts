@@ -203,6 +203,9 @@ export interface MonthlyAmounts {
   sep?: number; oct?: number; nov?: number; dec?: number;
 }
 
+/** Snow contract setup: storms outside the contract dates. */
+export type SnowOutsideDates = "dont_service" | "included" | "bill_per_event";
+
 export interface CRMContract {
   id: string;
   orgId: string;
@@ -225,8 +228,10 @@ export interface CRMContract {
   autoGenerate: boolean;
   isActive: boolean;
   includeSubProperties: boolean;
-  /** Snow storms dated before the start date / after the end date: billed per event (default) or included in the price. */
-  snowOutsideDates: "bill_per_event" | "included";
+  /** Snow storms dated before the start date / after the end date: not serviced, included in the price, or billed per event (default). */
+  snowOutsideDates: SnowOutsideDates;
+  /** bill_per_event: what a Monthly Flat Rate snow job bills per storm outside the dates (cents); null = not set. */
+  snowOutsideEventPriceCents: number | null;
   source: string | null;
   salesRepId: string | null;
   saleType: "new" | "renewal" | null;

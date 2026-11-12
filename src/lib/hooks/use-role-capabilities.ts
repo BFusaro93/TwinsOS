@@ -23,7 +23,8 @@ import { useTrialStatus } from "@/lib/hooks/use-trial-status";
  *               read-only; maintenance requests follow the requestor rule
  *               (own, while Open); everything else unchanged.
  *
- * Admin / manager / technician / crew are unrestricted here.
+ * Admin / manager / technician / crew are unrestricted here, except that crew
+ * can't generate work orders from a PM schedule.
  *
  * While the profile is still loading the store holds a placeholder "viewer"
  * user; every capability reports TRUE until `currentUserLoaded`, so full-access
@@ -67,6 +68,9 @@ export interface RoleCapabilities {
   /** Work orders and their parts / labor / vendor charges / status / sub-WOs.
    * False for viewer, requestor and purchaser. */
   canEditWorkOrders: boolean;
+  /** Generate work orders from a PM schedule. canEditWorkOrders minus crew
+   * logins — /api/pm-schedules/[id]/generate-wo refuses crew. */
+  canGeneratePMWorkOrders: boolean;
   canCreatePO: boolean;
   canReceive: boolean;
   canManageInventory: boolean;
@@ -118,6 +122,7 @@ export function useRoleCapabilities(): RoleCapabilities {
     isReadOnly: noWrites,
     canWriteEquipt,
     canEditWorkOrders,
+    canGeneratePMWorkOrders: canEditWorkOrders && role !== "crew",
     canCreatePO: canWriteEquipt,
     canReceive: canWriteEquipt,
     canManageInventory: canWriteEquipt,

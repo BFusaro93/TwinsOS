@@ -1,12 +1,14 @@
 import { rejectWithoutSchedulingPermission } from "@/lib/auth/scheduling-permission";
 import { NextResponse } from "next/server";
-import { isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARDED_STATUS_CHANGES } from "@/lib/visits/status-guards";
+import { isVisitInProgress, reopenClearsClockStamps, GUARDED_STATUS_CHANGES } from "@/lib/visits/status-guards";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { checkPackageMinDaysViolation, overridePackageMinDays, PACKAGE_MIN_DAYS_CODE, revertPackageMinDaysOverrides } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { CREW_GROUP_SIBLING_IN_PROGRESS_MESSAGE, findVisitsWithInProgressGroupSibling } from "@/lib/visits/crew-group-guards";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import { notifyVisitAssigned } from "@/lib/notifications/visit-notify";
 import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
@@ -73,12 +75,17 @@ export async function POST(request: Request) {
   const before: BeforeRow[] = [];
   for (let i = 0; i < ids.length; i += 100) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: beforeRows } = await (supabase as any)
+    const { data: beforeRows, error: readErr } = await (supabase as any)
       .from("crm_job_visits")
       .select("id, client_id, job_id, job_service_id, scheduled_date, status, crew_id, start_time, clocked_in_at, clocked_out_at")
-      .in("id", ids.slice(i, i + 100));
+      .in("id", ids.slice(i, i + 100))
+      .is("deleted_at", null);
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 });
     before.push(...((beforeRows ?? []) as BeforeRow[]));
   }
+  // Only rows the caller can see are written (RLS); ids from another org or
+  // already removed simply aren't part of the batch.
+  const writeIds = before.map((r) => r.id);
 
   // crm_crews has no org-scoped FK to crm_job_visits, so a crew id from another
   // org would write through RLS (which only checks the visit's own org_id) and
@@ -102,6 +109,20 @@ export async function POST(request: Request) {
         error: running.length === 1
           ? "This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first."
           : `${running.length} of the selected visits are in progress (the crew has clocked in), so they can't be moved to another day. Have the crews clock out first.`,
+      }, { status: 409 });
+    }
+  }
+
+  // A multi-crew stop moves as one (every crew's visit follows the date), so it
+  // can't move while any crew on it is clocked in.
+  if (updates.scheduled_date) {
+    const moving = before.filter((r) => r.scheduled_date !== updates.scheduled_date).map((r) => r.id);
+    const blocked = await findVisitsWithInProgressGroupSibling(supabase, moving);
+    if (blocked.size > 0) {
+      return NextResponse.json({
+        error: blocked.size === 1
+          ? CREW_GROUP_SIBLING_IN_PROGRESS_MESSAGE
+          : `${blocked.size} of the selected visits are on multi-crew stops where another crew has clocked in, so they can't be moved to another day. Have every crew on those stops clock out first.`,
       }, { status: 409 });
     }
   }
@@ -195,37 +216,40 @@ export async function POST(request: Request) {
     }
   }
 
-  const patch = {
-    ...updates,
-    // An explicit crew and "unassigned" are mutually exclusive.
-    ...(updates.crew_id ? { crew_unassigned: false } : {}),
-    ...(updates.crew_unassigned ? { crew_id: null } : {}),
-    updated_at: new Date().toISOString(),
-  };
-  // Reopening a finished visit (completed, or skipped/cancelled after Start Job) has to clear
-  // its clock stamps, or the crew app sees it as already worked (clock-in/out are no-ops) and
-  // it can't be done again. Decided per row: a mixed selection used to reopen its completed
-  // rows with stale stamps because only an all-completed batch was cleared.
+  // One transaction for the whole batch (crm_bulk_update_visits, SECURITY
+  // INVOKER, so RLS and every visit trigger still apply as the caller). Each
+  // row only updates while its status is still the one read above — the same
+  // optimistic check the single-visit PATCH makes: a crew clocking in between
+  // that read and this write must fail the edit, not be overwritten by a stale
+  // "dispatched" or a date move. Any failure (a changed row, a trigger refusal)
+  // rolls back every row, so a batch is never half-applied. Locked visits the
+  // admin override already moved carry their new status. Reopening a finished
+  // visit clears its clock stamps per row (clear_clock), and dispatched_at is
+  // stamped by the function on the transition into "dispatched".
   const clearIds = new Set(before.filter((r) => reopenClearsClockStamps(r, updates.status)).map((r) => r.id));
-  const groups: { ids: string[]; patch: Record<string, unknown> }[] = [
-    { ids: ids.filter((id) => !clearIds.has(id)), patch },
-    { ids: ids.filter((id) => clearIds.has(id)), patch: { ...patch, ...CLEARED_CLOCK_STAMPS } },
-  ];
-  let error: { message: string; hint?: string } | null = null;
-  for (const group of groups) {
-    for (let i = 0; i < group.ids.length && !error; i += 100) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await (supabase as any).from("crm_job_visits").update(group.patch).in("id", group.ids.slice(i, i + 100));
-      error = res.error;
-    }
-  }
+  const rpcPatch: Record<string, unknown> = { ...updates };
+  if (updates.crew_id) rpcPatch.crew_unassigned = false;
+  if (updates.crew_unassigned) rpcPatch.crew_id = null;
+  const rpcRows = before.map((r) => ({
+    id: r.id,
+    expected_status: locked.has(r.id) ? (updates.status ?? r.status) : r.status,
+    clear_clock: clearIds.has(r.id),
+  }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc("crm_bulk_update_visits", { p_rows: rpcRows, p_patch: rpcPatch });
 
   if (error) {
     await undoOverrides();
-    const isLocked = (error as { hint?: string }).hint === INVOICED_VISIT_LOCKED_CODE;
+    const hint = (error as { hint?: string }).hint;
+    if (hint === "visit_changed") {
+      return NextResponse.json({
+        error: "One of the selected visits just changed (a crew may have clocked in), so nothing was applied. Refresh the board and try again.",
+      }, { status: 409 });
+    }
+    const isLocked = hint === INVOICED_VISIT_LOCKED_CODE;
     return NextResponse.json(
       { error: error.message, ...(isLocked ? { code: INVOICED_VISIT_LOCKED_CODE } : {}) },
-      { status: isLocked ? 409 : 500 }
+      { status: isLocked ? 409 : (error as { code?: string }).code === "42501" ? 403 : 500 }
     );
   }
 
@@ -238,11 +262,6 @@ export async function POST(request: Request) {
   if (updates.status === "dispatched") {
     const newlyDispatched = before.filter((r) => r.status !== "dispatched").map((r) => r.id);
     if (newlyDispatched.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from("crm_job_visits")
-        .update({ dispatched_at: new Date().toISOString() })
-        .in("id", newlyDispatched);
       for (const id of newlyDispatched) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await loadServiceChemicalsForVisit(supabase as any, id).catch(() => 0);
@@ -300,9 +319,9 @@ export async function POST(request: Request) {
   // sequences never ran for bulk actions. Only visits whose status/date
   // actually changed fire (a no-op bulk re-apply fires nothing), and nothing
   // else fires these for this route, so there is no double-firing.
-  // org_id comes from the caller's profile, never the request.
-  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).maybeSingle();
-  const orgId = (profile as { org_id: string | null } | null)?.org_id;
+  // org_id comes from the session (my_org_id(), which follows a staff
+  // impersonation session like RLS does), never the request.
+  const orgId = await getEffectiveOrgId(supabase);
   if (orgId) {
     const statusTriggers: Partial<Record<string, TriggerType>> = {
       cancelled: "visit_cancelled",
@@ -326,5 +345,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ updated: ids.length });
+  return NextResponse.json({ updated: writeIds.length });
 }

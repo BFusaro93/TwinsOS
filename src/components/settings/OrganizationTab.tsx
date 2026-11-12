@@ -12,6 +12,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import { DEFAULT_TIME_ZONE, SELECTABLE_TIME_ZONES } from "@/lib/time/zone";
 import { ApplyRatesToProjectsDialog } from "@/components/shared/ApplyRatesToProjectsDialog";
+import { ApplyTaxRateToClientsDialog } from "@/components/shared/ApplyTaxRateToClientsDialog";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 
 // General organization settings — name, address, tax rate, and labor rates.
@@ -47,6 +48,8 @@ export function OrganizationTab() {
   const [addressSaved, setAddressSaved] = useState(false);
   // After a labor rate is saved: offer to also update open projects.
   const [ratesPrompt, setRatesPrompt] = useState<{ full: number; burdened: number } | null>(null);
+  // After the tax rate is saved: offer to move clients still at the old rate.
+  const [taxPrompt, setTaxPrompt] = useState<{ from: number; to: number } | null>(null);
 
   const [taxDraft, setTaxDraft] = useState(taxRatePercent);
   const [breakevenDraft, setBreakevenDraft] = useState((breakevenLaborRateCents / 100).toFixed(2));
@@ -308,7 +311,15 @@ export function OrganizationTab() {
                 className="h-8"
                 disabled={taxDraft === taxRatePercent}
                 onClick={() => {
-                  updateOrgSettings({ taxRatePercent: taxDraft }, saveFeedback("Default tax rate", () => setTaxRatePercent(taxDraft)));
+                  const previous = taxRatePercent;
+                  const next = taxDraft;
+                  updateOrgSettings(
+                    { taxRatePercent: next },
+                    saveFeedback("Default tax rate", () => {
+                      setTaxRatePercent(next);
+                      if (previous !== next) setTaxPrompt({ from: previous, to: next });
+                    })
+                  );
                 }}
               >
                 Save
@@ -408,6 +419,12 @@ export function OrganizationTab() {
           </div>
         </div>
       )}
+
+      <ApplyTaxRateToClientsDialog
+        previousPercent={taxPrompt?.from ?? null}
+        newPercent={taxPrompt?.to ?? 0}
+        onClose={() => setTaxPrompt(null)}
+      />
 
       {ratesPrompt && (
         <ApplyRatesToProjectsDialog

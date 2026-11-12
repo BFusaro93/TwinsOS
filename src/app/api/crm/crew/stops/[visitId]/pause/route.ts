@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { createServiceClient } from "@/lib/supabase/server";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
@@ -11,6 +12,7 @@ interface VisitRow {
   client_id: string;
   scheduled_date: string;
   push_number?: number | null;
+  storm_event_id?: string | null;
   crew_id: string | null;
   status: string;
   clocked_in_at: string | null;
@@ -25,13 +27,14 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
     pushNumber: row.push_number,
+    stormEventId: row.storm_event_id,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
   };
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, crm_jobs:crew_job(crew_id, property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, storm_event_id, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, crm_jobs:crew_job(crew_id, property_id, service_address, service_city)";
 
 /**
  * Pauses every open visit in this stop (lunch, stopping for the day) without
@@ -109,8 +112,10 @@ export async function POST(
   // When the crew tapped Pause — a queued offline tap replays later, and stamping
   // server time collapsed the break to ~0 (see crew/occurred-at.ts).
   const now = resolveOccurredAt(await readOccurredAt(request), { notBefore: anchor.clocked_in_at }).toISOString();
+  // Service role: a crew login can't write paused_at directly
+  // (a_crm_job_visits_crew_price_guard); openIds came from the anchor proven above.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (createVisitWriter(user.id) as any)
     .from("crm_job_visits")
     .update({ paused_at: now, updated_at: now })
     .in("id", openIds)

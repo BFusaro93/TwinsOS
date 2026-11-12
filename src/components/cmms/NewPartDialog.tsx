@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import type { Part, Vendor } from "@/types";
 import {
   Dialog,
@@ -171,8 +172,21 @@ export function NewPartDialog({ open, onOpenChange, initialData, copyFrom, onCre
           onSuccess: () => {
             if (newQuantityOnHand !== initialData.quantityOnHand) {
               adjustQuantity.mutate(
-                { id: initialData.id, quantityOnHand: newQuantityOnHand, reason: "Edited via part form" },
-                { onSettled: () => handleClose() }
+                {
+                  id: initialData.id,
+                  quantityOnHand: newQuantityOnHand,
+                  reason: "Edited via part form",
+                  // The quantity this form opened with: refused if stock moved since.
+                  expectedQty: initialData.quantityOnHand,
+                },
+                {
+                  onError: (err) => {
+                    toast.error("Quantity on hand wasn't changed", {
+                      description: err instanceof Error ? err.message : "Please try again.",
+                    });
+                  },
+                  onSettled: () => handleClose(),
+                }
               );
             } else {
               handleClose();

@@ -67,7 +67,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search, FileSignature } from "lucide-react";
 import { toast } from "sonner";
-import type { BillingFrequency, CRMContract, MonthlyAmounts, ContractStatus } from "@/types/crm-invoices";
+import type { BillingFrequency, CRMContract, MonthlyAmounts, ContractStatus, SnowOutsideDates } from "@/types/crm-invoices";
 import { billingAnchor, normalizeBillingFrequency } from "@/lib/contract-billing";
 import {
   BILLING_FREQUENCY_OPTIONS,
@@ -294,7 +294,8 @@ interface DetailsState {
   autoGenerate: boolean;
   isActive: boolean;
   includeSubProperties: boolean;
-  snowOutsideDates: "bill_per_event" | "included";
+  snowOutsideDates: SnowOutsideDates;
+  snowOutsideEventPriceCents: number | null;
 }
 
 /**
@@ -435,18 +436,35 @@ function ContractDetailsTab({
           <FieldRow label="End Date">
             <Input type="date" className="h-8 w-44 text-sm" value={state.endDate} onChange={(e) => onChange({ endDate: e.target.value })} />
           </FieldRow>
-          {(coversSnow || state.snowOutsideDates === "included") && (
+          {(coversSnow || state.snowOutsideDates !== "bill_per_event" || state.snowOutsideEventPriceCents != null) && (
             <FieldRow label="Storms outside the contract dates">
               <div className="space-y-1">
-                <Select value={state.snowOutsideDates} onValueChange={(v) => onChange({ snowOutsideDates: v as DetailsState["snowOutsideDates"] })}>
+                <Select value={state.snowOutsideDates} onValueChange={(v) => onChange({ snowOutsideDates: v as SnowOutsideDates })}>
                   <SelectTrigger className="h-8 w-56 text-sm" aria-label="Storms outside the contract dates"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="dont_service">Don&apos;t service</SelectItem>
+                    <SelectItem value="included">Included in the flat rate</SelectItem>
                     <SelectItem value="bill_per_event">Bill per event</SelectItem>
-                    <SelectItem value="included">Included in the contract</SelectItem>
                   </SelectContent>
                 </Select>
+                {state.snowOutsideDates === "bill_per_event" && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-600 dark:text-neutral-400">Price per storm</span>
+                    <CurrencyInput
+                      className="h-7 w-28 text-sm"
+                      cents={state.snowOutsideEventPriceCents ?? 0}
+                      blankWhenZero
+                      aria-label="Price per storm outside the contract dates"
+                      onCommit={(cents) => onChange({ snowOutsideEventPriceCents: cents > 0 ? cents : null })}
+                    />
+                  </div>
+                )}
                 <p className="text-[11px] text-muted-foreground">
-                  A snow storm before the start date or after the end date is billed per event in Snow Invoicing, unless it&apos;s included.
+                  {state.snowOutsideDates === "dont_service"
+                    ? "This contract's snow jobs aren't offered for a storm before the start date or after the end date."
+                    : state.snowOutsideDates === "included"
+                      ? "Storms before the start date or after the end date are plowed and covered by the contract price."
+                      : "Storms before the start date or after the end date are plowed and billed in Snow Invoicing — a Monthly Flat Rate job at the price per storm, other jobs at their own rate."}
                 </p>
               </div>
             </FieldRow>
@@ -1288,6 +1306,7 @@ export function ContractDialog({
     isActive: contract?.isActive ?? true,
     includeSubProperties: contract?.includeSubProperties ?? true,
     snowOutsideDates: contract?.snowOutsideDates ?? "bill_per_event",
+    snowOutsideEventPriceCents: contract?.snowOutsideEventPriceCents ?? null,
   });
 
   const [source, setSource] = useState(contract?.source ?? "");
@@ -1402,6 +1421,7 @@ export function ContractDialog({
             is_active: details.isActive,
             include_sub_properties: details.includeSubProperties,
             snow_outside_dates: details.snowOutsideDates,
+            snow_outside_event_price_cents: details.snowOutsideEventPriceCents,
             source: source || null,
             sales_rep_id: salesRepId || null,
             sale_type: saleType,

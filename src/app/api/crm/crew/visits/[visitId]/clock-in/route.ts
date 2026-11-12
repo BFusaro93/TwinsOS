@@ -4,6 +4,9 @@ import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
+import { createServiceClient } from "@/lib/supabase/server";
+import { assertOrgWritable } from "@/lib/org-writable";
 
 /** Visits a crew can no longer start. Same set the stop clock-in excludes. */
 const TERMINAL_STATUSES = ["completed", "cancelled", "skipped"];
@@ -49,6 +52,10 @@ export async function POST(
   if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
+  // The write below uses the service role (a crew login can't write clock
+  // stamps directly), which skips the read-only-org RLS policy — check it here.
+  const readOnly = await assertOrgWritable(createServiceClient(), existing.org_id);
+  if (readOnly) return readOnly;
   // Same rule as the stop clock-in: a future-dated visit drops off the crew list once started, stranding the clock-out.
   const orgToday = isoInZone(new Date(), await getOrgTimeZone(supabase, existing.org_id));
   if (!existing?.clocked_in_at && existing.scheduled_date > orgToday) {
@@ -91,8 +98,10 @@ export async function POST(
     }
   }
 
+  // Service role after the ownership check above: a crew login can't write
+  // clock stamps directly (a_crm_job_visits_crew_price_guard).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (createVisitWriter(user.id) as any)
     .from("crm_job_visits")
     .update({
       clocked_in_at: now,

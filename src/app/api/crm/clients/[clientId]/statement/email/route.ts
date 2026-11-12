@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient as createServerClient } from "@/lib/supabase/server";
+import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
+import { isOrgReadOnly } from "@/lib/org-writable";
 import { Resend } from "resend";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
@@ -253,8 +254,12 @@ export async function POST(
 
   const toEmailsJoined = toEmails.join(", ");
 
+  // Statements are collections, so a read-only org (canceled / ended trial)
+  // may still send them — but its own timeline insert is refused by the
+  // read-only policies, so record it with the service client there.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("client_activity").insert({
+  const activityDb = ((await isOrgReadOnly(client.org_id as string)) ? createServiceClient() : supabase) as any;
+  await activityDb.from("client_activity").insert({
     org_id: client.org_id,
     client_id: clientId,
     activity_type: "email",

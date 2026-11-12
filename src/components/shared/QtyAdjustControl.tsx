@@ -16,12 +16,30 @@ import {
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+/** See PartAdjustmentKind (use-parts.ts): a shelf count settles work-order shortfalls. */
+export type QtyAdjustKind = "count" | "correction";
+
+const KIND_OPTIONS: { value: QtyAdjustKind; label: string; hint: string }[] = [
+  {
+    value: "count",
+    label: "Shelf count",
+    hint: "You counted what's on the shelf. Parts used on work orders while this was out of stock are treated as already taken, so the next delivery won't deduct them again.",
+  },
+  {
+    value: "correction",
+    label: "Found / correction",
+    hint: "Found extra stock or fixing a mistake. Parts still owed to work orders are deducted when the next delivery is received.",
+  },
+];
+
 interface QtyAdjustControlProps {
   value: number;
-  onChange: (newQty: number, reason: string) => Promise<void>;
+  onChange: (newQty: number, reason: string, kind: QtyAdjustKind) => Promise<void>;
+  /** Ask whether the change is a shelf count or a correction (parts only). */
+  askKind?: boolean;
 }
 
-export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
+export function QtyAdjustControl({ value, onChange, askKind = false }: QtyAdjustControlProps) {
   const [inputVal, setInputVal] = useState(String(value));
   // The control is reused across records without remounting (the part detail
   // sheet keeps it mounted between opens), so re-seed the box whenever the
@@ -30,6 +48,7 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
   const [saved, setSaved] = useState(false);
   const [pendingQty, setPendingQty] = useState<number | null>(null);
   const [reason, setReason] = useState("");
+  const [kind, setKind] = useState<QtyAdjustKind>("count");
   const [submitting, setSubmitting] = useState(false);
 
   if (value !== lastValue) {
@@ -58,10 +77,11 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
     if (pendingQty === null || !reason.trim()) return;
     setSubmitting(true);
     try {
-      await onChange(pendingQty, reason.trim());
+      await onChange(pendingQty, reason.trim(), askKind ? kind : "correction");
       setInputVal(String(pendingQty));
       setPendingQty(null);
       setReason("");
+      setKind("count");
       flash();
     } catch (err) {
       toast.error("Failed to adjust quantity", {
@@ -76,6 +96,7 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
     setInputVal(String(value));
     setPendingQty(null);
     setReason("");
+    setKind("count");
   }
 
   return (
@@ -139,6 +160,34 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
           <DialogHeader>
             <DialogTitle>Adjust quantity: {value} → {pendingQty}</DialogTitle>
           </DialogHeader>
+
+          {askKind && (
+            <fieldset className="space-y-1.5 pt-2">
+              <legend className="mb-1.5 text-sm font-medium">What kind of change is this?</legend>
+              {KIND_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm",
+                    kind === opt.value ? "border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-900/30" : "border-border"
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="qty-adjust-kind"
+                    value={opt.value}
+                    checked={kind === opt.value}
+                    onChange={() => setKind(opt.value)}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="font-medium">{opt.label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{opt.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          )}
 
           <div className="space-y-1.5 py-2">
             <Label htmlFor="qty-adjust-reason">Reason <span className="text-red-500 dark:text-red-400">*</span></Label>

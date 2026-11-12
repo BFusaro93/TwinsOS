@@ -41,6 +41,15 @@ export interface SmsRegistration extends Partial<SmsRegistrationBusinessInfo> {
   twilio_brand_failure_reason: string | null;
   twilio_campaign_failure_reason: string | null;
   last_synced_at: string | null;
+  /** Set when the number and campaign were released (subscription canceled / SMS add-on removed). */
+  released_at?: string | null;
+  released_reason?: "subscription_canceled" | "sms_addon_removed" | null;
+}
+
+export interface SmsOnboardingState {
+  registration: SmsRegistration | null;
+  /** The org has the paid SMS add-on (required to set up or continue setup). */
+  smsAddon: boolean;
 }
 
 const QUERY_KEY = ["sms-onboarding"];
@@ -48,11 +57,11 @@ const QUERY_KEY = ["sms-onboarding"];
 export function useSmsRegistration() {
   return useQuery({
     queryKey: QUERY_KEY,
-    queryFn: async (): Promise<SmsRegistration | null> => {
+    queryFn: async (): Promise<SmsOnboardingState> => {
       const res = await fetch("/api/sms-onboarding");
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? "Failed to load");
-      const { registration } = await res.json();
-      return registration;
+      const { registration, smsAddon } = await res.json();
+      return { registration: registration ?? null, smsAddon: smsAddon === true };
     },
   });
 }

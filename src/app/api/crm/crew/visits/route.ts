@@ -114,7 +114,7 @@ export async function GET(request: Request) {
   // raw visit.crew_id hid every job-inherited visit (most of them) from the
   // crew's own day. See selectEffectiveCrewVisits().
   const visitSelect = `
-      id, job_id, client_id, job_service_id, crew_id, crew_unassigned, scheduled_date, push_number,
+      id, job_id, client_id, job_service_id, crew_id, crew_unassigned, scheduled_date, push_number, storm_event_id,
       start_time, end_time, status, sub_status, priority,
       notes_to_crew, notes_to_client, completion_notes, job_comments,
       men_count, actual_hours, budgeted_hours, clocked_in_at, clocked_out_at,
@@ -248,7 +248,8 @@ export async function GET(request: Request) {
       jobId: row.job_id as string,
       clientId: row.client_id as string,
       jobServiceId: (row.job_service_id as string) ?? null,
-      stormEventId: null,
+      // Two storms on the same day are separate stops (see stopKeyForVisit).
+      stormEventId: (row.storm_event_id as string | null) ?? null,
       // A snow job's push 2+ is its own stop (see stopKeyForVisit).
       pushNumber: Number(row.push_number ?? 1) || 1,
       snowDepthInches: null,

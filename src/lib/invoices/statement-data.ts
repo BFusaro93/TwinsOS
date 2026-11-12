@@ -78,6 +78,22 @@ export async function buildInvoiceStatementData(
       }
     : null;
 
+  // Money the client has on account that isn't applied to any invoice yet
+  // (prepayments, deposits, overpayments, account credits — net of refunds,
+  // which come off unused credit first). It is theirs to apply, so the account
+  // balance is shown net of it; ignoring it overstated what they owe.
+  const { data: creditRows } = await supabase
+    .from("crm_payments")
+    .select("unused_amount_cents")
+    .eq("org_id", inv.org_id)
+    .eq("client_id", inv.client_id)
+    .is("deleted_at", null)
+    .gt("unused_amount_cents", 0);
+  const unappliedCreditCents = ((creditRows ?? []) as { unused_amount_cents: number | null }[]).reduce(
+    (sum, row) => sum + (row.unused_amount_cents ?? 0),
+    0
+  );
+
   const { data: clientRow } = await supabase
     .from("clients")
     .select("account_number")
@@ -92,7 +108,10 @@ export async function buildInvoiceStatementData(
     // THIS invoice's own outstanding balance — not its total. Using
     // total_cents overstated the balance by however much of this invoice
     // had already been paid/credited.
-    accountBalanceCents: previousBalanceCents + (inv.balance_cents ?? 0),
+    // ...less any unapplied credit on the account (can go below zero: the
+    // client is in credit).
+    accountBalanceCents: previousBalanceCents + (inv.balance_cents ?? 0) - unappliedCreditCents,
+    unappliedCreditCents,
     lastPayment,
     priorInvoices,
   };

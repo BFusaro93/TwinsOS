@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { assertOrgWritable } from "@/lib/org-writable";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import {
   buildClientMergeVars,
@@ -62,6 +63,9 @@ export async function POST(
   if (!canEmail || !canTickets) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // A read-only (canceled / expired-trial) org may only send collections.
+  const notWritable = await assertOrgWritable(createServiceClient(), orgId);
+  if (notWritable) return notWritable;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

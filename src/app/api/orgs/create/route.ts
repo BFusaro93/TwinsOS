@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "crypto";
-import { isBillablePlan } from "@/lib/stripe/plans";
+import { getPriceIdForPlan, isBillablePlan } from "@/lib/stripe/plans";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { logger } from "@/lib/logger";
 import { notifySupportInboxOfTrialSignup } from "@/lib/staff-notify";
+import { coerceTimeZone, shiftYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 
 const log = logger.child("orgs-create");
 const MAX_COMPANY_NAME = 120;
@@ -12,6 +13,20 @@ const MAX_COMPANY_NAME = 120;
 const TRIAL_DAYS = 30;
 /** How long a member-less org from a failed signup can be picked up again by a retry. */
 const PENDING_ORG_REUSE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The trial runs TRIAL_DAYS calendar days on the company's own clock and ends
+ * at the END of the last day (23:59:59 in its time zone), so it never cuts out
+ * mid-afternoon or mid-route. Signing up Nov 11 → the trial's last day is Dec 11.
+ */
+function trialEndsAtFor(timezone: string | null): string {
+  const tz = coerceTimeZone(timezone);
+  const lastDay = shiftYmd(todayInZone(tz), TRIAL_DAYS);
+  const nextMidnight = zoneWallClockToInstant(shiftYmd(lastDay, 1), "00:00", tz);
+  return nextMidnight
+    ? new Date(nextMidnight.getTime() - 1000).toISOString()
+    : new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
 
 /**
  * POST /api/orgs/create
@@ -51,7 +66,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Company name must be ${MAX_COMPANY_NAME} characters or fewer` }, { status: 400 });
   }
 
-  const pendingPlan = body.plan && isBillablePlan(body.plan) ? body.plan : null;
+  // Only a plan that can actually be checked out (has a Stripe price) is kept —
+  // otherwise the admin is sent into a checkout that always fails.
+  const pendingPlan = body.plan && isBillablePlan(body.plan) && getPriceIdForPlan(body.plan) ? body.plan : null;
 
   // The signup form sends the browser's zone so a Pacific/Central company doesn't run on Eastern
   // day boundaries until someone finds the setting. Anything Intl can't resolve is ignored.
@@ -138,7 +155,7 @@ export async function POST(request: Request) {
     ...(replyTo ? { customizations: { reply_to_email: replyTo } } : {}),
     // No column default — without this a new org's trial never expires
     // (use-trial-status treats a null trial_ends_at as open-ended).
-    trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+    trial_ends_at: trialEndsAtFor(timezone),
   };
   // per_org_numbering numbers invoices/estimates/tickets from 1 instead of the global counters
   // (migration 20261203000100, applied to both projects).

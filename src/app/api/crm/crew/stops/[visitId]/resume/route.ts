@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { createServiceClient } from "@/lib/supabase/server";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
@@ -11,6 +12,7 @@ interface VisitRow {
   client_id: string;
   scheduled_date: string;
   push_number?: number | null;
+  storm_event_id?: string | null;
   crew_id: string | null;
   status: string;
   clocked_in_at: string | null;
@@ -26,13 +28,14 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
     pushNumber: row.push_number,
+    stormEventId: row.storm_event_id,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
   };
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, break_minutes, crm_jobs:crew_job(crew_id, property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, storm_event_id, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, break_minutes, crm_jobs:crew_job(crew_id, property_id, service_address, service_city)";
 
 /**
  * Resumes every paused visit in this stop — rolls the elapsed break time
@@ -110,6 +113,9 @@ export async function POST(
   const rawOccurredAt = await readOccurredAt(request);
   const now = new Date().toISOString();
   const updateErrors: string[] = [];
+  // Service role: a crew login can't write paused_at / break_minutes directly
+  // (a_crm_job_visits_crew_price_guard); pausedRows came from the anchor proven above.
+  const visitWriter = createVisitWriter(user.id);
   for (const row of pausedRows) {
     const resumedAt = resolveOccurredAt(rawOccurredAt, { notBefore: row.paused_at });
     const pauseMinutes = Math.max(0, Math.round(
@@ -120,7 +126,7 @@ export async function POST(
     // read the same pause, and without this guard both added the elapsed
     // break — doubling it. The loser's update matches nothing and is a no-op.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q = (supabase as any)
+    let q = (visitWriter as any)
       .from("crm_job_visits")
       .update({
         paused_at: null,

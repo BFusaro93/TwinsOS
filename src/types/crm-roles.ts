@@ -332,6 +332,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           sched_waiting_list: "Waiting List",
           sched_teams: "Teams",
           sched_add_modify_projects: "Add/Modify Projects",
+          sched_visit_price_qty: "Change Visit Price & Quantity",
         },
       },
       warranty_access: {

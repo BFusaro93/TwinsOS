@@ -48,6 +48,7 @@ import { cn, formatDate, matchesFilter, todayLocalISODate, localISODateFromToday
 import type { WorkOrder, WorkOrderStatus, WorkOrderPriority } from "@/types";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
+import { isOpenWO, isOverdueWO } from "@/lib/utils/work-order-status";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -165,8 +166,10 @@ function UpcomingMaintenanceView({
   const monthOut   = shiftYmd(todayStr, 30);
 
   const recurring = workOrders.filter((wo) => wo.isRecurring);
-  const active    = recurring.filter((wo) => wo.status !== "done");
-  const done      = recurring.filter((wo) => wo.status === "done");
+  // Skipped occurrences are closed (the next one is scheduled), not active.
+  const active    = recurring.filter(isOpenWO);
+  // Done or skipped — either way the next occurrence has been scheduled.
+  const done      = recurring.filter((wo) => !isOpenWO(wo));
 
   const byDue = (a: WorkOrder, b: WorkOrder) =>
     (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999");
@@ -176,9 +179,11 @@ function UpcomingMaintenanceView({
   const thisMonth = active.filter((wo) => wo.dueDate && wo.dueDate >= weekOut  && wo.dueDate < monthOut).sort(byDue);
   const later     = active.filter((wo) => wo.dueDate && wo.dueDate >= monthOut).sort(byDue);
   const noDue     = active.filter((wo) => !wo.dueDate);
-  const completed = done.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 10);
+  const completed = done
+    .sort((a, b) => (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt))
+    .slice(0, 10);
 
-  const totalActive = recurring.filter((wo) => wo.status !== "done").length;
+  const totalActive = active.length;
 
   if (!isLoading && recurring.length === 0) {
     return (
@@ -453,7 +458,7 @@ export function WorkOrderListPage() {
     const assigneeNames = wo.assignedToNames.length > 0 ? wo.assignedToNames : (wo.assignedToName ? [wo.assignedToName] : []);
     const matchAssignee  = !filterValues.assignedToName?.length || assigneeNames.some((n) => matchesFilter(n, filterValues.assignedToName));
     const matchCategory  = matchesFilter(wo.category ?? "", filterValues.category);
-    const matchOverdue   = filterValues.overdue !== "1" || (wo.status !== "done" && !!wo.dueDate && wo.dueDate < todayDateStr);
+    const matchOverdue   = filterValues.overdue !== "1" || isOverdueWO(wo, todayDateStr);
     return matchSearch && matchStatus && matchPriority && matchType && matchRecurring && matchAsset && matchAssignee && matchCategory && matchOverdue;
   });
 

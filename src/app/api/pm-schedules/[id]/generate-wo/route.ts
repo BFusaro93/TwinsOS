@@ -7,6 +7,7 @@ import { setWOPartStock } from "@/lib/inventory/part-stock";
 import { logger } from "@/lib/logger";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { assertOrgWritable } from "@/lib/org-writable";
+import { getCatalogCost, type CostLayer, type CostMethod } from "@/lib/cost-methods";
 
 const log = logger.child("pm-generate-wo");
 
@@ -30,7 +31,8 @@ async function copyTemplatePartsAndDeduct(
   orgId: string,
   workOrderId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  templateParts: any[]
+  templateParts: any[],
+  costMethod: CostMethod
 ): Promise<string[]> {
   if (templateParts.length === 0) return [];
   // A template can still point at a part that was deleted since. Copying it put a
@@ -39,17 +41,25 @@ async function copyTemplatePartsAndDeduct(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const partIds = [...new Set(templateParts.map((tp: any) => tp.part_id).filter(Boolean))] as string[];
   let liveTemplates = templateParts;
+  // Each line is priced at the part's CURRENT catalog cost (the org's costing
+  // method over its cost layers) — the same price the Costs tab uses when a
+  // part is added by hand (getCatalogCost in WOCostsTab). The template's
+  // unit_cost is frozen at the day the part was put on the schedule.
+  const catalogCost = new Map<string, number>();
   if (partIds.length > 0) {
     const { data: liveParts, error: liveErr } = await adminClient
       .from("parts")
-      .select("id")
+      .select("id, unit_cost, cost_layers")
       .in("id", partIds)
       .eq("org_id", orgId)
       .is("deleted_at", null);
     if (liveErr) throw new Error(`Failed to check the schedule's parts: ${liveErr.message}`);
-    const live = new Set(((liveParts ?? []) as { id: string }[]).map((p) => p.id));
+    const rows = (liveParts ?? []) as { id: string; unit_cost: number; cost_layers: CostLayer[] | null }[];
+    for (const p of rows) {
+      catalogCost.set(p.id, getCatalogCost(p.unit_cost, Array.isArray(p.cost_layers) ? p.cost_layers : [], costMethod));
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    liveTemplates = templateParts.filter((tp: any) => !tp.part_id || live.has(tp.part_id));
+    liveTemplates = templateParts.filter((tp: any) => !tp.part_id || catalogCost.has(tp.part_id));
   }
   if (liveTemplates.length === 0) return [];
   // wo_parts allows one live line per part per work order
@@ -86,7 +96,7 @@ async function copyTemplatePartsAndDeduct(
         part_name: tp.part_name,
         part_number: tp.part_number,
         quantity: tp.quantity,
-        unit_cost: tp.unit_cost,
+        unit_cost: (tp.part_id ? catalogCost.get(tp.part_id) : undefined) ?? tp.unit_cost,
         quantity_deducted: 0,
       }))
     )
@@ -183,6 +193,18 @@ function isDuplicateBatchError(error: any): boolean {
     && error.message.includes("work_orders_pm_schedule_open_batch_unique");
 }
 
+// The org's counter handed out a number that is already on a live work order
+// (one entered or imported by hand with that number, or drawn from the wrong
+// org's counter before next_entity_number used the effective org). Retried
+// with the next number instead of failing with the raw constraint error.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isNumberConflictError(error: any): boolean {
+  return error?.code === "23505" && typeof error?.message === "string"
+    && error.message.includes("work_orders_org_number_unique");
+}
+
+const NUMBER_ATTEMPTS = 5;
+
 /**
  * POST /api/pm-schedules/[id]/generate-wo
  *
@@ -278,18 +300,40 @@ export async function POST(
   // ── 2. Duplicate guard — block if any open WOs from this schedule exist ─────
   // Checks across all dates, not just today, so generating a new batch while
   // the previous week's is still open is prevented.
-  const { data: openWOs } = await adminClient
+  const { data: openWOs, error: openWOsErr } = await adminClient
     .from("work_orders")
     .select("id, work_order_number, created_at")
     .eq("pm_schedule_id", scheduleId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
     .not("status", "in", '("done","skipped")')
-    .is("parent_work_order_id", null)  // parent WOs only to avoid counting sub-WOs
-    .limit(1);
+    .is("parent_work_order_id", null);  // parent WOs only to avoid counting sub-WOs
+  if (openWOsErr) {
+    return NextResponse.json({ error: `Couldn't check for open work orders: ${openWOsErr.message}` }, { status: 500 });
+  }
 
-  if (openWOs && openWOs.length > 0) {
-    const existing = openWOs[0];
+  // A multi-asset batch's master WO left open after every asset WO was done
+  // or skipped isn't open work — it's a finished batch nobody closed (they
+  // close themselves now, trg_work_orders_close_finished_pm_batch, but older
+  // ones may still be open). Close it the same way instead of blocking.
+  for (const existing of (openWOs ?? []) as { id: string; work_order_number: string }[]) {
+    const { data: subs, error: subsErr } = await adminClient
+      .from("work_orders")
+      .select("status")
+      .eq("parent_work_order_id", existing.id)
+      .is("deleted_at", null);
+    const subStatuses = ((subs ?? []) as { status: string }[]).map((x) => x.status);
+    const finishedBatch = !subsErr && subStatuses.length > 0
+      && subStatuses.every((st) => st === "done" || st === "skipped");
+    if (finishedBatch) {
+      // Session client, so the stock / audit triggers see the acting user.
+      const { error: closeErr } = await userClient
+        .from("work_orders")
+        .update({ status: subStatuses.includes("done") ? "done" : "skipped" })
+        .eq("id", existing.id);
+      if (!closeErr) continue;
+      log.error("could not close a finished PM batch", { workOrderId: existing.id, error: closeErr.message });
+    }
     return NextResponse.json(
       { error: `There are already open work orders for this schedule (${existing.work_order_number}). Complete or close the existing batch before generating a new one.` },
       { status: 409 }
@@ -360,13 +404,38 @@ export async function POST(
   // Same next_work_order_number() every other WO path uses. The old
   // `WO-${Date.now().slice(-6)}` could collide and skipped the org's sequence.
   // Sub-WOs share the batch's number with a -1, -2… suffix, which can't
-  // collide with a counter-issued number.
+  // collide with a counter-issued number. The number is drawn when the first
+  // (single or master) WO is inserted, and a number already in use is skipped
+  // — see insertTopLevelWO.
+  let baseNumber = "";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: woNumber, error: woNumErr } = await (userClient.rpc as any)("next_work_order_number");
-  if (woNumErr || !woNumber) {
-    return NextResponse.json({ error: woNumErr?.message ?? "Failed to allocate a work order number" }, { status: 500 });
-  }
-  const baseNumber = woNumber as string;
+  type InsertResult = { data: any; error: { message: string; code?: string } | null };
+  const insertTopLevelWO = async (row: Record<string, unknown>): Promise<InsertResult> => {
+    for (let attempt = 0; attempt < NUMBER_ATTEMPTS; attempt++) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: woNumber, error: woNumErr } = await (userClient.rpc as any)("next_work_order_number");
+      if (woNumErr || !woNumber) {
+        return { data: null, error: { message: woNumErr?.message ?? "Failed to allocate a work order number" } };
+      }
+      const res = await adminClient
+        .from("work_orders")
+        .insert({ ...row, work_order_number: woNumber as string })
+        .select()
+        .single();
+      if (res.error && isNumberConflictError(res.error)) {
+        log.warn("work order number already in use, drawing the next one", { woNumber });
+        continue;
+      }
+      if (!res.error) baseNumber = woNumber as string;
+      return res as InsertResult;
+    }
+    return {
+      data: null,
+      error: { code: "number_conflict", message: "Couldn't find an unused work order number. Check for work orders numbered by hand ahead of the sequence, then try again." },
+    };
+  };
+  const numberConflictResponse = (error: { code?: string; message: string } | null) =>
+    error?.code === "number_conflict" ? NextResponse.json({ error: error.message }, { status: 409 }) : null;
   const createdWOIds: string[] = [];
   const shortParts: string[] = [];
 
@@ -382,6 +451,12 @@ export async function POST(
     return NextResponse.json({ error: `Failed to load the schedule's shared parts: ${sharedPartsErr.message}` }, { status: 500 });
   }
   const sharedParts = sharedPartRows ?? [];
+  const { data: orgRow } = await adminClient
+    .from("organizations")
+    .select("cost_method")
+    .eq("id", profile.org_id)
+    .maybeSingle();
+  const costMethod: CostMethod = (orgRow?.cost_method as CostMethod | null) ?? "manual";
   // The org's calendar day, not the server's (UTC is already tomorrow after
   // ~8pm ET). `today` is YYYY-MM-DD; format it as a plain calendar date.
   const dateLabel = new Date(`${today}T12:00:00Z`).toLocaleDateString("en-US", {
@@ -422,32 +497,29 @@ export async function POST(
     const assigneeIds   = schedule.assigned_to_id   ? [schedule.assigned_to_id]   : [];
     const assigneeNames = schedule.assigned_to_name ? [schedule.assigned_to_name] : [];
 
-    const { data: singleWO, error: singleErr } = await adminClient
-      .from("work_orders")
-      .insert({
-        org_id: profile.org_id,
-        created_by: user.id,
-        title: `${schedule.title} — ${dateLabel}`,
-        description: schedule.description,
-        status: "open",
-        priority: "medium",
-        wo_type: "preventive",
-        asset_id: sa.asset_id,
-        asset_name: sa.asset_name,
-        linked_entity_type: entityTypeById.get(sa.asset_id) ?? "asset",
-        pm_schedule_id: scheduleId,
-        work_order_number: baseNumber,
-        due_date: pmDueDate,
-        assigned_to_id: schedule.assigned_to_id ?? null,
-        assigned_to_name: schedule.assigned_to_name ?? null,
-        assigned_to_ids: assigneeIds,
-        assigned_to_names: assigneeNames,
-        categories: ["Preventive Maintenance"],
-        is_recurring: false,
-      })
-      .select()
-      .single();
+    const { data: singleWO, error: singleErr } = await insertTopLevelWO({
+      org_id: profile.org_id,
+      created_by: user.id,
+      title: `${schedule.title} — ${dateLabel}`,
+      description: schedule.description,
+      status: "open",
+      priority: "medium",
+      wo_type: "preventive",
+      asset_id: sa.asset_id,
+      asset_name: sa.asset_name,
+      linked_entity_type: entityTypeById.get(sa.asset_id) ?? "asset",
+      pm_schedule_id: scheduleId,
+      due_date: pmDueDate,
+      assigned_to_id: schedule.assigned_to_id ?? null,
+      assigned_to_name: schedule.assigned_to_name ?? null,
+      assigned_to_ids: assigneeIds,
+      assigned_to_names: assigneeNames,
+      categories: ["Preventive Maintenance"],
+      is_recurring: false,
+    });
 
+    const singleConflict = numberConflictResponse(singleErr);
+    if (singleConflict) return singleConflict;
     if (singleErr && isDuplicateBatchError(singleErr)) {
       return NextResponse.json(
         { error: "There are already open work orders for this schedule. Complete or close the existing batch before generating a new one." },
@@ -469,7 +541,7 @@ export async function POST(
 
     try {
       if (tplErr) throw new Error(`Failed to load the schedule's parts: ${tplErr.message}`);
-      shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, singleWO.id, [...(templateParts ?? []), ...sharedParts]));
+      shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, singleWO.id, [...(templateParts ?? []), ...sharedParts], costMethod));
     } catch (err) {
       await rollbackGeneratedWOs(adminClient, userClient, createdWOIds);
       return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
@@ -481,29 +553,26 @@ export async function POST(
     const assigneeIds   = schedule.assigned_to_id   ? [schedule.assigned_to_id]   : [];
     const assigneeNames = schedule.assigned_to_name ? [schedule.assigned_to_name] : [];
 
-    const { data: parentWO, error: parentErr } = await adminClient
-      .from("work_orders")
-      .insert({
-        org_id: profile.org_id,
-        created_by: user.id,
-        title: `${schedule.title} — ${dateLabel}`,
-        description: schedule.description,
-        status: "open",
-        priority: "medium",
-        wo_type: "preventive",
-        pm_schedule_id: scheduleId,
-        work_order_number: baseNumber,
-        due_date: pmDueDate,
-        assigned_to_id: schedule.assigned_to_id ?? null,
-        assigned_to_name: schedule.assigned_to_name ?? null,
-        assigned_to_ids: assigneeIds,
-        assigned_to_names: assigneeNames,
-        categories: ["Preventive Maintenance"],
-        is_recurring: false,
-      })
-      .select()
-      .single();
+    const { data: parentWO, error: parentErr } = await insertTopLevelWO({
+      org_id: profile.org_id,
+      created_by: user.id,
+      title: `${schedule.title} — ${dateLabel}`,
+      description: schedule.description,
+      status: "open",
+      priority: "medium",
+      wo_type: "preventive",
+      pm_schedule_id: scheduleId,
+      due_date: pmDueDate,
+      assigned_to_id: schedule.assigned_to_id ?? null,
+      assigned_to_name: schedule.assigned_to_name ?? null,
+      assigned_to_ids: assigneeIds,
+      assigned_to_names: assigneeNames,
+      categories: ["Preventive Maintenance"],
+      is_recurring: false,
+    });
 
+    const parentConflict = numberConflictResponse(parentErr);
+    if (parentConflict) return parentConflict;
     if (parentErr && isDuplicateBatchError(parentErr)) {
       return NextResponse.json(
         { error: "There are already open work orders for this schedule. Complete or close the existing batch before generating a new one." },
@@ -517,7 +586,7 @@ export async function POST(
 
     // Shared parts belong to the master WO only (once per batch), not to every asset's sub-WO.
     try {
-      shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, parentWO.id, sharedParts));
+      shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, parentWO.id, sharedParts, costMethod));
     } catch (err) {
       await rollbackGeneratedWOs(adminClient, userClient, createdWOIds);
       return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
@@ -573,7 +642,7 @@ export async function POST(
 
       try {
         if (tplErr) throw new Error(`Failed to load the schedule's parts: ${tplErr.message}`);
-        shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, subWO.id, templateParts ?? []));
+        shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, subWO.id, templateParts ?? [], costMethod));
       } catch (err) {
         await rollbackGeneratedWOs(adminClient, userClient, createdWOIds);
         return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });

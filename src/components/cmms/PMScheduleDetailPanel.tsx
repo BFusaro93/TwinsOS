@@ -208,7 +208,7 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
   const [generateError, setGenerateError] = useState<string | null>(null);
 
   const { mutate: deletePMSchedule, isPending: deleting } = useDeletePMSchedule();
-  const { canWriteEquipt, canEditWorkOrders } = useRoleCapabilities();
+  const { canWriteEquipt, canGeneratePMWorkOrders } = useRoleCapabilities();
   const { setSelectedPMScheduleId, setSelectedWorkOrderId } = useCMMSStore();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -227,14 +227,20 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
   // Check if any open (non-done, non-skipped) WOs already exist for this schedule.
   // If so, block generation until they're completed or deleted.
   const { data: allWorkOrders } = useWorkOrders();
-  const openBatchWO = allWorkOrders?.find(
-    (wo) =>
-      wo.pmScheduleId === schedule.id &&
-      wo.parentWorkOrderId === null &&     // parent / single-asset WOs only
-      wo.status !== "done" &&
-      wo.status !== "skipped" &&
-      wo.deletedAt === null
-  ) ?? null;
+  // A batch master whose asset WOs are all done/skipped is a finished batch
+  // (it closes itself; generating closes an older one left open), so it
+  // doesn't block — same rule as the generate route.
+  const openBatchWO = allWorkOrders?.find((wo) => {
+    if (
+      wo.pmScheduleId !== schedule.id ||
+      wo.parentWorkOrderId !== null ||     // parent / single-asset WOs only
+      wo.status === "done" ||
+      wo.status === "skipped" ||
+      wo.deletedAt !== null
+    ) return false;
+    const subs = allWorkOrders.filter((sub) => sub.parentWorkOrderId === wo.id && sub.deletedAt === null);
+    return subs.length === 0 || subs.some((sub) => sub.status !== "done" && sub.status !== "skipped");
+  }) ?? null;
   const alreadyGeneratedToday = openBatchWO !== null; // name kept for JSX compat below
 
   async function handleGenerateWOs() {
@@ -320,8 +326,8 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
             </Button>
           ) : null}
 
-          {/* Generate Work Orders button */}
-          {canEditWorkOrders && (
+          {/* Generate Work Orders button — not for crew logins (the route refuses them) */}
+          {canGeneratePMWorkOrders && (
           <Button
             size="sm"
             variant="outline"

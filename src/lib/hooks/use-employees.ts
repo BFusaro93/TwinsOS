@@ -5,6 +5,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
+import { memberWorksOn } from "@/lib/crew/roster-days";
 import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import type { CRMEmployee, CRMCrew, CRMCrewMember, CRMCrewLogin } from "@/types/crm-employees";
 
@@ -692,9 +693,28 @@ export function useSetCrewDailyMember() {
 /** Revert a crew member back to their default crew for `workDate` (clears the override). */
 export function useClearCrewDailyMember() {
   const qc = useQueryClient();
+  const { today } = useOrgDates();
   return useMutation({
     mutationFn: async ({ memberId, workDate }: { memberId: string; workDate: string }) => {
       const supabase = createClient();
+      // Clearing today's placement moves the member back to their default crew
+      // (only if that roster row works today) — or onto no crew at all. Close
+      // their open job punches on every other crew first, exactly like a move
+      // (useSetCrewDailyMember), or the old crew's job keeps accruing their
+      // hours alongside the new one's and they are paid twice.
+      if (workDate === today()) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: row, error: rowErr } = await (supabase as any)
+          .from("crm_crew_members")
+          .select("crew_id, days_of_week, deleted_at")
+          .eq("id", memberId)
+          .maybeSingle();
+        if (rowErr) throw rowErr;
+        const r = row as { crew_id: string | null; days_of_week: number[] | null; deleted_at: string | null } | null;
+        const resolvedCrewId = r && !r.deleted_at && r.crew_id && memberWorksOn(r.days_of_week, workDate) ? r.crew_id : null;
+        // No crew today: "" matches no visit's crew, so every open job punch closes.
+        await closeMemberPunchesOnOtherCrews(supabase, { memberId, newCrewId: resolvedCrewId ?? "", at: new Date().toISOString() });
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_crew_daily_members")

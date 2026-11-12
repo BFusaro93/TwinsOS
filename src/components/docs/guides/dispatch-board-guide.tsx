@@ -322,7 +322,10 @@ export function DispatchBoardGuide() {
           </li>
           <li>
             <strong>The day moves together.</strong> Rescheduling one crew&apos;s visit moves the
-            other crews&apos; visits that haven&apos;t started. A crew already clocked in stays put.
+            other crews&apos; visits with it. While any crew on the stop is clocked in, the stop
+            can&apos;t be moved to another day at all — from the board, the calendar, the visit
+            sheet or a bulk move — so no crew loses the stop mid-job. Have every crew clock out
+            first.
           </li>
           <li>
             <strong>Visit counts don&apos;t double.</strong> A shared stop uses one of a contract&apos;s
@@ -716,6 +719,15 @@ export function DispatchBoardGuide() {
           visits back to the waiting list processes them one at a time, and the job&apos;s own date
           and crew only reset when its last visit goes back.
         </p>
+        <p>
+          <strong>Bulk changes are all-or-nothing.</strong> A bulk Change Status, Re-assign Crew or
+          Move to Day either applies to every selected visit or to none of them. If one of the
+          visits changed after you selected it — most often a crew clocked in — nothing is changed
+          and you&apos;re asked to refresh the board and try again, so a crew&apos;s running stop is
+          never overwritten. Very large selections (more than 500 visits) are sent in batches of
+          500; if a later batch fails, the message says how many visits the earlier batches already
+          updated.
+        </p>
         <Callout>
           Email Selected Clients requires the same permission as any other outbound client email
           (Email Activity&apos;s Send permission) — it isn&apos;t a separate, less-gated path to
@@ -868,7 +880,9 @@ export function DispatchBoardGuide() {
           Switch the toggle at the top right of the Dispatch Board from <strong>List</strong> to{" "}
           <strong>Calendar</strong> for a week at a glance: one row per crew, one column per day.
           The view and the week you&apos;re on are kept in the page address, so refreshing or sharing
-          the link lands on the same week.
+          the link lands on the same week. The highlighted <strong>today</strong> column and the{" "}
+          <strong>Today</strong> button follow your company&apos;s time zone (Settings), not the
+          computer you&apos;re on.
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -965,7 +979,13 @@ export function DispatchBoardGuide() {
           <li>
             <strong>Change crews by dragging.</strong> Drag a person to another crew (that move is for
             this day only and is tagged &quot;today only&quot; — dropping them back on their own crew
-            clears it), or drag a job card to another crew to reassign it. Jobs with no crew sit in an{" "}
+            clears it), or drag a job card to another crew to reassign it. A person only shows on their
+            regular crew on the weekdays that crew membership is scheduled for (the days set in Team
+            settings), the same as Team Assignment and the crew app; on other days they show only if
+            you place them. Moving someone off a crew today — including dropping them back on their
+            regular crew — stops their running job time on the crew they left, so their hours are
+            counted once. If some of a job&apos;s visits can&apos;t be moved (for example one was
+            just started), the message says how many moved; the ones that moved stay on the new crew. Jobs with no crew sit in an{" "}
             <strong>Unassigned jobs</strong> column. On a touch screen, tap to pick up and tap to place
             instead of dragging. On a phone or portrait tablet the board stacks into one column that
             scrolls down, with the equipment yard at the bottom, instead of crews side by side.
