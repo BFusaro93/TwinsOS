@@ -97,7 +97,7 @@ export function SnowInvoicing() {
   } = useSnowRateTiersForJobs(perEventPerInchJobIds);
 
   const rows = useMemo(() => {
-    const byGroup = new Map<string, CRMJobVisit[]>();
+    const byGroup = new Map<string, UninvoicedSnowVisit[]>();
     for (const v of visits) {
       const key = billingGroupKey(v);
       if (!byGroup.has(key)) byGroup.set(key, []);
@@ -110,11 +110,18 @@ export function SnowInvoicing() {
         amountByVisitId.set(visitId, amount);
       }
     }
-    return visits.map((v) => ({
-      visit: v,
-      amountCents: amountByVisitId.get(v.id) ?? 0,
-      groupSize: byGroup.get(billingGroupKey(v))!.length,
-    }));
+    return visits.map((v) => {
+      const amountCents = amountByVisitId.get(v.id) ?? 0;
+      // A storm's materials bill with its visit — not when the visit itself
+      // can't be priced yet (it stays queued, materials and all).
+      const productsCents = amountCents > 0 ? (v.stormProducts ?? []).reduce((s, p) => s + p.totalCents, 0) : 0;
+      return {
+        visit: v,
+        amountCents,
+        productsCents,
+        groupSize: byGroup.get(billingGroupKey(v))!.length,
+      };
+    });
   }, [visits, tiersByJobId]);
 
   const byClient = useMemo(() => {
@@ -159,7 +166,7 @@ export function SnowInvoicing() {
     else setSelectedIds(new Set(rows.map((r) => r.visit.id)));
   }
 
-  const selectedTotal = rows.filter((r) => selectedIds.has(r.visit.id)).reduce((s, r) => s + r.amountCents, 0);
+  const selectedTotal = rows.filter((r) => selectedIds.has(r.visit.id)).reduce((s, r) => s + r.amountCents + r.productsCents, 0);
 
   async function handleGenerate() {
     // Defensive: expand any partial selection to whole billing groups.
@@ -179,6 +186,7 @@ export function SnowInvoicing() {
               + ((r.visit.pushNumber ?? 1) > 1 ? ` — Push ${r.visit.pushNumber}` : ""),
             amountCents: r.amountCents,
             serviceDate: r.visit.scheduledDate,
+            products: r.visit.stormProducts ?? [],
           })),
       }))
       .filter((g) => g.visits.length > 0);
@@ -221,6 +229,11 @@ export function SnowInvoicing() {
       if (result.excludedZeroAmountVisits > 0) {
         toast.warning(
           `${result.excludedZeroAmountVisits} visit${result.excludedZeroAmountVisits !== 1 ? "s" : ""} priced at $0 left in the queue — check rates and re-invoice`
+        );
+      }
+      if (result.unclaimedProducts > 0) {
+        toast.warning(
+          `${result.unclaimedProducts} material line${result.unclaimedProducts !== 1 ? "s were" : " was"} already billed on another invoice — remove ${result.unclaimedProducts !== 1 ? "them" : "it"} from the new draft`
         );
       }
       if (result.skippedRaceConditionGroups > 0) {
@@ -312,8 +325,8 @@ export function SnowInvoicing() {
               {byClient.map(([clientId, group]) => (
                 <Fragment key={clientId}>
                   {group.rows.map(({ visit, amountCents, groupSize }) => (
+                    <Fragment key={visit.id}>
                     <tr
-                      key={visit.id}
                       className={cn("border-b border-slate-100 dark:border-neutral-800 cursor-pointer", selectedIds.has(visit.id) ? "bg-brand-50 dark:bg-brand-900/30" : "hover:bg-slate-50 dark:hover:bg-muted/40")}
                       onClick={() => toggle(visit.id)}
                     >
@@ -338,6 +351,9 @@ export function SnowInvoicing() {
                       <td className="px-2 py-2 text-muted-foreground">{visit.job?.services?.[0]?.serviceName ?? "Snow Service"}</td>
                       <td className="px-2 py-2 text-muted-foreground">
                         {describeAmount(visit, groupSize, tiersByJobId)}
+                        {visit.billingWarning && (
+                          <span className="mt-1 block text-[10px] text-amber-700 dark:text-amber-400">{visit.billingWarning}</span>
+                        )}
                         {(visit.job?.invoiceType === "per_event_per_inch" || visit.job?.invoiceType === "per_push_per_inch") &&
                           (visit.snowDepthInches == null || visit.snowDepthInches <= 0) && (
                             <SnowDepthInput visit={visit} onSaved={() => void refetch()} />
@@ -345,11 +361,23 @@ export function SnowInvoicing() {
                       </td>
                       <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(amountCents)}</td>
                     </tr>
+                    {(visit.stormProducts ?? []).map((p) => (
+                      <tr key={p.id} className="border-b border-slate-100 dark:border-neutral-800 text-muted-foreground">
+                        <td />
+                        <td colSpan={3} className="px-2 py-1 pl-6 text-[11px]">
+                          Materials used: {p.name} × {p.qty}
+                          {amountCents <= 0 && <span className="ml-2 text-amber-700 dark:text-amber-400">(billed once the visit is priced)</span>}
+                        </td>
+                        <td className="px-2 py-1 text-[11px]">{formatCurrency(p.unitPriceCents)} each</td>
+                        <td className="px-2 py-1 text-right text-[11px]">{amountCents > 0 ? formatCurrency(p.totalCents) : "—"}</td>
+                      </tr>
+                    ))}
+                    </Fragment>
                   ))}
                   <tr className="bg-slate-50 dark:bg-muted/40 text-[10px] font-semibold text-muted-foreground">
                     <td colSpan={5} className="px-2 py-1 text-right">{group.clientName} subtotal</td>
                     <td className="px-2 py-1 text-right">
-                      {formatCurrency(group.rows.reduce((s, r) => s + r.amountCents, 0))}
+                      {formatCurrency(group.rows.reduce((s, r) => s + r.amountCents + r.productsCents, 0))}
                     </td>
                   </tr>
                 </Fragment>

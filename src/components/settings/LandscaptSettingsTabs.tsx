@@ -126,6 +126,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { LANDSCAPT_TAB_PERMISSIONS } from "@/lib/permissions/settings-access";
 import { CommissionPlansTab } from "@/components/crm/commissions/CommissionPlansTab";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { ApplyTaxRateToClientsDialog } from "@/components/shared/ApplyTaxRateToClientsDialog";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
 
@@ -1718,6 +1719,7 @@ function AccountingTab() {
   const { mutateAsync: updateOrg } = useUpdateOrgSettings();
   const [taxDraft, setTaxDraft] = useState<string>("");
   const [taxSaving, setTaxSaving] = useState(false);
+  const [taxPrompt, setTaxPrompt] = useState<{ from: number; to: number } | null>(null);
 
   const [feeEnabledDraft, setFeeEnabledDraft] = useState(true);
   const [feePercentDraft, setFeePercentDraft] = useState<string>("");
@@ -1755,9 +1757,12 @@ function AccountingTab() {
     const val = parseFloat(taxDraft);
     if (isNaN(val) || val < 0) { toast.error("Enter a valid tax rate"); return; }
     setTaxSaving(true);
+    const previous = orgSettings?.taxRatePercent ?? null;
     try {
       await updateOrg({ taxRatePercent: val });
       toast.success("Default tax rate saved");
+      // Offer to move the clients still at the old rate (each client keeps its own).
+      if (previous != null && previous !== val) setTaxPrompt({ from: previous, to: val });
     } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to save tax rate"); }
     finally { setTaxSaving(false); }
   }
@@ -1812,8 +1817,13 @@ function AccountingTab() {
             </Button>
           </div>
           <p className="text-xs text-slate-400 dark:text-neutral-500">
-            New clients get this rate as their own tax rate when they&apos;re created (tax-exempt clients stay at 0%); their estimates, invoices and automatic invoices then use the client&apos;s rate. Changing it here doesn&apos;t change existing clients — edit a client&apos;s tax rate on their profile.
+            New clients get this rate as their own tax rate when they&apos;re created (tax-exempt clients stay at 0%); their estimates, invoices and automatic invoices then use the client&apos;s rate. When you change it, you&apos;re asked whether to also move the clients still at the old rate; otherwise edit a client&apos;s tax rate on their profile.
           </p>
+          <ApplyTaxRateToClientsDialog
+            previousPercent={taxPrompt?.from ?? null}
+            newPercent={taxPrompt?.to ?? 0}
+            onClose={() => setTaxPrompt(null)}
+          />
         </div>
       </AccordionSection>
       <AccordionSection

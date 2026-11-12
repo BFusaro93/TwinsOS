@@ -32,12 +32,13 @@ import { useAssets } from "@/lib/hooks/use-assets";
 import { useWOCostSummary } from "@/lib/hooks/use-wo-cost-summary";
 import { usePMOutcomes } from "@/lib/hooks/use-asset-metrics";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
-import { shiftYmd } from "@/lib/time/zone";
+import { shiftYmd, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
+import { isOpenWO, isOverdueWO } from "@/lib/utils/work-order-status";
 import { countPMOutcomes, summarizePMCompliance } from "@/lib/utils/pm-compliance";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useRecentActivityFeed } from "@/lib/hooks/use-audit-log";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
-import { formatCurrency, getInitials, getAvatarColor, relativeTime, toLocalISODate } from "@/lib/utils";
+import { formatCurrency, getInitials, getAvatarColor, relativeTime } from "@/lib/utils";
 
 const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   work_order: "Work Order",
@@ -73,16 +74,22 @@ function monthKey(date: Date): { key: string; label: string } {
 }
 
 export function EquiptDashboard() {
-  const today = new Date();
-  const todayIso = toLocalISODate(today);
+  // Every date bucket below is the ORG's calendar (month-to-date, overdue,
+  // monthly and weekly charts), not the viewer's or UTC's. `today` is the
+  // org's today as a local-midnight Date, for the local-component month/week
+  // arithmetic; `todayIso` is the same day as "YYYY-MM-DD".
+  const { today: orgToday, timeZone: orgTimeZone, toISODate: orgDateOf } = useOrgDates();
+  const today = todayInZoneAsLocalMidnight(orgTimeZone);
+  const todayIso = orgToday();
+  /** Org-calendar local-midnight Date of an instant, for weekLabel(). */
+  const orgDay = (instant: string) => new Date(`${orgDateOf(new Date(instant))}T00:00:00`);
 
   const { data: requisitions = [] } = useRequisitions();
   const { data: purchaseOrders = [] } = usePurchaseOrders();
   const { data: workOrders = [] } = useWorkOrders();
   const { data: assets = [] } = useAssets();
   // Same 90-day, completed ÷ came-due score as Reports > PM Compliance.
-  const { today: orgToday } = useOrgDates();
-  const pmToday = orgToday();
+  const pmToday = todayIso;
   const { data: pmOutcomes = [] } = usePMOutcomes(shiftYmd(pmToday, -90));
   const { data: woCosts = [] } = useWOCostSummary();
   const { data: products = [] } = useProducts();
@@ -126,22 +133,18 @@ export function EquiptDashboard() {
   const repairsMTD = useMemo(() => {
     const mtdStart = `${todayIso.slice(0, 7)}-01`;
     return woCosts
-      .filter((w) => w.costAt.slice(0, 10) >= mtdStart)
+      .filter((w) => orgDateOf(new Date(w.costAt)) >= mtdStart)
       .reduce((sum, w) => sum + w.partsCents + w.laborCents + w.vendorCents, 0);
-  }, [woCosts, todayIso]);
+  }, [woCosts, todayIso, orgDateOf]);
 
   // ── Maintenance KPIs ────────────────────────────────────────────────────────
   const cmmsKPIs = useMemo(() => {
-    const openWorkOrders = workOrders.filter((wo) => wo.status !== "done").length;
+    // Open = open / in progress / on hold; skipped work orders are closed.
+    const openWorkOrders = workOrders.filter(isOpenWO).length;
     const highPriority = workOrders.filter(
-      (wo) => wo.status !== "done" && (wo.priority === "high" || wo.priority === "critical")
+      (wo) => isOpenWO(wo) && (wo.priority === "high" || wo.priority === "critical")
     ).length;
-    const overdueWOs = workOrders.filter(
-      (wo) =>
-        wo.status !== "done" &&
-        wo.dueDate !== null &&
-        wo.dueDate.slice(0, 10) < todayIso
-    ).length;
+    const overdueWOs = workOrders.filter((wo) => isOverdueWO(wo, todayIso)).length;
     const pmComplianceRate = summarizePMCompliance(
       countPMOutcomes(pmOutcomes.filter((r) => r.dueOn <= pmToday))
     ).compliancePct;
@@ -172,12 +175,12 @@ export function EquiptDashboard() {
       });
 
     for (const w of woCosts) {
-      const mk = w.costAt.slice(0, 7);
+      const mk = orgDateOf(new Date(w.costAt)).slice(0, 7);
       if (mk in repairsByMonth) repairsByMonth[mk] += w.partsCents + w.laborCents + w.vendorCents;
     }
 
     return months.map(({ key, label }) => ({ month: label, parts: spendByMonth[key], repairs: repairsByMonth[key] }));
-  }, [purchaseOrders, productCategoryMap, today, woCosts]);
+  }, [purchaseOrders, productCategoryMap, today, woCosts, orgDateOf]);
 
   // ── WO Trend (last 7 calendar weeks) ────────────────────────────────────────
   const woTrend = useMemo(() => {
@@ -195,16 +198,19 @@ export function EquiptDashboard() {
     for (const w of weeks) { created[w] = 0; completed[w] = 0; }
 
     workOrders.forEach((wo) => {
-      const createdLbl = weekLabel(new Date(wo.createdAt));
+      const createdLbl = weekLabel(orgDay(wo.createdAt));
       if (createdLbl in created) created[createdLbl]++;
+      // The week it was completed — not its last edit (updatedAt moved on
+      // every later change, e.g. a cost added after closing).
       if (wo.status === "done") {
-        const doneLbl = weekLabel(new Date(wo.updatedAt));
+        const doneLbl = weekLabel(orgDay(wo.completedAt ?? wo.updatedAt));
         if (doneLbl in completed) completed[doneLbl]++;
       }
     });
 
     return weeks.map((w) => ({ week: w, created: created[w], completed: completed[w] }));
-  }, [workOrders, today]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- orgDay only closes over orgDateOf
+  }, [workOrders, today, orgDateOf]);
 
   return (
     <div className="flex flex-col gap-6">

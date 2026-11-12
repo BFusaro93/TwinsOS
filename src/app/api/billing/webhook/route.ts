@@ -7,6 +7,8 @@ import { getPlanForPriceId } from "@/lib/stripe/plans";
 import { syncSeatOverage } from "@/lib/stripe/seat-sync";
 import { reconcileAddonsWithSubscription, removePurchasedBundledAddons } from "@/lib/stripe/bundled-addon-reconcile";
 import { logger } from "@/lib/logger";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
+import { releaseOrgSmsResources } from "@/lib/twilio/provisioning";
 import { EMAIL_FROM } from "@/lib/email/send";
 
 const log = logger.child("stripe webhook");
@@ -273,11 +275,22 @@ async function applySubscriptionToOrg(
   // ended subscription grants none, and a resubscribe (new subscription with
   // just the plan price) must not inherit the old one's add-on rows. Throws
   // (→ 500 → Stripe retries) so a failed write can't leave add-ons free.
+  const hadPaidSms = await orgHasAddon(db, org.id, "sms");
   await reconcileAddonsWithSubscription(
     db,
     org.id,
     DOWNGRADE_STATUSES.has(subscription.status) ? null : subscription
   );
+
+  // Canceled, or the SMS add-on just came off the subscription (e.g. removed
+  // in the Stripe portal): stop paying Twilio for the org's own number and
+  // campaign. Never throws and is idempotent, so it can't fail or repeat-harm
+  // this event — failures are logged for support.
+  if (DOWNGRADE_STATUSES.has(subscription.status)) {
+    await releaseOrgSmsResources(db, org.id, "subscription_canceled");
+  } else if (hadPaidSms && !(await orgHasAddon(db, org.id, "sms"))) {
+    await releaseOrgSmsResources(db, org.id, "sms_addon_removed");
+  }
 
   // A downgraded/canceled subscription doesn't need its overage item
   // reconciled — the subscription itself is ending or already gone.

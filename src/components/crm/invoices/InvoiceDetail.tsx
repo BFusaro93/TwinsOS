@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   useInvoice,
   useUpsertInvoiceLineItem,
@@ -15,6 +16,7 @@ import {
   useDeleteInvoice,
   LINE_ITEM_MUTATION_KEY,
   useVoidInvoice,
+  useDuplicateVoidInvoice,
   voidBlockedMessage,
   useUnappliedPayments,
   useApplyCreditToInvoice,
@@ -62,7 +64,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn, formatCurrency } from "@/lib/utils";
 import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
-import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -721,6 +723,8 @@ export function InvoiceDetail({
   const { mutateAsync: assignNumber } = useAssignInvoiceNumber();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const { mutateAsync: voidInvoice } = useVoidInvoice();
+  const { mutateAsync: duplicateVoidInvoice } = useDuplicateVoidInvoice();
+  const router = useRouter();
   const applyCredit = useApplyCreditToInvoice();
   const { data: unappliedPayments = [] } = useUnappliedPayments(invoice?.clientId, invoice?.id);
   const unappliedCents = unappliedPayments.reduce((s, p) => s + p.unusedAmountCents, 0);
@@ -773,6 +777,8 @@ export function InvoiceDetail({
   const [deleting, setDeleting] = useState(false);
   const [confirmVoidOpen, setConfirmVoidOpen] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [confirmDuplicateOpen, setConfirmDuplicateOpen] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
 
   useEffect(() => {
@@ -1068,6 +1074,27 @@ export function InvoiceDetail({
     finally { setVoiding(false); }
   }
 
+  async function handleDuplicate() {
+    if (!invoice) return;
+    setDuplicating(true);
+    try {
+      const res = await duplicateVoidInvoice({ id: invoice.id, clientId: invoice.clientId });
+      const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+      const relinked = [
+        res.visitsRelinked > 0 ? plural(res.visitsRelinked, "visit") : null,
+        res.materialsRelinked > 0 ? plural(res.materialsRelinked, "material") : null,
+        res.milestonesRelinked > 0 ? plural(res.milestonesRelinked, "milestone") : null,
+      ].filter(Boolean);
+      toast.success(relinked.length > 0 ? `Draft created. Re-linked: ${relinked.join(", ")}.` : "Draft created.");
+      setConfirmDuplicateOpen(false);
+      router.push(`/crm/accounting/invoices/${res.invoiceId}`);
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to duplicate invoice"));
+    }
+    finally { setDuplicating(false); }
+  }
+  const canDuplicate = canModifyInvoice && invoice.status === "void" && !invoice.deletedAt;
+
   const displayAddress = invoice.serviceAddress ?? invoice.clientAddress;
 
   // Voiding an invoice that has payments applied would orphan those payment
@@ -1123,6 +1150,13 @@ export function InvoiceDetail({
             title={cardPaymentsReady ? undefined : "Connect your Stripe account in Settings > Accounting to accept card payments"}>
             <CreditCard className="mr-1 h-3.5 w-3.5 text-brand-500 dark:text-brand-400" /> Collect Payment
           </Button>
+          {canDuplicate && (
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              onClick={() => setConfirmDuplicateOpen(true)}
+              title="Void is final. Create a new draft with this invoice's lines to bill the work again.">
+              <Copy className="mr-1 h-3.5 w-3.5 text-muted-foreground" /> Duplicate as draft
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={handlePrint}>
             <Printer className="mr-1 h-3.5 w-3.5 text-muted-foreground" /> Print
@@ -1189,6 +1223,13 @@ export function InvoiceDetail({
               ? `Invoice #${invoice.invoiceNumber} will be marked void and its balance removed from the client's account.`
               : "This draft invoice will be marked void."}
             {" "}The record stays intact for your audit trail.
+            <span className="mt-2 block font-medium text-slate-800 dark:text-neutral-200">
+              Void is final — a void invoice can&apos;t be reopened or changed to another status.
+            </span>
+            <span className="mt-1 block">
+              Its visits, materials and milestones are released so they can be billed again. To re-bill this
+              work later, open the void invoice and use <span className="font-medium">Duplicate as draft</span>.
+            </span>
             {voidBlocked && (
               <span className="mt-2 block font-medium text-red-600 dark:text-red-400">{voidBlocked}</span>
             )}
@@ -1197,6 +1238,34 @@ export function InvoiceDetail({
             <Button variant="outline" size="sm" onClick={() => setConfirmVoidOpen(false)}>Cancel</Button>
             <Button variant="destructive" size="sm" onClick={handleVoid} disabled={voiding || voidBlocked !== null}>
               {voiding ? "Voiding…" : "Void Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate-as-draft confirmation */}
+      <Dialog open={confirmDuplicateOpen} onOpenChange={setConfirmDuplicateOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Duplicate as draft?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-slate-600 dark:text-neutral-400">
+            <p>
+              A new draft invoice is created for the same client with every line of
+              {invoice.invoiceNumber != null ? ` invoice #${invoice.invoiceNumber}` : " this invoice"}, dated today.
+              It gets its own number when you issue it. This void invoice stays void.
+            </p>
+            <p>
+              Visits, job materials and project milestones it billed are linked to the new draft
+              <span className="font-medium"> only if they haven&apos;t been billed on another invoice since</span>.
+              Anything already billed elsewhere stays there, and its line is copied as a plain line — delete it
+              from the draft if it isn&apos;t owed again.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setConfirmDuplicateOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleDuplicate} disabled={duplicating}>
+              {duplicating ? "Creating…" : "Create draft"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1285,7 +1354,8 @@ export function InvoiceDetail({
             )}
             <Select
               value={invoice.status}
-              disabled={readOnly}
+              // Void is final: a void invoice has no other status to move to.
+              disabled={readOnly || invoice.status === "void"}
               onValueChange={(v) => {
                 // Voiding needs to zero the balance and resync the client's total,
                 // so route it through the confirm dialog instead of a bare status write.
@@ -1299,7 +1369,7 @@ export function InvoiceDetail({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                {(invoice.status === "void" ? (["void"] as InvoiceStatus[]) : STATUSES).map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

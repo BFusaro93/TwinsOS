@@ -203,8 +203,9 @@ export function QuickBooksGuide() {
             <tr>
               <td className={CELL_LABEL}>Voiding</td>
               <td className={CELL}>
-                Voiding the invoice in Landscapt voids it in QuickBooks. A voided QuickBooks invoice can&apos;t be
-                reopened, so un-voiding in Landscapt shows a sync error instead of changing QuickBooks.
+                Voiding the invoice in Landscapt voids it in QuickBooks. Void is final in both: to bill the work
+                again, use <strong>Duplicate as draft</strong> on the void invoice, and the new invoice is sent to
+                QuickBooks as its own invoice once it is issued.
               </td>
             </tr>
           </tbody>

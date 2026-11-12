@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { advanceRegistration } from "@/lib/twilio/provisioning";
+import { requireSmsSetupAllowed } from "@/lib/twilio/sms-setup-gate";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("sms-onboarding provision");
@@ -25,6 +26,9 @@ export async function POST() {
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+  // Every step costs real money at Twilio: paid SMS add-on + a writable org only.
+  const blocked = await requireSmsSetupAllowed(profile.org_id);
+  if (blocked) return blocked;
 
   const supabase = createServiceClient();
   try {

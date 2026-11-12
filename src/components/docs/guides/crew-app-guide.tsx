@@ -204,6 +204,12 @@ export function CrewAppGuide() {
           same thing against the same underlying job — either side works from the same planned list.
         </p>
         <p>
+          <strong>Snow jobs record materials per storm.</strong> On a snow stop the planned materials
+          (salt, for example) come back as pending for every storm: record what you used on this
+          storm, and the next storm starts fresh from the same plan. Each storm&apos;s usage is billed
+          on that storm&apos;s invoice.
+        </p>
+        <p>
           <strong>Request Materials</strong> (in the native crew app and on the browser stop page,
           under a <strong>Materials requests</strong> card) is the crew asking for something instead. Pick a stocked or project material from the catalog, enter a quantity
           and an optional note, and Submit Request creates a draft requisition tied to that job for
@@ -555,7 +561,10 @@ export function CrewAppGuide() {
           <strong>Read-only accounts.</strong> When a company&apos;s subscription is canceled or its
           trial has ended, the crew app can still show the schedule, but Start Job, Stop Job, pauses,
           skips, photos, checklists, crew times and attendance are refused with a message instead of
-          appearing to save.
+          appearing to save. One exception: for the first 24 hours after the account becomes
+          read-only, <strong>End Day</strong> still works, so a crew that was on the clock at that
+          moment can close out its open shifts at the real time. Starting a new day or a new job is
+          not allowed.
         </p>
         <p>
           <strong>Once a visit&apos;s invoice is sent, its punches are locked for crew.</strong> Stop

@@ -656,62 +656,38 @@ export async function applyVisitCompletionSideEffects(
           // Appends this visit's lines to an open period draft. A closure because two paths
           // need it: the normal "an open draft already exists" case, and the race-loser case
           // below (another completion created the period's draft between our lookup and insert).
-          const appendToDraft = async (invoiceId: string) => {
-            const { count: existingItemCount } = await supabase
-              .from("crm_invoice_line_items")
-              .select("id", { count: "exact", head: true })
-              .eq("invoice_id", invoiceId);
-
-            const { data: insertedLines, error: lineErr } = await supabase
-              .from("crm_invoice_line_items")
-              .insert(toLineRows(invoiceId, existingItemCount ?? 0))
-              .select("id");
-            if (lineErr) throw lineErr;
-
-            // Atomic increment — two visits for the same client completing
-            // concurrently must not both read the same stale totals and have
-            // the second write clobber the first. The RPC also re-derives
-            // tax_cents from the invoice's line items at the invoice's
-            // tax_rate_bps, so appended taxable visits are taxed too.
-            const { error: incErr } = await supabase.rpc("increment_invoice_totals", {
+          // Returns false when that draft is no longer an open draft by the time we write —
+          // printed, sent, locked or deleted after the lookup — so the caller starts a new one.
+          const appendToDraft = async (invoiceId: string): Promise<boolean> => {
+            // One transaction (crm_append_auto_draft_lines): row-locks the invoice,
+            // re-checks it is still an unlocked draft, inserts the lines and re-totals
+            // with increment_invoice_totals (atomic increment; tax re-derived from all
+            // lines at the invoice's rate). Separate writes let lines land on an invoice
+            // the customer already had.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: insertedIds, error: appendErr } = await (supabase.rpc as any)("crm_append_auto_draft_lines", {
               p_invoice_id: invoiceId,
+              p_lines: toLineRows(invoiceId, 0),
               p_delta_cents: subtotal,
             });
-            if (incErr) {
-              // The lines are already on the draft but its header totals never
-              // moved. Remove the lines we just added so the invoice stays
-              // internally consistent (and the visit can be re-invoiced on the
-              // next attempt), then surface the failure.
-              const insertedIds = ((insertedLines ?? []) as { id: string }[]).map((l) => l.id);
-              if (insertedIds.length > 0) {
-                const { error: undoErr } = await supabase
-                  .from("crm_invoice_line_items")
-                  .delete()
-                  .in("id", insertedIds);
-                if (undoErr) {
-                  log.error("auto-invoice rollback of appended lines failed", {
-                    invoiceId,
-                    error: undoErr.message,
-                  });
-                }
-              }
-              throw incErr;
-            }
+            if (appendErr) throw appendErr;
+            if (insertedIds == null) return false;
+            const insertedLines = (insertedIds as string[]).map((id) => ({ id }));
 
             // Link job products only once the totals include their lines, so a
-            // failed increment above never leaves a material marked invoiced.
-            await linkProductLines(insertedLines as { id: string }[] | null);
+            // failed append above never leaves a material marked invoiced.
+            await linkProductLines(insertedLines);
 
             if (j.client_id) {
               await supabase.rpc("sync_client_balance", { p_client_id: j.client_id });
             }
             result.invoiced = true;
             result.invoiceId = invoiceId;
+            return true;
           };
 
-          if (existingInvoice) {
-            await appendToDraft(existingInvoice.id);
-          } else {
+          const appended = existingInvoice ? await appendToDraft(existingInvoice.id) : false;
+          if (!appended) {
             const { data: orgTermsRow } = await supabase
               .from("organizations")
               .select("default_billing_terms")
@@ -778,7 +754,9 @@ export async function applyVisitCompletionSideEffects(
                   .limit(1)
                   .maybeSingle();
                 if (!winner) throw invErr;
-                await appendToDraft((winner as { id: string }).id);
+                // The winner was issued in the meantime too: leave this visit for the next
+                // completion / a person rather than loop.
+                if (!(await appendToDraft((winner as { id: string }).id))) throw invErr;
                 lostRace = true;
               } else {
                 throw invErr;

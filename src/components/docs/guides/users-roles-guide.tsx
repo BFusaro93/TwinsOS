@@ -170,6 +170,15 @@ export function UsersRolesGuide() {
           or off per role.
         </p>
         <p>
+          <strong>Starter roles.</strong> Every new company starts with nine ready-made roles (Owner,
+          Operations Manager, Office Admin, Accounting, Sales / Account Mgr, Scheduler, Customer Support
+          Rep, Crew Leader, Fertilizer Tech) that you can edit or copy. Owner and Operations Manager have
+          every permission, including warranties, commissions and the payroll report; Office Admin also
+          gets warranties and the payroll report, and Sales / Account Mgr gets warranties and
+          &ldquo;View My Own Commissions&rdquo;. When a new permission is added to Landscapt, the starter
+          roles that should have it get it too; a box you unticked on a role stays unticked.
+        </p>
+        <p>
           To give someone CRM access, two things have to both be true:
         </p>
         <ol className="list-decimal space-y-2 pl-5">
@@ -283,11 +292,27 @@ export function UsersRolesGuide() {
           </li>
         </ul>
         <p>
-          Editing an existing job, its visits and crew time stays open to every CRM role in the
-          database, since the crew app writes those. Rescheduling, re-crewing, completing and bulk-updating
-          visits from the office, generating visits and changing a job&apos;s materials need one of the
-          scheduling permissions: Dispatch Board, Waiting List, Manage Snow Dispatch, View Jobs or Add Job. Giving an invoice its number (which happens when it is
-          printed, emailed or saved) is open to anyone who can see the invoice.
+          <strong>Changing the schedule needs a scheduling permission.</strong> Scheduling a new
+          visit, moving it to another day, changing its crew, dispatching, skipping, cancelling,
+          completing or deleting it, bulk-updating visits, generating visits and changing a
+          job&apos;s materials need one of: Dispatch Board, Waiting List, Manage Snow Dispatch or
+          Add Job (Settings → Schedules re-generating visits uses the Scheduling settings
+          permission, and a project-type job also accepts Add/Modify Projects).{" "}
+          <strong>View Jobs alone is view-only</strong> — a role with just View Jobs can open jobs
+          and their visits and add notes, but the Complete, Schedule Visit, Generate Visits and
+          per-visit dispatch, skip and delete actions are hidden, and the database refuses those
+          changes. Cancelling a job (Cancel Job) or a contract (Edit / Delete Contract) still
+          cancels that job&apos;s untouched visits. Crew app logins are not affected — the crew app
+          has its own rules.
+        </p>
+        <p>
+          <strong>A visit&apos;s price and quantity need Add/Modify Invoices.</strong> The Qty and
+          Rate on a visit are what the visit bills when it&apos;s completed, so changing them —
+          on the Dispatch Board&apos;s visit sheet or anywhere else — needs Add/Modify Invoices.
+          Without it those two fields are locked; everything else on the visit sheet still saves.
+          Notes, invoice descriptions, hours and crew size on a visit stay open to every CRM role.
+          Giving an invoice its number (which happens when it is printed, emailed or saved) is
+          open to anyone who can see the invoice.
         </p>
         <p>
           <strong>Client notes, stored card and balance are protected on write.</strong> Changing
@@ -375,7 +400,9 @@ export function UsersRolesGuide() {
             is already registered elsewhere in the system, a password-reset link is sent instead so
             they land on the same set-password screen. If the email belongs to a different type of
             account, such as a client portal login, or to a user in another organization, the invite
-            is refused with a message; use a different email. Inviting someone who is already an active
+            is refused with a message; use a different email. If that other organization is a free
+            trial the person started on their own that ended without a subscription, the message says
+            so &mdash; contact support to move their login to your team. Inviting someone who is already an active
             member of your team is refused too (&quot;already an active member&quot;) — change their role in
             the table instead. If the invitee&apos;s employee record already has a different Landscapt role,
             that role is kept and the invite says so; change it under Team → Employees.

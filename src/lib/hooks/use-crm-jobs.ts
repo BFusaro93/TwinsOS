@@ -23,6 +23,7 @@ import { stripHtml } from "@/lib/utils/strip-html";
 import type { CRMPackageService } from "@/types/crm-packages";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
+import { CREW_GROUP_SIBLING_IN_PROGRESS_MESSAGE, findVisitsWithInProgressGroupSibling } from "@/lib/visits/crew-group-guards";
 import { removeJobService } from "@/lib/visits/job-service-removal";
 import {
   isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARDED_STATUS_CHANGES,
@@ -315,7 +316,7 @@ type WaitingListRow = {
     zip: string | null;
   } | null;
   crm_job_visits?: { id: string; deleted_at: string | null; job_service_id: string | null; status: string; scheduled_date: string }[] | null;
-  crm_job_services?: { id: string }[] | null;
+  crm_job_services?: { id: string; included?: boolean | null }[] | null;
   [column: string]: unknown;
 };
 
@@ -338,8 +339,9 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
             crm_job_visits(id, deleted_at, job_service_id, status, scheduled_date, completed_at)
           `)
           .in("job_type", ["waiting_list", "package"])
-          // Cancelled and on-hold jobs are not waiting to be dispatched.
-          .not("status", "in", '("cancelled","hold")')
+          // Cancelled, on-hold and completed jobs are not waiting to be dispatched
+          // (a finished package program's leftover steps are not work to offer).
+          .not("status", "in", '("cancelled","hold","completed")')
           .is("deleted_at", null)
           .order("waiting_list_start", { ascending: true });
 
@@ -362,7 +364,15 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       // is only done waiting once every service has its visit — dropping the whole
       // job after the first dispatch stranded the other services: no visit and no
       // longer on this list. A visit with no linked service covers them all.
-      const rows = (data as WaitingListRow[]).filter((row) => {
+      // A service removed from the job (included = false) is not work to
+      // schedule: drop it before anything below counts or offers services. A
+      // job whose every service was removed has nothing left to dispatch.
+      const withIncluded = (data as WaitingListRow[]).filter((row) => {
+        const all = row.crm_job_services ?? [];
+        row.crm_job_services = all.filter((s) => s.included !== false);
+        return all.length === 0 || row.crm_job_services.length > 0;
+      });
+      const rows = withIncluded.filter((row) => {
         if (row.job_type !== "waiting_list") return true;
         // A skipped or cancelled visit never happened, so it doesn't count as
         // dispatched: a job whose only visits were skipped/cancelled goes back
@@ -475,20 +485,33 @@ export function useUpdateJobStatus() {
     }) => {
       const supabase = createClient();
 
-      // Never mark multi-visit job types as completed via a direct status update —
-      // only their individual visits complete. Keep job at scheduled.
-      let resolvedStatus = status;
       // The previous status and job type decide what happens to the visits
       // (src/lib/visits/job-status-visits.ts).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: jobRow } = await (supabase as any).from("crm_jobs").select("job_type, status").eq("id", id).single();
       const prior = jobRow as { job_type: string | null; status: string | null } | null;
+      // A job is completed only when nothing is left open on it: every visit has
+      // been completed, skipped or cancelled. Any job type may then be marked
+      // Completed. With a visit still open the change is refused and says why —
+      // it used to be silently rewritten to Scheduled for multi-visit types
+      // while the screen reported "Marked Completed".
       if (status === "completed") {
-        const multiVisitTypes = ["recurring", "waiting_list", "package", "snow", "project"];
-        if (prior?.job_type && multiVisitTypes.includes(prior.job_type)) {
-          resolvedStatus = "scheduled";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count, error: openErr } = await (supabase as any)
+          .from("crm_job_visits")
+          .select("id", { count: "exact", head: true })
+          .eq("job_id", id)
+          .is("deleted_at", null)
+          .not("status", "in", "(completed,skipped,cancelled)");
+        if (openErr) throw openErr;
+        const open = count ?? 0;
+        if (open > 0) {
+          throw new Error(
+            `This job still has ${open} open visit${open !== 1 ? "s" : ""}. Complete, skip or cancel ${open !== 1 ? "them" : "it"} first — a job can be marked Completed only when nothing is left open.`
+          );
         }
       }
+      const resolvedStatus = status;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
@@ -548,7 +571,7 @@ export function useUpdateJobStatus() {
         if (activityError) log.error("client_activity insert failed", { jobId: id, error: activityError.message });
       }
 
-      return { scheduledDate, resolvedClientId, status };
+      return { scheduledDate, resolvedClientId, status: resolvedStatus };
     },
     onSuccess: (data, vars) => {
       // Every job list, not just the dispatch board's day — invalidating only
@@ -1507,6 +1530,11 @@ export function useUpdateVisit() {
         // list edits, snow board) didn't.
         if (dateChanged && isVisitInProgress(before)) {
           throw new Error("This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first.");
+        }
+        // A multi-crew stop moves as one (every crew's visit follows the date), so
+        // it can't move while ANY crew on it is clocked in.
+        if (dateChanged && (await findVisitsWithInProgressGroupSibling(supabase, [id])).has(id)) {
+          throw new Error(CREW_GROUP_SIBLING_IN_PROGRESS_MESSAGE);
         }
         if (dateChanged && before?.job_id) {
           // Package spacing rule (crm_job_services.min_days) — every client

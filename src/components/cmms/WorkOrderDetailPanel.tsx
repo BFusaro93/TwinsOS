@@ -297,6 +297,13 @@ function DetailsTab({
     !isParentWO ||
     subWorkOrders.every((sub) => sub.status === "done" || sub.status === "skipped");
   const isSubWO = !!parentWorkOrder;
+  // Skip = "this occurrence won't be done". Offered on sub-work orders, on a
+  // single-asset PM work order (PM compliance scores it as skipped), and on a
+  // top-level recurring work order (the next occurrence is still scheduled).
+  // Not on a batch master with open sub-work orders — skip those individually.
+  const canSkip =
+    isSubWO ||
+    ((!!workOrder.pmScheduleId || workOrder.isRecurring) && (!isParentWO || allSubsDoneOrSkipped));
 
   // Sync entityStatus when the linked asset/vehicle status changes in the cache
   // (e.g. updated from this same panel or from the vehicle/asset detail panel).
@@ -402,7 +409,7 @@ function DetailsTab({
             {status === "open" && (<>
               <Button size="sm" onClick={() => onStatusChange("in_progress")}>Start Work</Button>
               <Button size="sm" variant="outline" onClick={() => onStatusChange("on_hold")}>Put On Hold</Button>
-              {isSubWO && (
+              {canSkip && (
                 <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => onStatusChange("skipped")}>
                   Skip
                 </Button>
@@ -418,7 +425,7 @@ function DetailsTab({
                 Mark Complete
               </Button>
               <Button size="sm" variant="outline" onClick={() => onStatusChange("on_hold")}>Put On Hold</Button>
-              {isSubWO && (
+              {canSkip && (
                 <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => onStatusChange("skipped")}>
                   Skip
                 </Button>
@@ -435,7 +442,7 @@ function DetailsTab({
               >
                 Mark Complete
               </Button>
-              {isSubWO && (
+              {canSkip && (
                 <Button size="sm" variant="outline" className="text-muted-foreground" onClick={() => onStatusChange("skipped")}>
                   Skip
                 </Button>

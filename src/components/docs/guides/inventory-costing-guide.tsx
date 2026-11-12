@@ -151,6 +151,18 @@ export function InventoryCostingGuide() {
           simply a frozen snapshot at the moment it was added or last edited, with no reconciliation
           against later cost changes.
         </p>
+        <p>
+          Work orders <strong>generated from a PM schedule</strong> price their parts the same way —
+          at the part&apos;s current catalog cost under your costing method on the day they are
+          generated — not at the unit cost saved on the schedule&apos;s parts template.
+        </p>
+        <p>
+          <strong>Returning parts to stock</strong> (removing a WO line, lowering its quantity, or
+          skipping or deleting the work order) adds the units back as a cost layer at that WO
+          line&apos;s own unit cost — what the work order was charged — so returned stock isn&apos;t
+          re-priced at today&apos;s cost. A manual increase of quantity on hand on the
+          part is added at the part&apos;s current unit cost.
+        </p>
       </Section>
 
       <Section id="projects" title="Project cost tracking">

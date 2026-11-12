@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -86,7 +87,9 @@ const EMPTY_FORM: SmsRegistrationBusinessInfo = {
 };
 
 export function SmsOnboardingSettings() {
-  const { data: registration, isLoading } = useSmsRegistration();
+  const { data: smsState, isLoading } = useSmsRegistration();
+  const registration = smsState?.registration ?? null;
+  const smsAddon = smsState?.smsAddon ?? false;
   const saveInfo = useSaveSmsBusinessInfo();
   const advance = useAdvanceSmsProvisioning();
   const checkStatus = useCheckSmsStatus();
@@ -107,7 +110,9 @@ export function SmsOnboardingSettings() {
   }
 
   const status = registration?.status ?? "not_started";
-  const isEditable = !LOCKED_STATUSES.includes(status);
+  // Without the paid SMS add-on nothing here can be saved or submitted (the
+  // routes refuse it too) — the form stays visible, read-only, under the upsell.
+  const isEditable = smsAddon && !LOCKED_STATUSES.includes(status);
   const failureReason = registration?.twilio_brand_failure_reason || registration?.twilio_campaign_failure_reason;
 
   async function handleSave() {
@@ -152,6 +157,31 @@ export function SmsOnboardingSettings() {
         </p>
       </div>
 
+      {!smsAddon && (
+        <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-900 dark:text-amber-200">
+          <p className="font-medium">Requires the SMS add-on</p>
+          <p className="mt-1">
+            Texting from your own number is part of the paid SMS add-on, which isn&apos;t available during the free
+            trial. An account admin can add it in{" "}
+            <Link href="/settings?tab=subscription" className="font-medium underline underline-offset-2">
+              Settings → Subscription
+            </Link>
+            , then come back here to set up your number.
+          </p>
+        </div>
+      )}
+
+      {registration?.released_at && status !== "complete" && (
+        <div className="rounded-md border border-border bg-slate-50 dark:bg-muted/40 p-4 text-sm text-slate-700 dark:text-neutral-300">
+          Your texting number was released on {new Date(registration.released_at).toLocaleDateString()}{" "}
+          {registration.released_reason === "sms_addon_removed"
+            ? "when the SMS add-on was removed"
+            : "when the subscription ended"}
+          . Your approved business registration is kept: with the SMS add-on active, Continue setup gets a new number
+          and resubmits the campaign.
+        </div>
+      )}
+
       <div className="flex items-center gap-3 rounded-md border border-border bg-slate-50 dark:bg-muted/40 p-4">
         <Badge variant={status === "complete" ? "default" : status.endsWith("rejected") ? "destructive" : "secondary"}>
           {STATUS_LABEL[status]}
@@ -166,7 +196,7 @@ export function SmsOnboardingSettings() {
               Check status
             </Button>
           )}
-          {ADVANCEABLE_STATUSES.includes(status) && (
+          {smsAddon && ADVANCEABLE_STATUSES.includes(status) && (
             <Button size="sm" onClick={handleAdvance} disabled={advance.isPending}>
               {advance.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Continue setup

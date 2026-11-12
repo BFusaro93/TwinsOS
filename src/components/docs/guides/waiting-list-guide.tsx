@@ -82,6 +82,13 @@ export function WaitingListGuide() {
             their spacing and jobs whose date window hasn&apos;t started, leaving only what can go out
             today.
           </li>
+          <li>
+            <strong>Only work that&apos;s still to do is offered.</strong> A service removed from a
+            job (unticked as included) never appears here or in Nearby, and a job whose every
+            service was removed drops off. A <strong>Completed</strong> job — for example a package
+            program that was finished — is left off too, along with cancelled and on-hold jobs, so
+            its leftover steps aren&apos;t offered for dispatch.
+          </li>
         </ul>
       </Section>
 

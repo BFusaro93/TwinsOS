@@ -235,7 +235,10 @@ export function OnlinePaymentsGuide() {
             refunding a $50 overpayment on a paid $100 invoice returns the $50 and leaves the invoice
             paid; it no longer reopens a settled invoice and pushes it back into the charge queue.
             Refund more than the unapplied amount and the remainder is taken back off the invoices
-            proportionally, as before.
+            proportionally, to the cent: the amounts taken off each invoice always add up to exactly
+            the refund, so nothing is left stranded on a payment that was split across invoices.
+            Refunds are only recorded through the payment&apos;s <strong>Refund</strong> action, which
+            refunds a card or bank payment in Stripe first.
           </li>
           <li>
             <strong>Client credit is used before the card is charged.</strong> Any deposit,

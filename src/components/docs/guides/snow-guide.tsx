@@ -135,11 +135,14 @@ export function SnowGuide() {
           again yourself.
         </p>
         <p>
-          Jobs are also excluded automatically if today isn&apos;t one of the days their contract
-          authorizes service on. A snow job whose contract has ended (cancelled, expired, inactive,
-          deleted or past its end date — unless the contract includes storms outside its dates)
-          no longer appears on this board at all. Everything not excluded is pre-checked; uncheck or check
-          individual rows before clicking <strong>Add to Dispatch</strong>.
+          Jobs are also excluded automatically if the dispatch date isn&apos;t one of the days their
+          contract authorizes service on. A snow job whose contract has ended (cancelled, expired,
+          inactive or deleted) no longer appears on this board at all, and neither does one whose
+          contract is set to <strong>Don&apos;t service</strong> storms outside its dates when the
+          dispatch date is before the contract&apos;s start date or after its end date. Contract
+          dates are always checked against the storm&apos;s dispatch date, not today. Everything not
+          excluded is pre-checked; uncheck or check individual rows before clicking{" "}
+          <strong>Add to Dispatch</strong>.
         </p>
         <Callout>
           Priority lives on the <strong>client</strong>, not the storm event — set it once on the
@@ -188,10 +191,27 @@ export function SnowGuide() {
           never adds a job that is already on the storm.
         </p>
         <p>
+          <strong>Two storms on the same day are two trips.</strong> If a job is on two storm events
+          dated the same day, the crew app shows each storm as its own stop, so finishing the first
+          trip never completes the second storm&apos;s visit.
+        </p>
+        <p>
+          <strong>Times from the crew app.</strong> Clock-in and clock-out times, breaks, hours and
+          crew size on a visit are recorded by the crew app&apos;s Start Job, Pause, Resume and Stop
+          Job buttons — a crew login can&apos;t change them any other way. To correct them, edit the
+          visit from the office (Edit Job Times on the Dispatch Board, or Close Out here).
+        </p>
+        <p>
           Skipped and cancelled stops are never closed out: they were called off rather than
           plowed, so Close Out (and Close Out Selected) leave them alone and nothing is billed for
           them. Once every visit for the event is closed out, move the storm event&apos;s status to{" "}
           <strong>Complete</strong>.
+        </p>
+        <p>
+          A <strong>Complete</strong> storm takes no new stops: <strong>Add Jobs</strong> and{" "}
+          <strong>Add push</strong> are turned off until you set the storm back to{" "}
+          <strong>Working</strong>. If a visit is added to a Complete storm any other way, the storm
+          moves back to Working on its own, so it never reads as finished with work still to do.
         </p>
       </Section>
 
@@ -319,12 +339,46 @@ export function SnowGuide() {
           contract price already paid for and stay out of the queue.
         </p>
         <p>
-          <strong>Storms outside the contract dates.</strong> A storm visit dated before the
-          contract&apos;s start date or after its end date is billed per event here by default. To
-          have those storms covered by the contract price instead, open the contract and set{" "}
-          <strong>Storms outside the contract dates</strong> (under its start and end dates) to{" "}
-          <strong>Included in the contract</strong>. The setting appears once a snow job is linked
-          to the contract, and changing it on a signed contract flags it as changed since signed.
+          <strong>Storms outside the contract dates.</strong> Each snow contract chooses what happens
+          to a storm before its start date or after its end date — open the contract and set{" "}
+          <strong>Storms outside the contract dates</strong> (under its start and end dates):
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Don&apos;t service</strong> — the contract&apos;s snow jobs aren&apos;t offered in
+            Add Jobs for those storms.
+          </li>
+          <li>
+            <strong>Included in the flat rate</strong> — they&apos;re dispatched and covered by the
+            contract price; nothing is billed for them here.
+          </li>
+          <li>
+            <strong>Bill per event</strong> (the default) — they&apos;re dispatched and billed here. A
+            Monthly Flat Rate job bills the contract&apos;s <strong>Price per storm</strong>; a job
+            with its own snow rate (Per Event, per inch, Hourly) bills that rate. If no price per
+            storm is set, the visit stays in the queue at $0 with a warning telling you to set one.
+          </li>
+        </ul>
+        <p>
+          The setting appears once a snow job is linked to the contract, and changing it (or the
+          price per storm) on a signed contract flags the contract as changed since signed.
+        </p>
+        <p>
+          <strong>Salt and materials, per storm.</strong> Materials planned on a snow job (the
+          job&apos;s Products, for example 10 bags of salt) are the plan for every storm. On each
+          storm visit the crew records what they actually used, and that storm&apos;s usage comes
+          off inventory then. Snow Invoicing lists each storm&apos;s used materials under its visit
+          and adds them as lines on that storm&apos;s invoice, priced from the planned material on
+          the job. They bill once: generating again doesn&apos;t add them a second time, and voiding
+          the invoice puts them back in the queue with their visit. A visit that can&apos;t be priced
+          yet keeps its materials until it is.
+        </p>
+        <p>
+          <strong>Two hourly jobs at one stop.</strong> When one crew&apos;s single stop includes more
+          than one Hourly snow job (say plowing and salting billed separately), each job bills its
+          share of the time on site — the same split the visit&apos;s hours get — instead of each
+          billing the whole stop. A stop with one hourly job, and separate trips or crews, bill
+          their full time as before.
         </p>
         <p>
           A per-inch visit with no recorded depth (for example one completed from the crew app,
@@ -349,10 +403,16 @@ export function SnowGuide() {
           longer treated as invoiced.
         </p>
         <p>
-          <strong>Snow invoices carry the client&apos;s terms.</strong> Each generated invoice takes
-          the client&apos;s Invoice terms (or the company default), gets a matching due date so it
-          ages and appears in past-due reminders, and copies the job&apos;s PO number and sales rep
-          when the invoice covers a single job.
+          <strong>Snow invoices carry the client&apos;s terms.</strong> Each generated invoice is
+          dated the day you generate it (your company&apos;s date, like Create Invoice), takes the
+          client&apos;s Invoice terms (or the company default), gets a matching due date so it ages
+          and appears in past-due reminders, and copies the job&apos;s PO number and sales rep when
+          the invoice covers a single job. Each line keeps its storm&apos;s service date.
+        </p>
+        <p>
+          <strong>Depth is locked once invoiced.</strong> A completed visit on a live invoice keeps
+          its recorded snow depth — void or edit the invoice first (or ask an admin to override) to
+          change it, the same as its status and date.
         </p>
         <Table>
           <thead>

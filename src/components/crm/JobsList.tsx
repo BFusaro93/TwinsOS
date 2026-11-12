@@ -64,15 +64,25 @@ function summarizeJob(job: CRMJob): JobSummary {
   const pending = sorted.filter((v) => !TERMINAL_VISIT_STATUSES.has(v.status));
   const completedCount = sorted.filter((v) => v.status === "completed").length;
   // Still something to do → show the next upcoming visit. Otherwise every
-  // visit has reached a terminal state — the job is done, so it belongs in
-  // Completed even if its very last visit was skipped/cancelled rather than
-  // literally completed (nothing pending means there's nothing left to act on).
+  // visit has reached a terminal state: Completed when at least one of them was
+  // actually done (a last visit skipped after real work is still a finished
+  // job). A job whose every visit was skipped or cancelled was never done — it
+  // is flagged Needs Attention, not counted as Completed. A cancelled or
+  // on-hold JOB always shows its own status, whatever its visits say.
   const rep = pending[0] ?? sorted[sorted.length - 1];
+  const status =
+    job.status === "cancelled" || job.status === "hold"
+      ? job.status
+      : pending.length > 0
+        ? rep.status
+        : completedCount > 0
+          ? "completed"
+          : "needs_attention";
   return {
     key: job.id,
     job,
     date: rep.scheduledDate,
-    status: pending.length > 0 ? rep.status : "completed",
+    status,
     crewName: rep.crewName ?? job.crewName ?? null,
     jobServiceId: rep.jobServiceId,
     visitCount: sorted.length,
@@ -96,6 +106,7 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
   skipped:     "bg-muted text-muted-foreground",
   hold:        "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
+  needs_attention: "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -105,6 +116,7 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled:   "Cancelled",
   skipped:     "Skipped",
   hold:        "On Hold",
+  needs_attention: "Needs Attention",
 };
 
 const JOB_TYPE_LABEL: Record<string, string> = {

@@ -11,6 +11,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 import { contractCoversServiceDay } from "@/lib/contract-billing";
+import { hourlyStopShares, productLineTotalCents, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -50,8 +51,10 @@ export interface SnowContractRow {
   deleted_at: string | null;
   start_date: string | null;
   end_date: string | null;
-  /** Storms before start_date / after end_date: 'bill_per_event' (default) or 'included'. */
+  /** Storms before start_date / after end_date: 'dont_service', 'included' or 'bill_per_event' (default). */
   snow_outside_dates: string | null;
+  /** bill_per_event: a Monthly Flat Rate job's price per storm outside the dates. */
+  snow_outside_event_price_cents?: number | null;
   // What the contract has billed — a cancelled/expired/paused contract still
   // covers storms inside a cycle it already invoiced (contractCoversServiceDay).
   last_billed_date?: string | null;
@@ -88,13 +91,29 @@ export function isSnowContractEnded(c: SnowContractRow | undefined, day: string 
   return !contractCoversServiceDay(c, day, { outsideDatesIncluded: stormsOutsideDatesIncluded(c) });
 }
 
-/** Dispatch: the contract's job is no longer served — dead, or past its end
- *  date unless storms outside the dates are included. A contract that hasn't
- *  started yet still gets its storms dispatched (they bill per event). */
+/** Dispatch: the contract's job is not served on `day` (the STORM's dispatch
+ *  date, not today) — the contract is dead, or the day is before its start
+ *  date or after its end date and the contract is set to "Don't service"
+ *  storms outside its dates. "Included" and "Bill per event" storms are
+ *  dispatched (covered by the price, or billed in Snow Invoicing). */
 export function isSnowContractClosedForDispatch(c: SnowContractRow | undefined, day: string): boolean {
   if (isSnowContractDead(c)) return true;
   const contract = c as SnowContractRow;
-  return !stormsOutsideDatesIncluded(contract) && contract.end_date != null && contract.end_date < day;
+  if (contract.snow_outside_dates !== "dont_service") return false;
+  return (contract.start_date != null && day < contract.start_date)
+    || (contract.end_date != null && day > contract.end_date);
+}
+
+/** Snow Invoicing, Monthly Flat Rate job on a storm its contract doesn't
+ *  cover: the contract's price per storm, or why there is none. */
+function flatRateOutsidePricing(c: SnowContractRow | undefined): { priceCents: number | null; warning: string | null } {
+  if (!c) return { priceCents: null, warning: "Monthly Flat Rate job without a contract — nothing to bill it at." };
+  const price = c.snow_outside_event_price_cents ?? null;
+  if (c.snow_outside_dates === "bill_per_event" && price != null && price > 0) return { priceCents: price, warning: null };
+  if (c.snow_outside_dates === "dont_service") {
+    return { priceCents: null, warning: "The contract is set to not service storms outside its dates — set a price per storm on the contract to bill this one." };
+  }
+  return { priceCents: null, warning: "No price per storm is set on the contract for storms outside its dates — set one on the contract to bill this storm." };
 }
 
 export async function loadContractsById(
@@ -107,7 +126,7 @@ export async function loadContractsById(
     const rows = await fetchAllRows<SnowContractRow>(() =>
       supabase
         .from("crm_contracts")
-        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at")
+        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates, snow_outside_event_price_cents, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at")
         .in("id", ids)
         .order("id", { ascending: true })
     );
@@ -120,7 +139,7 @@ export async function loadContractsById(
 
 /** A queued visit, flagged when its job already has an unlinked invoice line
  *  for the same date (`null` = that invoice has no number yet). */
-export type UninvoicedSnowVisit = CRMJobVisit & { possibleDuplicateInvoiceNumber?: number | null };
+export type UninvoicedSnowVisit = SnowBillableVisit & { possibleDuplicateInvoiceNumber?: number | null };
 
 export function useUninvoicedSnowVisits(filters: {
   stormEventId?: string;
@@ -177,8 +196,11 @@ export function useUninvoicedSnowVisits(filters: {
       const contractById = await loadContractsById(supabase, contractIds);
       const contractEnded = (v: CRMJobVisit): boolean =>
         isSnowContractEnded(v.job?.contractId ? contractById.get(v.job.contractId) : undefined, v.scheduledDate);
+      // A Monthly Flat Rate job bills only through its contract, so it reaches
+      // this queue only for a storm the contract doesn't cover (outside its
+      // dates, or after it ended) — priced at the contract's price per storm.
       const visits = ((data.map(mapVisit)) as CRMJobVisit[])
-        .filter((v) => v.job?.invoiceType !== "monthly_flat_rate")
+        .filter((v) => v.job?.invoiceType !== "monthly_flat_rate" || !!v.job?.contractId)
         .filter((v) => !v.job?.contractId || contractEnded(v));
 
       if (visits.length === 0) return [];
@@ -288,14 +310,134 @@ export function useUninvoicedSnowVisits(filters: {
         if (!l.service_date || !l.crm_invoices?.crm_job_id) continue;
         invoiceByJobDate.set(`${l.crm_invoices.crm_job_id}|${l.service_date}`, l.crm_invoices.invoice_number ?? null);
       }
+      const hourlyShares = await loadHourlyStopShares(supabase, queue);
+      const productsByVisit = await loadStormProducts(supabase, queue.map((v) => v.id));
+
       return queue.map((v): UninvoicedSnowVisit => {
         const key = `${v.jobId}|${v.scheduledDate}`;
-        return invoiceByJobDate.has(key)
+        const out: UninvoicedSnowVisit = invoiceByJobDate.has(key)
           ? { ...v, possibleDuplicateInvoiceNumber: invoiceByJobDate.get(key) ?? null }
-          : v;
+          : { ...v };
+        if (v.job?.invoiceType === "monthly_flat_rate") {
+          const pricing = flatRateOutsidePricing(v.job.contractId ? contractById.get(v.job.contractId) : undefined);
+          out.contractOutsidePriceCents = pricing.priceCents;
+          out.billingWarning = pricing.warning;
+        }
+        if (hourlyShares.has(v.id)) out.hourlyStopShare = hourlyShares.get(v.id) ?? null;
+        const products = productsByVisit.get(v.id);
+        if (products?.length) out.stormProducts = products;
+        return out;
       });
     },
   });
+}
+
+/** Hourly shares for the queue's hourly visits whose stop held another hourly
+ *  job — read from every visit of those stops, not just the queued ones. */
+async function loadHourlyStopShares(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  queue: CRMJobVisit[]
+): Promise<Map<string, number>> {
+  const hourly = queue.filter((v) => v.job?.invoiceType === "hourly" && v.clockedInAt);
+  if (hourly.length === 0) return new Map();
+  const clientIds = [...new Set(hourly.map((v) => v.clientId).filter(Boolean))];
+  const dates = [...new Set(hourly.map((v) => v.scheduledDate))];
+  const wantedStops = new Set(hourly.map((v) => `${v.clientId}|${v.scheduledDate}|${v.clockedInAt}`));
+  const rows: { id: string; client_id: string; scheduled_date: string; clocked_in_at: string | null; actual_hours: number | null; status: string; crm_jobs: { invoice_type: string | null } | null }[] = [];
+  for (const ids of chunkIds(clientIds)) {
+    rows.push(...await fetchAllRows<(typeof rows)[number]>(() =>
+      supabase
+        .from("crm_job_visits")
+        .select("id, client_id, scheduled_date, clocked_in_at, actual_hours, status, crm_jobs(invoice_type)")
+        .in("client_id", ids)
+        .in("scheduled_date", dates)
+        .not("clocked_in_at", "is", null)
+        .is("deleted_at", null)
+        .order("id", { ascending: true })
+    ));
+  }
+  const stopVisits = rows
+    .filter((r) => wantedStops.has(`${r.client_id}|${r.scheduled_date}|${r.clocked_in_at}`))
+    .map((r) => ({
+      id: r.id,
+      clientId: r.client_id,
+      scheduledDate: r.scheduled_date,
+      // Compared as the same string the queue's visits carry (both from PostgREST).
+      clockedInAt: r.clocked_in_at,
+      actualHours: r.actual_hours != null ? Number(r.actual_hours) : null,
+      status: r.status,
+      job: { invoiceType: r.crm_jobs?.invoice_type ?? null },
+    }));
+  return hourlyStopShares(stopVisits);
+}
+
+/** Materials the crew recorded as used on each storm visit and not yet on a
+ *  live invoice: 'used' rows, plus rows still linked to a line on a voided /
+ *  deleted invoice (the void freed the storm, so it frees its materials too). */
+async function loadStormProducts(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  visitIds: string[]
+): Promise<Map<string, SnowVisitProduct[]>> {
+  const out = new Map<string, SnowVisitProduct[]>();
+  if (visitIds.length === 0) return out;
+  type Row = {
+    id: string;
+    visit_id: string;
+    product_id: string | null;
+    product_name: string;
+    qty: number | string;
+    invoice_qty: number | string | null;
+    unit_price_cents: number | null;
+    status: string;
+    invoice_line_item_id: string | null;
+    crm_invoice_line_items: { crm_invoices: { status: string | null; deleted_at: string | null } | null } | null;
+  };
+  const rows: Row[] = [];
+  for (const ids of chunkIds(visitIds)) {
+    rows.push(...await fetchAllRows<Row>(() =>
+      supabase
+        .from("crm_job_products")
+        .select("id, visit_id, product_id, product_name, qty, invoice_qty, unit_price_cents, status, invoice_line_item_id, crm_invoice_line_items(crm_invoices(status, deleted_at))")
+        .in("visit_id", ids)
+        .not("template_job_product_id", "is", null)
+        .in("status", ["used", "invoiced"])
+        .is("deleted_at", null)
+        .order("id", { ascending: true })
+    ));
+  }
+  const billable = rows.filter((r) => {
+    if (r.invoice_line_item_id == null) return r.status === "used";
+    const inv = r.crm_invoice_line_items?.crm_invoices;
+    return !!inv && (inv.deleted_at != null || inv.status === "void");
+  });
+  const productIds = [...new Set(billable.map((r) => r.product_id).filter((id): id is string => !!id))];
+  const taxable = new Map<string, boolean>();
+  for (const ids of chunkIds(productIds)) {
+    const { data, error } = await supabase.from("product_items").select("id, is_taxable").in("id", ids);
+    if (error) throw error;
+    for (const t of (data ?? []) as { id: string; is_taxable: boolean | null }[]) taxable.set(t.id, t.is_taxable ?? false);
+  }
+  for (const r of billable) {
+    const qty = Number(r.invoice_qty ?? r.qty);
+    const unit = r.unit_price_cents ?? 0;
+    const list = out.get(r.visit_id) ?? [];
+    list.push({
+      id: r.id,
+      productId: r.product_id,
+      name: r.product_name,
+      qty,
+      unitPriceCents: unit,
+      totalCents: productLineTotalCents(unit, qty),
+      // Selling tax lives on the catalog product, as on every job → invoice path.
+      isTaxable: r.product_id ? (taxable.get(r.product_id) ?? false) : false,
+      status: r.status,
+      staleLineItemId: r.invoice_line_item_id,
+    });
+    out.set(r.visit_id, list);
+  }
+  return out;
 }
 
 // ── generate invoices ─────────────────────────────────────────────────────────
@@ -306,6 +448,8 @@ export interface SnowInvoiceVisitInput {
   description: string;
   amountCents: number;
   serviceDate: string | null;
+  /** Materials the crew used on this storm visit — billed on the same invoice, only with the visit. */
+  products?: SnowVisitProduct[];
 }
 
 interface SnowTaxContext {
@@ -392,7 +536,7 @@ function snowTaxRateBps(ctx: SnowTaxContext, jobIds: string[], clientId: string)
 }
 
 export function useGenerateSnowInvoices() {
-  // Falls back to the org's day when a group somehow has no service date.
+  // Invoices are dated the org's today (as Create Invoice does), not the storm.
   const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
@@ -405,6 +549,7 @@ export function useGenerateSnowInvoices() {
       let skippedZeroAmountGroups = 0;
       let excludedZeroAmountVisits = 0;
       let skippedRaceConditionGroups = 0;
+      let unclaimedProducts = 0;
 
       const tax = await loadSnowTaxContext(
         supabase,
@@ -460,7 +605,11 @@ export function useGenerateSnowInvoices() {
 
         const distinctJobIds = new Set(billableVisits.map((v) => v.jobId));
         const singleJobId = distinctJobIds.size === 1 ? [...distinctJobIds][0] : null;
-        const invoiceDate = billableVisits[0]?.serviceDate ?? todayInZone(orgTimeZone);
+        // The day the invoice is made, in the org's zone — same as Create
+        // Invoice (create-from-job). The storm's date is on each line instead;
+        // dating the invoice the first storm made a late-billed storm's
+        // invoice (and its due date) look weeks overdue on day one.
+        const invoiceDate = todayInZone(orgTimeZone);
         const invoiceTerms = resolveInvoiceTerms(defaultTermsByClient.get(group.clientId), orgTermsRow?.default_billing_terms);
 
         // Same tax rules as every other job → invoice path
@@ -469,10 +618,50 @@ export function useGenerateSnowInvoices() {
         // estimate's when the job came from one, else the client's default.
         // This used to hard-code tax_rate_bps 0 — snow invoices were never taxed.
         const taxRateBps = snowTaxRateBps(tax, billableVisits.map((v) => v.jobId), group.clientId);
-        const lineTaxable = billableVisits.map((v) => tax.taxableJobIds.has(v.jobId));
-        const taxableSubtotal = billableVisits.reduce((s, v, i) => s + (lineTaxable[i] ? v.amountCents : 0), 0);
+        // Each storm visit's line, followed by the materials the crew used on
+        // that storm (priced from the job's planned material, taxed by the
+        // catalog product's flag). A $0 visit's materials stay queued with it.
+        type DraftLine = {
+          name: string;
+          description: string;
+          qty: number;
+          rateCents: number;
+          totalCents: number;
+          serviceDate: string | null;
+          visitId: string | null;
+          productId: string | null;
+          isTaxable: boolean;
+          product?: SnowVisitProduct;
+        };
+        const draftLines: DraftLine[] = billableVisits.flatMap((v): DraftLine[] => [
+          {
+            name: v.description,
+            description: v.description,
+            qty: 1,
+            rateCents: v.amountCents,
+            totalCents: v.amountCents,
+            serviceDate: v.serviceDate,
+            visitId: v.visitId,
+            productId: null,
+            isTaxable: tax.taxableJobIds.has(v.jobId),
+          },
+          ...(v.products ?? []).map((p): DraftLine => ({
+            name: p.name,
+            description: p.name,
+            qty: p.qty,
+            rateCents: p.unitPriceCents,
+            totalCents: p.totalCents,
+            serviceDate: v.serviceDate,
+            visitId: null,
+            productId: p.productId,
+            isTaxable: p.isTaxable && !tax.exemptClientIds.has(group.clientId),
+            product: p,
+          })),
+        ]);
+        const linesSubtotal = draftLines.reduce((s, l) => s + l.totalCents, 0);
+        const taxableSubtotal = draftLines.reduce((s, l) => s + (l.isTaxable ? l.totalCents : 0), 0);
         const taxCents = Math.round((taxableSubtotal * taxRateBps) / 10000);
-        const totalCents = subtotal + taxCents;
+        const totalCents = linesSubtotal + taxCents;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: newInvoice, error: invErr } = await (supabase as any)
@@ -488,7 +677,7 @@ export function useGenerateSnowInvoices() {
             po_number: singleJobId ? jobMetaById.get(singleJobId)?.po_number ?? null : null,
             sales_rep_id: singleJobId ? jobMetaById.get(singleJobId)?.sales_rep_id ?? null : null,
             status: "draft",
-            subtotal_cents: subtotal,
+            subtotal_cents: linesSubtotal,
             tax_rate_bps: taxRateBps,
             tax_cents: taxCents,
             total_cents: totalCents,
@@ -500,20 +689,21 @@ export function useGenerateSnowInvoices() {
         if (invErr) throw invErr;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert(
-          billableVisits.map((v, i) => ({
+        const { data: insertedLines, error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert(
+          draftLines.map((l, i) => ({
             invoice_id: (newInvoice as { id: string }).id,
-            name: v.description,
-            description: v.description,
-            qty: 1,
-            rate_cents: v.amountCents,
-            total_cents: v.amountCents,
-            service_date: v.serviceDate,
-            visit_id: v.visitId,
-            is_taxable: lineTaxable[i],
+            name: l.name,
+            description: l.description,
+            qty: l.qty,
+            rate_cents: l.rateCents,
+            total_cents: l.totalCents,
+            service_date: l.serviceDate,
+            visit_id: l.visitId,
+            product_id: l.productId,
+            is_taxable: l.isTaxable,
             sort_order: i,
           }))
-        );
+        ).select("id");
         if (liErr) {
           // Soft delete (never hard delete): the half-built draft drops out of
           // every list and balance, and its visits stay in the queue since the
@@ -537,6 +727,39 @@ export function useGenerateSnowInvoices() {
             continue;
           }
           throw liErr;
+        }
+
+        // Claim each material for its line — conditional on it still being
+        // unbilled (or on the dead line it was freed from), so a second run
+        // can't bill it again — then mark it invoiced. 'used' -> 'invoiced' is
+        // between two used states, so stock isn't decremented again.
+        // insertedLines is positional, same order as draftLines.
+        const insertedIds = ((insertedLines ?? []) as { id: string }[]).map((r) => r.id);
+        for (let i = 0; i < draftLines.length; i++) {
+          const product = draftLines[i].product;
+          const lineId = insertedIds[i];
+          if (!product || !lineId) continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let claim = (supabase as any)
+            .from("crm_job_products")
+            .update({ invoice_line_item_id: lineId })
+            .eq("id", product.id);
+          claim = product.staleLineItemId
+            ? claim.eq("invoice_line_item_id", product.staleLineItemId)
+            : claim.is("invoice_line_item_id", null);
+          const { data: claimed, error: claimErr } = await claim.select("id");
+          if (claimErr || ((claimed ?? []) as unknown[]).length === 0) {
+            unclaimedProducts += 1;
+            continue;
+          }
+          if (product.status === "used") {
+            // Best-effort: the link above is what keeps it from billing twice.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase.rpc as any)("set_job_product_status", {
+              p_job_product_id: product.id,
+              p_new_status: "invoiced",
+            });
+          }
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -568,7 +791,7 @@ export function useGenerateSnowInvoices() {
         invoiceIds.push((newInvoice as { id: string }).id);
       }
 
-      return { invoicesCreated, invoiceIds, skippedZeroAmountGroups, excludedZeroAmountVisits, skippedRaceConditionGroups };
+      return { invoicesCreated, invoiceIds, skippedZeroAmountGroups, excludedZeroAmountVisits, skippedRaceConditionGroups, unclaimedProducts };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["snow-invoicing"] });

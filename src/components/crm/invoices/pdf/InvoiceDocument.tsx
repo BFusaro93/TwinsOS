@@ -99,8 +99,11 @@ export interface InvoicePDFStatementData {
   /** The client's total outstanding balance across every OTHER open invoice,
    *  i.e. what they owed before this invoice was added. */
   previousBalanceCents: number;
-  /** previousBalanceCents + this invoice's own outstanding balance. */
+  /** previousBalanceCents + this invoice's own outstanding balance, less
+   *  unappliedCreditCents. Negative when the client is in credit. */
   accountBalanceCents: number;
+  /** Payments/credits on the account not yet applied to any invoice. */
+  unappliedCreditCents?: number;
   lastPayment: { amountCents: number; date: string; reference: string | null } | null;
   /** Every OTHER still-open (outstanding balance) invoice for this client,
    *  newest first — not just the single most recent one. */
@@ -769,6 +772,12 @@ function StatementInvoiceLayout({
                   <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Invoice {invoiceLabel} Total</Text></View>
                   <View style={SS.miniCellValue}><Text>{cents(invoice.totalCents)}</Text></View>
                 </View>
+                {(st?.unappliedCreditCents ?? 0) > 0 && (
+                  <View style={SS.miniRow}>
+                    <View style={[SS.miniCellLabel, { color: accentColor }]}><Text>Credit on Account</Text></View>
+                    <View style={SS.miniCellValue}><Text>-{cents(st?.unappliedCreditCents ?? 0)}</Text></View>
+                  </View>
+                )}
               </>
             )}
             <View style={[SS.miniRow, { borderBottom: "none" }]}>
@@ -865,7 +874,7 @@ function StatementInvoiceLayout({
               <View style={SS.stubRow}><Text style={SS.stubLabel}>Client Name</Text><Text style={SS.stubValue}>{invoice.clientName ?? "—"}</Text></View>
               <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice #</Text><Text style={SS.stubValue}>{invoiceLabel}</Text></View>
               <View style={SS.stubRow}><Text style={SS.stubLabel}>Invoice Date</Text><Text style={SS.stubValue}>{formatDate(invoice.invoiceDate)}</Text></View>
-              <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? (st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
+              <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Due</Text><Text style={[SS.stubValue, { fontFamily: "Helvetica-Bold" }]}>{cents(showAccountBalance ? Math.max(0, st?.accountBalanceCents ?? invoice.totalCents) : invoice.balanceCents)}</Text></View>
               <View style={SS.stubRow}><Text style={SS.stubLabel}>Amount Enclosed</Text><View style={SS.stubBlankLine} /></View>
             </View>
             <View style={SS.stubRight}>

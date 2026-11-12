@@ -61,10 +61,16 @@ function mapSnowRouteStop(row: any): SnowRouteStop {
 
 // ── snow jobs (standing on-demand snow jobs per client) ─────────────────────
 
-export function useSnowJobs() {
+/**
+ * Standing snow jobs that can be dispatched. `dispatchDate` is the storm's
+ * dispatch date (Add Jobs) — a contract's dates and its "storms outside the
+ * contract dates" setting are judged against it, not against today. Without
+ * one (Master Routes) today's date is used.
+ */
+export function useSnowJobs(dispatchDate?: string) {
   const timeZone = useOrgTimeZone();
   return useQuery({
-    queryKey: ["crm-jobs", "snow", timeZone],
+    queryKey: ["crm-jobs", "snow", timeZone, dispatchDate ?? null],
     queryFn: async () => {
       const supabase = createClient();
       // Paged: PostgREST caps a response at 1000 rows.
@@ -97,10 +103,10 @@ export function useSnowJobs() {
       // generator already stops serving them (excludeInactiveParents), so a storm
       // must not send a crew (and an invoice) there either.
       // A contract-linked snow job whose contract has ended (cancelled / expired /
-      // inactive / deleted / past end_date, unless the contract includes storms
-      // outside its dates) is no longer served, so it must not be offered for
-      // dispatch. A contract that hasn't started yet still dispatches — those
-      // storms bill per event.
+      // inactive / deleted) is no longer served, and one whose contract is set to
+      // "Don't service" storms outside its dates isn't offered for a storm before
+      // its start date or after its end date. "Included" and "Bill per event"
+      // contracts are dispatched (covered by the price / billed per storm).
       // Visits that already exist or completed are untouched and still bill via
       // Snow Invoicing, which reads visits rather than this list.
       const contractIds = [...new Set(
@@ -108,10 +114,10 @@ export function useSnowJobs() {
         (data as any[]).map((r) => r.contract_id as string | null).filter((c): c is string => !!c)
       )];
       const contractById = await loadContractsById(supabase, contractIds);
-      const today = todayInZone(timeZone);
+      const day = dispatchDate || todayInZone(timeZone);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contractOk = (row: any): boolean =>
-        !row.contract_id || !isSnowContractClosedForDispatch(contractById.get(row.contract_id), today);
+        !row.contract_id || !isSnowContractClosedForDispatch(contractById.get(row.contract_id), day);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data.filter((row: any) => contractOk(row) && !["lead", "lost", "cancelled"].includes(row.clients?.status) && !row.clients?.deleted_at).map((row: any) => ({
         ...mapJob({
@@ -506,6 +512,8 @@ export function useAddJobsToStormEvent() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-job-visits", "storm-event", vars.stormEventId] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      // A visit added to a Complete storm puts it back to Working (DB trigger).
+      qc.invalidateQueries({ queryKey: ["storm-events"] });
     },
   });
 }
@@ -579,6 +587,7 @@ export function useAddStormPush() {
     onSuccess: (_d, source) => {
       qc.invalidateQueries({ queryKey: ["crm-job-visits", "storm-event", source.stormEventId] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      qc.invalidateQueries({ queryKey: ["storm-events"] });
     },
   });
 }

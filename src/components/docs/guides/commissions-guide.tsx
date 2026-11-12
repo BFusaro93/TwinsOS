@@ -153,7 +153,8 @@ export function CommissionsGuide() {
           statement keeps its original amount. The shortfall is taken back on the rep&apos;s <em>next</em>
           statement as an <strong>Adjustment</strong> line with a negative amount, at the rate the original line
           earned. It is added once per change: a further refund adds only the extra difference, and if the
-          refund is reversed or the invoice un-voided before that statement is created, nothing is deducted. If
+          refund is reversed before that statement is created, nothing is deducted (a void invoice stays void;
+          re-billing its work with Duplicate as draft creates a new invoice that earns on its own). If
           the adjustment is already on a statement and the refund is then reversed, the next statement gets a
           matching positive adjustment. An adjustment is not tied to the period you pick, and a statement can
           be created for an adjustment alone. Voiding a statement releases its adjustments along with its lines.

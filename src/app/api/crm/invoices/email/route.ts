@@ -26,6 +26,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { logger } from "@/lib/logger";
 import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { isOrgReadOnly } from "@/lib/org-writable";
 
 const log = logger.child("email-invoice");
 
@@ -116,6 +117,25 @@ export async function POST(req: NextRequest) {
   if (inv.status === "void" || inv.deleted_at) {
     return NextResponse.json({ error: "This invoice has been voided and can't be emailed" }, { status: 409 });
   }
+
+  // Read-only org (canceled, or a trial that ended): collections only. An
+  // invoice that was already issued (sent/printed, numbered) can still be
+  // emailed; a draft can't — sending it would assign a number and issue it.
+  // The org's own writes are refused by the read-only RLS policies, so this
+  // send's bookkeeping (sent status, lock, timeline entry) goes through the
+  // service client below instead of being silently dropped.
+  const orgReadOnly = await isOrgReadOnly(inv.org_id as string);
+  if (orgReadOnly && (inv.status === "draft" || inv.invoice_number == null)) {
+    return NextResponse.json(
+      {
+        error:
+          "This account is read-only, so draft invoices can't be sent. You can still email invoices that were already sent or printed, and account statements.",
+      },
+      { status: 403 }
+    );
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bookkeepingDb = (orgReadOnly ? createServiceClient() : supabase) as any;
 
   // A draft goes out as "sent" below — it must not go out numberless. The
   // manual save flow assigns the number (useAssignInvoiceNumber), but an
@@ -261,7 +281,7 @@ export async function POST(req: NextRequest) {
   // previously it only existed inside the attached PDF, so turning off
   // "Include PDF" (or a plain-text-reading client) meant the recipient had
   // no way to reach it at all.
-  const shareToken = await getOrCreateInvoiceShareToken(supabase, {
+  const shareToken = await getOrCreateInvoiceShareToken(bookkeepingDb, {
     orgId: inv.org_id as string,
     invoiceId: inv.id as string,
     createdBy: user.id,
@@ -534,7 +554,7 @@ export async function POST(req: NextRequest) {
   const lockPatch = inv.locked ? {} : { locked: true, locked_at: new Date().toISOString() };
   if (inv.status === "draft" || inv.status === "printed") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: statusErr } = await (supabase as any).from("crm_invoices").update({ status: "sent", ...lockPatch }).eq("id", invoiceId);
+    const { error: statusErr } = await bookkeepingDb.from("crm_invoices").update({ status: "sent", ...lockPatch }).eq("id", invoiceId);
     if (statusErr) {
       // The email already went out; surface the failed status flip rather than
       // silently leaving the invoice in draft/printed.
@@ -547,25 +567,25 @@ export async function POST(req: NextRequest) {
     // Re-sending an already-issued invoice: lock it too. Best-effort — the
     // email is out, and a failed lock must not turn this into an error.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: lockErr } = await (supabase as any).from("crm_invoices").update(lockPatch).eq("id", invoiceId);
+    const { error: lockErr } = await bookkeepingDb.from("crm_invoices").update(lockPatch).eq("id", invoiceId);
     if (lockErr) log.error("could not lock an invoice after emailing it", { invoiceId, error: lockErr.message });
   }
 
   // Push to QuickBooks now that the invoice has gone out — never throws, so
-  // a QuickBooks outage can't fail an invoice send.
-  if (effOrgId) {
+  // a QuickBooks outage can't fail an invoice send. A read-only org's
+  // integrations and automations are paused, so skip both there.
+  if (effOrgId && !orgReadOnly) {
     await pushInvoiceToQuickBooks(supabase, effOrgId, invoiceId);
   }
 
-  if (inv.client_id && effOrgId) {
+  if (inv.client_id && effOrgId && !orgReadOnly) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await fireSimpleTrigger(supabase as any, { orgId: effOrgId, clientId: inv.client_id, invoiceId, triggerType: "invoice_sent" });
   }
 
   // Log activity
   if (inv.client_id) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("client_activity").insert({
+    await bookkeepingDb.from("client_activity").insert({
       org_id: effOrgId,
       client_id: inv.client_id,
       activity_type: "email",

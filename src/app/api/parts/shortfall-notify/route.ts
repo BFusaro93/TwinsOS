@@ -47,11 +47,12 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: part } = await (db as any)
     .from("parts")
-    .select("quantity_on_hand")
+    .select("quantity_on_hand, is_inventory")
     .eq("id", line.part_id)
     .eq("org_id", profile.org_id)
     .maybeSingle();
-  if (!part || Number(part.quantity_on_hand) > 0) {
+  // An untracked part (not an inventory item) is never short.
+  if (!part || part.is_inventory === false || Number(part.quantity_on_hand) > 0) {
     return NextResponse.json({ success: true, skipped: "not_short" });
   }
 

@@ -1,5 +1,11 @@
 import { parentRequest, subaccountRequest, getOrgTwilioCreds, createParentSubaccount, findParentSubaccountByName } from "./client";
 import { REGISTERED_HELP_KEYWORDS, REGISTERED_OPT_IN_KEYWORDS, REGISTERED_OPT_OUT_KEYWORDS } from "@/lib/sms/keywords";
+import { SHARED_TWILIO_ORG_ID } from "@/lib/sms/send";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
+import { isBillablePlan } from "@/lib/stripe/plans";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("twilio provisioning");
 
 // Twilio's actual accepted enum strings for the customer_profile_business_
 // information EndUser type — confirmed against Twilio's "Gather the
@@ -554,4 +560,151 @@ export async function pollPendingRegistration(supabase: AnyClient, orgId: string
   if (reg.status === "profile_submitted") return pollCustomerProfile(supabase, reg);
   if (reg.status === "brand_submitted") return pollBrand(supabase, reg);
   if (reg.status === "campaign_submitted") return pollCampaign(supabase, reg);
+}
+
+/**
+ * Setting up the org's own texting number needs the PAID SMS add-on: a billable
+ * plan with the add-on purchased. A trial (which otherwise includes every
+ * add-on) and a canceled org can't start or continue it — every step costs
+ * real money at Twilio (number rental, brand and campaign fees). The platform's
+ * own orgs are exempt.
+ */
+export async function orgHasPaidSmsAddon(supabase: AnyClient, orgId: string): Promise<boolean> {
+  if (orgId === SHARED_TWILIO_ORG_ID) return true;
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("plan, is_platform_staff_org")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (!org) return false;
+  if (org.is_platform_staff_org === true) return true;
+  if (!isBillablePlan(org.plan ?? "")) return false;
+  return orgHasAddon(supabase, orgId, "sms");
+}
+
+/** Statuses at which the org holds a billable number and/or campaign at Twilio. */
+const RELEASABLE_STATUSES = new Set([
+  "number_provisioned",
+  "campaign_submitted",
+  "campaign_approved",
+  "campaign_rejected",
+  "complete",
+]);
+
+/**
+ * Stops paying Twilio for an org that canceled its subscription or removed the
+ * SMS add-on: deletes its A2P campaign, releases its phone number and points
+ * the org back at "no sender" (sendClientSms refuses an org with no messaging
+ * service, so nothing falls back to the shared number).
+ *
+ * Kept: the subaccount, the approved business profile + brand and the
+ * Messaging Service — none of them bill monthly, and keeping them means a
+ * resubscribe only has to buy a new number and resubmit the campaign
+ * ("Continue setup" from Brand approved). The number itself can't be kept:
+ * once released, it goes back to Twilio and the org gets a new one.
+ *
+ * Idempotent: a second call finds nothing to release. Each Twilio call is
+ * best-effort (404 = already gone); failures are logged and never thrown, so
+ * the billing webhook / add-on removal that calls this never fails on it.
+ */
+export async function releaseOrgSmsResources(
+  supabase: AnyClient,
+  orgId: string,
+  reason: "subscription_canceled" | "sms_addon_removed"
+): Promise<{ released: boolean }> {
+  try {
+    if (orgId === SHARED_TWILIO_ORG_ID) return { released: false };
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("is_platform_staff_org, twilio_account_sid, twilio_messaging_service_sid")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (!org || org.is_platform_staff_org === true) return { released: false };
+
+    const { data: reg } = await supabase.from("org_sms_registrations").select("*").eq("org_id", orgId).maybeSingle();
+    const registration = reg as Registration | null;
+    if (!registration) return { released: false };
+    const hasBillable =
+      !!registration.twilio_phone_number_sid || !!registration.twilio_campaign_sid || RELEASABLE_STATUSES.has(registration.status);
+    if (!hasBillable) return { released: false };
+
+    // 1. Stop sending through the org's number right away (before Twilio calls
+    //    that may fail). Only when the org points at THIS registration's sender.
+    if (org.twilio_account_sid && org.twilio_account_sid === registration.twilio_subaccount_sid) {
+      const { error } = await supabase
+        .from("organizations")
+        .update({ twilio_account_sid: null, twilio_messaging_service_sid: null })
+        .eq("id", orgId);
+      if (error) log.error("sms release: could not detach the org's sender", { orgId, error: error.message });
+    }
+
+    const failures: string[] = [];
+    const creds = registration.twilio_subaccount_sid ? await getOrgTwilioCreds(supabase, orgId).catch(() => null) : null;
+
+    // 2. Delete the campaign (monthly campaign fee).
+    if (registration.twilio_campaign_sid && registration.twilio_messaging_service_sid) {
+      if (!creds) {
+        failures.push("campaign: missing subaccount credentials");
+      } else {
+        try {
+          await subaccountRequest(
+            MESSAGING,
+            `/Services/${registration.twilio_messaging_service_sid}/Compliance/Usa2p/${registration.twilio_campaign_sid}`,
+            creds,
+            { method: "DELETE" }
+          );
+        } catch (err) {
+          if (!(err instanceof Error && err.message.includes("(404)"))) {
+            failures.push(`campaign: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
+    }
+
+    // 3. Release the number (monthly rental).
+    if (registration.twilio_phone_number_sid && registration.twilio_subaccount_sid) {
+      try {
+        await parentRequest(`/IncomingPhoneNumbers/${registration.twilio_phone_number_sid}.json`, {
+          accountSid: registration.twilio_subaccount_sid,
+          method: "DELETE",
+        });
+      } catch (err) {
+        if (!(err instanceof Error && err.message.includes("(404)"))) {
+          failures.push(`number: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    if (failures.length > 0) {
+      // Leave the SIDs in place so the next cancel/removal event (or support)
+      // can retry; the org already can't send (step 1).
+      log.error("sms release: Twilio cleanup incomplete", { orgId, reason, failures });
+      await supabase
+        .from("org_sms_registrations")
+        .update({ release_error: failures.join("; ").slice(0, 2000), last_synced_at: new Date().toISOString() })
+        .eq("org_id", orgId);
+      return { released: false };
+    }
+
+    const { error: patchErr } = await supabase
+      .from("org_sms_registrations")
+      .update({
+        status: "brand_approved",
+        twilio_phone_number_sid: null,
+        twilio_phone_number: null,
+        twilio_campaign_sid: null,
+        twilio_campaign_failure_reason: null,
+        released_at: new Date().toISOString(),
+        released_reason: reason,
+        release_error: null,
+        last_synced_at: new Date().toISOString(),
+      })
+      .eq("org_id", orgId);
+    if (patchErr) log.error("sms release: could not record the release", { orgId, error: patchErr.message });
+    log.info("sms release: released the org's texting number and campaign", { orgId, reason });
+    return { released: true };
+  } catch (err) {
+    log.error("sms release failed", { orgId, reason, error: err instanceof Error ? err.message : String(err) });
+    return { released: false };
+  }
 }

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import type { Database } from "@/types/supabase";
 import { GOOGLE_FAILURE_STATUSES, resolveGoogleMapsKey } from "@/lib/google-maps-key";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { chunk } from "@/lib/utils/chunk";
 
 /**
@@ -81,6 +82,16 @@ export async function POST(request: Request) {
   );
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Geocoding spends the org's Google Maps quota and returns stop locations, so
+  // it needs the permission of a screen that uses it — the Dispatch Board (map,
+  // weather, Nearby), the Waiting List, Snow Dispatch (map, weather), or chemical
+  // tracking (application weather) — like /api/crm/route-optimize. Any org login
+  // could call it before.
+  if (!(await hasAnySettingsPermission(supabase, [
+    "sched_dispatch_board", "sched_waiting_list", "snow_dispatch_view", "snow_dispatch_manage", "chem_add_edit_usage",
+  ]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => ({})) as { jobIds?: unknown };
   const jobIds = Array.isArray(body.jobIds) ? body.jobIds.filter((v): v is string => typeof v === "string") : [];

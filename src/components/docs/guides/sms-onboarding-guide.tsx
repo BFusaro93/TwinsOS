@@ -68,6 +68,14 @@ export function SmsOnboardingGuide() {
           few hours to a few days.
         </p>
         <p>
+          <strong>You need the SMS add-on first.</strong> Your own texting number is part of the paid
+          SMS add-on, which an account admin adds in <strong>Settings → Subscription</strong>. It
+          isn&apos;t available during the free trial, because every step of the registration has real
+          carrier and number costs. Without the add-on the page shows &ldquo;Requires the SMS
+          add-on&rdquo;, the form can&apos;t be saved and there&apos;s no Continue Setup button. The same
+          applies while the account is read-only (subscription canceled or trial ended).
+        </p>
+        <p>
           This guide exists because getting this right on the first try isn&apos;t obvious — Twins Lawn
           Service&apos;s own registration was rejected twice before it was approved, for reasons that
           weren&apos;t clear from the error messages alone. The sections below are written from exactly
@@ -241,6 +249,14 @@ export function SmsOnboardingGuide() {
           </li>
           <li>
             <strong>Phone numbers with extensions.</strong> An extension typed after a number (&ldquo;x12&rdquo;, &ldquo;ext. 7&rdquo;, &ldquo;#3&rdquo;) is ignored when texting and when matching a reply to a client.
+          </li>
+          <li>
+            <strong>Canceling or removing the SMS add-on releases your number.</strong> When the
+            subscription is canceled or the SMS add-on is removed, your texting number is released and
+            your campaign is closed, so you stop paying for them, and texts stop sending right away. Your
+            approved business profile and brand are kept: after you resubscribe and add SMS again,
+            Continue Setup gets you a new number and resubmits the campaign without starting over. The
+            old number can&apos;t be recovered once it&apos;s released.
           </li>
           <li>
             <strong>Fixing a rejected campaign.</strong> If only the campaign step is rejected, fix the fields and save: the campaign is resubmitted on the same texting number. You don&apos;t get (or pay for) a second number.

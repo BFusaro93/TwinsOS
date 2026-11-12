@@ -30,7 +30,10 @@ export interface NearbyWaitingListMatch {
  *  placeholder visit somewhere other than that day. Min Days is checked later,
  *  only for jobs that turn out to be nearby. */
 function nextDuePackageStep(job: CRMJob, targetDate: string): { service: CRMJobService; visitId: string } | null {
-  const next = [...(job.services ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)[0];
+  // Only a live program's included steps: a completed package or a removed
+  // step (included = false) is never offered.
+  if (job.status === "completed" || job.status === "cancelled") return null;
+  const next = [...(job.services ?? [])].filter((s) => s.included !== false).sort((a, b) => a.sortOrder - b.sortOrder)[0];
   if (!next) return null;
   if (next.startDate && next.startDate > targetDate) return null;
   if (next.completeByDate && next.completeByDate < targetDate) return null;
@@ -172,7 +175,7 @@ export function useNearbyWaitingListJobs(radiusMiles = 3, targetDate?: string) {
             // every service again, or none if one was already invoiced.
             pendingServices:
               (job.services ?? []).length > 1 || (job.visits ?? []).some((v) => v.jobServiceId)
-                ? job.services ?? []
+                ? (job.services ?? []).filter((s) => s.included !== false)
                 : [],
           });
         }
@@ -187,7 +190,9 @@ export function useNearbyWaitingListJobs(radiusMiles = 3, targetDate?: string) {
         const { data: stepRows } = await supabase
           .from("crm_job_services")
           .select("id, job_id, sort_order")
-          .in("job_id", packageMatches.map((m) => m.jobId));
+          .in("job_id", packageMatches.map((m) => m.jobId))
+          // Removed steps are not part of the program's numbering.
+          .eq("included", true);
         const steps = (stepRows ?? []) as { id: string; job_id: string; sort_order: number }[];
         const blocked = new Set<string>();
         await Promise.all(

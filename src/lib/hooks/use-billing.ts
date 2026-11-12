@@ -103,8 +103,8 @@ export function useCreateCheckoutSession() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan }),
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed to start checkout");
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body.error === "string" ? body.error : "Failed to start checkout");
       // { updated: true } — org already had a live subscription; its price
       // was changed in place instead of opening a new checkout session.
       return body as { clientSecret: string } | { updated: true };
@@ -113,6 +113,11 @@ export function useCreateCheckoutSession() {
       if ("updated" in result) {
         queryClient.invalidateQueries({ queryKey: ["billing-info"] });
       }
+    },
+    // The route clears the signup's pending plan on success and on a 4xx it
+    // can't recover from — refetch it so Home stops redirecting into checkout.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["org-pending-plan"] });
     },
   });
 }

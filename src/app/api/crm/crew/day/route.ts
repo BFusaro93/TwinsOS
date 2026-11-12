@@ -11,7 +11,7 @@ import { memberWorksOn } from "@/lib/crew/roster-days";
 import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
 import { startCrewDay, endCrewDay, closeMemberOpenShift, openShiftLookbackDate, isCurrentOpenShift, CARRY_OVER_SHIFT_MS } from "@/lib/crew/day-shifts";
 import { shiftYmd } from "@/lib/time/zone";
-import { assertOrgWritable } from "@/lib/org-writable";
+import { assertOrgWritable, inCrewCloseOutGrace } from "@/lib/org-writable";
 
 /**
  * The crew's paid day (shop to shop).
@@ -135,8 +135,11 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   // The service role skips the read-only-when-canceled RLS policies, so a
   // canceled / expired-trial org's crew could still clock time here.
+  // One exception: in the first 24h after the org went read-only, End Day may
+  // still close the crew's open shifts (service client only, no new time), so
+  // a crew on the clock when the trial/subscription ended isn't left open.
   const readOnly = await assertOrgWritable(admin, orgId);
-  if (readOnly) return readOnly;
+  if (readOnly && !(action === "end_day" && (await inCrewCloseOutGrace(admin, orgId)))) return readOnly;
 
   try {
     if (action === "start_day") {

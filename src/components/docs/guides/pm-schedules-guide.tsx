@@ -180,9 +180,28 @@ export function PMSchedulesGuide() {
             <strong>Multiple assets</strong> — one parent (master) work order plus a sub-work order
             per asset, each carrying its own asset and that asset&apos;s own parts. Parts from the
             schedule&apos;s Parts tab are shared, so they go on the master work order once (one stock
-            deduction), not on every sub-work order.
+            deduction), not on every sub-work order. The master work order completes itself when the
+            last asset&apos;s work order is done or skipped — you don&apos;t have to close it by hand
+            (if every asset was skipped, the master is marked Skipped).
           </li>
         </ul>
+        <p>
+          Parts are copied onto the work order at the part&apos;s <strong>current cost</strong> — the
+          same price the work order&apos;s Costs tab uses when you add that part by hand (your
+          organization&apos;s costing method: manual, average cost or FIFO) — not the unit cost shown
+          on the schedule&apos;s parts template, which is only a reference.
+        </p>
+        <p>
+          <strong>Who can generate:</strong> admins, managers and technicians. Crew logins can work
+          the generated work orders but don&apos;t see the Generate WOs button.
+        </p>
+        <p>
+          <strong>Skipping a PM.</strong> A single-asset PM work order can be marked{" "}
+          <strong>Skipped</strong> when that PM won&apos;t be done this cycle (on a multi-asset
+          batch, skip the individual asset&apos;s work order). It shows as <em>skipped</em> in PM
+          compliance — not as overdue or never generated — and the schedule&apos;s next due date
+          isn&apos;t affected.
+        </p>
         <p>
           A part can be listed once on the schedule&apos;s Parts tab and once per asset (the Add
           Part pickers hide parts already added). On a single-asset schedule, a part that is on both
@@ -200,7 +219,10 @@ export function PMSchedulesGuide() {
           <strong>Duplicate guard.</strong> You can&apos;t generate a new batch of work orders for a
           schedule while an earlier batch is still open (not done or skipped). Close out the
           existing work order(s) first, or the generate action is blocked with an error naming the
-          still-open WO.
+          still-open WO. A master work order whose asset work orders are all done or skipped
+          doesn&apos;t block — it is closed when you generate the next batch. The same rule applies
+          to the PM Schedule Due email: a schedule only counts as &ldquo;already has an open work
+          order&rdquo; while real work is still open.
         </Callout>
       </Section>
 

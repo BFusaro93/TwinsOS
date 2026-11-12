@@ -24,11 +24,12 @@ interface VisitRow {
   client_id: string;
   scheduled_date: string;
   push_number?: number | null;
+  storm_event_id?: string | null;
   crew_id: string | null;
   crm_jobs: { crew_id?: string | null; property_id: string | null; service_address: string | null; service_city: string | null } | null;
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id, property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, storm_event_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id, property_id, service_address, service_city)";
 
 function toStopKeyInput(row: VisitRow): StopKeyInput {
   return {
@@ -36,6 +37,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
     pushNumber: row.push_number,
+    stormEventId: row.storm_event_id,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,

@@ -76,19 +76,38 @@ export async function GET(request: Request) {
 
     // A schedule that already has an open work order is being handled.
     const scheduleIds = schedules.map((s) => s.id).filter((id) => !pausedIds.has(id));
-    const withOpenWo = new Set(
+    //
+    // A multi-asset batch's master work order only counts while one of its
+    // asset work orders is still open: a master left open after every asset
+    // was finished (they now close themselves — trg_work_orders_close_finished_pm_batch —
+    // but older ones may linger) used to silence this email for good.
+    const openWOs = await inChunks(scheduleIds, 100, async (chunk) => {
+      const { data, error } = await supabase
+        .from("work_orders")
+        .select("id, pm_schedule_id, parent_work_order_id")
+        .in("pm_schedule_id", chunk)
+        .in("status", OPEN_WO_STATUSES)
+        .is("deleted_at", null);
+      if (error) throw error;
+      return (data ?? []) as { id: string; pm_schedule_id: string; parent_work_order_id: string | null }[];
+    });
+    const topLevelIds = openWOs.filter((w) => !w.parent_work_order_id).map((w) => w.id);
+    const batchMasters = new Set(
       (
-        await inChunks(scheduleIds, 100, async (chunk) => {
+        await inChunks(topLevelIds, 100, async (chunk) => {
           const { data, error } = await supabase
             .from("work_orders")
-            .select("pm_schedule_id")
-            .in("pm_schedule_id", chunk)
-            .in("status", OPEN_WO_STATUSES)
+            .select("parent_work_order_id")
+            .in("parent_work_order_id", chunk)
             .is("deleted_at", null);
           if (error) throw error;
-          return (data ?? []) as { pm_schedule_id: string }[];
+          return (data ?? []) as { parent_work_order_id: string }[];
         })
-      ).map((w) => w.pm_schedule_id)
+      ).map((c) => c.parent_work_order_id)
+    );
+    const withOpenWo = new Set(
+      // Open sub-WOs are in openWOs themselves, so a master counts through them.
+      openWOs.filter((w) => !batchMasters.has(w.id)).map((w) => w.pm_schedule_id)
     );
 
     const byOrg = new Map<string, typeof schedules>();

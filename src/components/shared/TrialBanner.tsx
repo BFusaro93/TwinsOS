@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useTrialStatus } from "@/lib/hooks/use-trial-status";
+import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
 
 function todayKey(): string {
   return `trial-banner-dismissed-${new Date().toISOString().slice(0, 10)}`;
@@ -11,25 +12,35 @@ function todayKey(): string {
 
 /** Persistent (dismissible-per-day) trial countdown, shown above the app shell — see (crm)/layout.tsx and (dashboard)/layout.tsx. */
 export function TrialBanner() {
-  const { isTrial, isExpired, trialEndsAt, daysRemaining, isReadOnly, accessEndsAt, isLoading } = useTrialStatus();
+  const { isTrial, isExpired, trialEndsAt, daysRemaining, isReadOnly, readOnlyReason, accessEndsAt, isLoading } =
+    useTrialStatus();
+  const { data: profile } = useCurrentProfile();
+  // Only admins can open Settings → Subscription; everyone else is told who to ask.
+  const isAdmin = profile?.role === "admin";
   const [dismissed, setDismissed] = useState(true); // avoid a flash before we know today's dismiss state
 
   useEffect(() => {
     setDismissed(typeof window !== "undefined" && localStorage.getItem(todayKey()) === "1");
   }, []);
 
-  // Canceled subscription: not dismissible — every save will fail, so the
-  // reason has to stay on screen.
+  // Read-only (canceled subscription, or a trial that ended): not dismissible —
+  // every save will fail, so the reason has to stay on screen.
   if (!isLoading && isReadOnly && accessEndsAt) {
     const until = new Date(accessEndsAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const what = readOnlyReason === "trial" ? "Your free trial has ended" : "Your subscription was canceled";
+    const action = readOnlyReason === "trial" ? "Subscribe" : "Resubscribe";
     return (
       <div className="flex items-center gap-3 bg-amber-500 px-4 py-2 text-sm text-white">
         <span>
-          Your subscription was canceled — your account is read-only until {until} ({daysRemaining} day
-          {daysRemaining === 1 ? "" : "s"} left).{" "}
-          <Link href="/settings?tab=subscription" className="font-semibold underline underline-offset-2">
-            Resubscribe
-          </Link>
+          {what} — your account is read-only until {until} ({daysRemaining} day
+          {daysRemaining === 1 ? "" : "s"} left). You can still view, export and email sent invoices and statements.{" "}
+          {isAdmin ? (
+            <Link href="/settings?tab=subscription" className="font-semibold underline underline-offset-2">
+              {action}
+            </Link>
+          ) : (
+            <span className="font-semibold">Ask an account admin to {action.toLowerCase()}.</span>
+          )}
         </span>
       </div>
     );
@@ -45,9 +56,13 @@ export function TrialBanner() {
     <div className="flex items-center justify-between gap-3 bg-brand-500 px-4 py-2 text-sm text-white">
       <span>
         {daysRemaining === 0 ? "Your trial ends today." : `${daysRemaining} day${daysRemaining === 1 ? "" : "s"} left in your trial.`}{" "}
-        <Link href="/settings?tab=subscription" className="font-semibold underline underline-offset-2">
-          Subscribe now
-        </Link>
+        {isAdmin ? (
+          <Link href="/settings?tab=subscription" className="font-semibold underline underline-offset-2">
+            Subscribe now
+          </Link>
+        ) : (
+          <span className="font-semibold">Ask an account admin to subscribe.</span>
+        )}
       </span>
       <button
         type="button"

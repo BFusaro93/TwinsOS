@@ -607,8 +607,10 @@ export function ClientsGuide() {
           or voids). When a payment was recorded on another account, typically the parent&apos;s, and
           applied to this client&apos;s invoices, the child&apos;s statement shows it as a payment
           line labelled <strong>Paid by parent account</strong> with the method and invoice number,
-          for just the share applied to the child&apos;s invoices (net of any refund). The
-          child&apos;s balance on the statement therefore matches what the child actually owes.
+          for just the share still applied to the child&apos;s invoices. A refund is counted once:
+          if the parent pays a $100 invoice and $30 is refunded, the statement shows $70 paid and $30
+          owed. The child&apos;s balance on the statement therefore matches what the child actually
+          owes.
         </p>
         <p>
           <strong>Parent accounts roll up their sub-accounts.</strong> A parent account&apos;s statement

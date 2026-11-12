@@ -1,4 +1,5 @@
-import { rejectWithoutSchedulingPermission } from "@/lib/auth/scheduling-permission";
+import { SCHEDULING_KEYS, rejectWithoutSchedulingPermission } from "@/lib/auth/scheduling-permission";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
@@ -64,8 +65,13 @@ export async function POST(request: Request) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const denied = await rejectWithoutSchedulingPermission(supabase);
-  if (denied) return denied;
+  // A project-type job may also be scheduled with Add/Modify Projects (the key
+  // that lets its holder create the job); checked once the job is loaded.
+  const canSchedule = await hasAnySettingsPermission(supabase, SCHEDULING_KEYS);
+  if (!canSchedule) {
+    const denied = await rejectWithoutSchedulingPermission(supabase, ["sched_add_modify_projects"]);
+    if (denied) return denied;
+  }
 
   const parsed = Body.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "jobId required" }, { status: 400 });
@@ -84,6 +90,9 @@ export async function POST(request: Request) {
     .single();
   if (jobErr || !job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   const j = job as GeneratorJob;
+  if (!canSchedule && j.job_type !== "project") {
+    return NextResponse.json({ error: "You do not have permission to change the schedule" }, { status: 403 });
+  }
 
   // The job is fetched under the caller's RLS, so the session org is its org.
   const orgId = j.org_id ?? sessionOrgId;

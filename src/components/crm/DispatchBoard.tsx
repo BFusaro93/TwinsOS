@@ -157,6 +157,9 @@ const EMPTY_DAILY_OVERRIDES: { id: string; member_id: string; crew_id: string }[
 
 type ConfirmFn = ReturnType<typeof useConfirm>[0];
 
+/** The bulk-update route takes at most this many visits per request. */
+const BULK_VISIT_CHUNK = 500;
+
 /**
  * POST /api/crm/visits/bulk-update. Completed visits that are already
  * invoiced are locked against moves and status changes (409,
@@ -164,53 +167,67 @@ type ConfirmFn = ReturnType<typeof useConfirm>[0];
  * everyone else gets the reason. Resolves to the final Response, or null when
  * the admin declined the override. Throws with the server's message on any
  * other failure.
+ *
+ * A selection over the route's 500-visit limit is sent in 500-visit chunks
+ * (each one all-or-nothing on the server). If a later chunk fails, the error
+ * says how many visits the earlier chunks already updated.
  */
 async function postBulkVisitUpdate(
   body: { ids: string[]; updates: Record<string, unknown> },
   opts: { isAdmin: boolean; confirm: ConfirmFn }
 ): Promise<Response | null> {
   const flags = { invoiced: false, minDays: false };
-  const send = () =>
-    fetch("/api/crm/visits/bulk-update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...body,
-        ...(flags.invoiced ? { override_invoiced: true } : {}),
-        ...(flags.minDays ? { override_min_days: true } : {}),
-      }),
-    });
-  let res = await send();
-  // Up to one invoiced-visit override and one Min Days override.
-  for (let attempt = 0; attempt < 2 && res.status === 409; attempt++) {
-    const err = await res.clone().json().catch(() => ({})) as { error?: string; code?: string };
-    if (err.code === "invoiced_visit_locked" && !flags.invoiced) {
-      if (!opts.isAdmin) throw new Error(err.error ?? "This visit is completed and already invoiced.");
-      const ok = await opts.confirm({
-        title: "Change an invoiced visit?",
-        description: `${err.error ?? "This visit is completed and already invoiced."} As an admin you can override — the invoice itself is NOT changed, so review it afterwards.`,
-        confirmLabel: "Override",
-        destructive: true,
+  const chunks: string[][] = [];
+  for (let i = 0; i < body.ids.length; i += BULK_VISIT_CHUNK) chunks.push(body.ids.slice(i, i + BULK_VISIT_CHUNK));
+  let done = 0;
+  let res: Response | null = null;
+  for (const chunk of chunks) {
+    const send = () =>
+      fetch("/api/crm/visits/bulk-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...body,
+          ids: chunk,
+          ...(flags.invoiced ? { override_invoiced: true } : {}),
+          ...(flags.minDays ? { override_min_days: true } : {}),
+        }),
       });
-      if (!ok) return null;
-      flags.invoiced = true;
-    } else if (err.code === "package_min_days" && !flags.minDays) {
-      // Anyone who can schedule visits may override a package step's spacing.
-      const ok = await opts.confirm({
-        title: "Move ahead of Min Days?",
-        description: `${err.error ?? "This package step is closer to the previous step than its Min Days allows."} Move it anyway if the spacing doesn't apply here (for example the client asked for an early visit).`,
-        confirmLabel: "Move anyway",
-      });
-      if (!ok) return null;
-      flags.minDays = true;
-    } else {
-      break;
-    }
+    const partial = (msg: string) =>
+      done > 0 ? `${msg} (${done} of ${body.ids.length} visits were already updated.)` : msg;
     res = await send();
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: string | object };
-    throw new Error(typeof err.error === "string" ? err.error : `Update failed (HTTP ${res.status})`);
+    // Up to one invoiced-visit override and one Min Days override.
+    for (let attempt = 0; attempt < 2 && res.status === 409; attempt++) {
+      const err = await res.clone().json().catch(() => ({})) as { error?: string; code?: string };
+      if (err.code === "invoiced_visit_locked" && !flags.invoiced) {
+        if (!opts.isAdmin) throw new Error(partial(err.error ?? "This visit is completed and already invoiced."));
+        const ok = await opts.confirm({
+          title: "Change an invoiced visit?",
+          description: `${err.error ?? "This visit is completed and already invoiced."} As an admin you can override — the invoice itself is NOT changed, so review it afterwards.`,
+          confirmLabel: "Override",
+          destructive: true,
+        });
+        if (!ok) return null;
+        flags.invoiced = true;
+      } else if (err.code === "package_min_days" && !flags.minDays) {
+        // Anyone who can schedule visits may override a package step's spacing.
+        const ok = await opts.confirm({
+          title: "Move ahead of Min Days?",
+          description: `${err.error ?? "This package step is closer to the previous step than its Min Days allows."} Move it anyway if the spacing doesn't apply here (for example the client asked for an early visit).`,
+          confirmLabel: "Move anyway",
+        });
+        if (!ok) return null;
+        flags.minDays = true;
+      } else {
+        break;
+      }
+      res = await send();
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string | object };
+      throw new Error(partial(typeof err.error === "string" ? err.error : `Update failed (HTTP ${res.status})`));
+    }
+    done += chunk.length;
   }
   return res;
 }
@@ -840,6 +857,7 @@ function JobDetailSheet({
   );
   const { currentUser } = useCurrentUserStore();
   const { can, isAdmin } = usePermissions();
+  const canEditVisitPrice = can("acct_add_modify_invoices");
   const [confirm, confirmDialog] = useConfirm();
   // The visit row carries the client's name only — the email address and SMS
   // consent that the More menu needs live on the client record.
@@ -1135,7 +1153,9 @@ function JobDetailSheet({
       ...(actualHours !== seedActual ? { actual_hours: actualHours ? parseFloat(actualHours) : null } : {}),
       ...(budgetedHoursInput !== seedBudgeted ? { budgeted_hours: budgetedHoursInput ? parseFloat(budgetedHoursInput) : null } : {}),
       men_count: parsedMenCount,
-      qty: qty ? parseFloat(qty) : null,
+      // Price and quantity are what the visit bills: changing them needs the
+      // invoice key (enforced in the database too), so only send them when edited.
+      ...(qty !== String(visit.qty ?? "") ? { qty: qty ? parseFloat(qty) : null } : {}),
       ...(rateCents !== seedRate ? { rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null } : {}),
       notes_to_client: notesToClient || null,
       // The textarea shows the job's description as a fallback; saving it unchanged used to
@@ -1907,6 +1927,8 @@ function JobDetailSheet({
                   <Input
                     type="number" step="0.1" value={qty}
                     onChange={(e) => setQty(e.target.value)}
+                    disabled={!canEditVisitPrice}
+                    title={canEditVisitPrice ? undefined : "Changing a visit's quantity needs the Add/Modify Invoices permission"}
                     className="h-6 w-16 text-[11px] text-right px-1"
                     placeholder="—"
                   />
@@ -1917,6 +1939,8 @@ function JobDetailSheet({
                   <Input
                     type="number" step="0.01" value={rateCents}
                     onChange={(e) => setRateCents(e.target.value)}
+                    disabled={!canEditVisitPrice}
+                    title={canEditVisitPrice ? undefined : "Changing a visit's rate needs the Add/Modify Invoices permission"}
                     className="h-6 w-16 text-[11px] text-right px-1"
                     placeholder="—"
                   />
@@ -6104,17 +6128,14 @@ export function DispatchBoard() {
                         .map((v) => v.id);
                       if (ids.length === 0) return;
                       try {
-                        const res = await fetch("/api/crm/visits/bulk-update", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ ids, updates: { crew_id: null, crew_unassigned: true } }),
-                        });
-                        if (!res.ok) throw new Error("One or more updates failed");
+                        const res = await postBulkVisitUpdate({ ids, updates: { crew_id: null, crew_unassigned: true } }, { isAdmin, confirm });
+                        if (!res) return;
                         await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                         setSelectedIds(new Set());
                         toast.success(`Unassigned ${ids.length} visit${ids.length > 1 ? "s" : ""}`);
-                      } catch {
-                        toast.error("Failed to unassign one or more visits");
+                      } catch (err) {
+                        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+                        toast.error(err instanceof Error && err.message ? err.message : "Failed to unassign one or more visits");
                       }
                     }}
                   >
@@ -6136,19 +6157,13 @@ export function DispatchBoard() {
                           return;
                         }
                         try {
-                          const res = await fetch("/api/crm/visits/bulk-update", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ ids, updates: { crew_id: c.id } }),
-                          });
-                          if (!res.ok) {
-                            const err = await res.json().catch(() => ({})) as { error?: unknown };
-                            throw new Error(typeof err.error === "string" ? err.error : "One or more updates failed");
-                          }
+                          const res = await postBulkVisitUpdate({ ids, updates: { crew_id: c.id } }, { isAdmin, confirm });
+                          if (!res) return;
                           await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                           setSelectedIds(new Set());
                           toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);
                         } catch (err) {
+                          await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                           toast.error(err instanceof Error && err.message ? err.message : "Failed to reassign one or more visits");
                         }
                       }}

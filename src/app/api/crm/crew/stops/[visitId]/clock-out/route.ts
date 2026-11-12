@@ -16,6 +16,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, isoInZone, todayInZone } from "@/lib/time/zone";
 import { stopClockOutCap } from "@/lib/crew/visit-pause";
 import { assertOrgWritable } from "@/lib/org-writable";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
 
 const log = logger.child("crew/stops/clock-out");
 
@@ -39,6 +40,7 @@ interface VisitRow {
   client_id: string;
   scheduled_date: string;
   push_number?: number | null;
+  storm_event_id?: string | null;
   crew_id: string | null;
   job_service_id: string | null;
   status: string;
@@ -69,6 +71,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
     pushNumber: row.push_number,
+    stormEventId: row.storm_event_id,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
@@ -76,7 +79,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 }
 
 const VISIT_SELECT = `
-  id, org_id, job_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, job_service_id, status,
+  id, org_id, job_id, client_id, scheduled_date, push_number, storm_event_id, crew_id, crew_unassigned, job_service_id, status,
   men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
   crm_jobs:crew_job(crew_id, status, property_id, service_address, service_city, crm_job_services:crew_job_services(id, budgeted_hours, team_size))
 `;
@@ -126,6 +129,10 @@ export async function POST(
   // while the punch closes (service role) went through anyway.
   const readOnly = await assertOrgWritable(createServiceClient(), anchor.org_id);
   if (readOnly) return readOnly;
+  // A crew login can't write clock stamps, breaks, hours or crew size directly
+  // (a_crm_job_visits_crew_price_guard): every visit write below goes through
+  // the service role, only for visits derived from the anchor proven above.
+  const visitWriter = createVisitWriter(user.id);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidateQuery = (supabase as any)
@@ -233,7 +240,7 @@ export async function POST(
       }
       // ...and file the hours those punches represent (Job Costing showed 0 hours
       // for a stop the office completed while the crew was still punched in).
-      await recomputeStopLabor(supabase, punchVisitId).catch((err: unknown) => {
+      await recomputeStopLabor(supabase, punchVisitId, visitWriter).catch((err: unknown) => {
         log.error("recomputeStopLabor after late clock-out failed", { visitId: anchor.id, error: err instanceof Error ? err.message : String(err) });
       });
       return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedOut: true });
@@ -353,7 +360,7 @@ export async function POST(
   const transitionedRows: VisitRow[] = [];
   for (const row of openRows) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: updated, error } = await (supabase as any)
+    const { data: updated, error } = await (visitWriter as any)
       .from("crm_job_visits")
       .update({
         clocked_out_at: now,
@@ -455,7 +462,7 @@ export async function POST(
         punchAllocation = new Map(openRows.map((r, i) => [r.id, shares[i]]));
         for (const row of transitionedRows) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
+          await (visitWriter as any)
             .from("crm_job_visits")
             .update({ actual_hours: punchAllocation.get(row.id) ?? 0 })
             .eq("id", row.id);
@@ -500,7 +507,7 @@ export async function POST(
     for (const row of transitionedRows) {
       const share = totalAllocHours > 0 ? hoursFor(row.id) / totalAllocHours : 1 / openRows.length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await (visitWriter as any)
         .from("crm_job_visits")
         .update({ actual_labor_cost_cents: Math.round(totalLaborCents * share) })
         .eq("id", row.id);

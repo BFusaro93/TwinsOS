@@ -2,6 +2,7 @@ import { selectEffectiveCrewVisits, CARRY_OVER_MAX_DAYS } from "@/lib/supabase/c
 import { closeStopPunches, resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { recomputeStopLabor } from "@/lib/crew/visit-labor";
 import { createServiceClient } from "@/lib/supabase/server";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { formatInZone, instantToZoneWallClock, isoInZone, shiftYmd } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 
@@ -92,6 +93,10 @@ export async function autoStopOtherRunningStops(
     }
 
     const punchWriter = createServiceClient();
+    // A crew login can't write clocked_out_at / end_time / paused_at directly
+    // (a_crm_job_visits_crew_price_guard); the stops were found under the
+    // caller's own crew above.
+    const visitWriter = createVisitWriter(p.userId);
     for (const visits of groups.values()) {
       const ids = visits.map((v) => v.id);
       const pausedAt = visits.map((v) => v.paused_at).filter((v): v is string => !!v).sort()[0] ?? null;
@@ -100,7 +105,7 @@ export async function autoStopOtherRunningStops(
 
       const landed: string[] = [];
       for (const id of ids) {
-        const { data: updated, error: updErr } = await supabase
+        const { data: updated, error: updErr } = await visitWriter
           .from("crm_job_visits")
           .update({ clocked_out_at: endAt, end_time: `${endWall}:00`, paused_at: null, updated_at: p.at })
           .eq("id", id)
@@ -115,7 +120,7 @@ export async function autoStopOtherRunningStops(
 
       const punchVisitId = await resolvePunchOwnerVisitId(supabase, ids, ids[0]);
       await closeStopPunches(punchWriter, punchVisitId, endAt);
-      await recomputeStopLabor(supabase, punchVisitId);
+      await recomputeStopLabor(supabase, punchVisitId, visitWriter);
 
       const text = `Stopped automatically at ${formatInZone(endAt, p.timeZone, { hour: "numeric", minute: "2-digit" })} when the crew started ${p.newStopLabel} — Stop Job was never tapped here. Finish it with Stop Job in the crew app or Mark Complete.`;
       for (const id of landed) {

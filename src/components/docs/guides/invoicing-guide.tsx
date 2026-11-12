@@ -26,7 +26,7 @@ const STATUS_ROWS: [string, string, string][] = [
   ["Partial", "Linear", "A payment was recorded against the invoice, but the balance is still greater than $0."],
   ["Paid", "Linear", "amount_paid_cents has covered the full total — balance is $0."],
   ["Overdue", "Side state", "Not a stored status — computed on the fly from the due date whenever it's still displayed and unpaid. An invoice with no due date (whatever its terms) goes overdue the day after its invoice date — the same aging rule the A/R reports and the Invoice past due automation use. An invoice with a zero or negative balance is never overdue, and neither is one whose balance has been cleared. It disappears the moment the balance clears or you void the invoice, with no cron job flipping a column."],
-  ["Void", "Side state", "Set by hand when an invoice should no longer count — a mistake, a client dispute you're not pursuing. Once void, the invoice is excluded from “overdue” and left alone by all the auto-status logic below."],
+  ["Void", "Final", "Set by hand when an invoice should no longer count — a mistake, a client dispute you're not pursuing. Void is final: a void invoice can't be changed to any other status (its status menu only shows Void). It is excluded from “overdue” and left alone by all the auto-status logic below. To bill the same work again, use Duplicate as draft on it."],
 ];
 
 export function InvoicingGuide() {
@@ -193,6 +193,17 @@ export function InvoicingGuide() {
             computed on the taxable lines only.
           </li>
           <li>
+            <strong>Changing the company tax rate.</strong> Each client keeps its own tax rate, which it
+            gets from the company rate when the client is created. When you save a new company rate
+            (Settings → Organization, or Landscapt Settings → Accounting → Sales Tax), you&apos;re asked
+            whether to also move the clients that are still at the old rate &mdash; for example, clients
+            added before you first set a rate are at 0%. Choosing <strong>Apply to N clients</strong>{" "}
+            updates them all at once (tax-exempt clients are never changed, and invoices that already
+            exist keep their tax); <strong>Only new clients</strong> leaves them as they are. This needs
+            the Accounting Settings and Client Bulk Edit permissions, and each change shows in the
+            client&apos;s audit trail.
+          </li>
+          <li>
             <strong>Tax-exempt clients.</strong> A client whose <strong>Client is taxable</strong> box is unchecked is
             never taxed on invoices drafted from jobs, snow invoices or project milestone invoices, whatever
             default rate is stored or what the estimate carried. Opening and saving such an invoice keeps its
@@ -247,6 +258,13 @@ export function InvoicingGuide() {
             lines &mdash; Save is refused with &quot;Add at least one line item with a description or
             amount before saving this invoice.&quot; Every line that&apos;s kept needs a description or
             an amount; rows you added and left blank are dropped.
+          </li>
+          <li>
+            <strong>Read-only accounts can still collect.</strong> When the subscription is canceled or
+            the free trial has ended, the account is read-only, but you can still email invoices that
+            were already sent or printed, and account statements, so you can collect what you&apos;re
+            owed. Draft invoices can&apos;t be sent (sending would issue them), and estimates, chemical
+            notices, ticket emails and document test emails are blocked until you subscribe.
           </li>
           <li>
             <strong>Every line bills a service.</strong> Each line has a service dropdown, and Save is
@@ -309,6 +327,23 @@ export function InvoicingGuide() {
             that the invoice billed go back to Pending (and the stock they used is restored), so they
             can bill again on a replacement invoice instead of staying marked Invoiced against a dead
             one. The voided invoice keeps its lines for the record.
+          </li>
+          <li>
+            <strong>Void is final.</strong> Once an invoice is void it can&apos;t be reopened or moved
+            to Draft, Sent, Paid or any other status, and <strong>Mark as Sent</strong> /{" "}
+            <strong>Mark as Paid</strong> on the Invoices list skip void invoices. The void
+            confirmation says so before you commit.
+          </li>
+          <li>
+            <strong>Duplicate as draft.</strong> To bill a void invoice&apos;s work again, open it and
+            click <strong>Duplicate as draft</strong> (needs Add/Modify Invoices). It creates a new
+            draft for the same client with every line, dated today, with no number until you issue it;
+            the void invoice stays void. Visits, job materials and project milestones the void invoice
+            billed are linked to the new draft only if nothing else has billed them since; a material
+            linked again goes back to Invoiced and its stock is used again. Anything already billed on
+            another invoice stays there and its line is copied as a plain line, so delete it from the
+            draft if it isn&apos;t owed again. Merged (consolidated) invoices can&apos;t be duplicated:
+            their lines already live on the invoice they were merged into.
           </li>
           <li>
             <strong>Every issued invoice has a number.</strong> A draft that was never saved (for
@@ -400,6 +435,14 @@ export function InvoicingGuide() {
             it off unless your crews write customer-ready notes.
           </li>
         </ul>
+        <p>
+          <strong>Account balance box.</strong> On a template that shows the client&apos;s account
+          balance, the box lists Previous Balance and this invoice&apos;s total, then{" "}
+          <strong>Credit on Account</strong> when the client has payments, prepayments or credits not
+          yet applied to any invoice. <strong>Account Balance</strong> is what they owe after that
+          credit (negative when they are in credit), and the payment stub&apos;s Amount Due never
+          goes below $0.00.
+        </p>
       </Section>
 
       <Section id="invoice-photos" title="Photos on an invoice">
@@ -569,7 +612,9 @@ export function InvoicingGuide() {
           Draft → Sent → Viewed → Partial → Paid is the path a normal invoice walks. Overdue and
           Void can layer on top of (or, for Void, replace) wherever an invoice sits in that line —
           Draft, Paid, and Void invoices are never shown as Overdue no matter how old their due date
-          gets.
+          gets. Void is the end of the line: a void invoice never changes status again. When a
+          payment is removed or refunded and an invoice is left with nothing paid on it, a Printed or
+          Viewed invoice keeps that status; one that was Partial or Paid goes back to Sent.
         </p>
         <Callout>
           <strong>Only issued invoices count.</strong> An invoice is &quot;issued&quot; once it has

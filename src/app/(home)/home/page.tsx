@@ -19,7 +19,7 @@ import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { parseHomeShortcuts, getHomeShortcutIcon } from "@/lib/home-shortcuts";
 
 /**
- * Picked a paid plan at signup instead of "start free trial"? Checkout can't
+ * Picked a paid plan at signup instead of "start free trial"? (Admins only.) Checkout can't
  * run until email confirmation gives us an authenticated session, so
  * organizations.pending_plan records the choice and this is the first
  * authenticated page they land on — send them straight into checkout for it.
@@ -32,8 +32,10 @@ function usePendingPlanRedirect() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-      if (!profile) return null;
+      const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
+      // Only an admin can subscribe (checkout is admin-only); everyone else —
+      // crew included — stays on Home instead of bouncing to a page they can't use.
+      if (!profile || profile.role !== "admin" || profile.status === "inactive") return null;
       const { data: org } = await supabase
         .from("organizations")
         .select("pending_plan")

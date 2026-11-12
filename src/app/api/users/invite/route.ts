@@ -172,6 +172,20 @@ export async function POST(request: Request) {
       .eq("id", linkData.user.id)
       .maybeSingle();
     if (existingProfile && existingProfile.org_id !== callerProfile.org_id) {
+      // A login belongs to exactly one company. When the other company is a
+      // free trial that ended without subscribing and this person is its only
+      // user (e.g. they tried Landscapt on their own before their employer
+      // signed up), say so — moving a login between companies is done by
+      // support, never automatically from here.
+      if (await isAbandonedSoloTrial(adminClient, existingProfile.org_id as string, linkData.user.id)) {
+        return NextResponse.json(
+          {
+            error: `${email} is still attached to an earlier free-trial account that ended without a subscription. Contact support@landscapt.com to move this login to your team, or invite a different email address.`,
+            code: "abandoned_trial_account",
+          },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
     }
     // An existing auth user with NO profiles row is not staff of any org -
@@ -308,4 +322,30 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ success: true }, { status: 200 });
+}
+
+/**
+ * The other org is a trial that has ended, never had a subscription, and has no
+ * user besides this one — an abandoned solo trial. Fails closed (false).
+ */
+async function isAbandonedSoloTrial(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adminClient: any,
+  orgId: string,
+  userId: string
+): Promise<boolean> {
+  const { data: org, error } = await adminClient
+    .from("organizations")
+    .select("plan, trial_ends_at, stripe_subscription_id, is_platform_staff_org")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error || !org) return false;
+  const trialEnded = org.plan === "trial" && !!org.trial_ends_at && new Date(org.trial_ends_at).getTime() <= Date.now();
+  if (!trialEnded || org.stripe_subscription_id || org.is_platform_staff_org === true) return false;
+  const { count, error: countErr } = await adminClient
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .neq("id", userId);
+  return !countErr && (count ?? 0) === 0;
 }

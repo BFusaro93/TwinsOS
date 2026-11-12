@@ -29,6 +29,8 @@ async function getCurrentOrgId(supabase: ReturnType<typeof createClient>): Promi
  * block this — WO parts usage is routinely recorded before or independent
  * of a formal receiving step — but it records how much was REALLY deducted,
  * so a later edit/delete credits back only that, never the full quantity.
+ * An untracked part (not an inventory item) moves no stock at all — the RPC
+ * reports a zero request for it, so it never warns or notifies as short.
  */
 async function syncWOPartStock(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

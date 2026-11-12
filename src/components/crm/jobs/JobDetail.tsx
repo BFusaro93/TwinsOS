@@ -181,6 +181,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const { today: orgToday } = useOrgDates();
   const { data: job, isLoading, error: jobError } = useJobDetail(jobId);
   const { data: visits = [], isLoading: visitsLoading } = useJobVisits(jobId);
+  // Changing the schedule (scheduling, moving, re-crewing, skipping, completing
+  // or deleting visits) needs a scheduling key — "View Jobs" alone is view-only.
+  // Same keys the visit routes and the database check; a project-type job also
+  // accepts Add/Modify Projects.
+  const canSchedule =
+    can("sched_dispatch_board") || can("sched_waiting_list") || can("snow_dispatch_manage") || can("job_add") ||
+    (job?.jobType === "project" && can("sched_add_modify_projects"));
   const { data: linkedProject } = useProject(job?.projectId ?? "");
   const [projectSheetOpen, setProjectSheetOpen] = useState(false);
   // Powers the More menu's Send Email / Send Text — the job row carries only
@@ -342,6 +349,17 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     // its untouched upcoming visits are removed (applyJobStatusToVisits, after
     // the save). Started, completed and invoiced visits stay. Ask first.
     const effectiveJobType = (typeof edits.job_type === "string" ? edits.job_type : null) ?? job.jobType;
+    // Every other job type completes only when nothing is left open — the same
+    // rule as the Complete button.
+    if (edits.status === "completed" && job.status !== "completed" && !GENERATED_VISIT_JOB_TYPES.includes(effectiveJobType)) {
+      const open = visits.filter((v) => v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled");
+      if (open.length > 0) {
+        toast.error(
+          `This job still has ${open.length} open visit${open.length !== 1 ? "s" : ""}. Complete, skip or cancel ${open.length !== 1 ? "them" : "it"} on the Visits tab before marking the job Completed.`
+        );
+        return;
+      }
+    }
     if (edits.status === "completed" && job.status !== "completed" && GENERATED_VISIT_JOB_TYPES.includes(effectiveJobType)) {
       try {
         const target = await findJobVisitsToRemove(createClient(), { jobId: job.id, jobType: effectiveJobType, today: orgToday() });
@@ -521,8 +539,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     // Completing the job here invoices every service as performed. With visits still open
     // on the board that bills work nobody has done yet — and when the crew later works a
     // stop, its completion invoices the same service a second time.
+    // Any job type (waiting list, snow and project included) completes only when
+    // nothing is left open; useUpdateJobStatus re-checks against the database
+    // and refuses with the reason.
     if (status === "completed") {
-      const open = visits.filter((v) => v.status === "scheduled" || v.status === "dispatched" || v.status === "in_progress");
+      const open = visits.filter((v) => v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled");
       if (open.length > 0) {
         toast.error(
           `This job still has ${open.length} open visit${open.length !== 1 ? "s" : ""}. Complete, skip or cancel them on the Visits tab first — each completed visit invoices itself.`
@@ -531,8 +552,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       }
     }
     try {
-      await updateStatus.mutateAsync({ id: job.id, status, scheduledDate: job.scheduledDate ?? "" });
-      toast.success(`Marked ${STATUS_LABEL[status] ?? status}`);
+      const result = await updateStatus.mutateAsync({ id: job.id, status, scheduledDate: job.scheduledDate ?? "" });
+      toast.success(`Marked ${STATUS_LABEL[result.status] ?? result.status}`);
       // Auto-create a draft invoice when a one-time job is completed. Built on
       // the server from the job's services and products (as the service role,
       // like visit completion), so roles that may complete jobs but not write
@@ -940,7 +961,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         </div>
 
         <div className="flex items-center gap-1.5">
-          {effectiveStatus !== "completed" && job.jobType !== "recurring" && job.jobType !== "package" && (
+          {effectiveStatus !== "completed" && job.jobType !== "recurring" && job.jobType !== "package" && canSchedule && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => handleStatus("completed")}>
               <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500 dark:text-green-400" />
@@ -2052,13 +2073,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">{visits.length} visit{visits.length !== 1 ? "s" : ""}</p>
                 <div className="flex items-center gap-2">
                   {/* Manual generate button for recurring/package jobs */}
-                  {(job.jobType === "recurring" || job.jobType === "package") && job.status !== "hold" && (
+                  {(job.jobType === "recurring" || job.jobType === "package") && job.status !== "hold" && canSchedule && (
                     <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleGenerateVisits} disabled={generating}>
                       {generating ? "Generating…" : "Generate Visits"}
                     </Button>
                   )}
                   {/* Bulk-delete by day of week — useful when a schedule changes */}
-                  {visits.length > 0 && (() => {
+                  {visits.length > 0 && canSchedule && (() => {
                     const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
                     // Upcoming only — the removal skips past visits, so they mustn't be counted.
                     const today = orgToday();
@@ -2107,10 +2128,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   <Button size="sm" variant="outline" onClick={() => setAddingBulkNote(true)}>
                     Note All Visits
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setAddingVisit(true)}>
-                    <CalendarPlus className="mr-1.5 h-4 w-4" />
-                    Schedule Visit
-                  </Button>
+                  {canSchedule && (
+                    <Button size="sm" variant="outline" onClick={() => setAddingVisit(true)}>
+                      <CalendarPlus className="mr-1.5 h-4 w-4" />
+                      Schedule Visit
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -2233,6 +2256,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         isChemicalJob={isChemicalJob}
                         crews={crews}
                         jobVisits={visits}
+                        canSchedule={canSchedule}
                         onDelete={async () => {
                           // A completed visit is usually billed — deleting it
                           // would leave its invoice charging for a visit the
@@ -2480,6 +2504,7 @@ function VisitRow({
   onSaveInvoiceDesc,
   onSkip,
   onDispatch,
+  canSchedule,
 }: {
   visit: CRMJobVisit;
   services: CRMJobService[];
@@ -2495,6 +2520,8 @@ function VisitRow({
   onSaveInvoiceDesc: (desc: string) => Promise<void>;
   onSkip: (reason: string) => Promise<void>;
   onDispatch: (date: string, crewId: string | null) => Promise<void>;
+  /** The viewer holds a scheduling key: dispatch / move, skip and delete. */
+  canSchedule: boolean;
 }) {
   // completed_at is an instant; render it on the ORG's clock so the same
   // visit doesn't read as a different day to someone in another timezone.
@@ -2655,7 +2682,7 @@ function VisitRow({
         </td>
         <td className="px-4 py-3 w-28">
           <div className="flex items-center gap-1">
-            {canDispatch && (
+            {canDispatch && canSchedule && (
               <button
                 onClick={() => { setDispatching(true); setSkipping(false); setEditingNote(false); }}
                 title={isFreshDispatch ? "Dispatch to a date/crew" : "Change date/crew"}
@@ -2676,7 +2703,7 @@ function VisitRow({
                 <FlaskConical className="h-3.5 w-3.5" />
               </button>
             )}
-            {!isTerminal && (
+            {!isTerminal && canSchedule && (
               <button
                 onClick={() => { setSkipping(true); setEditingNote(false); }}
                 title="Skip visit"
@@ -2685,13 +2712,15 @@ function VisitRow({
                 <SkipForward className="h-3.5 w-3.5" />
               </button>
             )}
-            <button
-              onClick={onDelete}
-              title="Delete visit"
-              className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            {canSchedule && (
+              <button
+                onClick={onDelete}
+                title="Delete visit"
+                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </td>
       </tr>

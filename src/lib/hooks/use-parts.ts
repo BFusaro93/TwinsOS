@@ -9,16 +9,29 @@ import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import type { Part } from "@/types/cmms";
 
 /**
+ * How a manual quantity change is meant:
+ * - "count"      — a physical shelf count. Work-order usage recorded while the
+ *                  part was out of stock is already reflected on the shelf, so
+ *                  the part's open shortfall lines are marked settled (no stock
+ *                  moves) and the next receipt won't take those units again.
+ * - "correction" — found stock / data fix. Open shortfalls stay open.
+ */
+export type PartAdjustmentKind = "count" | "correction";
+
+/**
  * Sets a part's quantity_on_hand through adjust_part_quantity_manual — the
  * one audited path for non-purchasing quantity changes. The RPC rejects
  * negatives and keeps cost_layers in step (increase → new layer at the
- * part's current unit cost, decrease → FIFO consume).
+ * part's current unit cost, decrease → FIFO consume). With `expectedQty`
+ * the RPC refuses the change when stock moved since the user looked
+ * ("Stock changed since you opened this — refresh").
  */
 async function adjustPartQuantity(
   supabase: ReturnType<typeof createClient>,
   partId: string,
   newQty: number,
-  reason: string
+  reason: string,
+  opts: { kind?: PartAdjustmentKind; expectedQty?: number | null } = {}
 ): Promise<void> {
   if (!Number.isInteger(newQty) || newQty < 0) {
     throw new Error("Quantity on hand must be a whole number of 0 or more");
@@ -28,6 +41,8 @@ async function adjustPartQuantity(
     p_part_id: partId,
     p_new_qty: newQty,
     p_reason: reason,
+    p_kind: opts.kind ?? "correction",
+    p_expected_qty: opts.expectedQty ?? null,
   });
   if (error) throw error;
 }
@@ -280,7 +295,15 @@ export function useUpdatePart() {
 export function useAdjustPartQuantityManual() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; quantityOnHand: number; reason: string }) => {
+    mutationFn: async (input: {
+      id: string;
+      quantityOnHand: number;
+      reason: string;
+      /** Defaults to "correction" (no shortfall settling). */
+      kind?: PartAdjustmentKind;
+      /** The on-hand quantity the user was looking at; refuses the change if stock moved since. */
+      expectedQty?: number | null;
+    }) => {
       const supabase = createClient();
       const { data: part, error: fetchErr } = await supabase
         .from("parts")
@@ -289,7 +312,10 @@ export function useAdjustPartQuantityManual() {
         .single();
       if (fetchErr) throw fetchErr;
 
-      await adjustPartQuantity(supabase, input.id, input.quantityOnHand, input.reason);
+      await adjustPartQuantity(supabase, input.id, input.quantityOnHand, input.reason, {
+        kind: input.kind,
+        expectedQty: input.expectedQty,
+      });
 
       if (part.product_item_id) {
         const { error: mirrorErr } = await supabase
@@ -307,6 +333,12 @@ export function useAdjustPartQuantityManual() {
       queryClient.invalidateQueries({ queryKey: ["parts", id] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+      // A shelf count settles the part's work-order shortfalls.
+      queryClient.invalidateQueries({ queryKey: ["wo-part-shortfalls"] });
+    },
+    onError: () => {
+      // Most often "stock changed since you opened this": reload the real number.
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
     },
   });
 }

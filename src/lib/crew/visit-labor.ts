@@ -195,7 +195,12 @@ export async function rollupJobLabor(jobIds: string[]): Promise<void> {
  * falling back to an even split. No-ops when nothing in the stop has been
  * clocked out yet (the clock-out route will compute it then). Non-throwing.
  */
-export async function recomputeStopLabor(supabase: AnySupabase, anchorVisitId: string): Promise<void> {
+export async function recomputeStopLabor(
+  supabase: AnySupabase,
+  anchorVisitId: string,
+  /** Writes the visits' hours / labor. Crew routes pass createVisitWriter() — a crew login can't write actual_hours itself. */
+  writer: AnySupabase = supabase,
+): Promise<void> {
   try {
     const { data: anchor } = await supabase
       .from("crm_job_visits")
@@ -240,7 +245,7 @@ export async function recomputeStopLabor(supabase: AnySupabase, anchorVisitId: s
       const diff = Math.round((punchHours - shares.reduce((a, b) => a + b, 0)) * 100) / 100;
       if (diff !== 0) shares[weights.indexOf(Math.max(...weights))] += diff;
       for (let i = 0; i < closed.length; i++) {
-        await supabase.from("crm_job_visits").update({ actual_hours: shares[i] }).eq("id", closed[i].id);
+        await writer.from("crm_job_visits").update({ actual_hours: shares[i] }).eq("id", closed[i].id);
         closed[i].actual_hours = shares[i];
       }
     }
@@ -249,7 +254,7 @@ export async function recomputeStopLabor(supabase: AnySupabase, anchorVisitId: s
     const weightSum = closed.reduce((s, r) => s + Math.max(0, Number(r.actual_hours ?? 0)), 0);
     for (const r of closed) {
       const share = weightSum > 0 ? Math.max(0, Number(r.actual_hours ?? 0)) / weightSum : 1 / closed.length;
-      await supabase
+      await writer
         .from("crm_job_visits")
         .update({ actual_labor_cost_cents: Math.round(total * share) })
         .eq("id", r.id);

@@ -9,6 +9,8 @@ import { MERGE_CLIENT_COLUMNS, MERGE_PROPERTY_COLUMNS, clientMergeInput, employe
 import { resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { createServiceClient } from "@/lib/supabase/server";
+import { assertOrgWritable } from "@/lib/org-writable";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { DEFAULT_TIME_ZONE } from "@/lib/time/zone";
 import { renderChemicalNoticePdf } from "@/lib/chemical/notice-pdf";
@@ -130,6 +132,12 @@ export async function POST(
   // Fetch org
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile?.org_id;
+  // A read-only (canceled / expired-trial) org may only send collections
+  // (issued invoices, statements) — not chemical notices.
+  if (effOrgId) {
+    const notWritable = await assertOrgWritable(createServiceClient(), effOrgId);
+    if (notWritable) return notWritable;
+  }
   // Opt-outs are per address: the same email on another, opted-out client account blocks marketing here too.
   if (isMarketing && effOrgId) {
     try {

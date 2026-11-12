@@ -142,7 +142,8 @@ export function useUpdateWorkOrderStatus() {
 
       // Recurring WOs: the DB trigger trg_work_orders_spawn_next_recurrence
       // (20260930200000) creates the next occurrence when a recurring WO
-      // reaches done, on every write path (at most one successor per WO).
+      // reaches done — or skipped (20270101000330) — on every write path (at
+      // most one successor per WO).
       // Note whether a successor already existed so a reopen→re-complete
       // cycle doesn't announce one that was generated the first time.
       const findSuccessor = async () => {
@@ -154,7 +155,8 @@ export function useUpdateWorkOrderStatus() {
           .maybeSingle();
         return data;
       };
-      const priorSuccessorId = status === "done" ? (await findSuccessor())?.id ?? null : null;
+      const closing = status === "done" || status === "skipped";
+      const priorSuccessorId = closing ? (await findSuccessor())?.id ?? null : null;
 
       const { error } = await supabase.from("work_orders").update({ status }).eq("id", id);
       if (error) throw error;
@@ -165,7 +167,7 @@ export function useUpdateWorkOrderStatus() {
       // path — this hook used to do it client-side, only on done, which left
       // rules stuck forever after a skip, a rejected request or a deletion.
 
-      if (status === "done") {
+      if (closing) {
         const next = await findSuccessor();
         if (next && next.id !== priorSuccessorId) {
           return { nextWorkOrder: { id: next.id, workOrderNumber: next.work_order_number, dueDate: next.due_date } };
@@ -360,20 +362,31 @@ export function useBulkImportWorkOrders() {
         }
 
         const parsedCreatedAt = parseCsvDate(r.createdAt ?? "");
+        const parsedDueDate = parseCsvDate(r.dueDate ?? "");
+        const parsedCompletedAt = parseCsvDate(r.completedAt ?? "");
+        const status = normaliseWOStatus(r.status ?? "");
+        // A done work order's completion date comes from the import — its
+        // Completed date, else the WO's own date (created, then due) — not
+        // the moment of the import, which piled every historical completion
+        // into one day of the dashboards and repair-cost reports. Dates are
+        // stamped at 12:00 UTC so they land on the same calendar day in every
+        // US timezone (midnight UTC is the previous evening in the Americas).
+        const completedDay = status === "done" ? (parsedCompletedAt ?? parsedCreatedAt ?? parsedDueDate) : null;
         const row = {
           title: r.title.trim(),
           description: r.description?.trim() || null,
-          status: normaliseWOStatus(r.status ?? ""),
+          status,
           priority: normaliseWOPriority(r.priority ?? ""),
           wo_type: r.woType?.trim() || null,
           asset_id: assetId,
           asset_name: assetNameRaw,
           linked_entity_type: linkedEntityType,
           assigned_to_name: r.assignedToName?.trim() || null,
-          due_date: parseCsvDate(r.dueDate ?? ""),
+          due_date: parsedDueDate,
           category: r.category?.trim() || null,
           work_order_number: r.workOrderNumber?.trim() || `WO-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5)}`,
-          ...(parsedCreatedAt && { created_at: new Date(parsedCreatedAt).toISOString() }),
+          ...(parsedCreatedAt && { created_at: `${parsedCreatedAt}T12:00:00Z` }),
+          ...(completedDay && { completed_at: `${completedDay}T12:00:00Z` }),
         };
 
         const { error } = await supabase.from("work_orders").insert(row);
@@ -397,6 +410,14 @@ export function useBulkImportWorkOrders() {
             ...(row.due_date ? { due_date: row.due_date } : {}),
             ...(row.category ? { category: row.category } : {}),
           }).eq("work_order_number", row.work_order_number).eq("org_id", profile!.org_id).is("deleted_at", null);
+          // A CSV Completed date on a done WO: set it in its own update — the
+          // status change above re-stamps completed_at to now
+          // (trg_work_orders_stamp_completed_at fires on status updates only).
+          if (status === "done" && parsedCompletedAt) {
+            await supabase.from("work_orders").update({ completed_at: `${parsedCompletedAt}T12:00:00Z` })
+              .eq("work_order_number", row.work_order_number).eq("org_id", profile!.org_id)
+              .eq("status", "done").is("deleted_at", null);
+          }
         } else if (error) {
           throw error;
         }

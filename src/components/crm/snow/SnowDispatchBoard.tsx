@@ -63,7 +63,7 @@ import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
 import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
 import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
-import { computeGroupAmountCents, splitGroupAmountByVisit } from "@/lib/snow-billing";
+import { computeGroupAmountCents, hourlyStopShares, splitGroupAmountByVisit, type SnowBillableVisit } from "@/lib/snow-billing";
 import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
@@ -317,14 +317,16 @@ function AddJobsDialog({
   forecastDepthInches: number | null;
   onDone: () => void;
 }) {
-  const { data: snowJobs = [], isLoading: jobsLoading } = useSnowJobs();
+  const [date, setDate] = useState(eventDate);
+  // Judged against the storm's dispatch date: a contract's dates (and its
+  // "storms outside the contract dates" setting) decide which jobs are offered.
+  const { data: snowJobs = [], isLoading: jobsLoading } = useSnowJobs(date);
   const { data: routes = [] } = useSnowRoutes();
   const { data: crews = [] } = useCRMCrews();
   const addJobs = useAddJobsToStormEvent();
 
   const [routeId, setRouteId] = useState("");
   const { data: routeStops = [] } = useSnowRouteStops(routeId);
-  const [date, setDate] = useState(eventDate);
   const [maxTriggerInches, setMaxTriggerInches] = useState(forecastDepthInches != null ? String(forecastDepthInches) : "");
   const [minPriority, setMinPriority] = useState("");
   const [defaultCrewId, setDefaultCrewId] = useState("");
@@ -1091,6 +1093,9 @@ export function SnowDispatchBoard() {
   const { mutateAsync: addStormPush, isPending: addingPush } = useAddStormPush();
 
   const activeEvent = events.find((e) => e.id === selectedEventId) ?? events[0] ?? null;
+  // Adding a visit to a Complete storm puts it back to Working (DB trigger);
+  // the board doesn't offer it at all until someone does that on purpose.
+  const stormComplete = activeEvent?.dispatchStatus === "complete";
   const effectiveEventId = activeEvent?.id ?? "";
 
   const { data: visits = [], isLoading: visitsLoading, refetch: refetchVisits } = useStormEventVisits(effectiveEventId);
@@ -1141,8 +1146,11 @@ export function SnowDispatchBoard() {
   const { data: tiersByJobId } = useSnowRateTiersForJobs(perEventPerInchJobIds);
 
   const amountByVisitId = useMemo(() => {
-    const byGroup = new Map<string, CRMJobVisit[]>();
-    for (const v of visits) {
+    // Two hourly jobs at one crew stop each bill their share of it (as Snow Invoicing does).
+    const shares = hourlyStopShares(visits);
+    const byGroup = new Map<string, SnowBillableVisit[]>();
+    for (const visit of visits) {
+      const v: SnowBillableVisit = shares.has(visit.id) ? { ...visit, hourlyStopShare: shares.get(visit.id) } : visit;
       // Skipped and cancelled stops are called off, not plowed — nothing is billed for them, so
       // they get no amount (their row shows "—") and stay out of the totals and crew stats.
       if (v.status === "skipped" || v.status === "cancelled") continue;
@@ -1181,6 +1189,7 @@ export function SnowDispatchBoard() {
 
   /** Per Push jobs: each push is its own visit on the storm, billed on its own depth. */
   async function addPush(v: CRMJobVisit) {
+    if (stormComplete) return;
     try {
       const n = await addStormPush(v);
       toast.success(`Push ${n} added for ${v.clientName ?? "this job"}`);
@@ -1486,7 +1495,14 @@ export function SnowDispatchBoard() {
             <Printer className="h-3.5 w-3.5" />Print
           </Button>
           {canManage && (
-            <Button size="sm" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setAddJobsOpen(true)} disabled={!activeEvent}>
+            // A Complete storm takes no new stops: set it back to Working first.
+            <Button
+              size="sm"
+              className="h-9 max-lg:h-11 text-xs gap-1.5"
+              onClick={() => setAddJobsOpen(true)}
+              disabled={!activeEvent || stormComplete}
+              title={stormComplete ? "This storm is Complete — set it back to Working to add jobs" : undefined}
+            >
               <Plus className="h-3.5 w-3.5" />Add Jobs
             </Button>
           )}
@@ -1783,7 +1799,7 @@ export function SnowDispatchBoard() {
                         {(v.pushNumber ?? 1) > 1 && (
                           <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
                         )}
-                        {canManage && v.job?.invoiceType === "per_push_per_inch" && latestPushVisitIdByJob.get(v.jobId) === v.id && (
+                        {canManage && !stormComplete && v.job?.invoiceType === "per_push_per_inch" && latestPushVisitIdByJob.get(v.jobId) === v.id && (
                           <button
                             type="button"
                             title="Add another push for this job on this storm — billed on its own depth"

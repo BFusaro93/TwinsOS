@@ -13,6 +13,21 @@ const CheckoutSessionSchema = z.object({
   plan: z.string().refine(isBillablePlan, { message: "Unknown plan" }),
 });
 
+/**
+ * The signup plan picker stores the chosen plan as organizations.pending_plan,
+ * and Home sends the admin into checkout for it until it's cleared. A request
+ * the caller can't fix by retrying (unknown/unconfigured plan, already on it)
+ * clears it too — otherwise every login bounced into the same failing checkout.
+ */
+async function clearPendingPlan(orgId: string) {
+  const { error } = await createServiceClient()
+    .from("organizations")
+    .update({ pending_plan: null })
+    .eq("id", orgId)
+    .not("pending_plan", "is", null);
+  if (error) log.warn("could not clear pending_plan", { orgId, error: error.message });
+}
+
 export async function POST(request: Request) {
   if (!isStripeConfigured()) {
     return NextResponse.json({ error: "Billing is not configured yet" }, { status: 400 });
@@ -39,11 +54,13 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = CheckoutSessionSchema.safeParse(body);
   if (!parsed.success) {
+    await clearPendingPlan(profile.org_id);
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const priceId = getPriceIdForPlan(parsed.data.plan);
   if (!priceId) {
+    await clearPendingPlan(profile.org_id);
     return NextResponse.json({ error: `No Stripe price configured for plan "${parsed.data.plan}"` }, { status: 400 });
   }
 
@@ -107,6 +124,7 @@ export async function POST(request: Request) {
       const item =
         activeSub.items.data.find((i) => getPlanForPriceId(i.price.id) !== null) ?? activeSub.items.data[0];
       if (item && item.price.id === priceId) {
+        await clearPendingPlan(org.id);
         return NextResponse.json({ error: "This organization is already subscribed to this plan" }, { status: 422 });
       }
       await stripe.subscriptions.update(activeSub.id, {

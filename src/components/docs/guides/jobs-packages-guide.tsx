@@ -320,6 +320,15 @@ export function JobsPackagesGuide() {
           falls outside the window isn&apos;t listed, <em>including</em> overdue jobs whose next
           visit is already in the past. The filter means exactly what it shows.
         </p>
+        <p>
+          <strong>The Status column.</strong> A job with visits still to do shows its next
+          visit&apos;s status. A job whose visits are all finished shows <strong>Completed</strong>{" "}
+          — and lands on the Completed tab — only when at least one visit was actually completed.
+          A job whose every visit was skipped or cancelled was never done, so it shows{" "}
+          <strong>Needs Attention</strong> on the Active tab instead: reschedule it, or cancel the
+          job. A cancelled or on-hold job always shows <strong>Cancelled</strong> or{" "}
+          <strong>On Hold</strong>, whatever its visits say.
+        </p>
         <Callout>
           To see overdue work, widen <strong>From</strong> back past the oldest date you care about.
           Earlier versions let overdue jobs bypass the window, which made the default 30-day range
@@ -739,7 +748,10 @@ export function JobsPackagesGuide() {
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Complete waits for open visits.</strong> The job&apos;s <strong>Complete</strong> button refuses while the job still has scheduled, dispatched or in-progress visits, and says how many. Complete, skip or cancel them on the Visits tab first; each completed visit invoices itself, so the job isn&apos;t billed for work not done or billed twice.
+            <strong>Complete waits for open visits.</strong> A job is marked Completed only when nothing is left open on it. The job&apos;s <strong>Complete</strong> button (and setting the status to Completed in Edit Job) refuses while the job still has any visit that isn&apos;t completed, skipped or cancelled, and says how many. Complete, skip or cancel them on the Visits tab first; each completed visit invoices itself, so the job isn&apos;t billed for work not done or billed twice. Once nothing is open, any job type — one-time, waiting list, snow or project — can be marked Completed, and the confirmation tells you the status it was actually given.
+          </li>
+          <li>
+            <strong>Scheduling a job&apos;s visits needs a scheduling permission.</strong> On the Visits tab, Schedule Visit, Generate Visits, Remove day, and each visit&apos;s dispatch / change date or crew, skip and delete actions — and the job&apos;s Complete button — appear only for roles with Dispatch Board, Waiting List, Manage Snow Dispatch or Add Job (a project job also accepts Add/Modify Projects). A role with only View Jobs can read the job and add notes. See <strong>Users &amp; Roles</strong>.
           </li>
           <li>
             <strong>Where the Invoice button appears.</strong> Job Detail&apos;s <strong>Invoice</strong> button is for one-time and waiting-list jobs. Recurring and package jobs invoice visit by visit, snow jobs bill through Snow Invoicing, and project jobs bill through their milestones, so the button isn&apos;t shown on those.

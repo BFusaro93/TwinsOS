@@ -21,6 +21,9 @@ import { crewGroupVisitIds } from "@/lib/crew/crew-group-visits";
  * returned when it was resolved on this visit's own service date — i.e.
  * "what this crew recorded today" — while still-pending rows always show,
  * because those are genuinely outstanding work. See the `filter` below.
+ *
+ * Snow jobs are the exception: materials are recorded per storm, so each
+ * job-level row is listed for every storm visit with THIS storm's record.
  */
 export async function GET(
   request: Request,
@@ -50,7 +53,7 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (createServiceClient() as any)
     .from("crm_job_products")
-    .select("id, product_name, planned_qty, qty, status, updated_at, visit_id")
+    .select("id, product_name, planned_qty, qty, status, updated_at, visit_id, template_job_product_id")
     .eq("org_id", visit.org_id as string)
     .eq("job_id", visit.job_id as string)
     .is("deleted_at", null)
@@ -65,6 +68,39 @@ export async function GET(
   const serviceDate = (visit.scheduled_date as string | null) ?? todayInZone(timeZone);
   // A multi-crew stop's per-visit rows sit on the lead visit; every crew on the stop sees them.
   const stopVisitIds = await crewGroupVisitIds(visit);
+
+  // Snow records materials per storm: each job-level row is the plan for every
+  // storm, and this storm's own record of it is a per-visit copy (see
+  // use-materials). Shown under the plan row's id, so the crew sees one line
+  // per material — pending until recorded on THIS storm.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: jobRow } = await (createServiceClient() as any)
+    .from("crm_jobs").select("job_type").eq("id", visit.job_id as string).maybeSingle();
+  if ((jobRow?.job_type as string | undefined) === "snow") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = (data ?? []) as any[];
+    const thisStorm = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      if (row.template_job_product_id && row.visit_id && stopVisitIds.has(row.visit_id)) {
+        thisStorm.set(row.template_job_product_id as string, row);
+      }
+    }
+    return NextResponse.json(
+      rows
+        .filter((row) => row.visit_id == null && row.status === "pending")
+        .map((plan) => {
+          const recorded = thisStorm.get(plan.id as string);
+          const row = recorded ?? plan;
+          return {
+            id: plan.id,
+            productName: row.product_name,
+            plannedQty: row.planned_qty != null ? Number(row.planned_qty) : Number(row.qty),
+            qty: Number(row.qty),
+            status: row.status,
+          };
+        })
+    );
+  }
 
   return NextResponse.json(
     (data ?? [])

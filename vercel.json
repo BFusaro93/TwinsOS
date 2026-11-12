@@ -80,6 +80,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/trial-reminders",
+      "schedule": "0 14 * * *"
+    },
+    {
       "path": "/api/cron/sync-seat-overage",
       "schedule": "0 5 * * *"
     },

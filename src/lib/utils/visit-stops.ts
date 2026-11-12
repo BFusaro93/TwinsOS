@@ -138,6 +138,8 @@ export interface StopKeyInput {
   crewId: string | null;
   /** Snow: a second push on the same storm is its own stop, not a sibling of the first. */
   pushNumber?: number | null;
+  /** Snow: two storms dated the same day are two trips, never one stop. */
+  stormEventId?: string | null;
   job?: { propertyId?: string | null; serviceAddress?: string | null; serviceCity?: string | null };
 }
 
@@ -148,7 +150,11 @@ export function stopKeyForVisit(visit: StopKeyInput): string {
     ?? "-";
   const key = [visit.clientId, visit.scheduledDate, visit.crewId ?? "none", address || "-"].join("|");
   // Push 1 (every non-snow visit) keeps the plain key; push 2+ is a separate pass.
-  return (visit.pushNumber ?? 1) > 1 ? `${key}|push${visit.pushNumber}` : key;
+  const pushed = (visit.pushNumber ?? 1) > 1 ? `${key}|push${visit.pushNumber}` : key;
+  // A storm visit is keyed by its storm as well: the same job on two storms
+  // dated the same day merged into one stop, and the first trip's Stop Job
+  // completed the second storm's visit too.
+  return visit.stormEventId ? `${pushed}|storm${visit.stormEventId}` : pushed;
 }
 
 /**

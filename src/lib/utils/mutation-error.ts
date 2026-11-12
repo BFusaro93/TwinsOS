@@ -20,7 +20,7 @@ export function setOrgReadOnlyForErrors(value: boolean): void {
 }
 
 export const READ_ONLY_ORG_MESSAGE =
-  "Your subscription has ended, so this account is read-only. Resubscribe in Settings → Subscription to make changes.";
+  "This account is read-only because its subscription or free trial has ended. Subscribe in Settings → Subscription to make changes.";
 
 export function mutationErrorMessage(err: unknown, fallback: string): string {
   const e = err as { code?: unknown; message?: unknown } | null | undefined;

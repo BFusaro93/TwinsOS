@@ -501,8 +501,22 @@ export function InvoicesList({ clientId }: Props) {
   }
 
   async function bulkUpdateStatus(status: InvoiceStatus) {
-    const ids = Array.from(selectedIds);
+    let ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+    // Void is final: Mark as Sent / Paid never touch a void invoice (the DB
+    // refuses it too). Voiding again is a no-op skip in assertVoidable.
+    if (status !== "void") {
+      const voidIds = new Set(allInvoices.filter((i) => i.status === "void").map((i) => i.id));
+      const skipped = ids.filter((id) => voidIds.has(id)).length;
+      ids = ids.filter((id) => !voidIds.has(id));
+      if (skipped > 0) {
+        toast.info(`${skipped} void invoice${skipped === 1 ? "" : "s"} skipped — void is final. Use Duplicate as draft to bill the work again.`);
+      }
+      if (ids.length === 0) {
+        setSelectedIds(new Set());
+        return;
+      }
+    }
     const results = await Promise.allSettled(
       ids.map((id) => updateStatus({ id, status }))
     );
@@ -1260,6 +1274,10 @@ export function InvoicesList({ clientId }: Props) {
               ? `Invoice #${voidTarget.invoiceNumber} will be marked void and its balance removed from the client's account.`
               : ""}
             {" "}The record stays intact for your audit trail.
+            <span className="mt-2 block font-medium text-slate-800 dark:text-neutral-200">
+              Void is final — a void invoice can&apos;t be reopened or changed to another status. To bill the
+              work again later, open it and use Duplicate as draft.
+            </span>
           </p>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setVoidTarget(null)}>Cancel</Button>
@@ -1305,8 +1323,12 @@ export function InvoicesList({ clientId }: Props) {
             <DialogTitle>Void {selectedIds.size} invoice{selectedIds.size === 1 ? "" : "s"}?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-slate-600 dark:text-neutral-400">
-            Their balances are removed from the clients&apos; accounts. Locked invoices and
-            invoices with payments applied are skipped — you&apos;ll get a reason for each.
+            Their balances are removed from the clients&apos; accounts. Invoices with payments
+            applied are skipped — you&apos;ll get a reason for each.
+            <span className="mt-2 block font-medium text-slate-800 dark:text-neutral-200">
+              Void is final — these invoices can&apos;t be reopened afterwards. To bill the work again, open
+              one and use Duplicate as draft.
+            </span>
           </p>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setBulkVoidOpen(false)}>Cancel</Button>

@@ -1069,6 +1069,55 @@ export function useVoidInvoice() {
   });
 }
 
+// ── duplicate a void invoice ──────────────────────────────────────────────────
+
+export interface DuplicateVoidInvoiceResult {
+  invoiceId: string;
+  lines: number;
+  visitsRelinked: number;
+  materialsRelinked: number;
+  milestonesRelinked: number;
+}
+
+/**
+ * Void is final, so billing a void invoice's work again means a new invoice.
+ * crm_duplicate_void_invoice copies the header and every line onto a new
+ * draft (no number, nothing paid) and, in the same transaction, re-links only
+ * what is still unbilled: a visit whose billed tag is free, a material still
+ * pending/used on the void line, a milestone the void sent back to pending.
+ * Anything billed elsewhere since stays where it is.
+ */
+export function useDuplicateVoidInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; clientId: string | null }): Promise<DuplicateVoidInvoiceResult> => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)("crm_duplicate_void_invoice", { p_invoice_id: id });
+      if (error) throw error;
+      const row = (data ?? {}) as Record<string, unknown>;
+      const invoiceId = typeof row.invoice_id === "string" ? row.invoice_id : null;
+      if (!invoiceId) throw new Error("The draft could not be created.");
+      return {
+        invoiceId,
+        lines: Number(row.lines ?? 0),
+        visitsRelinked: Number(row.visits_relinked ?? 0),
+        materialsRelinked: Number(row.materials_relinked ?? 0),
+        milestonesRelinked: Number(row.milestones_relinked ?? 0),
+      };
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
+      invalidateClientBalances(qc);
+      // Materials and milestones it re-linked show as invoiced again.
+      qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["estimate-milestones"] });
+      qc.invalidateQueries({ queryKey: ["project-milestones"] });
+    },
+  });
+}
+
 // ── update status ─────────────────────────────────────────────────────────────
 
 export function useUpdateInvoiceStatus() {
@@ -1095,11 +1144,6 @@ export function useUpdateInvoiceStatus() {
         await releaseMaterialsForVoidedInvoice(supabase, id);
         return;
       }
-      // Voiding zeroed balance_cents; taking an invoice back out of void
-      // (to sent/draft from the status menu) must restore it, or the invoice
-      // reopens with $0 due and drops out of AR, autopay and the charge
-      // queues. (20260927100300 adds the same rule as a DB trigger; this keeps
-      // it correct from the client too.)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: current, error: currentErr } = await (supabase as any)
         .from("crm_invoices")
@@ -1107,6 +1151,12 @@ export function useUpdateInvoiceStatus() {
         .eq("id", id)
         .single();
       if (currentErr) throw currentErr;
+      // Void is final (trg_crm_invoices_void_is_final refuses it too): a void
+      // invoice's visits, materials and milestones were released and may be
+      // billed elsewhere already. "Duplicate as draft" bills the work again.
+      if (current?.status === "void") {
+        throw new Error("it is void, and a void invoice can't be reopened — use Duplicate as draft instead");
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patch: Record<string, any> = { status };
       // A manual status can't contradict the payments on the invoice. This hook
@@ -1162,10 +1212,6 @@ export function useUpdateInvoiceStatus() {
           }
         }
       }
-      const leavingVoid = current?.status === "void";
-      if (leavingVoid) {
-        patch.balance_cents = Math.max(0, (current.total_cents ?? 0) - (current.amount_paid_cents ?? 0));
-      }
       // Issuing a draft that was never numbered (created from a job/estimate and
       // never saved) must not leave a live invoice with no number — the client
       // would receive "Invoice #—". Idempotent RPC; a no-op for numbered ones.
@@ -1180,10 +1226,6 @@ export function useUpdateInvoiceStatus() {
         .update(patch)
         .eq("id", id);
       if (error) throw error;
-      if (leavingVoid && current?.client_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.rpc as any)("sync_client_balance", { p_client_id: current.client_id });
-      }
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
@@ -1191,7 +1233,7 @@ export function useUpdateInvoiceStatus() {
       if (vars.status === "sent") {
         fireQuickBooksInvoiceSync(vars.id);
       } else {
-        // Void (or un-void) of an invoice that's already in QuickBooks.
+        // Void (or another status change) of an invoice that's already in QuickBooks.
         fireQuickBooksInvoiceUpdate(vars.id);
       }
     },

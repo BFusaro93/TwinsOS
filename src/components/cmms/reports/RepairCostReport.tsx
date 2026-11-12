@@ -15,6 +15,8 @@ import { ReportSkeletonCard, ReportStatCard } from "@/components/shared/ReportSt
 import { useWOCostSummary } from "@/lib/hooks/use-wo-cost-summary";
 import { SPEND_RANGE_OPTIONS, rangeCutoffKey, rangeMonths, type SpendRange } from "@/lib/utils/spend-range";
 import { formatCurrency } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 import { RepairCostDetailDialog, type RepairCostDetailKind } from "./RepairCostDetailDialog";
 
 const COLORS = { parts: "#3b82f6", labor: "#22c55e", vendor: "#f59e0b" };
@@ -29,11 +31,18 @@ export function RepairCostReport() {
   const { data: allWOs = [], isLoading } = useWOCostSummary();
   const [range, setRange] = useState<SpendRange>("12m");
   const [detailKind, setDetailKind] = useState<RepairCostDetailKind | null>(null);
+  // Months are the ORG's calendar months: costAt is an instant, and its UTC
+  // "YYYY-MM" put a cost recorded the evening of the last day of a month (in
+  // the Americas) into the next month.
+  const { timeZone, toISODate } = useOrgDates();
+  const monthOf = (costAt: string) => toISODate(new Date(costAt)).slice(0, 7);
+  const now = todayInZoneAsLocalMidnight(timeZone);
 
   const wos = useMemo(() => {
-    const cutoffKey = rangeCutoffKey(range);
-    return allWOs.filter((w) => cutoffKey === null || w.costAt.slice(0, 7) >= cutoffKey);
-  }, [allWOs, range]);
+    const cutoffKey = rangeCutoffKey(range, now);
+    return allWOs.filter((w) => cutoffKey === null || monthOf(w.costAt) >= cutoffKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- monthOf/now derive from timeZone
+  }, [allWOs, range, timeZone]);
 
   const totals = useMemo(() => {
     const t = { parts: 0, labor: 0, vendor: 0, withCost: 0 };
@@ -48,12 +57,12 @@ export function RepairCostReport() {
 
   const monthly = useMemo(() => {
     const earliest = wos.reduce<string | null>((min, w) => {
-      const k = w.costAt.slice(0, 7);
+      const k = monthOf(w.costAt);
       return min === null || k < min ? k : min;
     }, null);
-    const months = rangeMonths(range, earliest).map((m) => ({ ...m, parts: 0, labor: 0, vendor: 0 }));
+    const months = rangeMonths(range, earliest, now).map((m) => ({ ...m, parts: 0, labor: 0, vendor: 0 }));
     for (const w of wos) {
-      const bucket = months.find((m) => m.key === w.costAt.slice(0, 7));
+      const bucket = months.find((m) => m.key === monthOf(w.costAt));
       if (!bucket) continue;
       bucket.parts += w.partsCents;
       bucket.labor += w.laborCents;
@@ -65,7 +74,8 @@ export function RepairCostReport() {
       Labor: m.labor / 100,
       "Vendors / Subs": m.vendor / 100,
     }));
-  }, [wos, range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- monthOf/now derive from timeZone
+  }, [wos, range, timeZone]);
 
   const byAsset = useMemo(() => {
     const map = new Map<string, { name: string; total: number }>();

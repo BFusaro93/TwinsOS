@@ -28,6 +28,8 @@ import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useProducts } from "@/lib/hooks/use-products";
 import { formatCurrency } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { isOpenWO, isOverdueWO } from "@/lib/utils/work-order-status";
 import { SPEND_RANGE_OPTIONS, rangeCutoffKey, rangeMonths, type SpendRange } from "@/lib/utils/spend-range";
 import { RepairCostReport } from "@/components/cmms/reports/RepairCostReport";
 import type { PurchaseOrder } from "@/types";
@@ -292,6 +294,7 @@ const WO_STATUS_COLORS: Record<string, string> = {
   in_progress: "#f59e0b",
   done: "#22c55e",
   on_hold: "#a78bfa",
+  skipped: "#94a3b8",
 };
 
 const WO_STATUS_LABELS: Record<string, string> = {
@@ -299,20 +302,19 @@ const WO_STATUS_LABELS: Record<string, string> = {
   in_progress: "In Progress",
   done: "Done",
   on_hold: "On Hold",
+  skipped: "Skipped",
 };
 
 function MaintenanceTab({ workOrders, isLoading }: { workOrders: WorkOrder[]; isLoading: boolean }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Overdue is measured on the org's calendar, comparing "YYYY-MM-DD" text —
+  // new Date("YYYY-MM-DD") is UTC midnight, which made a WO due today read as
+  // overdue all evening in the Americas. Skipped work orders are closed.
+  const { today: orgToday } = useOrgDates();
+  const todayYmd = orgToday();
 
-  const openWOs = workOrders.filter((wo) => wo.status !== "done");
+  const openWOs = workOrders.filter(isOpenWO);
 
-  const overdueWOs = workOrders.filter(
-    (wo) =>
-      wo.status !== "done" &&
-      wo.dueDate !== null &&
-      new Date(wo.dueDate) < today
-  );
+  const overdueWOs = workOrders.filter((wo) => isOverdueWO(wo, todayYmd));
 
   // WO by status for pie chart
   const woByStatus = useMemo(() => {

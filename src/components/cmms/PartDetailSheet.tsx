@@ -21,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThumbnailUpload } from "@/components/shared/ThumbnailUpload";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EditButton } from "@/components/shared/EditButton";
-import { QtyAdjustControl } from "@/components/shared/QtyAdjustControl";
+import { QtyAdjustControl, type QtyAdjustKind } from "@/components/shared/QtyAdjustControl";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { PartAssetsTab } from "@/components/cmms/PartAssetsTab";
 import { AssetDetailPanel } from "@/components/cmms/AssetDetailPanel";
@@ -88,7 +88,7 @@ function DetailsTab({
   onOrderQty: number;
   woAssignedQty: number;
   qtyOnHand: number;
-  setQtyOnHand: (n: number, reason: string) => Promise<void>;
+  setQtyOnHand: (n: number, reason: string, kind: QtyAdjustKind) => Promise<void>;
   linkedProductName: string | null;
   onPartClick: (p: Part) => void;
   onAddGenericToOem: (oemId: string) => void;
@@ -174,7 +174,7 @@ function DetailsTab({
               </Badge>
             )}
           </div>
-          {canManageInventory && <QtyAdjustControl value={qtyOnHand} onChange={setQtyOnHand} />}
+          {canManageInventory && <QtyAdjustControl value={qtyOnHand} onChange={setQtyOnHand} askKind />}
         </div>
       ) : (
         <div className="rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-4 py-3">
@@ -769,9 +769,11 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
       ? qtyOverride.to
       : livePart.quantityOnHand;
 
-  async function handleQtyChange(n: number, reason: string) {
+  async function handleQtyChange(n: number, reason: string, kind: QtyAdjustKind) {
     const from = livePart.quantityOnHand;
-    await adjustQtyManualAsync({ id: partId, quantityOnHand: n, reason });
+    // expectedQty = the number on screen: the RPC refuses the change if stock
+    // moved since (a receipt or a work order elsewhere) instead of overwriting it.
+    await adjustQtyManualAsync({ id: partId, quantityOnHand: n, reason, kind, expectedQty: effectiveQty });
     setQtyOverride({ partId, from, to: n });
   }
 
