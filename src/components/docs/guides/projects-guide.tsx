@@ -226,6 +226,13 @@ export function ProjectsGuide() {
           own subtotal by type feeds into the project&apos;s overall cost on the Details tab, alongside
           the Materials Total.
         </p>
+        <p>
+          When you add a cost entry, the Vendor picker lists your shared vendors. If the vendor
+          isn&apos;t there, choose <strong>Add New Vendor</strong> at the bottom of the list — it opens
+          the same new-vendor form used on purchase orders (it needs Equipt write access) and selects
+          the vendor on the entry when you save. Enter a <em>negative</em> amount for a vendor credit
+          (hover the Amount label for the reminder).
+        </p>
       </Section>
 
       <Section id="crm-view" title="The CRM view of a Project">

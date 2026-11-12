@@ -79,6 +79,8 @@ import {
 } from "@/lib/hooks/use-project-subcontract-costs";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { VendorCombobox } from "@/components/shared/VendorCombobox";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { NewVendorDialog } from "@/components/shared/NewVendorDialog";
 import { usePOStore } from "@/stores";
 import type { PrefillItem } from "./NewRequisitionDialog";
 import type { POPrefillItem } from "./NewPODialog";
@@ -729,11 +731,14 @@ export function SubcontractsTab({ project }: { project: Project }) {
   const { data: costsRaw = [], isLoading } = useProjectSubcontractCosts(project.id);
   const costs: import("@/types").ProjectSubcontractCost[] = costsRaw;
   const { data: vendors = [] } = useVendors();
+  const [extraVendors, setExtraVendors] = useState<import("@/types").Vendor[]>([]);
+  const allVendors = [...vendors, ...extraVendors.filter((e) => !vendors.some((v) => v.id === e.id))];
   const { mutate: createCost, isPending: creating } = useCreateProjectSubcontractCost();
   const { mutate: updateCost, isPending: updating } = useUpdateProjectSubcontractCost();
   const { mutate: deleteCost } = useDeleteProjectSubcontractCost();
 
   const [addOpen, setAddOpen] = useState(false);
+  const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -763,7 +768,7 @@ export function SubcontractsTab({ project }: { project: Project }) {
       setForm((f) => ({ ...f, vendorId: "", vendorName: "" }));
       return;
     }
-    const v = vendors.find((v) => v.id === vendorId);
+    const v = allVendors.find((v) => v.id === vendorId);
     setForm((f) => ({ ...f, vendorId, vendorName: v?.name ?? "" }));
   }
 
@@ -892,6 +897,15 @@ export function SubcontractsTab({ project }: { project: Project }) {
         </>
       )}
 
+      <NewVendorDialog
+        open={vendorDialogOpen}
+        onOpenChange={setVendorDialogOpen}
+        onCreated={(v) => {
+          setExtraVendors((prev) => [...prev, v]);
+          setForm((f) => ({ ...f, vendorId: v.id, vendorName: v.name }));
+        }}
+      />
+
       {/* Add / Edit dialog */}
       <Dialog open={addOpen} onOpenChange={(o) => { if (!o) setAddOpen(false); }}>
         <DialogContent className="sm:max-w-md">
@@ -904,10 +918,11 @@ export function SubcontractsTab({ project }: { project: Project }) {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Vendor</label>
               <VendorCombobox
-                vendors={vendors}
+                vendors={allVendors}
                 value={form.vendorId || "none"}
                 onValueChange={handleVendorChange}
                 noneLabel="— Type vendor name —"
+                onCreateNew={canWriteEquipt ? () => setVendorDialogOpen(true) : undefined}
               />
               {(!form.vendorId) && (
                 <Input
@@ -944,11 +959,18 @@ export function SubcontractsTab({ project }: { project: Project }) {
                 </select>
               </div>
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Amount ($)</label>
+                <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <label className="w-fit cursor-help text-xs font-medium text-slate-600 dark:text-neutral-400">Amount ($)</label>
+                  </TooltipTrigger>
+                  <TooltipContent>Enter a negative amount for a vendor credit.</TooltipContent>
+                </Tooltip>
+                </TooltipProvider>
                 <Input
                   type="number"
                   step="any"
-                  placeholder="0.00 (negative for a vendor credit)"
+                  placeholder="0.00"
                   value={form.amount}
                   onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
                 />

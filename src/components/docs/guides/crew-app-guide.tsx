@@ -162,7 +162,17 @@ export function CrewAppGuide() {
           <strong>Equipment today</strong>, above the stops, lists the trucks, trailers and equipment
           the office put on the crew for the day on the Crew Board (or the crew&apos;s default
           equipment when nothing was changed for that day), so the crew knows what to take from the
-          yard.
+          yard. Tap an item to check it off as <strong>loaded</strong> as it comes off the yard (tap
+          again to undo); the header shows a count like <em>3 of 5 loaded</em>, and the office sees the
+          same checks on the Crew Board.
+        </p>
+        <p>
+          <strong>Materials to load</strong> works the same way for the day&apos;s materials — mulch,
+          bagged fertilizer and other products called for on the crew&apos;s dispatched stops, added up
+          per product, with the clients each is for. Chemicals aren&apos;t listed here; they&apos;re
+          preloaded in the chemical step on each stop. The checks reset every day, and on the native
+          app the check-off needs a connection (it&apos;s a live signal to the shop, so it isn&apos;t
+          queued for later).
         </p>
         <Callout>
           <strong>A stop is a property visit, not a job.</strong> If a client has three services due

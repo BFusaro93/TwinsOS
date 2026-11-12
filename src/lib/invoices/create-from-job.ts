@@ -485,6 +485,17 @@ export async function createInvoiceFromJob(
 export const BILLABLE_JOB_PRODUCT_STATUSES: string[] = ["pending", "used"];
 
 /**
+ * A whole-job invoice has no single visit to bill against, so it must not pick up a
+ * material that was planned for one specific visit (visit_id set) until the crew has
+ * recorded it as actually used — otherwise a Pending material for tomorrow's stop gets
+ * billed on today's job invoice. Job-level rows (visit_id null) are unaffected.
+ */
+export function isBillableOnWholeJobInvoice(p: { visit_id?: string | null; visitId?: string | null; status: string }): boolean {
+  const scoped = p.visit_id ?? p.visitId ?? null;
+  return !scoped || p.status === "used";
+}
+
+/**
  * Which job-product statuses a COMPLETED VISIT bills. On recurring and
  * package jobs the office plans materials ahead ("pending") for the whole
  * season, so a visit bills only what the crew recorded as actually `used`;
@@ -533,7 +544,7 @@ export async function buildCompletedJobInvoiceInput(
 
   const { data: products, error: prodErr } = await supabase
     .from("crm_job_products")
-    .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents, status, invoice_line_item_id, job_service_subitem_id")
+    .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents, status, invoice_line_item_id, job_service_subitem_id, visit_id")
     .eq("job_id", jobId)
     .is("deleted_at", null)
     .order("created_at");
@@ -556,8 +567,9 @@ export async function buildCompletedJobInvoiceInput(
     status: string;
     invoice_line_item_id: string | null;
     job_service_subitem_id: string | null;
+    visit_id: string | null;
   }[])
-    .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status) && !p.invoice_line_item_id && !p.job_service_subitem_id)
+    .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status) && !p.invoice_line_item_id && !p.job_service_subitem_id && isBillableOnWholeJobInvoice(p))
     .map((p) => {
       // Bill the invoice_qty override when set (e.g. 5 bags used, only 4
       // invoiced) — the used qty still drives the inventory decrement.
@@ -727,7 +739,7 @@ export async function invoiceCompletedJob(
   // billed at most once — linking it below takes it out of every sweep.
   const { data: products, error: prodErr } = await supabase
     .from("crm_job_products")
-    .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents")
+    .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents, status, visit_id")
     .eq("job_id", jobId)
     .in("status", BILLABLE_JOB_PRODUCT_STATUSES)
     .is("invoice_line_item_id", null)
@@ -735,7 +747,7 @@ export async function invoiceCompletedJob(
     .is("deleted_at", null)
     .order("created_at");
   if (prodErr) throw prodErr;
-  for (const p of (products ?? []) as { id: string; product_id: string | null; product_name: string; qty: number; invoice_qty: number | null; unit_price_cents: number }[]) {
+  for (const p of ((products ?? []) as { id: string; product_id: string | null; product_name: string; qty: number; invoice_qty: number | null; unit_price_cents: number; status: string; visit_id: string | null }[]).filter(isBillableOnWholeJobInvoice)) {
     const billedQty = Number(p.invoice_qty ?? p.qty);
     const rate = Number(p.unit_price_cents);
     lines.push({

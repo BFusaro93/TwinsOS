@@ -624,3 +624,46 @@ export async function translateNote(text: string, target: 'en' | 'es'): Promise<
     body: JSON.stringify({ text, target }),
   })) as TranslatedNote;
 }
+
+export interface CrewLoadEquipment {
+  id: string;
+  kind: 'asset' | 'vehicle';
+  /** `vehicle:<id>` / `asset:<id>` — the key the load check-off uses. */
+  key: string;
+  name: string;
+  tag: string | null;
+  type: string | null;
+  loaded: boolean;
+}
+
+export interface CrewLoadMaterial {
+  /** `product:<id>` — the key the load check-off uses. */
+  key: string;
+  productId: string;
+  name: string;
+  qty: number;
+  stops: string[];
+  loaded: boolean;
+}
+
+/** GET /api/crm/crew/equipment — the trucks/trailers/tools the office put on this crew today, with loaded state. */
+export async function fetchCrewEquipment(date?: string): Promise<CrewLoadEquipment[]> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  const res = (await authedFetch(`/api/crm/crew/equipment${query}`)) as { items: CrewLoadEquipment[] };
+  return res.items;
+}
+
+/** GET /api/crm/crew/materials — materials (mulch, bagged fertilizer, …) to load for today's dispatched stops. */
+export async function fetchCrewMaterials(date?: string): Promise<CrewLoadMaterial[]> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  const res = (await authedFetch(`/api/crm/crew/materials${query}`)) as { items: CrewLoadMaterial[] };
+  return res.items;
+}
+
+/** POST /api/crm/crew/load-checks — tick an equipment item or material as loaded (or un-tick it). Online-only. */
+export async function setCrewLoaded(date: string, key: string, loaded: boolean): Promise<void> {
+  await authedFetch('/api/crm/crew/load-checks', {
+    method: 'POST',
+    body: JSON.stringify({ date, key, loaded }),
+  });
+}

@@ -419,7 +419,7 @@ function DispatchLegendDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     { icon: <StickyNote className="h-4 w-4 text-amber-400" />, label: "Note to crew" },
     { icon: <MessageSquareText className="h-4 w-4 text-blue-400" />, label: "Job comments" },
     { icon: <Package className="h-4 w-4 text-purple-500 dark:text-purple-400" />, label: "Service has a linked product" },
-    { icon: <Phone className="h-4 w-4 text-slate-400" />, label: "Call ahead — tap to call the client" },
+    { icon: <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />, label: "Call ahead — tap to call the client" },
     { icon: <TriangleAlert className="h-4 w-4 text-amber-500 dark:text-amber-400" />, label: "Punch mismatch — crew punches disagree with the visit's Start/End or hours" },
     {
       icon: <span className="rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">Lead</span>,
@@ -1119,7 +1119,12 @@ function JobDetailSheet({
   // What this visit bills — the same figure the Amt column and the invoice use.
   const amt = visitAmountCents(visit);
 
+  const productDraftRef = useRef<(() => Promise<boolean>) | null>(null);
+
   async function handleSave() {
+    // A product row the user filled in but never confirmed with its check mark is saved
+    // first, so Save can't report success while silently dropping it.
+    if (productDraftRef.current && !(await productDraftRef.current())) return;
     // A blank/invalid men-count parses to NaN, and `NaN || 0` would silently
     // coerce that to 0 — which then corrupts effectiveCrewSize-based labor
     // cost/hours math downstream. Block the save instead, same as the
@@ -1313,7 +1318,7 @@ function JobDetailSheet({
       // season's plan and stay pending).
       const billableStatuses = billableJobProductStatusesForVisit(job?.jobType);
       const productLineItems = jobProducts
-        .filter((p) => billableStatuses.includes(p.status) && !p.invoiceLineItemId && !p.jobServiceSubitemId)
+        .filter((p) => billableStatuses.includes(p.status) && !p.invoiceLineItemId && !p.jobServiceSubitemId && (!p.visitId || p.visitId === visit.id))
         .map((p) => {
           const billedQty = p.invoiceQty ?? p.qty;
           return {
@@ -1870,7 +1875,7 @@ function JobDetailSheet({
             {/* Products (materials) section — used vs. billed qty can differ, see JobProductsSection */}
             {job && (
               <div className="border-t px-4 py-3">
-                <JobProductsSection jobId={job.id} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
+                <JobProductsSection jobId={job.id} visitId={visit.id} commitDraftRef={productDraftRef} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
               </div>
             )}
             {/* Equipment the crew needs to bring — rolls up onto the Crew Board */}
@@ -4104,7 +4109,7 @@ function VisitRow({
                   href={`tel:${visit.clientPhone}`}
                   onClick={(e) => e.stopPropagation()}
                   title={`Call ahead: ${visit.job.clientPhone}`}
-                  className="text-slate-300 dark:text-neutral-500 hover:text-green-600 dark:hover:text-green-400 transition-colors shrink-0"
+                  className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors shrink-0"
                 >
                   <Phone className="h-3 w-3" />
                 </a>
@@ -5750,17 +5755,15 @@ export function DispatchBoard() {
             <BarChart3 className="h-3.5 w-3.5" />
             Stats
           </Button>
-          {can("view_report_center") && (
-            <Button
-              size="sm" variant="outline"
-              className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", loadListOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
-              onClick={() => setLoadListOpen(true)}
-              title="What each crew loads for this day — chemicals and materials"
-            >
-              <Truck className="h-3.5 w-3.5" />
-              Load List
-            </Button>
-          )}
+          <Button
+            size="sm" variant="outline"
+            className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", loadListOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
+            onClick={() => setLoadListOpen(true)}
+            title="What each crew loads for this day — chemicals and materials"
+          >
+            <Truck className="h-3.5 w-3.5" />
+            Load List
+          </Button>
           <Button
             size="sm" variant="outline"
             className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", mapOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}

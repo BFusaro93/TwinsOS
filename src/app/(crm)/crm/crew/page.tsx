@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO, differenceInMinutes } from "date-fns";
-import { Truck, MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, BookOpen, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
-import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction, useCrewTap, useCrewEquipment } from "@/lib/hooks/use-crew-app";
+import { Package, Square, CheckSquare, Truck, MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, BookOpen, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
+import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction, useCrewTap, useCrewEquipment, useCrewMaterials, useToggleCrewLoaded } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
@@ -148,6 +148,8 @@ export default function CrewSchedulePage() {
   const { data: crewInfo } = useMyCrewInfo();
   const { data: drive } = useCrewDriveToday(today);
   const { data: equipment = [] } = useCrewEquipment(today);
+  const { data: materials = [] } = useCrewMaterials(today);
+  const toggleLoaded = useToggleCrewLoaded(today);
   const startDrive = useStartDrive();
   const endDrive = useEndDrive();
   const { data: crewDay, isSuccess: crewDayLoaded } = useCrewDay();
@@ -404,19 +406,27 @@ export default function CrewSchedulePage() {
         )}
 
         {equipment.length > 0 && (
-          <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
-              <Truck className="h-3.5 w-3.5" /> {t("Equipment today")}
-            </p>
-            <ul className="mt-1.5 space-y-0.5">
-              {equipment.map((e) => (
-                <li key={`${e.kind}:${e.id}`} className="text-sm text-slate-800 dark:text-neutral-200">
-                  {e.name}
-                  {e.tag && <span className="ml-1.5 text-xs text-slate-500 dark:text-neutral-400">{e.tag}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <LoadChecklist
+            title={t("Equipment today")}
+            icon={<Truck className="h-3.5 w-3.5" />}
+            rows={equipment.map((e) => ({ key: e.key, label: e.name, sub: e.tag, loaded: e.loaded }))}
+            onToggle={(key, loaded) => toggleLoaded.mutate({ key, loaded })}
+          />
+        )}
+
+        {materials.length > 0 && (
+          <LoadChecklist
+            title={t("Materials to load")}
+            icon={<Package className="h-3.5 w-3.5" />}
+            rows={materials.map((m) => ({
+              key: m.key,
+              label: m.name,
+              qty: Number.isInteger(m.qty) ? String(m.qty) : m.qty.toFixed(2),
+              sub: m.stops.join(", ") || null,
+              loaded: m.loaded,
+            }))}
+            onToggle={(key, loaded) => toggleLoaded.mutate({ key, loaded })}
+          />
         )}
 
         {stops.map((stop, idx) => (
@@ -480,6 +490,62 @@ export default function CrewSchedulePage() {
           visitId={stops.find(s => s.derivedStatus === "in_progress")?.anchorVisitId}
         />
       )}
+    </div>
+  );
+}
+
+
+interface LoadRow { key: string; label: string; qty?: string; sub?: string | null; loaded: boolean }
+
+/** A tick-off list ("3 of 5 loaded") for what goes on the truck. Tap a row to mark it loaded; tap again to undo. */
+function LoadChecklist({
+  title, icon, rows, onToggle,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  rows: LoadRow[];
+  onToggle: (key: string, loaded: boolean) => void;
+}) {
+  const done = rows.filter((r) => r.loaded).length;
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+          {icon} {title}
+        </p>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+            done === rows.length ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-muted text-slate-600 dark:text-neutral-300"
+          }`}
+        >
+          {t("{n} of {total} loaded", { n: done, total: rows.length })}
+        </span>
+      </div>
+      <ul className="mt-1.5 divide-y divide-border">
+        {rows.map((r) => (
+          <li key={r.key}>
+            <button
+              type="button"
+              onClick={() => onToggle(r.key, !r.loaded)}
+              aria-pressed={r.loaded}
+              title={t("Tap to mark as loaded")}
+              className="flex min-h-11 w-full items-center gap-3 py-1.5 text-left"
+            >
+              {r.loaded
+                ? <CheckSquare className="h-6 w-6 shrink-0 text-green-600 dark:text-green-400" />
+                : <Square className="h-6 w-6 shrink-0 text-slate-400 dark:text-neutral-500" />}
+              <span className="min-w-0 flex-1">
+                <span className={`block text-sm ${r.loaded ? "text-slate-400 line-through dark:text-neutral-500" : "text-slate-800 dark:text-neutral-200"}`}>
+                  {r.label}
+                  {r.sub && !r.qty && <span className="ml-1.5 text-xs text-slate-500 dark:text-neutral-400">{r.sub}</span>}
+                </span>
+                {r.qty && r.sub && <span className="block truncate text-xs text-slate-500 dark:text-neutral-400">{r.sub}</span>}
+              </span>
+              {r.qty && <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-700 dark:text-neutral-200">{r.qty}</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

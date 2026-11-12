@@ -171,3 +171,32 @@ export async function fetchDailyLoadList(date: string): Promise<DailyLoadListRes
   if (!res.ok) throw new Error(res.status === 403 ? "You don't have access to the Report Center." : "Failed to load report");
   return res.json() as Promise<DailyLoadListResult>;
 }
+
+/** One crew's load as flat rows — "Black Mulch 14", "Fert 16-0-8 12 bags" — for the Crew Board's Load lane. */
+export interface LoadLaneRow {
+  key: string;
+  name: string;
+  /** Preformatted quantity, or null when it can't be totalled (then `warning` says why). */
+  qty: string | null;
+  warning: string | null;
+  /** crm_crew_load_checks key — set for materials only (chemicals are preloaded in the crew app's chemical flow). */
+  checkKey?: string;
+}
+
+export function loadLaneRows(crew: DailyLoadListCrewGroup | undefined): LoadLaneRow[] {
+  if (!crew) return [];
+  const chem: LoadLaneRow[] = crew.chemicals.map((c) => ({
+    key: `c:${c.productId}`,
+    name: c.productName,
+    qty: c.concentrateQty != null && c.concentrateUnitName ? `${fmtQty(c.concentrateQty)} ${c.concentrateUnitName}` : null,
+    warning: c.concentrateQty != null && c.concentrateUnitName ? null : (c.unresolvedReason ?? "Check this product's application rate setup."),
+  }));
+  const mats: LoadLaneRow[] = crew.materials.map((m) => ({
+    key: `m:${m.productId}`,
+    name: m.productName,
+    qty: fmtQty(m.qty),
+    warning: null,
+    checkKey: `product:${m.productId}`,
+  }));
+  return [...chem, ...mats];
+}

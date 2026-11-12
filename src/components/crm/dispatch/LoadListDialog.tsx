@@ -11,7 +11,8 @@ import { DailyLoadListView, fetchDailyLoadList } from "@/components/crm/reports/
 /**
  * The Daily Load List for the day the dispatch board is showing: what each crew loads
  * (chemical concentrate + mixed volume, materials) before rolling out. Same data and
- * permission (view_report_center) as Reports → Daily Load List.
+ * as Reports → Daily Load List. Shown to anyone who can open the board — the API accepts
+ * either dispatch-board or Report Center permission.
  */
 export function LoadListDialog({ open, onOpenChange, date }: { open: boolean; onOpenChange: (o: boolean) => void; date: string }) {
   const { data, isLoading, error } = useQuery<DailyLoadListResult>({

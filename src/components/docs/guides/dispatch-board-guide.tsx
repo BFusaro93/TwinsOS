@@ -569,6 +569,17 @@ export function DispatchBoardGuide() {
           price, and change its status (Used/Invoice, Used, do not Invoice, Not Used/Cancel, or reopen
           it to Pending) without leaving the board.
         </p>
+        <p>
+          A product you add from a visit&apos;s detail sheet belongs to <strong>that visit</strong>: it
+          shows on that day&apos;s Load List and Crew Board, not on the job&apos;s other visits, and it is
+          billed with that visit&apos;s invoice (on recurring and package jobs once the crew has marked it
+          Used; one-time jobs bill planned materials at completion). A whole-job invoice skips a product planned for a
+          specific visit until the crew has marked it Used. Adding a product is a two-step action —
+          pick the product, service and quantity, then click the <strong>green check</strong> at the end
+          of the row (hover it for a reminder). If you press the sheet&apos;s <strong>Save</strong> first,
+          the half-filled row is saved for you; if the row is incomplete, Save stops and tells you what
+          is missing instead of dropping it.
+        </p>
         <Callout>
           <strong>&quot;Used&quot; and &quot;Used, not billed&quot; both take the material off the
           shelf</strong> — the difference is only whether it still reaches the client&apos;s invoice.
@@ -630,8 +641,8 @@ export function DispatchBoardGuide() {
             <strong>Load List</strong> — next to Stats, opens the <strong>Daily Load List</strong> for the
             board&apos;s selected day in a dialog: what each crew needs on the truck, with chemicals
             (concentrate amount and finished mix volume) and other materials grouped by crew. Use{" "}
-            <strong>Print</strong> or open the full report from the dialog. It needs the View Report Center
-            permission.
+            <strong>Print</strong> or open the full report from the dialog. Anyone who can open the
+            Dispatch Board can use it.
           </li>
           <li>
             <strong>Print Route Sheets</strong> — generates a printable, per-crew stop sheet (client,
@@ -980,6 +991,15 @@ export function DispatchBoardGuide() {
             <strong>Needs …</strong> chip appears — click it to load the item (it also tells you if the
             item is currently on another crew). Items that a job needs show a green{" "}
             <strong>Job needs</strong> tag once loaded.
+          </li>
+          <li>
+            <strong>Load.</strong> Under Equipment, each crew shows what it needs on the truck for the day —
+            chemical concentrate and materials such as mulch or bags of fertilizer — from the same data
+            as the Load List. The first few items are listed; <strong>+N more</strong> opens the full Load
+            List. Once the crew checks a material off in the crew app, it shows a green check and the lane header
+            counts <strong>on truck</strong>; equipment the crew has loaded shows a small green check (hover it for
+            &quot;Loaded&quot;; TV mode spells out a green <strong>Loaded</strong> tag) and the Equipment lane counts it too. A chemical that can&apos;t be totalled (its stops use different units, or the application
+            rate has no unit) shows an amber <strong>Can&apos;t total</strong> instead of a number.
           </li>
           <li>
             <strong>Default equipment.</strong> Click the pin on a loaded item to make it that crew&apos;s{" "}

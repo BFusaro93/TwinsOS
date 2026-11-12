@@ -1824,9 +1824,13 @@ export async function openCrewReference(id: string): Promise<void> {
 export interface CrewEquipmentItem {
   id: string;
   kind: "asset" | "vehicle";
+  /** `vehicle:<id>` / `asset:<id>` — the key the load check-off uses. */
+  key: string;
   name: string;
   tag: string | null;
   type: string | null;
+  /** The crew has ticked this off as loaded on the truck. */
+  loaded: boolean;
 }
 
 /** The trucks, trailers and equipment the office loaded on this crew for `date` (crew board drag-and-drop). */
@@ -1839,6 +1843,65 @@ export function useCrewEquipment(date: string) {
       if (!res.ok) throw new Error("Could not load equipment");
       const json = (await res.json()) as { items: CrewEquipmentItem[] };
       return json.items;
+    },
+  });
+}
+
+export interface CrewMaterialItem {
+  /** `product:<id>` — the key the load check-off uses. */
+  key: string;
+  productId: string;
+  name: string;
+  qty: number;
+  /** Clients of the stops this material is for. */
+  stops: string[];
+  loaded: boolean;
+}
+
+/** Materials (mulch, bagged fertilizer, …) this crew still has to load for `date`'s dispatched stops. */
+export function useCrewMaterials(date: string) {
+  return useQuery<CrewMaterialItem[]>({
+    queryKey: ["crew-app-materials", date],
+    enabled: !!date,
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/materials?date=${date}`);
+      if (!res.ok) throw new Error("Could not load materials");
+      const json = (await res.json()) as { items: CrewMaterialItem[] };
+      return json.items;
+    },
+  });
+}
+
+/** Tick an equipment item or material off as loaded (or un-tick it). Optimistic; rolls back on error. */
+export function useToggleCrewLoaded(date: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ key, loaded }: { key: string; loaded: boolean }) => {
+      const res = await fetch("/api/crm/crew/load-checks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, key, loaded }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "Could not save");
+      }
+    },
+    onMutate: async ({ key, loaded }) => {
+      const queryKey = key.startsWith("product:") ? ["crew-app-materials", date] : ["crew-app-equipment", date];
+      await qc.cancelQueries({ queryKey });
+      const previous = qc.getQueryData<{ key: string; loaded: boolean }[]>(queryKey);
+      qc.setQueryData<{ key: string; loaded: boolean }[]>(queryKey, (old) =>
+        old?.map((i) => (i.key === key ? { ...i, loaded } : i))
+      );
+      return { queryKey, previous };
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx) qc.setQueryData(ctx.queryKey, ctx.previous);
+      toast.error(err instanceof Error ? err.message : "Could not save");
+    },
+    onSettled: (_d, _e, vars) => {
+      void qc.invalidateQueries({ queryKey: [vars.key.startsWith("product:") ? "crew-app-materials" : "crew-app-equipment", date] });
     },
   });
 }
