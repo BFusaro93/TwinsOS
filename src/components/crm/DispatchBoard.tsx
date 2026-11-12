@@ -857,7 +857,7 @@ function JobDetailSheet({
   );
   const { currentUser } = useCurrentUserStore();
   const { can, isAdmin } = usePermissions();
-  const canEditVisitPrice = can("acct_add_modify_invoices");
+  const canEditVisitPrice = can("sched_visit_price_qty");
   const [confirm, confirmDialog] = useConfirm();
   // The visit row carries the client's name only — the email address and SMS
   // consent that the More menu needs live on the client record.
@@ -1933,7 +1933,7 @@ function JobDetailSheet({
                     type="number" step="0.1" value={qty}
                     onChange={(e) => setQty(e.target.value)}
                     disabled={!canEditVisitPrice}
-                    title={canEditVisitPrice ? undefined : "Changing a visit's quantity needs the Add/Modify Invoices permission"}
+                    title={canEditVisitPrice ? undefined : "Changing a visit's quantity needs the Change Visit Price & Quantity permission"}
                     className="h-6 w-16 text-[11px] text-right px-1"
                     placeholder="—"
                   />
@@ -1945,7 +1945,7 @@ function JobDetailSheet({
                     type="number" step="0.01" value={rateCents}
                     onChange={(e) => setRateCents(e.target.value)}
                     disabled={!canEditVisitPrice}
-                    title={canEditVisitPrice ? undefined : "Changing a visit's rate needs the Add/Modify Invoices permission"}
+                    title={canEditVisitPrice ? undefined : "Changing a visit's rate needs the Change Visit Price & Quantity permission"}
                     className="h-6 w-16 text-[11px] text-right px-1"
                     placeholder="—"
                   />

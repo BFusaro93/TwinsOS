@@ -1906,6 +1906,58 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Maintenance & Work Orders",
     items: [
       {
+        q: "What's the difference between \"Shelf count\" and \"Found / correction\" when I adjust a part's quantity?",
+        a: "Choose Shelf count when you physically counted the part. Work orders that used it while it was out of stock are marked settled, so the next delivery won't deduct those parts again. Choose Found / correction when you found extra stock or are fixing a typo; work orders still waiting on the part are covered by the next delivery.",
+      },
+      {
+        q: "Why did my quantity adjustment say \"Stock changed since you opened this — refresh\"?",
+        a: "A delivery or a work order changed the part's stock while you had it open. The current number reloads; check it and adjust again.",
+      },
+      {
+        q: "Do parts that aren't tracked as inventory get deducted when used on a work order?",
+        a: "No. They can be added for costing, but they never move stock, never show as short or \"used before received\", and never raise Low Stock alerts.",
+      },
+      {
+        q: "Why didn't I get a Low Stock alert for a part at 0?",
+        a: "Low Stock (bell and email) only covers parts tracked as inventory with a minimum stock above 0.",
+      },
+      {
+        q: "Do I have to close the master work order of a multi-asset PM batch?",
+        a: "No. It completes itself when the last asset's work order is done or skipped, and it is marked Skipped if every asset was skipped.",
+      },
+      {
+        q: "Can I skip a PM or recurring work order?",
+        a: "Yes. Single-asset PM work orders and recurring work orders can be skipped. A skipped recurring work order still schedules the next one.",
+      },
+      {
+        q: "Why can't crew members generate PM work orders?",
+        a: "Generating is limited to admins, managers and technicians. Crew can work the generated work orders.",
+      },
+      {
+        q: "What price do parts get on work orders generated from a PM schedule?",
+        a: "The part's current cost under your costing method on the day they are generated, the same as adding the part by hand. The template's saved cost is not used.",
+      },
+      {
+        q: "What cost do parts go back to stock at when I remove them from a work order?",
+        a: "The cost the work order line was charged, not today's price.",
+      },
+      {
+        q: "Why don't skipped work orders show as open or overdue?",
+        a: "Skipped means closed. Open means Open, In Progress or On Hold, and overdue means open and past due on your organization's calendar.",
+      },
+      {
+        q: "What completion date does an imported Done work order get?",
+        a: "Its completedAt column if the file has one, else its created date, else its due date — not the day of the import.",
+      },
+      {
+        q: "Which month does a repair cost count in?",
+        a: "The month it was recorded, in your organization's timezone.",
+      },
+      {
+        q: "Why did a PM work order skip a number?",
+        a: "If the next number was already used (for example by a work order numbered by hand), generation moves on to the next free number.",
+      },
+      {
         q: "Who is shown as \"Submitted By\" on a maintenance request I create in the app?",
         a: "You. The request is credited to whoever is signed in when it's created.",
       },
@@ -2010,6 +2062,110 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Landscapt (CRM)",
     items: [
+      {
+        q: "Can I reopen a void invoice?",
+        a: "No. Void is final: a void invoice can't be changed to Draft, Sent, Paid or any other status, and bulk Mark as Sent / Mark as Paid skip it. To bill the work again, open the void invoice and click Duplicate as draft.",
+      },
+      {
+        q: "What does \"Duplicate as draft\" do?",
+        a: "It creates a new draft for the same client with every line of the void invoice, dated today. It gets a number when you issue it, and the void invoice stays void. Visits, job materials and project milestones from the void invoice are linked to the new draft only if they haven't been billed on another invoice since. Anything billed elsewhere is copied as a plain line, so delete it if it isn't owed again.",
+      },
+      {
+        q: "Why can't I duplicate a merged invoice?",
+        a: "Its lines already live on the invoice it was merged into, so duplicating it would bill the work twice.",
+      },
+      {
+        q: "When a payment split across several invoices is partly refunded, how is the refund divided?",
+        a: "Unapplied credit on the payment is refunded first. The rest comes off the invoices in proportion to what each was paid, to the cent, so the amounts always add up to exactly the refund.",
+      },
+      {
+        q: "Can a refund be recorded without refunding the card?",
+        a: "No. Refunds are only recorded through the payment's Refund action, which refunds a card or bank payment in Stripe first.",
+      },
+      {
+        q: "A parent account paid a sub-account's invoice and part of it was refunded. What does the sub-account's statement show?",
+        a: "Only what is still paid. For example, a $100 payment with $30 refunded shows $70 \"Paid by parent account\" and $30 still owed. The refund is counted once.",
+      },
+      {
+        q: "Does the account balance on an invoice account for credit the client already has?",
+        a: "Yes. On templates that show the account balance, any unapplied payments, prepayments or credits appear as \"Credit on Account\" and are taken off the Account Balance. The payment stub's Amount Due never goes below $0.00.",
+      },
+      {
+        q: "Can a sub-account's credit pay its parent's invoice?",
+        a: "No. A parent account's credit can pay a sub-account's invoice, but not the other way round.",
+      },
+      {
+        q: "If a payment is removed from an invoice, what status does the invoice go back to?",
+        a: "If nothing is left paid on it, a Printed or Viewed invoice keeps that status; one that was Partial or Paid goes back to Sent.",
+      },
+      {
+        q: "A visit completed while its period's draft invoice was being printed. Where did it go?",
+        a: "Visits are only added to a period draft that is still an unlocked draft at that moment. If it was printed, sent or locked in the meantime, the visit starts a new draft for the period.",
+      },
+      {
+        q: "Why can't a crew change a visit's clock times or snow depth?",
+        a: "Times, breaks, hours and crew size are recorded only by the crew app's Start Job, Pause, Resume and Stop Job buttons, and snow depth only by the office. Billing uses these, so the office corrects them (Edit Job Times or Close Out).",
+      },
+      {
+        q: "How is salt billed on snow jobs?",
+        a: "The job's planned materials are the plan for every storm. The crew records what they used on each storm, that usage comes off inventory, and Snow Invoicing adds it to that storm's invoice at the planned price. It bills once, and voiding the invoice puts it back in the queue.",
+      },
+      {
+        q: "What date does a snow invoice get?",
+        a: "The day you generate it, in your company's time zone, with the due date from the client's terms. Each line keeps its storm's date.",
+      },
+      {
+        q: "We plow and salt the same property on hourly jobs. Are we billing the time twice?",
+        a: "No. When one crew's stop has more than one hourly job, each job bills its share of the time on site.",
+      },
+      {
+        q: "A job is on two storms on the same day. Will finishing the first trip finish the second?",
+        a: "No. Each storm is its own stop in the crew app.",
+      },
+      {
+        q: "What happens to storms outside a snow contract's dates?",
+        a: "You choose on the contract. Don't service: the jobs aren't offered for those storms. Included in the flat rate: they're plowed and covered by the price. Bill per event: they're plowed and billed, with a Monthly Flat Rate job billing the contract's Price per storm. If no price is set, Snow Invoicing shows a warning instead of billing $0.",
+      },
+      {
+        q: "Why can't I add jobs to a storm?",
+        a: "The storm is marked Complete. Set it back to Working first. A storm also goes back to Working automatically if a visit is added to it.",
+      },
+      {
+        q: "Why can't I change the snow depth on a visit?",
+        a: "The visit is already on an invoice. Void the invoice first if the depth really needs to change.",
+      },
+      {
+        q: "Why can't someone with \"View Jobs\" schedule or move visits?",
+        a: "View Jobs is view-only. Scheduling, moving, re-crewing, dispatching, skipping, completing or deleting visits needs Dispatch Board, Waiting List, Manage Snow Dispatch or Add Job. A project job also accepts Add/Modify Projects. Cancelling a job or contract still cancels its untouched visits.",
+      },
+      {
+        q: "Why are Qty and Rate greyed out on the visit sheet?",
+        a: "A visit's quantity and rate are what it bills, so changing them needs the Change Visit Price & Quantity permission (Settings → Roles, under Scheduling Access). It's separate from Add/Modify Invoices, so you can let a scheduler re-price visits without giving them invoice access. Everything else on the sheet still saves.",
+      },
+      {
+        q: "Why does my Complete button say the job still has open visits?",
+        a: "A job can be marked Completed only when every visit is completed, skipped or cancelled. Finish, skip or cancel the open visits on the Visits tab first. After that, any job type — waiting list, snow and project included — can be completed.",
+      },
+      {
+        q: "What does \"Needs Attention\" mean on the Jobs list?",
+        a: "Every visit on that job was skipped or cancelled, so the work was never done. Reschedule it or cancel the job. It is not counted as Completed.",
+      },
+      {
+        q: "My bulk change said \"nothing was applied\". Why?",
+        a: "Bulk changes are all-or-nothing. If any selected visit changed after you selected it (usually a crew clocked in), nothing is changed. Refresh the board and try again.",
+      },
+      {
+        q: "Why can't I move a stop that two crews share?",
+        a: "While any crew on a multi-crew stop is clocked in, the stop can't move to another day, because the move would take it off that crew's list mid-job. Have every crew clock out first.",
+      },
+      {
+        q: "Do finished packages or removed services show on the Waiting List?",
+        a: "No. Completed jobs and removed services aren't offered on the Waiting List or in Nearby.",
+      },
+      {
+        q: "Why is someone missing from a crew on the Crew Board?",
+        a: "The Crew Board shows people on their regular crew only on the weekdays that membership is scheduled for, the same as Team Assignment and the crew app. On other days, place them on a crew for that day.",
+      },
       {
         q: "A crew tapped Start Day or End Day with no signal and it synced later. What time is recorded?",
         a: "The time they tapped, as long as it's within the last 48 hours. The same goes for marking someone in, out or not working, and for Skip.",
@@ -2688,7 +2844,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which price does a visit bill if I changed its Rate or Qty on the Dispatch Board?",
-        a: "The visit's own Rate x Qty, the same amount the board's Amt column and Job Costing show. Without one, it bills the service's rate.",
+        a: "The visit's own Rate x Qty, the same amount the board's Amt column and Job Costing show. Without one, it bills the service's rate. Changing a visit's Rate or Qty needs the Change Visit Price & Quantity permission.",
       },
       {
         q: "Why did a client get two invoices for the same week or month?",
@@ -2824,6 +2980,50 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Users & Settings",
     items: [
       {
+        q: "Who can change a visit's price or quantity?",
+        a: "Roles with Change Visit Price & Quantity (Settings → Roles, Scheduling Access). Starter roles that schedule or invoice have it ticked; untick it on any role that shouldn't re-price visits. Admins always can.",
+      },
+      {
+        q: "Will I be reminded before my trial ends?",
+        a: "Yes. Your account admins get an email about a week before the trial ends, and again the day before.",
+      },
+      {
+        q: "Why does it say \"Ask an account admin to subscribe\"?",
+        a: "Only admins can open Settings → Subscription. Ask an admin to choose a plan or resubscribe.",
+      },
+      {
+        q: "Can I send invoices while my account is read-only?",
+        a: "You can email invoices that were already sent or printed, and account statements, so you can keep collecting what you're owed. Draft invoices can't be sent. Estimates, chemical notices, ticket emails and document test emails are blocked until you subscribe.",
+      },
+      {
+        q: "My crew was on the clock when our subscription ended. Can they finish?",
+        a: "For the first 24 hours after the account becomes read-only, the crew can still tap End Day to close their shifts. They can't start new days or jobs.",
+      },
+      {
+        q: "Why can't I set up my own texting number?",
+        a: "It's part of the paid SMS add-on, which isn't available during the free trial. An admin can add it in Settings → Subscription, and then you can finish setup.",
+      },
+      {
+        q: "What happens to my texting number if I cancel or remove SMS?",
+        a: "The number is released and the campaign is closed, so you stop paying for them, and texts stop sending. Your approved business registration is kept. After you add SMS again, Continue Setup gets you a new number. The old number can't be recovered.",
+      },
+      {
+        q: "I changed our company tax rate. Do existing clients change?",
+        a: "Each client keeps its own rate. After you save a new rate, you're asked whether to also move the clients still at the old rate (for example, clients added while the rate was 0%). Tax-exempt clients and existing invoices never change.",
+      },
+      {
+        q: "Why can't I add an add-on?",
+        a: "If your subscription is canceled or has ended, resubscribe to a plan first, then add add-ons.",
+      },
+      {
+        q: "Why does an invite say the email is attached to an earlier free-trial account?",
+        a: "That person started their own trial, which ended without a subscription. Contact support@landscapt.com to move their login to your team, or invite them with a different email.",
+      },
+      {
+        q: "Which permissions do the starter roles include?",
+        a: "Owner and Operations Manager have every permission, including warranties, commissions and the payroll report. Office Admin also gets warranties and the payroll report. Sales / Account Mgr gets warranties and View My Own Commissions. Every starter role that schedules or invoices also gets Change Visit Price & Quantity.",
+      },
+      {
         q: "Why did my Zap's \"Create Job\" step used to fail after \"Create Client\"?",
         a: "Create Client makes a lead, and Create Job now converts that lead to a client first, just like the Convert button: the client gets today as its client-since date, a timeline note, and your \"Lead converted to client\" automations run once. A lead that was closed as lost is still refused; reopen it in the app first.",
       },
@@ -2913,7 +3113,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What happens when my free trial ends?",
-        a: "Once the trial end date passes, Landscapt and Equipt lock and show a screen asking you to subscribe; Settings and Billing stay reachable so you can upgrade. Your data is kept, and the database also refuses saves from a stale tab or an API call, so nothing can be changed until you subscribe. Choosing a plan restores full access straight away.",
+        a: "Your trial ends at the end of the last day, on your company's own clock. If you haven't subscribed, the account becomes read-only for 90 days. You can view, search and export everything, and email invoices you already sent plus account statements, but you can't add or change anything. After 90 days the app is locked until you subscribe. Your data is kept either way. Choosing a plan restores full access straight away.",
       },
       {
         q: "Can I customize which fields are required?",
@@ -2949,7 +3149,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "If I change or void an invoice in Landscapt, does QuickBooks update?",
-        a: "Yes. Editing a sent invoice (lines, tax, number, date, terms) updates the same QuickBooks invoice about two seconds after you stop, and voiding it voids it in QuickBooks. A voided QuickBooks invoice can't be reopened, so un-voiding in Landscapt shows a sync error instead. Changes made in QuickBooks are never pulled back.",
+        a: "Yes. Editing a sent invoice (lines, tax, number, date, terms) updates the same QuickBooks invoice about two seconds after you stop, and voiding it voids it in QuickBooks. Void is final in both, so to bill the work again use Duplicate as draft on the void invoice; the new invoice syncs as a new QuickBooks invoice. Changes made in QuickBooks are never pulled back.",
       },
       {
         q: "Do payments and refunds sync to QuickBooks?",

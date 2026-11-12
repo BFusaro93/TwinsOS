@@ -306,10 +306,13 @@ export function UsersRolesGuide() {
           has its own rules.
         </p>
         <p>
-          <strong>A visit&apos;s price and quantity need Add/Modify Invoices.</strong> The Qty and
-          Rate on a visit are what the visit bills when it&apos;s completed, so changing them —
-          on the Dispatch Board&apos;s visit sheet or anywhere else — needs Add/Modify Invoices.
-          Without it those two fields are locked; everything else on the visit sheet still saves.
+          <strong>A visit&apos;s price and quantity need Change Visit Price &amp; Quantity.</strong>{" "}
+          The Qty and Rate on a visit are what the visit bills when it&apos;s completed, so changing
+          them — on the Dispatch Board&apos;s visit sheet or anywhere else — needs the{" "}
+          <strong>Change Visit Price &amp; Quantity</strong> box (Scheduling Access). It&apos;s
+          separate from Add/Modify Invoices, so a scheduler can re-price a visit without getting
+          access to invoices. Without it those two fields are locked; everything else on the visit
+          sheet still saves.
           Notes, invoice descriptions, hours and crew size on a visit stay open to every CRM role.
           Giving an invoice its number (which happens when it is printed, emailed or saved) is
           open to anyone who can see the invoice.

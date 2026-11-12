@@ -22,8 +22,10 @@
 --    occurrence) also passes with job_cancel, contract_edit or contract_delete:
 --    cancelling a job (src/lib/visits/job-status-visits.ts) or a contract
 --    (use-contracts) cancels / prunes its untouched visits.
---  UPDATE of rate_cents / qty  acct_add_modify_invoices — the key
---    enforce_crm_job_service_billing_write uses: they are what the visit bills.
+--  UPDATE of rate_cents / qty  sched_visit_price_qty (Change Visit Price &
+--    Quantity) — they are what the visit bills. Its own key so a scheduler can
+--    be allowed to re-price a visit without getting invoice access; granted by
+--    20270101000500 to every role that could schedule or edit invoices.
 --  Moving a multi-crew stop    refused (everyone, admins included) while any
 --    other crew on the stop (same crew_group_id) is clocked in — the date move
 --    carries every sibling (trg_crm_job_visits_group_follow_date) and would pull
@@ -85,8 +87,8 @@ begin
 
   if tg_op = 'UPDATE'
      and (new.rate_cents is distinct from old.rate_cents or new.qty is distinct from old.qty)
-     and not public.has_settings_permission('acct_add_modify_invoices') then
-    raise exception 'Only someone who can modify invoices can change a visit''s price or quantity'
+     and not public.has_settings_permission('sched_visit_price_qty') then
+    raise exception 'Changing a visit''s price or quantity needs the Change Visit Price & Quantity permission'
       using errcode = '42501';
   end if;
 
