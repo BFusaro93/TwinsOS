@@ -112,7 +112,7 @@ import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { JobVisitPhotos } from "@/components/crm/jobs/JobVisitPhotos";
-import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
+import { SnowRateTiersEditor, SnowRateTiersSummary } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -1582,6 +1582,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             <dt className="text-xs text-muted-foreground">Rate Per Inch</dt>
                             <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">{job.ratePerInchCents != null ? formatCurrency(job.ratePerInchCents) : "—"}</dd>
                           </div>
+                        )}
+                        {(job.invoiceType === "per_event_per_inch" || job.invoiceType === "per_push_per_inch") && (
+                          <SnowRateTiersSummary jobId={job.id} perPush={job.invoiceType === "per_push_per_inch"} />
                         )}
                         {job.assetType && (
                           <div className="flex justify-between">

@@ -12,6 +12,7 @@ import {
   type TierInput,
 } from "@/lib/hooks/use-snow-rate-tiers";
 import { snowTierRangeProblem } from "@/lib/snow-billing";
+import { formatCurrency } from "@/lib/utils";
 
 export interface DraftTier {
   minInches: string;
@@ -221,6 +222,34 @@ export function SnowRateTiersEditor({ jobId, perPush }: { jobId: string; perPush
       >
         {saveTiers.isPending ? "Saving…" : "Save Ranges"}
       </Button>
+    </div>
+  );
+}
+
+/** Read-only list of a saved snow job's rate ranges (the view-mode counterpart
+ *  to SnowRateTiersEditor). Renders nothing when the job has no ranges. */
+export function SnowRateTiersSummary({ jobId, perPush }: { jobId: string; perPush?: boolean }) {
+  const { data: tiers = [] } = useSnowRateTiers(jobId);
+  if (tiers.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <dt className="text-xs text-muted-foreground">
+        Rate by Inches <span className="text-slate-400 dark:text-neutral-500">({perPush ? "per push" : "per storm"})</span>
+      </dt>
+      <dd className="flex flex-col gap-0.5">
+        {tiers.map((t) => (
+          <div key={t.id} className="flex justify-between text-xs font-medium text-slate-800 dark:text-neutral-100">
+            <span>
+              {t.maxInches != null ? `${t.minInches}" – ${t.maxInches}"` : `${t.minInches}"+`}
+            </span>
+            <span>
+              {t.maxInches != null
+                ? `${formatCurrency(t.rateCents ?? 0)} flat`
+                : `${formatCurrency(t.ratePerInchCents ?? 0)} / in.`}
+            </span>
+          </div>
+        ))}
+      </dd>
     </div>
   );
 }
