@@ -337,6 +337,17 @@ export function DispatchBoardGuide() {
           </li>
         </ul>
         <p>
+          <strong>Setting crews on many stops at once.</strong> Check the visits, open{" "}
+          <strong>Actions &gt; Re-assign Crew &gt; Multiple crews…</strong>, and tick the crews. The
+          ticked crews become each stop&apos;s <em>full</em> crew list: the <strong>first crew you
+          tick is the Lead</strong> (it bills the stop), the rest are added as Shared, and any crew
+          on the stop that you didn&apos;t tick is taken off. Selecting one row of a shared stop
+          covers the whole stop, and with a single stop selected the dialog opens with its current
+          crews already ticked. A stop is skipped (and you&apos;re told why) if its Lead has already
+          started; a crew that has already started stays on the stop and can&apos;t be removed.
+          Completed visits are never touched.
+        </p>
+        <p>
           To take a crew back off, click the ✕ next to it in <strong>Crews on this stop</strong> —
           only before that crew has started. Removing the lead hands billing to the next crew. Each
           crew&apos;s order in its own route is set separately, and a change to the job&apos;s default
@@ -662,7 +673,8 @@ export function DispatchBoardGuide() {
       <Section id="bulk-actions" title="Bulk actions on selected visits">
         <p>
           Checking one or more visit rows reveals an <strong>Actions (n)</strong> button on the
-          toolbar with a Change Status submenu, a Re-assign Crew submenu, and — separately —{" "}
+          toolbar with a Change Status submenu, a Re-assign Crew submenu (pick one crew, or{" "}
+          <strong>Multiple crews…</strong> to put several crews on each stop), and — separately —{" "}
           <strong>Email Selected Clients</strong>.
         </p>
         <p>
