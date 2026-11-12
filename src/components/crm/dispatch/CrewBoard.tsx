@@ -827,7 +827,10 @@ function EquipmentCard({
         )}
       </div>
       <span className="flex shrink-0 items-center gap-1">
-        {onTruck && <span title="The crew marked this as loaded" className="flex items-center gap-0.5 rounded bg-green-100 px-1 text-[10px] font-semibold uppercase text-green-700 dark:bg-green-900/40 dark:text-green-300"><Check className="h-3 w-3" />Loaded</span>}
+        {/* Narrow columns: just a check, so a long equipment name keeps its room. TV mode has the width for the word. */}
+        {onTruck && (big
+          ? <span title="The crew marked this as loaded" className="flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-sm font-semibold uppercase text-green-700 dark:bg-green-900/40 dark:text-green-300"><Check className="h-4 w-4" />Loaded</span>
+          : <span title="Loaded — the crew marked this as loaded" role="img" aria-label="Loaded" className="flex h-4 w-4 items-center justify-center rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"><Check className="h-3 w-3" /></span>)}
         {needed && <span className="rounded bg-emerald-100 px-1 text-[10px] font-semibold uppercase text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Job needs</span>}
         {isDefault && !onToggleDefault && <Pin className="h-3 w-3 text-brand-600" />}
         {onToggleDefault && (
