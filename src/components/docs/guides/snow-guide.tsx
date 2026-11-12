@@ -510,6 +510,19 @@ export function SnowGuide() {
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
           <li>
+            <strong>Subcontractors.</strong> Set up each subcontractor as its own crew. There is no
+            separate subcontractor setting on a snow job, and you don&apos;t need to add them as a
+            vendor just to dispatch them. Go to <strong>Team → Crews</strong>, create a crew named
+            for the subcontractor (for example &quot;Sub – Smith Plowing&quot;), then add their
+            people under <strong>Team Assignments</strong>. Set those employees&apos; employment
+            status to <strong>Contractor</strong> so they show on the Contractor Phone List report.
+            If their truck should show on the board, add it to the Vehicles registry in Equipt and
+            load it onto that crew from the Equipment yard (use the pin to make it the crew&apos;s
+            default). Then assign their stops to that crew like any other crew. Add them as a
+            vendor only if you also want to track what you pay them through purchasing or on a
+            project&apos;s Other Costs.
+          </li>
+          <li>
             <strong>Status icon.</strong> Tapping a stop&apos;s status icon steps it forward through Scheduled, Dispatched and In Progress, and asks before marking it Completed (which invoices it) or reopening a completed stop. Skip a stop from the outcome dialog with a reason.
           </li>
           <li>

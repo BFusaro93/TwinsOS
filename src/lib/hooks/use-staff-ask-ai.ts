@@ -21,6 +21,8 @@ export interface StaffAskAIQuestion {
   createdAt: string;
   askerName: string | null;
   askerEmail: string | null;
+  /** Shared by every question asked in one chat; null for rows logged before grouping existed. */
+  conversationId: string | null;
 }
 
 /** Every org's logged Ask AI questions. Staff-only — the RPC returns nothing otherwise. */
@@ -49,6 +51,7 @@ export function useStaffAskAIQuestions() {
         createdAt: r.created_at,
         askerName: r.asker_name,
         askerEmail: r.asker_email,
+        conversationId: r.conversation_id ?? null,
       }));
     },
   });
