@@ -331,8 +331,10 @@ export function InvoicingGuide() {
           <li>
             <strong>Void is final.</strong> Once an invoice is void it can&apos;t be reopened or moved
             to Draft, Sent, Paid or any other status, and <strong>Mark as Sent</strong> /{" "}
-            <strong>Mark as Paid</strong> on the Invoices list skip void invoices. The void
-            confirmation says so before you commit.
+            <strong>Mark as Paid</strong> on the Invoices list skip void invoices. A void invoice is
+            also read-only: its lines, amounts, dates, terms and notes can&apos;t be edited, and it
+            shows nothing due. You can still print it, lock it or delete it. The void confirmation
+            says so before you commit.
           </li>
           <li>
             <strong>Duplicate as draft.</strong> To bill a void invoice&apos;s work again, open it and

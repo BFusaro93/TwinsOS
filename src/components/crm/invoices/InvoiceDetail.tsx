@@ -754,7 +754,10 @@ export function InvoiceDetail({
   // (the DB guard refuses them otherwise); anyone who can open the invoice may
   // still print it, and Email Invoices holders may email it.
   const canModifyInvoice = can("acct_add_modify_invoices");
-  const readOnly = !!invoice?.locked || !canModifyInvoice;
+  // Void is final: a void invoice is read-only for everyone (the database
+  // refuses edits too); Duplicate as draft is how its work is billed again.
+  const isVoid = invoice?.status === "void";
+  const readOnly = !!invoice?.locked || !canModifyInvoice || isVoid;
   const [selectedPayment, setSelectedPayment] = useState<CRMPayment | null>(null);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -1129,7 +1132,7 @@ export function InvoiceDetail({
           )}
           {/* Unlocking re-opens the amounts, so the database requires
               acct_add_modify_invoices for it; anyone may lock. */}
-          {(!invoice.locked || can("acct_add_modify_invoices")) && (
+          {!isVoid && (!invoice.locked || can("acct_add_modify_invoices")) && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={handleToggleLock}
               title={invoice.locked ? "Unlock invoice to make changes" : "Lock invoice"}>
@@ -1623,6 +1626,7 @@ export function InvoiceDetail({
               }}
               placeholder="Add a note that will appear on this invoice's PDF and email…"
               className="min-h-[70px] text-xs"
+              disabled={isVoid}
             />
           </div>
 
@@ -1785,9 +1789,10 @@ export function InvoiceDetail({
                     <span className="tabular-nums text-green-600 dark:text-green-400">−{formatCurrency(invoice.amountPaidCents)}</span>
                   </div>
                 )}
-                <div className={cn("flex justify-between gap-8 font-semibold", previewBalance > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
+                <div className={cn("flex justify-between gap-8 font-semibold", previewBalance > 0 && !isVoid ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
                   <span>Balance Due</span>
-                  <span className="tabular-nums">{formatCurrency(previewBalance)}</span>
+                  {/* A void invoice is owed nothing, whatever its stored balance. */}
+                  <span className="tabular-nums">{formatCurrency(isVoid ? 0 : previewBalance)}</span>
                 </div>
               </div>
             </div>

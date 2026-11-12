@@ -2063,6 +2063,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Can I edit a void invoice?",
+        a: "No. A void invoice is read-only: its lines, amounts, dates, terms and notes can't be changed, and it shows nothing due. You can still print, lock or delete it. To bill the work again, use Duplicate as draft.",
+      },
+      {
         q: "Can I reopen a void invoice?",
         a: "No. Void is final: a void invoice can't be changed to Draft, Sent, Paid or any other status, and bulk Mark as Sent / Mark as Paid skip it. To bill the work again, open the void invoice and click Duplicate as draft.",
       },
