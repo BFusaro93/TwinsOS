@@ -10,6 +10,7 @@ import { recurrenceProblem, recurrenceToColumns } from "@/lib/reports/schedule-r
 import { checkCallerCanScheduleAnalysis, dateWindowProblem } from "@/lib/reports/schedule-analysis-guard";
 import { withNextRun } from "@/lib/reports/schedule-rows";
 import { createReportScheduleSchema, REPORT_SCHEDULE_COLUMNS } from "@/types/report-schedules";
+import { advancedReportingDenied } from "@/lib/reports/advanced-reporting";
 
 /** GET — every live schedule in the caller's org (RLS scopes to my_org_id()),
  *  for the Report Center's Scheduled tab and the per-report dialog. Same gate
@@ -22,6 +23,8 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
   if (!(await hasAnySettingsPermission(supabase, ["view_report_center"]))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -65,6 +68,8 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
 
   // The UI hides these controls behind manage_report_center, but that is only a
   // hint — this is the boundary (view-only roles could otherwise edit/delete).

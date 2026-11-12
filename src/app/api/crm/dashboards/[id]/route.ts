@@ -3,6 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { dashboardInputSchema } from "@/types/crm-reports";
 import { isCrewCaller } from "@/lib/reports/crew-dashboard-access";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import {
+  advancedReportingDenied,
+  advancedReportingRequiredResponse,
+  callerHasAdvancedReporting,
+} from "@/lib/reports/advanced-reporting";
 
 interface DashboardRow {
   id: string;
@@ -45,6 +50,10 @@ export async function GET(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Without the Advanced Reporting add-on only built-in (seeded) dashboards
+  // open; any other id answers with the add-on message so the viewer can
+  // show the upsell instead of "not found".
+  const hasAdvancedReporting = await callerHasAdvancedReporting(supabase);
 
   // Crew logins may open only dashboards flagged visible_to_crew — see
   // crew-dashboard-access.ts. Everyone else needs Report Center access.
@@ -68,9 +77,11 @@ export async function GET(
     .eq("id", id)
     .is("deleted_at", null);
   if (isCrew) query = query.eq("visible_to_crew", true);
+  if (!hasAdvancedReporting) query = query.eq("is_system_seeded", true);
   const { data, error } = await query.single();
 
   if (error || !data) {
+    if (!hasAdvancedReporting) return advancedReportingRequiredResponse();
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   return NextResponse.json({ dashboard: mapRow(data as DashboardRow) });
@@ -85,6 +96,8 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
 
   // Mirrors the client-side gate in DashboardBuilder.tsx, but this is the
   // actual boundary — the UI gate only hides the builder controls.

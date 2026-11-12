@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { customReportInputSchema } from "@/types/crm-reports";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { advancedReportingDenied } from "@/lib/reports/advanced-reporting";
 
 interface CustomReportRow {
   id: string;
@@ -49,6 +50,8 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
 
   // Mirrors the client-side gate in ReportsHub.tsx, but this is the actual
   // boundary — the UI gate only hides the My Reports list. Saved analysis
@@ -86,6 +89,8 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
 
   // The UI hides these controls behind manage_report_center, but that is only a
   // hint — this is the boundary (view-only roles could otherwise edit/delete).

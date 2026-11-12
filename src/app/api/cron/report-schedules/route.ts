@@ -15,6 +15,7 @@ import { renderScheduledReport, type ScheduledReportFormat } from "@/lib/reports
 import { escapeHtml, orgEmailFrom, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { startOfTodayInZoneIso } from "@/lib/time/zone";
 import { isDue, recurrenceFromRow } from "@/lib/reports/schedule-recurrence";
 import { CREATOR_DEACTIVATED_PAUSE_MESSAGE } from "@/types/report-schedules";
@@ -98,8 +99,18 @@ export async function GET(request: Request) {
   const dayStartByOrg = new Map<string, string>();
   const due: ScheduleRow[] = [];
   const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  // Scheduled delivery is part of the Advanced Reporting add-on (bundled on
+  // Enterprise and during a trial). A schedule whose org lacks it is skipped
+  // without being claimed, so it resumes on its own if the add-on is bought.
+  const advancedReportingByOrg = new Map<string, boolean>();
   for (const schedule of schedules ?? []) {
     if (await orgCanceled(schedule.org_id)) continue; // canceled orgs get no scheduled report emails
+    let hasAdvancedReporting = advancedReportingByOrg.get(schedule.org_id);
+    if (hasAdvancedReporting === undefined) {
+      hasAdvancedReporting = await orgHasAddon(supabase, schedule.org_id, "advanced_reporting");
+      advancedReportingByOrg.set(schedule.org_id, hasAdvancedReporting);
+    }
+    if (!hasAdvancedReporting) continue;
     const tz = await getOrgTimeZone(supabase, schedule.org_id);
     if (!dayStartByOrg.has(schedule.org_id)) {
       dayStartByOrg.set(schedule.org_id, startOfTodayInZoneIso(now, tz));

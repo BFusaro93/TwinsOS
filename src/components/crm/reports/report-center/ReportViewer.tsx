@@ -26,6 +26,7 @@ import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
 import { buildTotalsRow, exportRowsWithTotals } from "@/lib/reports/export-rows";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
 
 function chartInputFromResult(
   title: string,
@@ -87,6 +88,8 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
   // resolved server-side against the ORG's zone — so this has to use the same
   // zone, not the browser's.
   const orgTimeZone = useOrgTimeZone();
+  // Scheduled email delivery is part of the Advanced Reporting add-on.
+  const { allowed: hasAdvancedReporting } = useAddonAccess("advanced_reporting");
   const [values, setValues] = useState<Record<string, string>>(() =>
     defaultFilterValues(def.filters, orgTimeZone)
   );
@@ -237,7 +240,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
                 {printing ? "Preparing…" : "Print"}
               </Button>
-              {def.schedulable && <ReportScheduleDialog reportKey={def.key} />}
+              {def.schedulable && hasAdvancedReporting && <ReportScheduleDialog reportKey={def.key} />}
             </>
           }
         />
@@ -245,8 +248,13 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
 
       {headerVisuals.length > 0 && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {headerVisuals.map((hv) => (
-            <HeaderVisual key={hv.title} headerVisual={hv} onData={handleChartData} />
+          {headerVisuals.map((hv, index) => (
+            <HeaderVisual
+              key={hv.title}
+              headerVisual={hv}
+              prebuilt={{ reportKey: def.key, params: values, index }}
+              onData={handleChartData}
+            />
           ))}
         </div>
       )}

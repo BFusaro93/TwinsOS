@@ -246,8 +246,8 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
       },
       {
         key: "advanced_reporting",
-        label: "Advanced reporting & job costing analytics",
-        description: "Deeper financial and operational analysis beyond the standard report library.",
+        label: "Advanced reporting",
+        description: "Custom report builder, custom dashboards, Graphics Library, and scheduled report emails.",
         highlight: false,
         values: { starter: "Add-on", cmms: false, growth: "Add-on", enterprise: true },
       },

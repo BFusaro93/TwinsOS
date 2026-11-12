@@ -32,6 +32,8 @@ import {
 } from "@/lib/hooks/use-report-center";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { Dashboard } from "@/types/crm-reports";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
+import { AdvancedReportingUpsell } from "./AdvancedReportingGate";
 
 function NewDashboardMenu() {
   return (
@@ -66,7 +68,11 @@ function NewDashboardMenu() {
 
 export function DashboardsList() {
   const { can } = usePermissions();
-  const canManage = can("manage_report_center");
+  // Built-in dashboards are on every plan; building, editing or duplicating
+  // one needs the Advanced Reporting add-on (the API lists only the
+  // built-ins without it).
+  const { allowed: hasAdvancedReporting, isLoading: addonLoading } = useAddonAccess("advanced_reporting");
+  const canManage = can("manage_report_center") && hasAdvancedReporting && !addonLoading;
   const { data: dashboards = [], isLoading } = useDashboards();
   const createDashboard = useCreateDashboard();
   const deleteDashboard = useDeleteDashboard();
@@ -89,6 +95,13 @@ export function DashboardsList() {
         </p>
         {canManage && <NewDashboardMenu />}
       </div>
+
+      {!addonLoading && !hasAdvancedReporting && (
+        <AdvancedReportingUpsell
+          feature="Custom dashboards"
+          className="rounded-lg border border-dashed bg-card py-8"
+        />
+      )}
 
       {isLoading ? (
         <div className="space-y-2">

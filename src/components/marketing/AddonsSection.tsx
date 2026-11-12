@@ -20,7 +20,7 @@ const DESCRIPTIONS: Record<AddonKey, string> = {
   job_photos: "Before/after photo capture with annotations, tagging, and an archive workflow attached to every job.",
   client_portal: "A self-service portal where clients view estimates, pay invoices, and submit tickets without calling in.",
   route_optimization: "Automatically sequence today's stops to minimize drive time between jobs and service calls.",
-  advanced_reporting: "Deeper financial and job-costing analytics beyond the standard report library.",
+  advanced_reporting: "Build your own reports and dashboards, save reusable graphics, and email reports on a schedule. Every prebuilt report is included on all plans.",
   api_access: "Programmatic REST API access to your data for custom integrations and internal tooling.",
 };
 

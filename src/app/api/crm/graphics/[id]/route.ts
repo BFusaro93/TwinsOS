@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { savedGraphicInputSchema } from "@/types/crm-reports";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { advancedReportingDenied } from "@/lib/reports/advanced-reporting";
 
 interface SavedGraphicRow {
   id: string;
@@ -42,6 +43,8 @@ export async function GET(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
 
   // Saved graphics are Report Center content — same gate as the list route.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,6 +78,8 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
 
   // The UI hides these controls behind manage_report_center, but that is only a
   // hint — this is the boundary (view-only roles could otherwise edit/delete).

@@ -1,4 +1,5 @@
 import { CustomAnalysisBuilder } from "@/components/crm/reports/report-center/CustomAnalysisBuilder";
+import { AdvancedReportingGate } from "@/components/crm/reports/report-center/AdvancedReportingGate";
 
 export default async function EditAnalysisPage({
   params,
@@ -6,5 +7,9 @@ export default async function EditAnalysisPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <CustomAnalysisBuilder reportId={id} />;
+  return (
+    <AdvancedReportingGate feature="The report builder">
+      <CustomAnalysisBuilder reportId={id} />
+    </AdvancedReportingGate>
+  );
 }

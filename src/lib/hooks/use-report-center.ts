@@ -5,6 +5,7 @@ import { getDataset, getDatasetField } from "@/lib/reports/datasets";
 import { GRAPHIC_TEMPLATES } from "@/lib/reports/graphic-templates";
 import { shiftYmd } from "@/lib/time/zone";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { todayInZone } from "@/lib/time/zone";
 import type {
   AnalysisConfig,
@@ -31,6 +32,19 @@ async function readError(res: Response): Promise<string> {
   }
 }
 
+// ── Advanced Reporting add-on ─────────────────────────────────────────────────
+
+/** Custom analyses, custom dashboards, the Graphics Library and scheduled
+ *  delivery need the Advanced Reporting add-on (server-enforced in their API
+ *  routes — see src/lib/reports/advanced-reporting.ts). Their queries stay
+ *  disabled without it so lists come back empty instead of erroring.
+ *  Dashboards aren't gated here: the built-in ones stay on every plan, and
+ *  the dashboards API itself narrows the list to them without the add-on. */
+export function useAdvancedReportingEnabled(): boolean {
+  const { allowed, isLoading } = useAddonAccess("advanced_reporting");
+  return allowed && !isLoading;
+}
+
 // ── pre-built report runs ─────────────────────────────────────────────────────
 
 export function useRunReport(reportKey: string, params: Record<string, string>) {
@@ -41,6 +55,29 @@ export function useRunReport(reportKey: string, params: Record<string, string>) 
       for (const [key, value] of Object.entries(params)) {
         if (value !== "") qs.set(key, value);
       }
+      const res = await fetch(`/api/crm/reports/run/${reportKey}?${qs.toString()}`);
+      if (!res.ok) throw new Error(await readError(res));
+      return res.json() as Promise<ReportResult>;
+    },
+  });
+}
+
+/** One of a prebuilt report's header charts, built and run server-side from
+ *  the report definition (the run route's `headerVisual` mode) — so prebuilt
+ *  charts don't need the Advanced Reporting add-on that analysis/run does. */
+export function useRunReportHeaderVisual(
+  source: { reportKey: string; params: Record<string, string>; index: number } | undefined
+) {
+  return useQuery<ReportResult>({
+    queryKey: ["report-run-header-visual", source?.reportKey, source?.params, source?.index],
+    enabled: !!source,
+    queryFn: async () => {
+      const { reportKey, params, index } = source as NonNullable<typeof source>;
+      const qs = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== "") qs.set(key, value);
+      }
+      qs.set("headerVisual", String(index));
       const res = await fetch(`/api/crm/reports/run/${reportKey}?${qs.toString()}`);
       if (!res.ok) throw new Error(await readError(res));
       return res.json() as Promise<ReportResult>;
@@ -67,8 +104,10 @@ export function useRunAnalysis() {
 // ── custom (saved) reports CRUD ───────────────────────────────────────────────
 
 export function useCustomReports() {
+  const advancedReporting = useAdvancedReportingEnabled();
   return useQuery<CustomReport[]>({
     queryKey: ["custom-reports"],
+    enabled: advancedReporting,
     queryFn: async () => {
       const res = await fetch("/api/crm/custom-reports");
       if (!res.ok) throw new Error(await readError(res));
@@ -79,9 +118,10 @@ export function useCustomReports() {
 }
 
 export function useCustomReport(id: string | undefined) {
+  const advancedReporting = useAdvancedReportingEnabled();
   return useQuery<CustomReport>({
     queryKey: ["custom-reports", id],
-    enabled: !!id,
+    enabled: advancedReporting && !!id,
     queryFn: async () => {
       const res = await fetch(`/api/crm/custom-reports/${id}`);
       if (!res.ok) throw new Error(await readError(res));
@@ -344,8 +384,10 @@ export function useDeleteDashboard() {
 // ── saved graphics (Graphics Library) CRUD ────────────────────────────────────
 
 export function useSavedGraphics() {
+  const advancedReporting = useAdvancedReportingEnabled();
   return useQuery<SavedGraphic[]>({
     queryKey: ["saved-graphics"],
+    enabled: advancedReporting,
     queryFn: async () => {
       const res = await fetch("/api/crm/graphics");
       if (!res.ok) throw new Error(await readError(res));
