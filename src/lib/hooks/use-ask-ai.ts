@@ -18,6 +18,9 @@ export function useAskAI() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // One id per chat, so the staff review tab can group a conversation's
+  // follow-up questions. A new one starts whenever the chat is reset (panel closed).
+  const conversationIdRef = useRef<string>(crypto.randomUUID());
 
   const ask = useCallback(
     async (question: string) => {
@@ -33,7 +36,7 @@ export function useAskAI() {
         const res = await fetch("/api/support/ask", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question, history }),
+          body: JSON.stringify({ question, history, conversationId: conversationIdRef.current }),
           signal: controller.signal,
         });
 
@@ -80,6 +83,7 @@ export function useAskAI() {
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
+    conversationIdRef.current = crypto.randomUUID();
     setMessages([]);
     setError(null);
     setIsStreaming(false);
