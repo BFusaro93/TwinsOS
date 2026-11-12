@@ -22,6 +22,7 @@ import { useCreateInvoiceFromJob, useInvoiceBlockReason, useInvoiceForVisit } fr
 import { billableJobProductStatusesForVisit, visitLineAmount, type InvoiceFromJobLine } from "@/lib/invoices/create-from-job";
 import { useOrgTags, useClient } from "@/lib/hooks/use-clients";
 import { BulkTagDialog } from "@/components/crm/BulkTagDialog";
+import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDialog";
 import {
   useDispatchSavedViews,
   useCreateDispatchSavedView,
@@ -4407,7 +4408,8 @@ export function DispatchBoard() {
   const [bulkEmailOpen,   setBulkEmailOpen]   = useState(false);
   const [bulkChemNoticeOpen, setBulkChemNoticeOpen] = useState(false);
   const [bulkTagOpen,     setBulkTagOpen]     = useState(false);
-  const [legendOpen,      setLegendOpen]      = useState(false);
+  const [bulkMultiCrewOpen, setBulkMultiCrewOpen] = useState(false);
+  const [legendOpen,     setLegendOpen]      = useState(false);
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
   // Service filter is multi-select (unlike the other Select-a-Filter text
@@ -6174,6 +6176,10 @@ export function DispatchBoard() {
                       {c.name}
                     </DropdownMenuItem>
                   ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-xs" onSelect={() => setBulkMultiCrewOpen(true)}>
+                    Multiple crews…
+                  </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
@@ -6605,6 +6611,18 @@ export function DispatchBoard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk assign the selected visits to several crews (lead + extra crews) */}
+      <BulkMultiCrewDialog
+        key={bulkMultiCrewOpen ? "open" : "closed"}
+        open={bulkMultiCrewOpen}
+        onOpenChange={setBulkMultiCrewOpen}
+        visits={displayVisits.filter((v) => selectedIds.has(v.id))}
+        allVisits={displayVisits}
+        crews={crews ?? []}
+        resolveCrewId={effectiveCrewId}
+        onDone={() => setSelectedIds(new Set())}
+      />
 
       {/* Bulk add/remove client tags for the selected visits */}
       <BulkTagDialog

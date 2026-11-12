@@ -1426,7 +1426,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Where it lives",
             detail:
-              "Administration > Reports in the Landscapt sidebar. Seven tabs: Dashboard (the original built-in overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses — New Analysis builds one), Scheduled (emailed reports), Payroll (crew hours from Start Day / End Day, editable, exportable and lockable; admins and roles with View & Edit Payroll Report), and Graphics Library. The ready-made dashboards (KPI Scorecard, Company Report, Social Media and others) are under the Dashboards tile on the Home screen.",
+              "Administration > Reports in the Landscapt sidebar. Seven tabs: Dashboard (the original built-in overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses — New Analysis builds one), Scheduled (emailed reports), Payroll (crew hours from Start Day / End Day, editable, exportable and lockable; admins and roles with View & Edit Payroll Report), and Graphics Library. The ready-made dashboards (KPI Scorecard, Company Report, Social Media and others) are under the Dashboards tile on the Home screen. Custom Dashboards (except the three built-in ones), My Reports, Scheduled and the Graphics Library need the Advanced Reporting add-on (included on Enterprise and during a trial, an add-on on Starter and Growth); everything else here is on every plan.",
           },
           {
             step: "Categories",
@@ -3170,6 +3170,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "What happens when I deactivate a user?",
         a: "They can't sign in. Their employee record is deactivated too, so they leave rosters and assignment lists, and reactivating either one restores both. If they created API keys, the dialog lists them with 'Revoke these keys' checked, and report emails they scheduled are paused until an admin takes them over.",
+      },
+      {
+        q: "Which reporting features need the Advanced Reporting add-on?",
+        a: "Building your own reports (My Reports and New Analysis), Custom Dashboards (including dashboards shown to crews), the Graphics Library, and scheduled report emails. Advanced Reporting is included on Enterprise and during your free trial, and is an add-on on Starter and Growth: an admin adds it in Settings > Subscription. Without it, those tabs show what the add-on includes instead, and scheduled emails aren't sent. Every pre-built report in the Report Center, the built-in Sales Overview, A/R Overview and Operations Dashboard dashboards (as shipped; changing or copying them needs the add-on), the Dashboard tab, the KPI Scorecard, the Company Report and the job costing reports are on every plan. Nothing you built is deleted if you don't have the add-on; it all comes back, and schedules start sending again, once it's added.",
       },
       {
         q: "A scheduled report says 'creator deactivated'. How do I start it again?",

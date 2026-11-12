@@ -11,6 +11,11 @@ import {
 import { REPORT_RELATIONS } from "@/lib/reports/datasets";
 import { DATASET_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import {
+  advancedReportingRequiredResponse,
+  callerHasAdvancedReporting,
+  isBuiltInDashboardPanel,
+} from "@/lib/reports/advanced-reporting";
 
 /**
  * Executes an ad-hoc custom analysis (the Custom Analysis builder's
@@ -61,6 +66,12 @@ export async function POST(request: Request) {
       { error: firstIssueMessage(parsed.error, "Invalid analysis config") },
       { status: 400 }
     );
+  }
+
+  // Free-form analyses are part of the Advanced Reporting add-on; without it
+  // only the exact panels of the built-in dashboards may run.
+  if (!isBuiltInDashboardPanel(parsed.data) && !(await callerHasAdvancedReporting(supabase))) {
+    return advancedReportingRequiredResponse();
   }
 
   if (isCrew) {

@@ -27,12 +27,12 @@ const ITEMS: DeepDiveItem[] = [
   {
     icon: LayoutDashboard,
     title: "Drag-and-Drop Dashboard Builder",
-    body: "Build a custom dashboard from any report's output — bar, line, gauge, or crosstab visuals, with top-N grouping and formula columns for derived metrics.",
+    body: "Build a custom dashboard from any report's output — bar, line, gauge, or crosstab visuals, with top-N grouping and formula columns for derived metrics. Included on Enterprise; an Advanced Reporting add-on on Starter and Growth.",
   },
   {
     icon: BarChart3,
     title: "Graphics Library",
-    body: "A catalog of pre-made panel-level visuals — system-defined and your own saved ones — that drop into any dashboard from the builder or the Report Center.",
+    body: "A catalog of pre-made panel-level visuals — system-defined and your own saved ones — that drop into any dashboard from the builder or the Report Center. Included on Enterprise; an Advanced Reporting add-on on Starter and Growth.",
   },
   {
     icon: Gauge,
@@ -42,7 +42,7 @@ const ITEMS: DeepDiveItem[] = [
   {
     icon: Clock,
     title: "Scheduled Delivery",
-    body: "Set a report to run on a schedule and land in the right inbox automatically, instead of someone remembering to pull it every week.",
+    body: "Set a report to run on a schedule and land in the right inbox automatically, instead of someone remembering to pull it every week. Included on Enterprise; an Advanced Reporting add-on on Starter and Growth.",
   },
 ];
 

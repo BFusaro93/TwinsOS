@@ -14,6 +14,7 @@ import { DashboardsList } from "./DashboardsList";
 import { GraphicsLibraryList } from "./GraphicsLibraryList";
 import { PayrollReport } from "./PayrollReport";
 import { ScheduledReportsList } from "./ScheduledReportsList";
+import { AdvancedReportingGate } from "./AdvancedReportingGate";
 
 const TAB_KEYS = ["dashboard", "dashboards", "center", "custom", "schedules", "graphics", "payroll"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
@@ -120,10 +121,14 @@ export function ReportsHub() {
           <ReportCatalog />
         </TabsContent>
         <TabsContent value="custom" className="mt-4 flex-1 overflow-auto">
-          <MyReportsList />
+          <AdvancedReportingGate feature="My Reports">
+            <MyReportsList />
+          </AdvancedReportingGate>
         </TabsContent>
         <TabsContent value="schedules" className="mt-4 flex-1 overflow-auto">
-          <ScheduledReportsList />
+          <AdvancedReportingGate feature="Scheduled report emails">
+            <ScheduledReportsList />
+          </AdvancedReportingGate>
         </TabsContent>
         {canPayroll && (
           <TabsContent value="payroll" className="mt-4 flex-1 overflow-auto">
@@ -131,7 +136,9 @@ export function ReportsHub() {
           </TabsContent>
         )}
         <TabsContent value="graphics" className="mt-4 flex-1 overflow-auto">
-          <GraphicsLibraryList />
+          <AdvancedReportingGate feature="The Graphics Library">
+            <GraphicsLibraryList />
+          </AdvancedReportingGate>
         </TabsContent>
       </Tabs>
     </div>

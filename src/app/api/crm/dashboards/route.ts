@@ -4,6 +4,7 @@ import { dashboardInputSchema } from "@/types/crm-reports";
 import { ensureSystemDashboardsSeeded } from "@/lib/reports/seed-dashboards";
 import { isCrewCaller } from "@/lib/reports/crew-dashboard-access";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { advancedReportingDenied, callerHasAdvancedReporting } from "@/lib/reports/advanced-reporting";
 
 interface DashboardRow {
   id: string;
@@ -37,6 +38,9 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Without the Advanced Reporting add-on only the built-in (seeded)
+  // dashboards are listed; custom ones come back when it's added.
+  const hasAdvancedReporting = await callerHasAdvancedReporting(supabase);
 
   // Crew logins have no Report Center permission; they only ever see the
   // dashboards an admin explicitly flagged visible_to_crew (and skip the
@@ -64,6 +68,7 @@ export async function GET() {
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
   if (isCrew) query = query.eq("visible_to_crew", true);
+  if (!hasAdvancedReporting) query = query.eq("is_system_seeded", true);
   const { data, error } = await query;
 
   if (error) {
@@ -82,6 +87,8 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const addonDenied = await advancedReportingDenied(supabase);
+  if (addonDenied) return addonDenied;
 
   // Mirrors the client-side gate in DashboardBuilder.tsx, but this is the
   // actual boundary — the UI gate only hides the builder controls.

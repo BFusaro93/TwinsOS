@@ -105,6 +105,22 @@ export function ReportCenterGuide() {
           <strong>Reports Dashboard</strong>, is Landscapt&apos;s original built-in reporting page;
           it&apos;s the same page you see on the Reports page&apos;s <strong>Dashboard</strong> tab.
         </p>
+        <Callout>
+          <strong>Advanced Reporting add-on.</strong> Four tabs &mdash; <strong>Custom
+          Dashboards</strong>, <strong>My Reports</strong>, <strong>Scheduled</strong> and the{" "}
+          <strong>Graphics Library</strong> &mdash; are part of the Advanced Reporting add-on, along
+          with the New Analysis and dashboard builders. It&apos;s included on Enterprise and during
+          your free trial, and an admin can add it to Starter or Growth in{" "}
+          <strong>Settings &gt; Subscription</strong>. Without it those tabs show what the add-on
+          includes, custom dashboards don&apos;t appear under the Dashboards tile, and scheduled
+          emails aren&apos;t sent. The three <strong>built-in</strong> dashboards (Sales Overview,
+          A/R Overview and Operations Dashboard) stay on the Custom Dashboards tab on every plan,
+          but changing or copying one needs the add-on, and a built-in you changed while you had
+          it locks like a custom dashboard. Everything else on this page &mdash; every pre-built
+          report, the Dashboard tab, Payroll, the KPI Scorecard, the Company Report and the job
+          costing reports &mdash; is on every plan. Nothing you built is deleted: it all comes back, and
+          schedules start sending again, once the add-on is added.
+        </Callout>
       </Section>
 
       <Section id="report-center" title="The Report Center tab">
@@ -873,6 +889,14 @@ export function ReportCenterGuide() {
             <strong>Your plan</strong> &mdash; the Equipt Dashboard appears only when your plan
             includes Equipt; Landscapt My Day, the Reports Dashboard, the KPI Scorecard and the
             Company Report appear only when it includes Landscapt.
+          </li>
+          <li>
+            <strong>Advanced Reporting add-on</strong> &mdash; custom analyses (&quot;My
+            Reports&quot;), Custom Dashboards, the Graphics Library and scheduled delivery need the
+            add-on on Starter and Growth (it&apos;s included on Enterprise and during a trial). The
+            built-in Sales Overview, A/R Overview and Operations Dashboard stay viewable on every
+            plan as shipped. This
+            is checked every time one of them opens, runs, saves or sends, not just by hiding tabs.
           </li>
           <li>
             <strong>Company-specific dashboards</strong> &mdash; Financial, Labor Efficiency and
