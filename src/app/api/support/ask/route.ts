@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
   const orgId: string = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   const userId = user.id;
 
-  let body: { question?: string; history?: ChatTurn[] };
+  let body: { question?: string; history?: ChatTurn[]; conversationId?: string };
   try {
     body = await req.json();
   } catch {
@@ -133,6 +133,13 @@ export async function POST(req: NextRequest) {
   if (question.length > 2000) {
     return NextResponse.json({ error: "question must be 2000 characters or fewer" }, { status: 400 });
   }
+  // Client-generated chat id, used only to group a conversation's questions in
+  // the staff review tab. Anything that isn't a UUID is ignored, not rejected.
+  const conversationId =
+    typeof body.conversationId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.conversationId)
+      ? body.conversationId
+      : null;
   // History is client-supplied: keep only well-formed turns and cap their size
   // so a crafted payload can't run up token cost or inject odd roles.
   const history: ChatTurn[] = (Array.isArray(body.history) ? body.history : [])
@@ -213,6 +220,7 @@ ${formatDataDictionaryContext(query)}`;
       org_id: orgId,
       created_by: user.id,
       question,
+      conversation_id: conversationId,
       model: MODEL,
       source_titles: [...new Set(docPassages.map((r) => r.title))],
     })

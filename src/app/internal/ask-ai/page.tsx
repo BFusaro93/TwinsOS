@@ -128,18 +128,80 @@ function QuestionCard({ item }: { item: StaffAskAIQuestion }) {
   );
 }
 
+interface Conversation {
+  key: string;
+  items: StaffAskAIQuestion[]; // oldest first, so it reads top to bottom
+  latest: string;
+  escalated: boolean;
+}
+
+/**
+ * Rows from one chat share a conversationId. Rows logged before grouping
+ * existed have none, so each is its own single-question conversation.
+ */
+function groupConversations(rows: StaffAskAIQuestion[]): Conversation[] {
+  const byKey = new Map<string, StaffAskAIQuestion[]>();
+  for (const q of rows) {
+    const key = q.conversationId ?? q.id;
+    const list = byKey.get(key);
+    if (list) list.push(q);
+    else byKey.set(key, [q]);
+  }
+  return [...byKey.entries()].map(([key, list]) => {
+    const items = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return {
+      key,
+      items,
+      latest: items[items.length - 1].createdAt,
+      escalated: items.some((q) => !!q.escalatedAt),
+    };
+  });
+}
+
+function ConversationBlock({ conversation }: { conversation: Conversation }) {
+  const { items } = conversation;
+  const first = items[0];
+  if (items.length === 1) return <QuestionCard item={first} />;
+  return (
+    <div className="rounded-lg border border-dashed p-2">
+      <p className="px-2 pb-2 pt-1 text-xs font-medium text-muted-foreground">
+        One conversation · {items.length} questions · {first.orgName} · {first.askerName ?? first.askerEmail ?? "Unknown user"}
+      </p>
+      <div className="flex flex-col gap-2">
+        {items.map((item) => (
+          <QuestionCard key={item.id} item={item} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="border-b pb-1 pt-2">
+      <h2 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{title}</h2>
+      <p className="text-xs text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
 export default function StaffAskAIPage() {
   const { data: items = [], isLoading, error } = useStaffAskAIQuestions();
   const [filter, setFilter] = useState<Filter>("needs-answer");
 
-  const visible = items
-    .filter((q) => {
-      if (filter === "all") return true;
-      if (filter === "needs-answer") return needsAnswer(q);
-      return q.status === filter;
-    })
-    // Escalated first: those customers are waiting on a reply.
-    .sort((a, b) => Number(!!b.escalatedAt) - Number(!!a.escalatedAt) || b.createdAt.localeCompare(a.createdAt));
+  // A conversation is shown whole when any of its questions matches the filter,
+  // so a flagged question keeps the follow-ups around it for context.
+  const matching = items.filter((q) => {
+    if (filter === "all") return true;
+    if (filter === "needs-answer") return needsAnswer(q);
+    return q.status === filter;
+  });
+  const matchingKeys = new Set(matching.map((q) => q.conversationId ?? q.id));
+  const conversations = groupConversations(items.filter((q) => matchingKeys.has(q.conversationId ?? q.id)));
+  const byNewest = (a: Conversation, b: Conversation) => b.latest.localeCompare(a.latest);
+  // Sent-to-support conversations come first: those customers are waiting on a reply.
+  const sentToSupport = conversations.filter((c) => c.escalated).sort(byNewest);
+  const others = conversations.filter((c) => !c.escalated).sort(byNewest);
   const needsCount = items.filter(needsAnswer).length;
 
   return (
@@ -169,10 +231,33 @@ export default function StaffAskAIPage() {
         <p className="text-sm text-destructive">Couldn&apos;t load questions.</p>
       ) : isLoading ? (
         <Skeleton className="h-32 w-full" />
-      ) : visible.length === 0 ? (
+      ) : conversations.length === 0 ? (
         <p className="py-10 text-center text-sm text-slate-400 dark:text-neutral-500">Nothing here.</p>
       ) : (
-        visible.map((item) => <QuestionCard key={item.id} item={item} />)
+        <>
+          {sentToSupport.length > 0 && (
+            <>
+              <SectionHeader
+                title={`Sent to support (${sentToSupport.length})`}
+                detail="The customer pressed Send this conversation to support, so they're waiting on a reply. Newest first."
+              />
+              {sentToSupport.map((c) => (
+                <ConversationBlock key={c.key} conversation={c} />
+              ))}
+            </>
+          )}
+          {others.length > 0 && (
+            <>
+              <SectionHeader
+                title={`Not sent to support (${others.length})`}
+                detail="The assistant logged these itself. Newest first."
+              />
+              {others.map((c) => (
+                <ConversationBlock key={c.key} conversation={c} />
+              ))}
+            </>
+          )}
+        </>
       )}
     </div>
   );
