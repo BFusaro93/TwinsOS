@@ -977,8 +977,8 @@ export function DispatchBoardGuide() {
             chemical concentrate and materials such as mulch or bags of fertilizer — from the same data
             as the Load List. The first few items are listed; <strong>+N more</strong> opens the full Load
             List. Once the crew checks a material off in the crew app, it shows a green check and the lane header
-            counts <strong>on truck</strong>; equipment the crew has loaded shows a green <strong>Loaded</strong>
-            tag and the Equipment lane counts it too. A chemical that can&apos;t be totalled (its stops use different units, or the application
+            counts <strong>on truck</strong>; equipment the crew has loaded shows a small green check (hover it for
+            &quot;Loaded&quot;; TV mode spells out a green <strong>Loaded</strong> tag) and the Equipment lane counts it too. A chemical that can&apos;t be totalled (its stops use different units, or the application
             rate has no unit) shows an amber <strong>Can&apos;t total</strong> instead of a number.
           </li>
           <li>
