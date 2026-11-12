@@ -2603,6 +2603,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. Open the visit on the Dispatch Board (or the job's Visits table > Change date / crew) and use 'Crews on this stop' > 'Add another crew…'. Each crew gets its own visit, so it has its own row in its own column, its own stop in the Crew App, and clocks its own hours. The original visit is the Lead: it carries the revenue and creates the one invoice, the added crew's visit shows $0 and never invoices, and Job Costing adds up every crew's labor. A shared stop uses one contract visit, rescheduling one crew moves the others that haven't started, and snow visits can't take a second crew.",
       },
       {
+        q: "Can I put several crews on many visits at once from the Dispatch Board?",
+        a: "Yes. Check the visits, then Actions > Re-assign Crew > Multiple crews… and tick the crews. The ticked crews become each stop's full crew list: the first crew you tick is the Lead (it bills the stop), the others are added as Shared, and any crew on the stop that you didn't tick is removed. With one stop selected the dialog opens with its current crews ticked, so you can untick one to remove it or tick the first one you want as Lead. Selecting one row of a shared stop covers the whole stop. A stop is skipped, with a message, if its Lead has already started; a crew that has already started stays on the stop; completed and cancelled visits are never changed, and snow visits can't take extra crews.",
+      },
+      {
         q: "Why does the second crew on a shared stop show $0 and no Invoice button?",
         a: "The stop bills once, from the Lead visit, so the added crew's visit carries no revenue and can't be invoiced on its own — its hours still count in Job Costing and the job's labor. If you remove the Lead crew from the stop, billing passes to the next crew automatically.",
       },
