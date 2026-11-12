@@ -1318,6 +1318,17 @@ export function ContractDialog({
   const { mutateAsync: updateStatus } = useUpdateContractStatus();
   const { mutateAsync: acknowledgeChange, isPending: acknowledging } = useAcknowledgeContractChange();
   const { data: linkedJobs } = useJobsByContract(contract?.id);
+  const { data: includedServices } = useContractServices(contract?.id);
+  const { data: catalogServices } = useCRMServices();
+  // The "storms outside the contract dates" setting is shown for a snow
+  // contract: one with snow jobs, or (while it's still being set up) one whose
+  // included services or invoice lines use a snow-dispatch service.
+  const snowServiceIds = new Set((catalogServices ?? []).filter((s) => s.showInSnowDispatch).map((s) => s.id));
+  const snowServiceNames = new Set((catalogServices ?? []).filter((s) => s.showInSnowDispatch).map((s) => s.name.trim().toLowerCase()));
+  const coversSnow =
+    (linkedJobs ?? []).some((j) => j.jobType === "snow") ||
+    (includedServices ?? []).some((s) => !!s.serviceId && snowServiceIds.has(s.serviceId)) ||
+    details.lineItems.some((li) => snowServiceNames.has(li.trim().toLowerCase()));
   const [confirmEnd, confirmEndDialog] = useConfirm();
   // Asks "bill this cycle now, or start with the next?" when a contract becomes
   // billable after its current billing day has passed (see LateCyclePrompt).
@@ -1543,7 +1554,7 @@ export function ContractDialog({
               createdAt={contract?.createdAt}
               lastBilledDate={contract?.lastBilledDate}
               billingAnchorDate={contract?.billingAnchorDate}
-              coversSnow={(linkedJobs ?? []).some((j) => j.jobType === "snow")}
+              coversSnow={coversSnow}
               hadMonthOverrides={
                 !!contract &&
                 normalizeBillingFrequency(contract.billingFrequency) !== "monthly" &&

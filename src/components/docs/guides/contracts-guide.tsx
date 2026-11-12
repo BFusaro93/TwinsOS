@@ -345,8 +345,10 @@ export function ContractsGuide() {
           cancelled you get an error saying how many — cancel those from the Dispatch Board.
         </p>
         <p>
-          <strong>Snow contracts and storms outside the dates.</strong> A contract with a linked
-          snow job has a <strong>Storms outside the contract dates</strong> setting under its start
+          <strong>Snow contracts and storms outside the dates.</strong> A snow contract (one with a
+          linked snow job, or whose included services or invoice lines use a service shown on Snow
+          Dispatch, so you can choose while setting it up) has a{" "}
+          <strong>Storms outside the contract dates</strong> setting under its start
           and end dates, for storms before the start date or after the end date:{" "}
           <strong>Don&apos;t service</strong> (the contract&apos;s snow jobs aren&apos;t offered for
           those storms on the Snow Jobs board), <strong>Included in the flat rate</strong>{" "}
