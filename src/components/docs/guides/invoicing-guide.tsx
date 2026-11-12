@@ -417,6 +417,41 @@ export function InvoicingGuide() {
         </ul>
       </Section>
 
+      <Section id="hide-invoice-lines" title="Hiding lines to keep an invoice clean">
+        <p>
+          An invoice with many visits, dump runs or add-on charges can read as cluttered. On any
+          line, click the <strong>eye</strong> icon (it appears when you hover the row) to{" "}
+          <strong>hide it from the customer</strong>. A hidden line&apos;s amount is folded into
+          the nearest visible line <em>above</em> it &mdash; the service it was entered under
+          &mdash; so the printed rows still add up to the Subtotal. If nothing visible is above it,
+          the amount goes into the nearest visible line below. Click the eye again to show it.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Hiding is presentation only.</strong> The line stays on the invoice with its
+            own amount, tax and discount, keeps its visit and product links, and the invoice total
+            and any accounting sync don&apos;t change. Nothing about the job or visit is touched
+            &mdash; unlike deleting the line, which can leave a visit looking unbilled and send a
+            product back to pending.
+          </li>
+          <li>
+            <strong>Where it applies:</strong> the PDF (print and download), the emailed invoice
+            (attachment and the invoice grid merge tag) and the online invoice page. Your own
+            invoice screen still shows every line, dimmed, with a crossed-eye icon.
+          </li>
+          <li>
+            <strong>Order matters.</strong> Lines are ordered as they appear on the invoice, so put a
+            dump run directly under the service it belongs to before hiding it. A hidden line&apos;s
+            own discount rolls up with it, and the parent row&apos;s printed rate becomes its combined
+            total divided by quantity.
+          </li>
+          <li>
+            If every line is hidden, the setting is ignored so the invoice never prints with no
+            rows. A locked invoice can&apos;t be changed until it is unlocked.
+          </li>
+        </ul>
+      </Section>
+
       <Section id="invoice-template-options" title="Chemical record and technician notes on invoices">
         <p>
           In Settings &gt; Accounting &gt; <em>Invoice Templates</em>, each template has two optional

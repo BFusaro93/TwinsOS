@@ -157,6 +157,7 @@ function mapLineItem(row: any): InvoiceLineItem {
     serviceId: row.service_id ?? null,
     serviceName: row.crm_services?.name ?? null,
     isOtherCharge: !!row.is_other_charge,
+    hideOnPrint: !!row.hide_on_print,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

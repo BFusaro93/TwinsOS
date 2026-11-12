@@ -2063,6 +2063,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Can I hide a line on an invoice without deleting it?",
+        a: "Yes. Hover the line on the invoice and click the eye icon to hide it from the customer. Its amount rolls into the nearest visible line above it (or below, if none is above), so the printed rows still add up to the Subtotal. The line stays on the invoice with its amount, tax, visit and product links, so totals and accounting sync don't change, and the job and visit are untouched. It applies to the PDF, the emailed invoice and the online invoice page; your own screen still shows every line, dimmed. Put a dump run directly under the service it belongs to before hiding it. Prefer this over deleting: deleting a visit's only line can make the visit look unbilled, and deleting a product line sends it back to pending. A locked invoice can't be changed until unlocked.",
+      },
+      {
         q: "Can I edit a void invoice?",
         a: "No. A void invoice is read-only: its lines, amounts, dates, terms and notes can't be changed, and it shows nothing due. You can still print, lock or delete it. To bill the work again, use Duplicate as draft.",
       },

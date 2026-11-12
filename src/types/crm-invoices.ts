@@ -77,6 +77,8 @@ export interface InvoiceLineItem {
   serviceName?: string | null;
   /** Added from the Other Charges catalog; exempt from the "every line bills a service" rule. */
   isOtherCharge: boolean;
+  /** Hidden from the customer-facing invoice; its amount rolls into the visible line above (see lib/invoices/hidden-lines.ts). */
+  hideOnPrint: boolean;
   createdAt: string;
   updatedAt: string;
 }

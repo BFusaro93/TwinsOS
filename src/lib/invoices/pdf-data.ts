@@ -9,6 +9,7 @@ import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoice
 import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications";
 import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit-notes";
+import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
 import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
 
 /** Per-invoice PDF builds in flight at once for a combined print. */
@@ -89,7 +90,9 @@ async function buildInvoicePDFData(
       rateCents: (li.rate_cents as number) ?? 0,
       totalCents: (li.total_cents as number) ?? 0,
       discountCents: (li.discount_cents as number) ?? 0,
+      hideOnPrint: !!li.hide_on_print,
     }));
+  const printedLineItems = rollUpHiddenLines(lineItems);
 
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
@@ -150,7 +153,7 @@ async function buildInvoicePDFData(
     totalCents: (inv.total_cents as number) ?? 0,
     amountPaidCents: (inv.amount_paid_cents as number) ?? 0,
     balanceCents: (inv.balance_cents as number) ?? 0,
-    lineItems,
+    lineItems: printedLineItems,
     statement,
     photos: includePhotos ? await loadInvoicePhotosForPdf(inv.id as string, inv.org_id as string) : [],
     chemicals: template?.show_chemical_applications
