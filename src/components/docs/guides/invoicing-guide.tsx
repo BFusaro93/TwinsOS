@@ -260,6 +260,13 @@ export function InvoicingGuide() {
             an amount; rows you added and left blank are dropped.
           </li>
           <li>
+            <strong>Line descriptions keep their line breaks and bullets.</strong> A line&apos;s
+            Description is a multi-line box: press Enter for a new line, and start a line with{" "}
+            <code>-</code> or <code>*</code> and a space to turn it into a <code>&bull;</code> bullet.
+            Descriptions copied from an estimate keep their paragraphs and bullets too, on screen and
+            on the PDF.
+          </li>
+          <li>
             <strong>Read-only accounts can still collect.</strong> When the subscription is canceled or
             the free trial has ended, the account is read-only, but you can still email invoices that
             were already sent or printed, and account statements, so you can collect what you&apos;re
@@ -311,6 +318,14 @@ export function InvoicingGuide() {
             <strong>View Invoice</strong> instead and still open the online invoice, the attached
             PDF says &quot;View Online&quot; rather than &quot;View &amp; Pay Online&quot;, and the online
             invoice page shows a note asking the client to contact you to pay instead of a Pay button.
+          </li>
+          <li>
+            <strong>The invoice button in the email.</strong> An invoice button or link you place in
+            the Invoice Email template stays where you put it and is sent as a button in the color of
+            the invoice template you send with (your company brand color if it has none). A link inside
+            a sentence stays a normal link. If the template has no invoice link, the{" "}
+            <strong>View &amp; Pay Invoice Online</strong> button is added at the bottom instead, never
+            both. The Preview tab in the send dialog shows what the client will get.
           </li>
           <li>
             <strong>Emailing locks the invoice.</strong> An invoice is locked the moment it is

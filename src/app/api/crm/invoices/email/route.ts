@@ -2,6 +2,7 @@ import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
 import { NextRequest, NextResponse } from "next/server";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { safeHexColor } from "@/lib/utils/safe-color";
+import { invoiceBottomButtonHtml, styleInvoiceLinkButtons } from "@/lib/invoices/invoice-link-button";
 import { buildInvoiceGridHtml } from "@/lib/invoices/invoice-grid-html";
 import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
@@ -397,7 +398,18 @@ export async function POST(req: NextRequest) {
   };
 
   const resolvedSubject = resolveSubjectMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
-  const resolvedBodyContent = addParagraphSpacing(resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars));
+  let resolvedBody = resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars);
+  // Where the invoice button goes is the template author's call: a body link
+  // stays where it was put (restyled as the branded button when alone in its
+  // paragraph) and the shell's bottom button is skipped. With no link in the
+  // body, the bottom button is the only way to reach the invoice.
+  let bodyHasInvoiceLink = false;
+  if (viewOnlineUrl) {
+    const styled = styleInvoiceLinkButtons(resolvedBody, viewOnlineUrl, brandColor);
+    resolvedBody = styled.html;
+    bodyHasInvoiceLink = styled.hasInvoiceLink;
+  }
+  const resolvedBodyContent = addParagraphSpacing(resolvedBody);
 
   // "Include PDF" — the template's setting, forwarded by the send dialog.
   // Defaults to true (PDF attached) to preserve prior behavior when no
@@ -417,10 +429,7 @@ export async function POST(req: NextRequest) {
     <p style="color:rgba(255,255,255,.8);margin:4px 0 0;font-size:14px">Invoice #${inv.invoice_number ?? "—"}</p>
   </div>
   <div style="padding:28px 32px;font-size:14px;line-height:1.6">${resolvedBodyContent}</div>
-  ${viewOnlineUrl ? `
-  <div style="padding:0 32px 28px;text-align:center">
-    <a href="${viewOnlineUrl}" style="display:inline-block;background:${brandColor};color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;font-weight:600">${escapeHtml(invoiceLinkLabel(cardPaymentsAvailable, "banner"))}</a>
-  </div>` : ""}
+  ${viewOnlineUrl && !bodyHasInvoiceLink ? invoiceBottomButtonHtml(viewOnlineUrl, escapeHtml(invoiceLinkLabel(cardPaymentsAvailable, "banner")), brandColor) : ""}
   <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center">
     <p style="margin:0;font-size:11px;color:#94a3b8">${orgNameHtml}</p>
   </div>

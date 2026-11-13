@@ -977,6 +977,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Sale Type (New sale or Renewal / existing account) sits next to the Sales Rep and decides which commission rate applies. Blank uses the job's, contract's or estimate's sale type, then counts as a new sale. Both are fixed when the invoice is issued; after that only someone who manages commissions can change them.",
           },
           {
+            step: "Line descriptions and the invoice email button",
+            detail:
+              "An invoice line's Description is a multi-line box: Enter makes a new line, and starting a line with - or * and a space makes a bullet; line breaks and bullets print on the PDF. In the emailed invoice, a button or link to the invoice in the Invoice Email template stays where you placed it, drawn in the invoice template's color (company brand color if none). With no invoice link in the template, a View & Pay Invoice Online button is added at the bottom, never both. The send dialog's Preview tab shows the result.",
+          },
+          {
             step: "Photos on an invoice",
             detail:
               "Open the invoice's Photos tab (or 'Photos to include' in the email dialog) to attach up to 12 photos from the invoice's visits and jobs, Job Photos linked to the client or project, or direct uploads. They print on extra PDF pages and show as a gallery on the client's online invoice page. HEIC iPhone photos are converted automatically; only JPEG and PNG print in the PDF, and Print Selected leaves photos out.",
@@ -2063,6 +2068,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "How do I put bullets or line breaks in an invoice line description?",
+        a: "A line's Description on the invoice is a multi-line box. Press Enter for a new line, and start a line with - or * and a space to turn it into a bullet. Line breaks and bullets, including ones copied over from an estimate, carry through to the printed PDF instead of running together as one sentence.",
+      },
+      {
+        q: "Why does my invoice email show the View & Pay button twice, or without its color?",
+        a: "The invoice button follows your Invoice Email template. A button or link you place in the template stays where you put it and is sent as a button in the invoice template's color (your company brand color if it has none); if the template has no invoice link, one View & Pay Invoice Online button is added at the bottom instead, never both. A link inside a sentence stays a plain link. The send dialog's Preview tab shows what the client will get.",
+      },
+      {
         q: "Can I hide a line on an invoice without deleting it?",
         a: "Yes. Hover the line on the invoice and click the eye icon to hide it from the customer. Its amount rolls into the nearest visible line above it (or below, if none is above), so the printed rows still add up to the Subtotal. The line stays on the invoice with its amount, tax, visit and product links, so totals and accounting sync don't change, and the job and visit are untouched. It applies to the PDF, the emailed invoice and the online invoice page; your own screen still shows every line, dimmed. Put a dump run directly under the service it belongs to before hiding it. Prefer this over deleting: deleting a visit's only line can make the visit look unbilled, and deleting a product line sends it back to pending. A locked invoice can't be changed until unlocked.",
       },
@@ -2476,7 +2489,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I make a button in an email template link to something?",
-        a: "Add a Button block, type its label, and use the Button links to control under it. Invoice Email templates offer View & pay invoice online, which links each client to their own invoice; any template can use Custom URL (https://, mailto: or tel:). The link works in the email. In an attached PDF the button is drawn but isn't clickable. See the Document & Email Templates guide.",
+        a: "Add a Button block, type its label, and use the Button links to control under it. Invoice Email templates offer View & pay invoice online, which links each client to their own invoice; any template can use Custom URL (https://, mailto: or tel:). In a sent invoice email the invoice button is drawn in the color of the invoice template you send with (your company brand color if it has none), wherever you placed it. If an Invoice Email template has no invoice button or link, a View & Pay Invoice Online button is added at the bottom automatically, never both. The link works in the email. In an attached PDF the button is drawn but isn't clickable. See the Document & Email Templates guide.",
       },
       {
         q: "The test email from the template editor failed or looks like a PDF, not an invoice. Why?",

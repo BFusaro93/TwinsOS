@@ -239,3 +239,17 @@ body {
     height: 22px;
   }
 }
+
+/* Invoice email editor: a link to the invoice (a template's Button block, or the
+   [viewinvoiceonline] / [paymentlink] tags used as a link) is sent as a green
+   button, so it is drawn as one while composing instead of a bare underlined link. */
+.ProseMirror a[href="[viewinvoiceonline]"],
+.ProseMirror a[href="[paymentlink]"] {
+  display: inline-block;
+  background: #60ab45;
+  color: #fff;
+  text-decoration: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+}
