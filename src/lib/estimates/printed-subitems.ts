@@ -13,6 +13,7 @@ export interface PrintedSubitem {
 type SubitemRow = {
   name?: string | null;
   qty?: number | null;
+  visits?: number | null;
   rate_cents?: number | null;
   total_cents?: number | null;
   print_on_estimate?: boolean | null;
@@ -32,7 +33,8 @@ export function pickPrintedSubitems(rows: unknown): PrintedSubitem[] {
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     .map((s) => ({
       name: s.name as string,
-      qty: s.qty ?? 1,
+      // Charged qty x visits times, so the printed qty x rate equals the printed total.
+      qty: (s.qty ?? 1) * (s.visits ?? 1),
       rateCents: s.rate_cents ?? 0,
       totalCents: s.total_cents ?? 0,
     }));

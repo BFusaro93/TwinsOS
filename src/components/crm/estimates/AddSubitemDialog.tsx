@@ -42,6 +42,8 @@ import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   lineItemId: string;
+  /** The parent estimate line's visits, for the Visits sanity warning. */
+  parentVisits?: number;
   subitem?: LineItemSubitem;
   open: boolean;
   onClose: () => void;
@@ -53,6 +55,7 @@ interface FormState {
   productId: string | null;
   serviceId: string | null;
   qty: number;
+  visits: number;
   rateDollars: number;
   costDollars: number;
   confirmQty: boolean;
@@ -69,6 +72,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
       productId: subitem.productId,
       serviceId: subitem.serviceId,
       qty: subitem.qty,
+      visits: subitem.visits,
       rateDollars: subitem.rateCents / 100,
       costDollars: subitem.costCents / 100,
       confirmQty: subitem.confirmQty,
@@ -83,6 +87,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
     productId: null,
     serviceId: null,
     qty: 1,
+    visits: 1,
     rateDollars: 0,
     costDollars: 0,
     confirmQty: false,
@@ -92,7 +97,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
   };
 }
 
-export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) {
+export function AddSubitemDialog({ lineItemId, parentVisits = 1, subitem, open, onClose }: Props) {
   const [form, setForm] = useState<FormState>(() => getInitialState(subitem));
   const { mutateAsync: upsert, isPending } = useUpsertSubitem();
   const { data: allProducts = [] } = useProducts();
@@ -141,7 +146,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
   // input: a rate typed as $0.145 saves as 15c (rateCents), so a total of
   // qty x 14.5c disagreed with the qty x rate printed beside it.
   const rateCents = Math.round(form.rateDollars * 100);
-  const totalCents = Math.round(form.qty * rateCents);
+  const totalCents = Math.round(form.qty * rateCents * form.visits);
 
   async function handleSave() {
     if (!form.name.trim()) {
@@ -158,6 +163,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
           serviceId: form.serviceId,
           name: form.name.trim(),
           qty: form.qty,
+          visits: form.visits,
           rateCents,
           costCents: Math.round(form.costDollars * 100),
           totalCents,
@@ -279,7 +285,18 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
           </div>
 
           {/* Qty + Rate + Cost in a row */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="subitem-visits" title="How many times this is charged. 1 = once for the whole line; set it to the line's visits to charge it on every visit.">Visits</Label>
+              <Input
+                id="subitem-visits"
+                type="number"
+                min={1}
+                step={1}
+                value={form.visits || ""}
+                onChange={(e) => setField("visits", Math.max(1, Math.round(Number(e.target.value)) || 1))}
+              />
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="subitem-qty">Qty</Label>
               <Input
@@ -314,6 +331,13 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
               />
             </div>
           </div>
+
+          {parentVisits > 1 && form.visits !== 1 && form.visits !== parentVisits && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              ⚠ This line has {parentVisits} visits. A sub-item can&apos;t be limited to some visits: Visits {form.visits} gets
+              spread across all {parentVisits}, with uneven cents on each invoice. Use 1 (once for the whole line) or {parentVisits} (every visit).
+            </p>
+          )}
 
           {/* Total read-only */}
           <div className="flex items-center justify-between rounded-md bg-slate-50 dark:bg-muted/40 px-3 py-2 text-sm">

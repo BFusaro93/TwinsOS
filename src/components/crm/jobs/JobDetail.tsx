@@ -11,6 +11,7 @@ import {
   useJobVisits,
   useUpdateJob,
   useUpdateJobService,
+  useSetSubitemPrintOnInvoice,
   useAddJobService,
   useDeleteJobService,
   useCRMServices,
@@ -207,6 +208,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const { data: existingInvoice } = useInvoiceForJob(jobId);
 
   const updateJobService = useUpdateJobService();
+  const setSubitemPrint = useSetSubitemPrintOnInvoice();
   const addJobService = useAddJobService();
   const deleteJobService = useDeleteJobService();
   const { data: crmServices = [] } = useCRMServices();
@@ -1850,6 +1852,27 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 <li key={si.id} className="text-xs text-slate-500 dark:text-neutral-400">
                                   {si.type === "product" ? "Product" : "Task"}: {si.name}
                                   {si.qty !== 1 && <span className="text-slate-400 dark:text-neutral-500"> × {si.qty.toLocaleString()}</span>}
+                                  {["one_time", "waiting_list", "recurring"].includes(job.jobType) && si.rateCents != null && can("acct_add_modify_invoices") && (
+                                    // Office-only: list this sub-item as its own invoice row (taken out of the
+                                    // service row, total unchanged). Applies to invoices created from now on.
+                                    <button
+                                      type="button"
+                                      disabled={setSubitemPrint.isPending}
+                                      onClick={() => setSubitemPrint.mutate(
+                                        { id: si.id, printOnInvoice: !si.printOnInvoice },
+                                        { onError: () => toast.error("Couldn't update the sub-item") },
+                                      )}
+                                      className={cn(
+                                        "ml-1.5 rounded border px-1 text-[10px] font-medium",
+                                        si.printOnInvoice
+                                          ? "border-green-300 text-green-700 dark:border-green-700 dark:text-green-400"
+                                          : "border-slate-200 text-slate-400 hover:text-slate-600 dark:border-neutral-700 dark:text-neutral-500",
+                                      )}
+                                      title="Show this sub-item as its own row on future invoices"
+                                    >
+                                      {si.printOnInvoice ? "On invoice" : "Not on invoice"}
+                                    </button>
+                                  )}
                                   {si.type === "subservice" && (
                                     // Crew ticks tasks off per visit on their stop.
                                     (subitemTicks[si.id] ?? 0) > 0

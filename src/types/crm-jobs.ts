@@ -114,6 +114,10 @@ export interface CRMJobServiceSubitem {
   name: string;
   qty: number;
   sortOrder: number;
+  /** Estimate rate snapshot (office views only; the crew app never selects it). */
+  rateCents?: number | null;
+  /** Prints as its own invoice row (per-visit job types). Office-only, like rateCents. */
+  printOnInvoice?: boolean;
 }
 
 export interface CRMJob {

@@ -22,6 +22,8 @@ export interface InvoicePDFLineItem {
   totalCents: number;
   /** Per-line discount — the invoice Subtotal is net of it, so the printed line must be too. */
   discountCents?: number;
+  /** Hidden-on-invoice marker; rolled up (and dropped) before rendering — see lib/invoices/hidden-lines.ts. */
+  hideOnPrint?: boolean;
 }
 
 /** A photo embedded on the invoice's photo page(s). dataUri is base64 —
