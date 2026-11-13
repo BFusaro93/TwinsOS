@@ -543,6 +543,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const allSelected = convertibleLines.length > 0 && convertibleLines.every((li) => selected.has(li.id));
   const hasSingle = convertibleLines.some((li) => isQuoted(li) && !li.packageId && (li.visits || 1) <= 1);
   const hasMulti = convertibleLines.some((li) => isQuoted(li) && !li.packageId && (li.visits || 1) > 1);
+  // On a recurring job a line's Visits value is the job's total visit count, so a
+  // 1-visit line yields exactly one visit and the schedule never repeats it.
+  const oneVisitRecurringLines = recurring ? selectedItems.filter((li) => (li.visits || 1) <= 1) : [];
 
   return (
     <>
@@ -659,6 +662,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               )}
             </table>
           </div>
+          {oneVisitRecurringLines.length > 0 && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+              {oneVisitRecurringLines.length === 1 ? "This service has" : `${oneVisitRecurringLines.length} services have`}{" "}
+              Visits = 1 on the estimate, so this recurring job will only get one visit
+              and won&apos;t repeat on its schedule. To repeat it, set the visit count on the
+              estimate line before converting (or choose One-Time as the job type).
+            </p>
+          )}
           {pricingShortfallCents > 0 && (
             <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
               Some prices don&apos;t divide evenly across their visits, so each visit is

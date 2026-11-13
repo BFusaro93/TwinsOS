@@ -87,6 +87,8 @@ export interface CRMJobService {
   budgetedHours: number;
   budgetMethod: BudgetMethod; // snapshotted from the service when this row is created
   teamSize: number;
+  /** Recurring jobs: total visits this service may ever get (null = no limit). */
+  maxVisits?: number | null;
   daysCount: number;
   timeStart: string | null;
   timeEnd: string | null;
