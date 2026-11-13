@@ -176,6 +176,14 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[installmentcount]": "1",
   "[installmentamount]": "$1,325.00",
   "[estimategrid]": SAMPLE_GRID_HTML,
+  // Snow (filled from a snow stop; blank elsewhere)
+  "[stormname]": "Nov 12 Storm",
+  "[stormdate]": "November 12, 2026",
+  "[snowservice]": "Driveway plow",
+  "[snowcrew]": "Snow Crew 1",
+  "[snowstatus]": "on our way",
+  "[snowarrival]": "about 6:30 AM",
+  "[snowaddress]": "123 Main St",
   // Invoice
   "[invoicenumber]": "00042",
   "[invoicedate]": "",

@@ -53,6 +53,7 @@ export function SnowGuide() {
           <TOCLink href="#adding-jobs">Adding jobs and setting priority</TOCLink>
           <TOCLink href="#dispatch-close-out">Dispatching, logging pushes, closing out</TOCLink>
           <TOCLink href="#board-tools">Filters, crews, route order, map, and weather</TOCLink>
+          <TOCLink href="#client-messages">Messaging clients: email, text, and templates</TOCLink>
           <TOCLink href="#worked-scenario">Worked scenario: a 6&quot; storm</TOCLink>
           <TOCLink href="#invoicing">Snow invoicing and the three rate types</TOCLink>
           <TOCLink href="#interval-billing">Interval billing (rate by inches)</TOCLink>
@@ -349,6 +350,59 @@ export function SnowGuide() {
             forecast and any active alerts for the storm date (US only, within about a week). It is
             only a heads-up — depth and temperature on a visit are still entered by hand at
             close-out.
+          </li>
+        </ul>
+      </Section>
+
+      <Section id="client-messages" title="Messaging clients: email, text, and templates">
+        <p>
+          Tick the stops you want to reach, then use <strong>Email Clients…</strong> or{" "}
+          <strong>Text Clients…</strong> (in <strong>Actions</strong>, or the buttons on the selection bar).
+          You need the Send Emails / Send Texts permission to see them. A client with several stops
+          on the storm gets <strong>one</strong> message that lists their stops.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5">
+          <li>
+            <strong>Compose.</strong> Choose email, text, or both. Pick a saved template to
+            pre-fill the message, then change anything you like before sending; the template is only
+            a starting point. A text shows a live character and segment count, and a preview shows
+            exactly what one client will receive.
+          </li>
+          <li>
+            <strong>Merge tags.</strong> <em>[stormname]</em>, <em>[stormdate]</em>,{" "}
+            <em>[snowservice]</em>, <em>[snowcrew]</em>, <em>[snowstatus]</em> (scheduled, on our way,
+            in progress, complete), <em>[snowarrival]</em> (only when the stop has a scheduled time)
+            and <em>[snowaddress]</em>, plus the usual client and company tags such as{" "}
+            <em>[clientfirstname]</em>.
+          </li>
+          <li>
+            <strong>Who is skipped.</strong> The confirm step lists the count and who will be
+            left out: no email or phone on file, a bounced email address, a client who hasn&apos;t
+            opted in to texts, or a number that replied STOP. Storm messages are{" "}
+            <em>service notices</em>, so a client marked Do Not Market still receives them (and
+            there is no unsubscribe footer), but a bounced address and a text opt-out are always
+            respected.
+          </li>
+          <li>
+            <strong>Timeline.</strong> Every email and text is logged on the client&apos;s activity
+            timeline, the same as any other message sent from the system.
+          </li>
+          <li>
+            <strong>Jobs Without Emails…</strong> lists the selected stops (or everything shown, with
+            nothing selected) whose client has no email or a bounced one, with a link to fix each client.
+          </li>
+          <li>
+            <strong>Templates.</strong> In the compose dialog, type a name and choose{" "}
+            <em>Save email</em> or <em>Save text</em> to keep your wording. Templates live in{" "}
+            <strong>Documents</strong> as <em>Snow – Email</em> and <em>Snow – Text Message</em>, so you can
+            also create and edit them there (for example &quot;Service complete&quot;, &quot;Storm
+            delayed&quot;, &quot;We&apos;re on our way&quot;).
+          </li>
+          <li>
+            <strong>Automations.</strong> The same templates can be picked in an automation&apos;s
+            Email or Text step (for example on <em>visit dispatched</em> or <em>visit completed</em>)
+            for messages that should go out on their own with fixed wording. In an automation the snow
+            tags are read from the client&apos;s most recent snow stop in the last 7 days.
           </li>
         </ul>
       </Section>

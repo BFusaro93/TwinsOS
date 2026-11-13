@@ -940,6 +940,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "CRM > Accounting > Snow Invoicing groups a client's uninvoiced storm visits and computes the amount from the job's invoice type: a flat rate per event, a rate per inch of snowfall (per event or per push), or an hourly rate × actual hours logged. Make one snow job per service: Per Event/Per Inch and Per Push jobs price from their depth ranges and take one service (the service price isn't used), Hourly takes one service whose rate is the hourly rate, and Monthly Flat Rate bills only through a linked contract.",
           },
           {
+            step: "Messaging clients about a storm",
+            detail:
+              "On the Snow Jobs board, tick the stops, then use Actions > Email Clients… or Text Clients… (also buttons on the selection bar; needs the Send Emails / Send Texts permission). A client with several stops gets one message. Pick a saved template to pre-fill it, edit freely, preview one recipient, then confirm: the dialog shows how many will receive it and who is skipped (no email or phone, bounced email, not opted in to texts, or a number that replied STOP). Storm messages are service notices, so Do Not Market clients still get them, but bounced addresses and text opt-outs are always respected. Every message is logged on the client's timeline. 'Jobs Without Emails…' lists selected (or shown) stops whose client has no usable email. Merge tags: [stormname], [stormdate], [snowservice], [snowcrew], [snowstatus], [snowarrival], [snowaddress], plus client/company tags. Save wording as a template in the dialog or in Documents (types 'Snow – Email' and 'Snow – Text Message'); the same templates can be used in an automation's Email or Text step (e.g. on visit dispatched or completed) for fixed messages that send on their own.",
+          },
+          {
             step: "Full guides",
             detail:
               "The Waiting List's filtering and dispatch flow gets its own deep dive; storm-event dispatch and snow invoice types get a dedicated guide.",

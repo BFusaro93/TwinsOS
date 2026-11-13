@@ -1,3 +1,4 @@
+import { buildSnowExtras } from "@/lib/automations/snow-extras";
 import { sendClientSms } from "@/lib/sms/send";
 import { findOptedOutNumbers, phoneLast10 } from "@/lib/sms/opt-outs";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
@@ -158,6 +159,7 @@ export async function resolveSmsStepContent(
     extras["[creditcardending]"] = params.cardExpiryContext.last4;
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
+  Object.assign(extras, await buildSnowExtras(supabase, { orgId: params.orgId, clientId: params.clientId }));
   Object.assign(
     extras,
     await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: false }),
