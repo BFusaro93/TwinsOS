@@ -12,6 +12,17 @@ export async function getOrCreateInvoiceShareToken(
   supabase: AnyClient,
   params: { orgId: string; invoiceId: string; createdBy?: string | null }
 ): Promise<string | null> {
+  // A void or deleted invoice has nothing to view or pay: its links are
+  // revoked when it is voided/merged/deleted (trg_crm_invoices_revoke_share_tokens),
+  // and re-rendering its PDF must not quietly mint a working one again.
+  const { data: invoice } = await supabase
+    .from("crm_invoices")
+    .select("status, deleted_at")
+    .eq("id", params.invoiceId)
+    .eq("org_id", params.orgId)
+    .maybeSingle();
+  if (!invoice || invoice.status === "void" || invoice.deleted_at) return null;
+
   const { data: existing } = await supabase
     .from("invoice_share_tokens")
     .select("token, expires_at, revoked_at")
@@ -43,19 +54,22 @@ export async function getOrCreateInvoiceShareToken(
   return created.token as string;
 }
 
-/** Revokes every live share token for an invoice — e.g. the org wants to
- *  cut off a link they suspect was forwarded/leaked. Org-scoped so a caller
- *  can't revoke another org's tokens by guessing an invoice id. */
+/** Revokes every live share token for an invoice — the "Revoke pay link"
+ *  action (POST /api/crm/invoices/[id]/revoke-pay-links), e.g. the org wants
+ *  to cut off a link they suspect was forwarded/leaked. Org-scoped so a caller
+ *  can't revoke another org's tokens by guessing an invoice id. Throws when
+ *  the write fails, so the caller never reports a link revoked that isn't. */
 export async function revokeInvoiceShareTokens(
   supabase: AnyClient,
   params: { orgId: string; invoiceId: string }
 ): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from("invoice_share_tokens")
     .update({ revoked_at: new Date().toISOString() })
     .eq("org_id", params.orgId)
     .eq("invoice_id", params.invoiceId)
     .is("revoked_at", null);
+  if (error) throw new Error(error.message ?? "Failed to revoke the invoice's share links");
 }
 
 export function buildInvoiceViewUrl(token: string): string {

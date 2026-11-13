@@ -74,7 +74,6 @@ const contractItemSchema = z.object({
   endDate: isoDate.optional().describe("YYYY-MM-DD. Billing stops once this date has passed."),
   monthlyAmountCents: z.number().int().nonnegative().optional().describe(AMOUNT_DESCRIPTION),
   billingFrequency: z.enum(BILLING_FREQUENCIES).optional().describe(FREQUENCY_DESCRIPTION),
-  autoRenew: z.boolean().optional(),
   notes: z.string().optional(),
   status: z.enum(CONTRACT_STATUSES).optional().describe(STATUS_DESCRIPTION),
   signedAt: isoDateTime
@@ -110,6 +109,11 @@ const contractItemSchema = z.object({
   monthlyAmounts: monthlyAmountsSchema,
   invoiceLineItems: z.array(z.string()).optional(),
   defaultService: z.string().optional(),
+  lastBilledDate: isoDate
+    .optional()
+    .describe(
+      "YYYY-MM-DD invoice date of the last cycle this contract was already billed for (e.g. by the system it came from). Billing continues with the cycle after it. Omitted on a 'signed'/'active' contract, the cycle in progress is treated as already billed, so the first run doesn't bill it a second time."
+    ),
 });
 
 /**
@@ -149,7 +153,6 @@ export const createContractSchema = z.object({
   endDate: isoDate.optional().describe("YYYY-MM-DD. Billing stops once this date has passed."),
   monthlyAmountCents: z.number().int().nonnegative().optional().describe(AMOUNT_DESCRIPTION),
   billingFrequency: z.enum(BILLING_FREQUENCIES).optional().describe(FREQUENCY_DESCRIPTION),
-  autoRenew: z.boolean().optional(),
   notes: z.string().optional(),
   status: z.enum(CONTRACT_STATUSES).optional().describe(STATUS_DESCRIPTION),
   signedAt: isoDateTime
@@ -181,6 +184,11 @@ export const createContractSchema = z.object({
   monthlyAmounts: monthlyAmountsSchema,
   invoiceLineItems: z.array(z.string()).optional(),
   defaultService: z.string().optional(),
+  lastBilledDate: isoDate
+    .optional()
+    .describe(
+      "YYYY-MM-DD invoice date of the last cycle this contract was already billed for (e.g. by the system it came from). Billing continues with the cycle after it. Omitted on a 'signed'/'active' contract, the cycle in progress is treated as already billed, so the first run doesn't bill it a second time."
+    ),
   contracts: z
     .array(contractItemSchema)
     .min(1)

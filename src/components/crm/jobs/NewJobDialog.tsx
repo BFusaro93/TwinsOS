@@ -609,7 +609,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
    * Orgs that want it enforced set Service Address to required under
    * Settings → Required Fields, which gates it at client creation instead.
    */
-  const { data: clientProperties } = useClientProperties(effectiveClientId);
+  const { data: clientProperties } = useClientProperties(effectiveClientId, { keepId: propertyId });
   // Ignore a pick that belongs to a previously selected client.
   const effectivePropertyId = (clientProperties ?? []).some((p) => p.id === propertyId) ? propertyId : null;
   const selectedProperty = (clientProperties ?? []).find((p) => p.id === effectivePropertyId) ?? null;
@@ -887,9 +887,27 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   <SelectTrigger><SelectValue placeholder="No contract" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No contract</SelectItem>
-                    {(contracts ?? []).map((c) => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
+                    {/* A cancelled contract covers nothing, so it isn't offered. Each option shows
+                        its status: an unsigned one holds the job's visits until it's signed. */}
+                    {(contracts ?? [])
+                      .filter((c) => c.status !== "cancelled" || c.id === contractId)
+                      .map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.title} <span className="capitalize text-muted-foreground">· {c.status}{!c.isActive ? ", inactive" : ""}</span>
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
+                {(() => {
+                  const picked = (contracts ?? []).find((c) => c.id === contractId);
+                  if (!picked || (picked.status !== "draft" && picked.status !== "sent")) return null;
+                  return (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                      This contract isn&apos;t signed yet ({picked.status}). Completed visits are held — not invoiced — until it&apos;s
+                      signed (then the contract covers them) or cancelled (then they bill per visit).
+                    </p>
+                  );
+                })()}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Sales Rep{rf.req("sales_rep")}</Label>

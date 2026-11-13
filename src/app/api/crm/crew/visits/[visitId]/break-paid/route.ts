@@ -4,12 +4,17 @@ import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { recomputeStopLabor } from "@/lib/crew/visit-labor";
 import { resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 
 /**
  * Office override for whether a stop's crew pause time is paid
  * (crm_job_visits.break_paid: true = paid, false = unpaid, null = follow the
  * org setting). OFFICE ONLY — crew logins are rejected; the crew app has no
- * control for this.
+ * control for this. Needs Dispatch Board (sched_dispatch_board) or Payroll
+ * (payroll_report) — whether pause time is paid is a payroll decision.
+ * Inside the payroll lock period the database refuses the change; that comes
+ * back as a 409 with its own sentence.
  *
  * `visitId` should be the stop's anchor visit (the one crew punches hang
  * off). The value is written to every live visit in the stop (same
@@ -61,6 +66,12 @@ export async function PATCH(
   if (profile.role === "crew") {
     return NextResponse.json({ error: "Only the office can change whether breaks are paid" }, { status: 403 });
   }
+  if (!(await hasAnySettingsPermission(supabase, ["sched_dispatch_board", "payroll_report"]))) {
+    return NextResponse.json(
+      { error: "Changing whether pause time is paid needs the Dispatch Board or Payroll permission" },
+      { status: 403 }
+    );
+  }
 
   const { visitId } = await params;
   // Org scoping is RLS's job (my_org_id() honours staff impersonation).
@@ -95,7 +106,7 @@ export async function PATCH(
     .from("crm_job_visits")
     .update({ break_paid: parsed.data.breakPaid, updated_at: new Date().toISOString() })
     .in("id", [...ids]);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
 
   // recomputeStopLabor locates the closed siblings itself and no-ops when
   // nothing in the stop has been clocked out yet.

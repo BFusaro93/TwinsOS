@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { notifyStaffOfDepositExcess } from "@/lib/estimate-deposit-excess-notify";
+import { isEstimateAccepted } from "@/lib/estimates/deposit-due";
 import {
   accountOwnedByOrg,
   resolveMethod,
@@ -10,6 +11,37 @@ import {
 } from "@/lib/stripe/record-charge";
 
 const log = logger.child("stripe estimate deposit");
+
+/** Tells the org's active admins a second deposit charge landed on an estimate
+ *  and was credited to the client's account (not to the estimate). */
+async function notifyStaffOfDuplicateDeposit(
+  db: Db,
+  orgId: string,
+  estimateId: string,
+  estimateNumber: number | null,
+  amountCents: number,
+  paymentIntentId: string
+): Promise<void> {
+  const amount = (amountCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const { data: admins } = await db
+    .from("profiles")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("role", "admin")
+    .neq("status", "inactive");
+  const rows = ((admins ?? []) as { id: string }[]).map((a) => ({
+    org_id: orgId,
+    user_id: a.id,
+    type: "estimate_deposit_excess",
+    title: "Second deposit charge",
+    message: `A second deposit of ${amount} was charged on Estimate #${estimateNumber ?? "—"}. It was added to the client's account as general credit (Stripe ${paymentIntentId}) — apply it to an invoice or refund it.`,
+    entity_id: estimateId,
+    entity_type: "estimate",
+  }));
+  if (rows.length === 0) return;
+  const { error } = await db.from("notifications").insert(rows);
+  if (error) log.error("failed to notify staff of a second deposit charge", { error, paymentIntentId });
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Db = any;
@@ -84,7 +116,8 @@ export async function clearEstimateDepositPending(
  *    different intent). The client has retried; recording the old failure
  *    would clobber the new pending marker and re-open a link that is already
  *    being paid;
- *  - the proposal has not been ACCEPTED yet. A card declined during the
+ *  - the proposal has not been ACCEPTED yet — through a proposal link, in the
+ *    client portal, or by the office (isEstimateAccepted). A card declined during the
  *    initial deposit step fires this same event, but the client is sitting on
  *    the page looking at the decline message and will either retry or skip.
  *    Nothing has gone wrong behind anyone's back, so notifying staff would be
@@ -113,7 +146,7 @@ export async function recordEstimateDepositFailure(
   const { data: estimate } = await db
     .from("estimates")
     .select(
-      "id, estimate_number, client_id, sales_rep_id, deposit_collected_cents, deposit_pending_intent_id, clients(display_name)"
+      "id, estimate_number, client_id, sales_rep_id, stage, portal_accepted_at, deposit_collected_cents, deposit_pending_intent_id, clients(display_name)"
     )
     .eq("id", estimateId)
     .eq("org_id", orgId)
@@ -128,17 +161,24 @@ export async function recordEstimateDepositFailure(
     return null;
   }
 
-  // Accepted yet? See the fourth case in the doc comment. Any token for this
-  // estimate carrying accepted_at means the client is past the live flow.
-  const { data: acceptedToken } = await db
-    .from("estimate_share_tokens")
-    .select("id")
-    .eq("estimate_id", estimateId)
-    .eq("org_id", orgId)
-    .not("accepted_at", "is", null)
-    .limit(1)
-    .maybeSingle();
-  if (!acceptedToken) return null;
+  // Accepted yet? See the fourth case in the doc comment. The same test
+  // deposit-intent uses: a token carrying accepted_at, OR accepted in the
+  // portal, OR the office moved it to accepted/won/invoiced. Checking only the
+  // token dropped every bounced ACH deposit on a proposal accepted in the
+  // portal or by the office — no record, nobody told, nothing on the timeline.
+  let accepted = isEstimateAccepted({ portalAcceptedAt: estimate.portal_accepted_at, stage: estimate.stage });
+  if (!accepted) {
+    const { data: acceptedToken } = await db
+      .from("estimate_share_tokens")
+      .select("id")
+      .eq("estimate_id", estimateId)
+      .eq("org_id", orgId)
+      .not("accepted_at", "is", null)
+      .limit(1)
+      .maybeSingle();
+    accepted = !!acceptedToken;
+  }
+  if (!accepted) return null;
 
   const method = paymentIntent.payment_method_types.includes("us_bank_account")
     ? ("us_bank_account" as const)
@@ -174,6 +214,35 @@ export async function recordEstimateDepositFailure(
   if (error) {
     log.error("failed to record the deposit failure", { error, paymentIntentId: paymentIntent.id });
     return null;
+  }
+
+  // On the client's timeline too — the estimate badge is easy to miss, and the
+  // office reads the timeline when the client calls. Keyed on the intent id
+  // (in the body) so a redelivered event doesn't log it twice.
+  if (estimate.client_id) {
+    const { count } = await db
+      .from("client_activity")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("client_id", estimate.client_id)
+      .eq("ref_table", "estimates")
+      .eq("ref_id", estimateId)
+      .like("subject", "Deposit failed:%")
+      .ilike("body", `%${paymentIntent.id}%`);
+    if ((count ?? 0) === 0) {
+      const amount = (amountCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+      const { error: activityErr } = await db.from("client_activity").insert({
+        org_id: orgId,
+        client_id: estimate.client_id,
+        activity_type: "payment",
+        subject: `Deposit failed: ${amount} ${method === "us_bank_account" ? "bank transfer" : "card payment"} for Estimate #${estimate.estimate_number ?? "—"} — ${reason}`,
+        body: `Stripe payment ${paymentIntent.id}. Nothing was credited, so nothing needs reversing. The client can pay the deposit again from their proposal link.`,
+        ref_id: estimateId,
+        ref_table: "estimates",
+        amount_cents: 0,
+      });
+      if (activityErr) log.error("failed to log the deposit failure on the timeline", { error: activityErr, paymentIntentId: paymentIntent.id });
+    }
   }
 
   const client = estimate.clients as { display_name?: string } | null;
@@ -304,45 +373,27 @@ export async function recordEstimateDepositCharge({
 
   // A deposit already banked for this estimate under a DIFFERENT intent means
   // two charges got through (see the reuse guard in deposit-intent/route.ts).
-  // Record nothing: crediting the second would double the client's prepayment
-  // against a single agreed deposit. The charge is real, so it is logged for a
-  // human to refund rather than silently absorbed.
-  if (
+  // The second is real money the client paid, so it is RECORDED — but as plain,
+  // UNRESERVED account credit (estimate_id null), never as a second deposit:
+  // the estimate keeps exactly one deposit, and the extra can pay any of the
+  // client's invoices or be refunded. Staff are told either way. It goes
+  // through the same insert below, so the unique index on
+  // stripe_payment_intent_id keeps a redelivered event from recording it twice.
+  const isDuplicateDeposit =
+    !estimateDeleted &&
     (estimate.deposit_collected_cents ?? 0) > 0 &&
-    estimate.deposit_reference &&
-    estimate.deposit_reference !== paymentIntent.id
-  ) {
-    log.error("a second deposit charge succeeded for an estimate that already has one — needs a refund", {
+    !!estimate.deposit_reference &&
+    estimate.deposit_reference !== paymentIntent.id;
+  if (isDuplicateDeposit) {
+    log.warn("a second deposit charge succeeded for an estimate that already has one — recording it as account credit", {
       paymentIntentId: paymentIntent.id,
       estimateId,
       alreadyCollectedCents: estimate.deposit_collected_cents,
       existingReference: estimate.deposit_reference,
     });
-    // Returning "error" made Stripe redeliver the event for days and the only record was a
-    // log line. Acknowledge it and leave a timeline entry + admin alert so someone refunds it.
-    const dupAmount = (paymentIntent.amount_received ?? paymentIntent.amount ?? 0) / 100;
-    await db.from("client_activity").insert({
-      org_id: orgId,
-      client_id: estimate.client_id,
-      activity_type: "payment",
-      subject: `Duplicate deposit charge of $${dupAmount.toFixed(2)} on Estimate #${estimate.estimate_number} needs a refund (Stripe ${paymentIntent.id})`,
-      ref_id: estimateId,
-      ref_table: "estimates",
-      amount_cents: 0,
-    });
-    const { data: admins } = await db.from("profiles").select("id").eq("org_id", orgId).eq("role", "admin").neq("status", "inactive");
-    const rows = ((admins ?? []) as { id: string }[]).map((a) => ({
-      org_id: orgId,
-      user_id: a.id,
-      type: "estimate_deposit_excess",
-      title: "Duplicate deposit charge",
-      message: `A second deposit of $${dupAmount.toFixed(2)} was charged on Estimate #${estimate.estimate_number}. Refund it in Stripe (${paymentIntent.id}); it was not credited to the client.`,
-      entity_id: estimateId,
-      entity_type: "estimate",
-    }));
-    if (rows.length) await db.from("notifications").insert(rows);
-    return "applied";
   }
+  // Unreserved when the estimate is gone, or when this is a second deposit.
+  const generalCredit = estimateDeleted || isDuplicateDeposit;
   const { method } = await resolveMethod(db, orgId, paymentIntent, connectedAccountId);
 
   const { data: inserted, error: insertErr } = await db
@@ -362,15 +413,18 @@ export async function recordEstimateDepositCharge({
       reference: paymentIntent.id,
       memo: estimateDeleted
         ? `Deposit for deleted estimate #${estimate.estimate_number ?? "—"} paid online — account credit`
-        : `Deposit for estimate #${estimate.estimate_number ?? "—"} paid online`,
+        : isDuplicateDeposit
+          ? `Second deposit charge for estimate #${estimate.estimate_number ?? "—"} paid online — account credit (the estimate already had its deposit)`
+          : `Deposit for estimate #${estimate.estimate_number ?? "—"} paid online`,
       processing_fee_cents: feeCents,
       stripe_payment_intent_id: paymentIntent.id,
       // Reserved for this estimate: credit-first and every other allocation
       // path only spend it on invoices of this estimate's job / project /
       // contract (DB trigger trg_guard_reserved_deposit_allocation) until staff
       // release it to general credit. A deleted estimate has nothing to
-      // reserve it for, so its deposit is general credit from the start.
-      estimate_id: estimateDeleted ? null : estimateId,
+      // reserve it for, and a SECOND deposit charge isn't the estimate's
+      // deposit at all, so both are general credit from the start.
+      estimate_id: generalCredit ? null : estimateId,
     })
     .select("id")
     .single();
@@ -400,6 +454,10 @@ export async function recordEstimateDepositCharge({
   // On a replay (23505) the deposit may since have been refunded or charged
   // back: re-stamping "collected" then would resurrect a deposit that was given
   // back. Only clear the pending markers in that case.
+  // A second deposit charge never touches the estimate's deposit stamp (that
+  // stays the first, real deposit) — it only drops a pending marker that
+  // names this intent.
+  let skipStamp = isDuplicateDeposit;
   let fullyReversed = false;
   // What the deposit still holds after any partial refund/chargeback — a replay
   // must not re-inflate deposit_collected_cents back to the gross.
@@ -407,17 +465,21 @@ export async function recordEstimateDepositCharge({
   if (alreadyRecorded) {
     const { data: existingForStamp } = await db
       .from("crm_payments")
-      .select("amount_cents, refunded_amount_cents")
+      .select("amount_cents, refunded_amount_cents, memo")
       .eq("org_id", orgId)
       .eq("stripe_payment_intent_id", paymentIntent.id)
       .maybeSingle();
+    // Recorded earlier as a SECOND deposit charge: a replay arriving after the
+    // first deposit was refunded must not promote it to the estimate's deposit.
+    if (String(existingForStamp?.memo ?? "").startsWith("Second deposit charge")) skipStamp = true;
     fullyReversed =
       !!existingForStamp && (existingForStamp.refunded_amount_cents ?? 0) >= (existingForStamp.amount_cents ?? 0);
     if (existingForStamp && !fullyReversed) {
       stampCents = Math.max((existingForStamp.amount_cents ?? depositCents) - (existingForStamp.refunded_amount_cents ?? 0), 0);
     }
   }
-  const { error: stampErr } = await db
+  if (skipStamp) await clearEstimateDepositPending(db, paymentIntent.id);
+  const { error: stampErr } = skipStamp ? { error: null } : await db
     .from("estimates")
     .update({
       ...(fullyReversed
@@ -456,7 +518,7 @@ export async function recordEstimateDepositCharge({
 
   // If the client accepted only part of the proposal, the deposit can exceed
   // the accepted total. Left as account credit; tell staff to refund/apply it.
-  if (!fullyReversed && !estimateDeleted) await notifyStaffOfDepositExcess(db, orgId, estimateId);
+  if (!fullyReversed && !generalCredit && !skipStamp) await notifyStaffOfDepositExcess(db, orgId, estimateId);
 
   // On the already-recorded path `inserted` is null (the insert failed with
   // 23505), so dereferencing it threw and the webhook 500'd on every retry,
@@ -492,11 +554,17 @@ export async function recordEstimateDepositCharge({
       activity_type: "payment",
       subject: estimateDeleted
         ? `Deposit received: ${method} (online) for deleted estimate #${estimate.estimate_number ?? "—"} — credited to account`
-        : `Deposit received: ${method} (online) — credited to account`,
+        : isDuplicateDeposit
+          ? `Second deposit charge: ${method} (online) on Estimate #${estimate.estimate_number ?? "—"} — credited to account as general credit (Stripe ${paymentIntent.id})`
+          : `Deposit received: ${method} (online) — credited to account`,
       amount_cents: depositCents,
       ref_id: paymentId,
       ref_table: "crm_payments",
     });
+    // Staff decide whether the client keeps the extra as credit or gets it
+    // back. Gated with the timeline entry, so a redelivered event that finds
+    // the entry already written doesn't notify twice.
+    if (isDuplicateDeposit) await notifyStaffOfDuplicateDeposit(db, orgId, estimateId, estimate.estimate_number, depositCents, paymentIntent.id);
   }
 
   return "applied";

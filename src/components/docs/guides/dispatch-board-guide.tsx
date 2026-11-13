@@ -450,6 +450,16 @@ export function DispatchBoardGuide() {
             report show the same hours. For example, three people for 4 hours is 12 hours; if one
             leaves an hour early it is 11 on both.
           </li>
+          <li>
+            <strong>Who can change punches.</strong> Adding, correcting or removing crew punches in
+            Edit Job Times &mdash; and choosing whether a stop&apos;s pause time is paid &mdash; needs
+            the <strong>Dispatch Board</strong> or <strong>Payroll</strong> permission (admins always
+            can). Anyone else with the board open can still see the punches. A punch can&apos;t
+            overlap another punch of the same person on a different stop: the save is refused and
+            tells you which punch it clashes with, so fix or remove that one first. Inside a locked
+            pay period (see the Report Center guide) punches, pause minutes, paid/unpaid pause and
+            the stop&apos;s clock times can&apos;t be changed at all.
+          </li>
         </ul>
         <p>
           <strong>What changes the visit only</strong>
@@ -984,7 +994,9 @@ export function DispatchBoardGuide() {
             settings), the same as Team Assignment and the crew app; on other days they show only if
             you place them. Moving someone off a crew today — including dropping them back on their
             regular crew — stops their running job time on the crew they left, so their hours are
-            counted once. If some of a job&apos;s visits can&apos;t be moved (for example one was
+            counted once. Moving people between crews needs the Teams, Dispatch Board or Payroll
+            permission; without it the move is refused with a message rather than leaving the old
+            job&apos;s clock running. If some of a job&apos;s visits can&apos;t be moved (for example one was
             just started), the message says how many moved; the ones that moved stay on the new crew. Jobs with no crew sit in an{" "}
             <strong>Unassigned jobs</strong> column. On a touch screen, tap to pick up and tap to place
             instead of dragging. On a phone or portrait tablet the board stacks into one column that

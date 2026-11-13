@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useClientFilterOptions, useOrgTags } from "@/lib/hooks/use-clients";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { FilterFieldDef } from "@/lib/client-filters";
 
 /** Builds the full client filter field list (status, city, zip, tags, custom
@@ -16,6 +17,9 @@ export function useClientFilterFields() {
   const orgTags = useOrgTags();
   const { data: crmServices = [] } = useCRMServices();
   const { data: customFieldDefs = [] } = useCustomFieldDefs();
+  // Filtering by balance reveals balances, so it follows View Client Balance.
+  const { can } = usePermissions();
+  const canViewBalance = can("client_view_balance");
 
   const uniqueSources = filterOptions?.sources;
   const uniqueSalesReps = filterOptions?.salesReps;
@@ -29,7 +33,7 @@ export function useClientFilterFields() {
       options: [{ v: "active", l: "Active" }, { v: "lead", l: "Lead" }, { v: "inactive", l: "Inactive" }, { v: "cancelled", l: "Cancelled" }, { v: "lost", l: "Lost" }] },
     { value: "account_type",   label: "Account Type",      type: "select",
       options: [{ v: "residential", l: "Residential" }, { v: "commercial", l: "Commercial" }] },
-    { value: "balance",        label: "Balance",           type: "number" },
+    ...(canViewBalance ? [{ value: "balance", label: "Balance", type: "number" as const }] : []),
     { value: "city",           label: "Billing City",      type: "text" },
     { value: "service_city",   label: "Service City",      type: "text" },
     { value: "zip",            label: "Zip Code",          type: "text" },
@@ -55,7 +59,7 @@ export function useClientFilterFields() {
     { value: "do_not_market",  label: "Do Not Market",     type: "boolean" },
     { value: "taxable",        label: "Taxable",           type: "boolean" },
     { value: "ok_to_email",    label: "OK to Email",       type: "boolean" },
-  ], [uniqueSources, uniqueSalesReps, orgTags, serviceNames, customFieldDefs]);
+  ], [uniqueSources, uniqueSalesReps, orgTags, serviceNames, customFieldDefs, canViewBalance]);
 
   return { fields };
 }

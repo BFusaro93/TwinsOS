@@ -31,7 +31,7 @@ async function resubmitPOForApprovalIfNeeded(supabase: any, poId: string, grandT
       entityType: "purchase_order",
       grandTotalCents: grandTotal,
     });
-    toast.info("PO total changed — re-submitted for approval.");
+    toast.info("PO changed — re-submitted for approval.");
   }
 }
 
@@ -222,7 +222,7 @@ export function useUpdatePurchaseOrder() {
       const supabase = createClient();
       const { data: before } = await supabase
         .from("purchase_orders")
-        .select("grand_total")
+        .select("grand_total, vendor_id")
         .eq("id", id)
         .single();
       const { error } = await supabase
@@ -248,8 +248,9 @@ export function useUpdatePurchaseOrder() {
         })
         .eq("id", id);
       if (error) throw error;
-      // Shipping/discount/tax edits move the total just like line items do.
-      if (before && before.grand_total !== grandTotal) {
+      // Shipping/discount/tax edits move the total just like line items do,
+      // and a new vendor is a different order: either one re-opens approval.
+      if (before && (before.grand_total !== grandTotal || (before.vendor_id ?? null) !== (vendorId ?? null))) {
         await resubmitPOForApprovalIfNeeded(supabase, id, grandTotal);
       }
     },
@@ -1084,9 +1085,19 @@ export function useDeletePOLineItem() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: receiptLines, error: receiptLinesErr } = await (supabase as any)
         .from("goods_receipt_lines")
-        .select("id, quantity_received, is_maint_part")
+        .select("id, quantity_received, is_maint_part, part_qty_applied, product_qty_applied")
         .eq("po_line_item_id", lineItemId);
       if (receiptLinesErr) throw receiptLinesErr;
+
+      // Units this line put into stock are tracked on its receipt lines; the
+      // database refuses to unlink them (it would let the same delivery be
+      // received twice). Taking them back goes through the receipt.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((receiptLines ?? []).some((r: any) => Number(r.part_qty_applied ?? 0) > 0 || Number(r.product_qty_applied ?? 0) > 0)) {
+        throw new Error(
+          `"${lineItem.product_item_name ?? "This line"}" has already been received into stock. Edit its goods receipt and set the received quantity to 0 first (that takes the units back out of stock), then delete the line.`
+        );
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const totalReceived = (receiptLines ?? []).reduce((sum: number, r: any) => sum + (r.quantity_received ?? 0), 0);
@@ -1326,7 +1337,7 @@ export function useDeletePurchaseOrder() {
         .is("deleted_at", null);
       if (receiptErr) throw receiptErr;
       if ((receiptCount ?? 0) > 0) {
-        throw new Error("This PO has goods receipts recorded against it, so it can't be deleted. Cancel it instead.");
+        throw new Error("Goods have been received on this PO, so it can't be deleted. Use Mark Complete to close it short instead.");
       }
       const { error } = await supabase.from("purchase_orders").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;

@@ -7,6 +7,7 @@ import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
+import { estimateDepositDueCents, estimatesSettledByInvoices, isEstimateAccepted } from "@/lib/estimates/deposit-due";
 
 interface LineItemRow {
   id: string;
@@ -45,11 +46,10 @@ interface EstimateRow {
   deposit_required_cents: number | null;
   deposit_collected_cents: number | null;
   deposit_pending_cents: number | null;
+  deposit_waived_at: string | null;
+  portal_accepted_at: string | null;
   line_items: LineItemRow[];
 }
-
-// Stages that mean the estimate has been accepted (portal, link, or office).
-const ACCEPTED_STAGES = ["accepted", "won", "invoiced"];
 
 export default async function EstimatesPage() {
   const ctx = await getPortalContext();
@@ -85,7 +85,7 @@ export default async function EstimatesPage() {
         .select(
           "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
             "discount_cents, discount_type, discount_value, tax_rate_bps, " +
-            "deposit_required_cents, deposit_collected_cents, deposit_pending_cents, " +
+            "deposit_required_cents, deposit_collected_cents, deposit_pending_cents, deposit_waived_at, portal_accepted_at, " +
             "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, adj_rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, service_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
         )
         .in("client_id", ids)
@@ -173,15 +173,28 @@ export default async function EstimatesPage() {
   }));
 
   // A required deposit still owed on an accepted estimate (nothing collected
-  // or clearing). Deposits are optional, so accepting never waits on it — but
-  // it is shown as due, with the proposal link to pay it online when one
-  // exists (an accepted link never expires).
-  const depositDue = (e: (typeof normalized)[number]) => {
-    const required = e.deposit_required_cents ?? 0;
-    if (!ACCEPTED_STAGES.includes(e.status) || required <= 0) return 0;
-    if ((e.deposit_collected_cents ?? 0) > 0 || (e.deposit_pending_cents ?? 0) > 0) return 0;
-    return e.total_price_cents > 0 ? Math.min(required, e.total_price_cents) : required;
-  };
+  // or clearing, not waived, the job not already invoiced and paid). Deposits
+  // are optional, so accepting never waits on it — but it is shown as due,
+  // with the proposal link to pay it online when one exists (an accepted link
+  // never expires). estimateDepositDueCents is the same rule the proposal page
+  // and the deposit-intent route use.
+  const accepted = (e: (typeof normalized)[number]) =>
+    isEstimateAccepted({ portalAcceptedAt: e.portal_accepted_at, stage: e.status });
+  const settledIds = await estimatesSettledByInvoices(
+    service,
+    normalized.filter((e) => accepted(e) && (e.deposit_required_cents ?? 0) > 0 && !e.deposit_waived_at).map((e) => e.id)
+  );
+  const depositDue = (e: (typeof normalized)[number]) =>
+    estimateDepositDueCents({
+      accepted: accepted(e),
+      stage: e.status,
+      requiredCents: e.deposit_required_cents,
+      collectedCents: e.deposit_collected_cents,
+      pendingCents: e.deposit_pending_cents,
+      totalCents: e.total_price_cents,
+      waivedAt: e.deposit_waived_at,
+      settledByInvoices: settledIds.has(e.id),
+    });
   // The pay link is looked up for every estimate that can owe a deposit, not only ones already
   // accepted: a client who accepts here sees "Deposit due" immediately, and without the link
   // already loaded it read "we'll be in touch" until they reloaded the page.
@@ -190,6 +203,8 @@ export default async function EstimatesPage() {
       (e.deposit_required_cents ?? 0) > 0 &&
       (e.deposit_collected_cents ?? 0) === 0 &&
       (e.deposit_pending_cents ?? 0) === 0 &&
+      !e.deposit_waived_at &&
+      !settledIds.has(e.id) &&
       !["lost", "declined"].includes(e.status)
     )
     .map((e) => e.id);

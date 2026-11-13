@@ -16,6 +16,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, isoInZone, todayInZone } from "@/lib/time/zone";
 import { stopClockOutCap } from "@/lib/crew/visit-pause";
 import { assertOrgWritable } from "@/lib/org-writable";
+import { PAYROLL_LOCKED_PREFIX, isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
 
 const log = logger.child("crew/stops/clock-out");
@@ -388,6 +389,11 @@ export async function POST(
   }
   if (updateErrors.some((e) => isChemicalGateError(e))) {
     return NextResponse.json({ error: "Confirm the chemicals applied before finishing this job.", code: "chemical_confirmation_required" }, { status: 409 });
+  }
+  // A stop left running since a day inside the payroll lock: the database's own sentence, as a 409.
+  const lockError = updateErrors.find((e) => isPayrollLockedError(e));
+  if (lockError) {
+    return NextResponse.json({ error: lockError.slice(lockError.indexOf(PAYROLL_LOCKED_PREFIX)), code: "payroll_locked" }, { status: 409 });
   }
   if (updateErrors.length > 0) {
     return NextResponse.json({ error: `Failed to clock out: ${updateErrors.join("; ")}` }, { status: 500 });

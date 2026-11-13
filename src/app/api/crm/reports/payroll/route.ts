@@ -6,9 +6,13 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
+import { applyOvertime, getOvertimeRule, overtimeComputeRange } from "@/lib/payroll/overtime";
 
 /**
- * GET  /api/crm/reports/payroll?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * GET  /api/crm/reports/payroll?from=YYYY-MM-DD&to=YYYY-MM-DD — rows carry
+ *      regular / overtime hours under the org's overtime rule (returned as
+ *      `overtime`); a weekly rule is computed over whole weeks around the range
+ *      so a pay period starting mid-week still counts the week's earlier days.
  * PUT  /api/crm/reports/payroll — upsert one member-day adjustment.
  *
  * Requires the payroll_report permission (admins always have it). Crew logins
@@ -29,7 +33,10 @@ const PutBody = z.object({
   endTime: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
   /** Unpaid minutes off the clock for the day (replaces the recorded break). */
   breakMinutes: z.number().int().min(0).max(1440).nullable(),
+  /** Extra worked time — counts toward overtime. */
   extraHours: z.number().min(0).max(MAX_DAY_HOURS),
+  /** Paid time off — paid, never overtime. Optional so older clients keep working. */
+  ptoHours: z.number().min(0).max(MAX_DAY_HOURS).optional().default(0),
   note: z.string().max(500).nullable(),
 });
 
@@ -65,8 +72,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Pick a range of at most ${MAX_RANGE_DAYS} days` }, { status: 400 });
   }
 
-  const rows = await computePayroll(auth.db, auth.orgId, from, to);
-  return NextResponse.json({ from, to, rows });
+  const overtime = await getOvertimeRule(auth.db, auth.orgId);
+  const span = overtimeComputeRange(overtime, from, to);
+  const rows = applyOvertime(await computePayroll(auth.db, auth.orgId, span.from, span.to), overtime)
+    .filter((r) => r.workDate >= from && r.workDate <= to);
+  return NextResponse.json({ from, to, rows, overtime });
 }
 
 export async function PUT(request: Request) {
@@ -83,7 +93,7 @@ export async function PUT(request: Request) {
 
   const note = b.note?.trim() || null;
   const now = new Date().toISOString();
-  const isEmpty = b.hoursOverride == null && b.startTime == null && b.endTime == null && b.breakMinutes == null && b.extraHours === 0 && !note;
+  const isEmpty = b.hoursOverride == null && b.startTime == null && b.endTime == null && b.breakMinutes == null && b.extraHours === 0 && b.ptoHours === 0 && !note;
 
   const { data: existing } = await auth.db
     .from("crm_payroll_adjustments")
@@ -135,6 +145,7 @@ export async function PUT(request: Request) {
     break_override: b.breakMinutes,
     hours_override: b.hoursOverride,
     extra_hours: b.extraHours,
+    pto_hours: b.ptoHours,
     note,
     updated_by: auth.user.id,
   };

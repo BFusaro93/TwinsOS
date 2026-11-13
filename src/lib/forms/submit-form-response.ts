@@ -951,8 +951,9 @@ export async function submitFormResponse(
     }
   }
   if (createdLeadId) {
-    // A web-form lead is a new lead like a manual, imported or Zapier one: "new lead → text
-    // the rep" automations key on lead_created, which form leads never fired.
+    // A web-form lead is a new lead like a manual or Zapier one, so "new lead → text the
+    // rep" automations (lead_created) run for it. CSV-imported leads fire it only when the
+    // importer ticks "Run automations for imported records".
     try {
       enrollmentIds.push(...await fireSimpleTrigger(db, { orgId: form.org_id, clientId: createdLeadId, triggerType: "lead_created" }));
     } catch (err) {

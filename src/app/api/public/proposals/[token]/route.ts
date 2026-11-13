@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { buildProposalContent, getPublishedProposal, isChangedSinceSent } from "@/lib/estimates/proposal-content";
 import { loadEstimateDocumentMergeVars, renderProposalDocumentHtml } from "@/lib/estimates/estimate-document-render";
 import { isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
+import { estimateDepositDueCents, estimateSettledByInvoices, isEstimateAccepted } from "@/lib/estimates/deposit-due";
 
 // Public route — no auth. Uses service role to read across RLS.
 const serviceClient = () =>
@@ -11,9 +12,6 @@ const serviceClient = () =>
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
-
-// Stages that mean the proposal has been accepted (by any route).
-const ACCEPTED_STAGES = ["accepted", "won", "invoiced"];
 
 // The client sees the rate the line is actually priced at (Adj Rate when the
 // office set one, as the PDF prints it) without learning that it was adjusted.
@@ -91,7 +89,7 @@ export async function GET(
   // office marking it accepted / converting it).
   const stage = est.stage as string;
   const acceptedElsewhere =
-    !shareToken.accepted_at && (!!est.portal_accepted_at || ACCEPTED_STAGES.includes(stage));
+    !shareToken.accepted_at && isEstimateAccepted({ portalAcceptedAt: est.portal_accepted_at as string | null, stage });
   const isAccepted = !!shareToken.accepted_at || acceptedElsewhere;
   if (linkExpired && !isAccepted) {
     return NextResponse.json({ error: "This proposal link has expired" }, { status: 410 });
@@ -190,17 +188,26 @@ export async function GET(
 
   // A required deposit nothing has been paid (or is clearing) against, on an
   // accepted proposal. Deposits are optional — the client may Skip — but the
-  // page keeps showing it as due, with a way to pay it. The amount is the live
-  // estimate's, capped at the accepted total (the same rule deposit-intent
-  // charges by). A client's "I'll send a check" promise does not settle it.
-  const requiredLive = (est.deposit_required_cents as number | null) ?? 0;
-  const collectedLive = (est.deposit_collected_cents as number | null) ?? 0;
+  // page keeps showing it as due, with a way to pay it, until staff waive it or
+  // the job's invoices are issued and paid in full. The amount is the live
+  // estimate's, capped at the accepted total — estimateDepositDueCents, the
+  // same rule deposit-intent charges by. A client's "I'll send a check"
+  // promise does not settle it.
   const pendingLive = (est.deposit_pending_cents as number | null) ?? 0;
-  const acceptedTotal = (est.total_cents as number | null) ?? 0;
-  const depositDueCents =
-    isAccepted && stage !== "lost" && requiredLive > 0 && collectedLive === 0 && pendingLive === 0
-      ? acceptedTotal > 0 ? Math.min(requiredLive, acceptedTotal) : requiredLive
-      : 0;
+  const settledByInvoices = isAccepted ? await estimateSettledByInvoices(supabase, shareToken.estimate_id) : false;
+  // Waived, or the job is paid: no deposit screen of any kind — not even the
+  // "your payment failed, try again" one (deposit-intent refuses it too).
+  const depositNoLongerDue = isAccepted && (!!est.deposit_waived_at || settledByInvoices);
+  const depositDueCents = estimateDepositDueCents({
+    accepted: isAccepted,
+    stage,
+    requiredCents: est.deposit_required_cents as number | null,
+    collectedCents: est.deposit_collected_cents as number | null,
+    pendingCents: pendingLive,
+    totalCents: est.total_cents as number | null,
+    waivedAt: est.deposit_waived_at as string | null,
+    settledByInvoices,
+  });
 
   return NextResponse.json({
     document,
@@ -258,10 +265,10 @@ export async function GET(
     depositPendingMethod: (est.deposit_pending_method as "card" | "us_bank_account" | null) ?? null,
     depositPromisedCents: (est.deposit_promised_cents as number | null) ?? null,
     depositPromisedMethod: (est.deposit_promised_method as string | null) ?? null,
-    depositFailedCents: (est.deposit_failed_cents as number | null) ?? null,
-    depositFailedReason: (est.deposit_failed_reason as string | null) ?? null,
-    depositFailedMethod: (est.deposit_failed_method as "card" | "us_bank_account" | null) ?? null,
-    depositFailedAt: (est.deposit_failed_at as string | null) ?? null,
+    depositFailedCents: depositNoLongerDue ? null : ((est.deposit_failed_cents as number | null) ?? null),
+    depositFailedReason: depositNoLongerDue ? null : ((est.deposit_failed_reason as string | null) ?? null),
+    depositFailedMethod: depositNoLongerDue ? null : ((est.deposit_failed_method as "card" | "us_bank_account" | null) ?? null),
+    depositFailedAt: depositNoLongerDue ? null : ((est.deposit_failed_at as string | null) ?? null),
     // Whether the deposit step can offer a real card charge, or only the
     // self-reported "I'll send a check" methods. Gated on the platform having
     // Stripe keys AND this org having finished Connect onboarding — an org

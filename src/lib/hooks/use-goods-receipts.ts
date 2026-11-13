@@ -151,19 +151,23 @@ export function useCreateGoodsReceipt() {
 }
 
 /**
- * Hard-deletes a goods receipt (header + lines, via ON DELETE CASCADE) — used
- * only to roll back a receipt that ReceiveGoodsDialog just created when
- * applying its inventory increments afterward fails partway through. Not a
- * general-purpose "undo a receipt" action (there's no soft-delete here on
- * purpose): a receipt this deletes was never shown to the user as
- * successful, so there's nothing to preserve for audit.
+ * Rolls back a goods receipt that ReceiveGoodsDialog just created when
+ * applying its inventory increments afterward fails partway through. The
+ * rollback_goods_receipt RPC takes back exactly the units this receipt had
+ * already added to stock (its part_qty_applied / product_qty_applied), then
+ * deletes the receipt (header + lines). The database refuses a plain delete of
+ * a receipt whose stock was applied — it would let the same delivery be
+ * received twice. Not a general-purpose "undo a receipt" action: only the
+ * receipt's creator (within an hour) or an admin may call it; a receipt this
+ * deletes was never shown to the user as successful.
  */
 export function useDeleteGoodsReceipt() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { error } = await supabase.from("goods_receipts").delete().eq("id", id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("rollback_goods_receipt", { p_receipt_id: id });
       if (error) throw error;
     },
     onSuccess: () => {

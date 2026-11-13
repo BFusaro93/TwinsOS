@@ -13,7 +13,7 @@ const PROJECT_FIELDS: [string, string][] = [
   ["Project Name", "Free text — e.g. \"Smith Residence Backyard Renovation.\""],
   ["Customer / Client Name", "Free text field (not a dropdown of CRM Clients). A project can separately carry a Client ID for billing — see below."],
   ["Address / City / State / Zip", "Job site location."],
-  ["Status", "Sold, Scheduled, In Progress, On Hold, Complete, or Canceled. Cancelling removes the project's milestones that haven't been invoiced yet and offers to cancel its upcoming visits."],
+  ["Status", "Sold, Scheduled, In Progress, On Hold, Complete, or Canceled. Cancelling removes the project's milestones that haven't been invoiced yet and offers to cancel its upcoming visits. A canceled project can't approve change orders or invoice milestones. Reopening it (back to Sold) asks whether to bring back the milestones the cancel removed."],
   ["Start Date / End Date", "End Date defaults to \"TBD\" until set."],
   ["Contract Price", "The editable field here is the ORIGINAL contract price, entered BEFORE tax (converting an estimate seeds it from the estimate subtotal minus discounts; milestone invoices add tax at the estimate/client rate, so a percent milestone is a percent of the pre-tax price). Projects created before this change keep their tax-inclusive price and are billed as before. The Revised Contract Price shown elsewhere (Analysis, Change Orders, Milestone billing) is derived — original plus every approved change order — and is maintained by the database, not editable directly. Changing an existing project's contract price needs the Projects permission (Add/Modify Projects); without it the field is locked and every other field stays editable."],
   ["Budget Hours", "Planned labor hours, compared against Actual Hours for a variance once logged."],
@@ -25,7 +25,7 @@ const PROJECT_TABS: [string, string, string][] = [
   ["Materials", "Purchasing", "Every Requisition, PO, or direct line item assigned to this project, with running Subtotal / Sales Tax / Shipping / Total."],
   ["Other Costs", "Purchasing", "Subcontractor costs entered manually — Materials, Labor, or Other — each with an optional linked Vendor."],
   ["Milestone", "CRM", "A real, working billing-schedule editor — percentages of the Revised Contract Price (an add-on estimate's milestones are percentages of that estimate's own total), each invoiced independently. The last milestone not yet invoiced takes any rounding cent, so 50% + 50% always adds up to the contract exactly. Invoicing a milestone creates a draft invoice on the project and marks the matching milestone on the source Estimate as invoiced (they're the same schedule). Requires the project to have a Client ID, or it shows a \"link to a client first\" message instead."],
-  ["Change Orders", "CRM", "Its own tab, not folded into Milestone. Full create / approve / reject / reverse workflow with statuses draft, pending_approval, approved, and rejected. Approving one raises the Revised Contract Price by the change order's amount and, per its chosen billing treatment (spread across remaining milestones, its own new milestone, added to the final milestone, or left off the schedule), adjusts only the milestones not yet invoiced — anything already billed stays put. Reversing an approved change order undoes exactly that (contract price and schedule both drop back); it's blocked once a milestone it touched has already been invoiced. A change order created by converting an add-on estimate can't be reversed while that estimate's milestones are still on the project."],
+  ["Change Orders", "CRM", "Its own tab, not folded into Milestone. Full create / approve / reject / reverse workflow with statuses draft, pending_approval, approved, and rejected. Approving one raises the Revised Contract Price by the change order's amount and, per its chosen billing treatment (spread across remaining milestones, its own new milestone, added to the final milestone, or left off the schedule), adjusts only the milestones not yet invoiced — anything already billed stays put. Reversing an approved change order undoes exactly that (contract price and schedule both drop back); it's blocked once a milestone it touched has already been invoiced. A change order created by converting an add-on estimate can't be reversed while that estimate's milestones are still on the project. A canceled project's change orders can't be approved until it is reopened; approving one on a Complete project asks you to confirm first."],
   ["Billing", "CRM", "Invoices, payments, and credits scoped to this project specifically — not every invoice on the linked client — filtered by type (All / Invoice / Payment / Credit). Requires the project to have a Client ID; without one this tab shows nothing rather than unrelated org-wide billing."],
   ["Analysis", "CRM", "Project-scoped Original Contract, Revised Contract, Invoiced (before tax), Payments, Amount Due, and Remaining to Bill, plus Budgeted vs. Actual Man Hours, Budgeted vs. Actual Labor Cost and Overhead to Date — the same figures as the WIP report. Voided and draft invoices are excluded from Invoiced; an invoice combined into another still counts on this project."],
   ["Notes & Attachments", "CRM", "Despite the name, just a free-text notes field saved to the project record today — there's no attachment upload here."],
@@ -120,6 +120,21 @@ export function ProjectsGuide() {
         <p>
           A project&apos;s status runs through a flow — Sold → Scheduled → In Progress → Complete —
           with On Hold and Canceled as side branches, shown as a step indicator on the Details tab.
+        </p>
+        <p>
+          <strong>Cancelling and reopening.</strong> Cancelling a project removes the billing
+          milestones that haven&apos;t been invoiced yet, so nothing more can be billed from its
+          schedule; invoiced milestones, invoices and purchase orders are kept. While a project is
+          canceled, its change orders can&apos;t be approved and its milestones can&apos;t be invoiced
+          — reopen it first. Clicking <strong>Reopen</strong> on a canceled project puts it back to
+          Sold and, if the cancel removed any milestones, asks whether to bring them back. Choosing
+          yes restores exactly the milestones that cancel removed. If the contract price changed while
+          the project was canceled (for example the original price was edited or a change order was
+          reversed), the difference is spread across the restored milestones in proportion to their
+          amounts, so the schedule covers the contract the same way it did before the cancel.
+          Choosing no reopens the project without them. Only the most recent cancel&apos;s milestones
+          can be restored, and reopening this way needs the Projects permission (Add/Modify
+          Projects); without it, Reopen just changes the status.
         </p>
         <p>
           Users with the Equipt <strong>Viewer</strong> or <strong>Requestor</strong> role can see
@@ -281,6 +296,16 @@ export function ProjectsGuide() {
           refused once a milestone it touched has already gone out on an invoice.
         </p>
         <p>
+          A <strong>canceled</strong> project can&apos;t approve change orders — the Approve button is
+          hidden and the database refuses it — until the project is reopened. A change order can
+          still be reversed while the project is canceled; it comes off the removed milestones too,
+          so restoring them on reopen doesn&apos;t bring its amount back. Change orders on a
+          <strong> Complete</strong> project can still be approved, but you&apos;re asked to confirm
+          first, because the work has already been signed off. Approving a change order and invoicing
+          a milestone on the same project at the same moment can&apos;t interfere: one waits for the
+          other, so a milestone is never re-priced after it was billed, or billed at a stale amount.
+        </p>
+        <p>
           <strong>Analysis</strong> shows the project&apos;s labor and overhead the way the WIP report
           counts them. <strong>Actual Man Hours</strong> are the crew hours on the project&apos;s
           completed visits plus any hours entered on the project; <strong>Actual Labor Cost</strong>{" "}
@@ -434,7 +459,7 @@ export function ProjectsGuide() {
             <strong>WIP cost includes labor and overhead.</strong> In the WIP report, Cost to Date is materials &amp; other costs plus labor (crew hours on completed visits and hours entered on the project, at the project&apos;s LLR) plus overhead at the estimate&apos;s overhead share. % Complete and Earned Revenue follow from it.
           </li>
           <li>
-            <strong>Delete vs. Cancel.</strong> A project that has invoices, open purchase orders or invoiced milestones can&apos;t be deleted — cancel it instead, which keeps its billing and purchasing history. Cancelling removes the milestones that haven&apos;t been invoiced yet and asks whether to cancel the project&apos;s upcoming visits (visits already started, completed or invoiced are kept). A deleted project can&apos;t be restored.
+            <strong>Delete vs. Cancel.</strong> A project that has invoices, open purchase orders or invoiced milestones can&apos;t be deleted — cancel it instead, which keeps its billing and purchasing history. Cancelling removes the milestones that haven&apos;t been invoiced yet and asks whether to cancel the project&apos;s upcoming visits (visits already started, completed or invoiced are kept). Reopening a canceled project offers to bring those milestones back. A deleted project can&apos;t be restored.
           </li>
           <li>
             <strong>Crew logins don&apos;t see project financials.</strong> Crew app logins can&apos;t read projects, their costs, change orders or billing milestones. Creating or editing change orders needs the Projects permission (Add/Modify Projects).

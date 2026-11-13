@@ -54,12 +54,6 @@ export async function resolveSmsRecipients(
   const client = loaded?.client;
 
   if (!client) return { error: "client not found" };
-  // Consent to be texted is modelled at the CLIENT level (clients.sms_opt_in —
-  // contacts have no SMS-consent column), and sendClientSms re-checks it at the
-  // actual send. So every recipient number below (billing phone, contacts) is
-  // texted under the client's own opt-in — unless that number itself replied
-  // STOP, which is remembered per number (crm_sms_opt_outs, filtered below).
-  if (!client.sms_opt_in) return { error: "client has not opted in to SMS" };
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary_phone"];
   // Keyed by digits so the same number typed two ways is one recipient.
@@ -70,27 +64,48 @@ export async function resolveSmsRecipients(
     const key = phone.replace(/\D/g, "");
     if (key.length >= 7 && !phonesByKey.has(key)) phonesByKey.set(key, phone);
   };
-  if (toSelection.includes("client_primary_phone")) addPhone(client.primary_phone);
-  if (toSelection.includes("billing_phone")) {
-    // Billing phone = a number on the client typed "billing" in its phone list.
-    for (const p of (client.phones ?? []) as { phone: string; type: string }[]) {
-      if ((p.type ?? "").toLowerCase().includes("billing")) addPhone(p.phone);
+  // Consent is per person: the client's own numbers (primary and billing phone)
+  // are texted under the client's opt-in (clients.sms_opt_in); a contact only
+  // under that contact's own opt-in (client_contacts.sms_opt_in). sendClientSms
+  // re-checks the same rule for the number at the actual send.
+  const wantsClientNumbers = toSelection.includes("client_primary_phone") || toSelection.includes("billing_phone");
+  if (wantsClientNumbers && client.sms_opt_in) {
+    if (toSelection.includes("client_primary_phone")) addPhone(client.primary_phone);
+    if (toSelection.includes("billing_phone")) {
+      // Billing phone = a number on the client typed "billing" in its phone list.
+      for (const p of (client.phones ?? []) as { phone: string; type: string }[]) {
+        if ((p.type ?? "").toLowerCase().includes("billing")) addPhone(p.phone);
+      }
     }
   }
+  let contactsWithoutConsent = 0;
   if (toSelection.includes("all_contacts")) {
     const { data: contacts } = await supabase
       .from("client_contacts")
-      .select("phone, phones")
+      .select("phone, phones, sms_opt_in")
       .eq("client_id", params.clientId)
       .eq("org_id", params.orgId)
       .is("deleted_at", null);
-    for (const contact of (contacts ?? []) as { phone: string | null; phones: unknown }[]) {
-      const typed = Array.isArray(contact.phones) ? (contact.phones as { phone?: string }[]) : [];
-      if (typed.length > 0) addPhone(typed[0]?.phone);
-      else addPhone(contact.phone);
+    for (const contact of (contacts ?? []) as { phone: string | null; phones: unknown; sms_opt_in: boolean | null }[]) {
+      const typed = Array.isArray(contact.phones) ? (contact.phones as { phone?: string; isPrimary?: boolean }[]) : [];
+      const main = typed.find((p) => p.isPrimary)?.phone ?? typed[0]?.phone ?? contact.phone;
+      if (!main) continue;
+      if (contact.sms_opt_in !== true) {
+        contactsWithoutConsent++;
+        continue;
+      }
+      addPhone(main);
     }
   }
   if (phonesByKey.size === 0) {
+    if (wantsClientNumbers && !client.sms_opt_in && contactsWithoutConsent === 0) {
+      return { error: "client has not opted in to SMS" };
+    }
+    if (contactsWithoutConsent > 0 && !(wantsClientNumbers && client.sms_opt_in)) {
+      return { error: wantsClientNumbers
+        ? "neither the client nor any contact has opted in to SMS"
+        : "no contact has opted in to SMS" };
+    }
     return { error: toSelection.length === 1 && toSelection[0] === "client_primary_phone"
       ? "client has no primary_phone"
       : "no resolvable phone number for the selected 'send to' options" };

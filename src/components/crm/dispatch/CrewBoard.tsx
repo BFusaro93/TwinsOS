@@ -323,7 +323,7 @@ export function CrewBoard() {
       const op = defaultCrewByMember.get(item.id) === crewId && worksDefaultOnDate.has(item.id)
         ? clearMember.mutateAsync({ memberId: item.id, workDate: date })
         : setMember.mutateAsync({ memberId: item.id, crewId, workDate: date });
-      op.catch(fail("Couldn't move that person"));
+      op.catch((err: unknown) => toast.error(err instanceof Error && err.message ? err.message : "Couldn't move that person"));
     } else if (item.kind === "equipment") {
       if (item.fromCrewId === crewId) return;
       loadAssetOnCrew(item.key, crewId);

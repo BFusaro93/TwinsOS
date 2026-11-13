@@ -28,7 +28,11 @@ async function buildInvoicePDFData(
   userId: string | null,
   // Photos are embedded for single-invoice PDFs; bulk "Print Selected" skips
   // them so a large batch can't balloon (each invoice may carry up to 12).
-  includePhotos = true
+  includePhotos = true,
+  // The PDF is being printed to go to the client (Print / Print Selected), so a
+  // draft is about to become "printed" and its paper copy needs the online
+  // link. A plain download/preview of a draft never mints one.
+  forPrint = false
 ): Promise<{ invoice: InvoicePDFData; org: OrgPDFData; layoutKey: InvoicePDFLayoutKey } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: inv, error: invErr } = await (supabase as any)
@@ -104,11 +108,18 @@ async function buildInvoicePDFData(
       })
     : null;
 
-  const shareToken = await getOrCreateInvoiceShareToken(supabase, {
-    orgId: inv.org_id as string,
-    invoiceId: inv.id as string,
-    createdBy: userId,
-  });
+  // No "View & Pay Online" link for a draft preview: a draft isn't issued, the
+  // public page refuses drafts, and minting one would leave a live link for
+  // an invoice that may still change. Minted with the caller's own session, so
+  // invoice_share_tokens RLS decides: send/modify-invoice users get a link;
+  // view-only users reuse an existing one or print without it.
+  const shareToken = inv.status === "draft" && !forPrint
+    ? null
+    : await getOrCreateInvoiceShareToken(supabase, {
+        orgId: inv.org_id as string,
+        invoiceId: inv.id as string,
+        createdBy: userId,
+      });
 
   const invoiceData: InvoicePDFData = {
     invoiceNumber: inv.invoice_number as number,
@@ -175,9 +186,10 @@ export async function renderInvoicePDF(
   supabase: any,
   invoiceId: string,
   orgId: string,
-  userId: string | null
+  userId: string | null,
+  options: { forPrint?: boolean } = {}
 ): Promise<{ buffer: Buffer; invoiceNumber: number } | null> {
-  const built = await buildInvoicePDFData(supabase, invoiceId, orgId, userId);
+  const built = await buildInvoicePDFData(supabase, invoiceId, orgId, userId, true, options.forPrint ?? false);
   if (!built) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buffer = await renderToBuffer(createElement(InvoiceDocument as any, built) as any);
@@ -198,7 +210,8 @@ export async function renderInvoicesPDF(
   // Each build is about a dozen queries; a few at a time instead of all at once, so a
   // large selection doesn't open hundreds of requests and run the route out of time.
   const built = await mapWithConcurrency(invoiceIds, PDF_BUILD_CONCURRENCY, async (id) => {
-    const data = await buildInvoicePDFData(supabase, id, orgId, userId, false);
+    // Only "Print Selected" uses this, and it marks the drafts printed.
+    const data = await buildInvoicePDFData(supabase, id, orgId, userId, false, true);
     return data ? { id, data } : null;
   });
   const ok = built.filter((x): x is NonNullable<typeof x> => x !== null);

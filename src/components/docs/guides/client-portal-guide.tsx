@@ -9,7 +9,7 @@ import {
 } from "@/components/docs/DocsBrand";
 
 const NAV_TABS: [string, string, string][] = [
-  ["Home", "/portal", "A greeting with the balance due (or an all-caught-up message), the next visit, credits on account (a parent account also sees each sub-account's credit listed separately, since a credit only applies to its own account's invoices), upcoming visits, open estimates, recent invoices, and completed-visit history, plus quick actions (Pay balance, My schedule, Request service, Estimates). Always shown."],
+  ["Home", "/portal", "A greeting with the balance due (or an all-caught-up message), the next visit, credits on account (a parent account also sees each sub-account's credit listed separately, since a credit only applies to its own account's invoices), upcoming visits, open estimates (the version the client was last sent; a Good/Better/Best proposal shows its price range across the packages), recent invoices, and completed-visit history, plus quick actions (Pay balance, My schedule, Request service, Estimates). Always shown."],
   ["Billing", "/portal/billing", "Every invoice, split into Outstanding and History, with Pay and PDF-download actions. Always shown."],
   ["Services", "/portal/services", "Upcoming and completed job visits, with a live in-progress banner. Always shown."],
   ["Estimates", "/portal/estimates", "Open and past estimates, with Accept / Decline / Request Changes on open ones. Hidden if the org turns off “Show Estimates.”"],
@@ -235,6 +235,8 @@ export function ClientPortalGuide() {
           Changing the amount, the invoices or switching between card and bank transfer cancels the earlier
           form, and so does anything that changes the invoice in the meantime (you record a payment, charge a
           saved card, void, merge or edit it), so an old form left open can&apos;t be submitted later.
+          Switching back and forth quickly (card, then bank transfer, then card again) always opens a fresh,
+          payable form &mdash; never the one that was just cancelled.
         </p>
         <p>
           <strong>Bank account waiting on verification.</strong> A bank account typed in by hand is verified
@@ -274,6 +276,12 @@ export function ClientPortalGuide() {
             it needs a client linked to the ticket. The client sees only the subject, category,
             status, and description &mdash; never comments, files, or the assignee. Turn the
             switch off to hide it again.
+          </li>
+          <li>
+            <strong>Ticket limits.</strong> A client can submit up to 10 tickets in any 10 minutes per
+            account, with a subject of up to 200 characters and a description of up to 5,000. New
+            tickets always arrive open, normal priority and unassigned &mdash; the same limits apply
+            however the ticket is submitted.
           </li>
           <li>
             <strong>Visit names.</strong> Visits in the schedule are named by their service rather
@@ -320,6 +328,13 @@ export function ClientPortalGuide() {
           An estimate past its <code>expires_at</code> date is shown as <strong>Expired</strong> and its action
           buttons disappear, even if its underlying status is still <code>sent</code> or <code>viewed</code>.
         </Callout>
+        <p>
+          <strong>Deposit due.</strong> An accepted estimate whose required deposit hasn&apos;t been paid shows
+          &ldquo;Deposit due&rdquo;, with a <strong>Pay online</strong> link to its proposal page when one has
+          been sent. It stops showing once a deposit is paid (or a bank transfer for it is clearing), once the
+          estimate&apos;s own invoices have all been sent and paid in full, or once the office waives the deposit
+          on the estimate.
+        </p>
       </Section>
 
       <Section id="branding" title="Branding and portal settings">

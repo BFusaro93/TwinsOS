@@ -20,6 +20,8 @@ import {
   useDeleteClientContact,
   useAddClientProperty,
   useUpdateClientProperty,
+  useSetClientPropertyArchived,
+  countOpenEstimatesForProperty,
   useAddClientTag,
   useRemoveClientTag,
   useOrgTags,
@@ -77,6 +79,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { TicketDetailSheet } from "./tickets/TicketDetailSheet";
@@ -154,6 +157,7 @@ import {
   CreditCard,
   MessageSquareText,
   GitMerge,
+  Archive,
 } from "lucide-react";
 import { MergeClientsDialog } from "@/components/crm/clients/MergeClientsDialog";
 import type { Client, ClientContact, ClientProperty, ContactPhone, PhoneType } from "@/types/crm";
@@ -170,6 +174,7 @@ import { summarizeContractAmount } from "@/lib/utils/contract-frequency";
 const CONTACT_TYPES = [
   "Owner",
   "Primary",
+  "Billing",
   "Spouse",
   "Property Manager",
   "District Manager",
@@ -1705,11 +1710,14 @@ function ContactDialog({
   open,
   onOpenChange,
   contact,
+  readOnly = false,
 }: {
   clientId: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   contact?: ClientContact | null;
+  /** View only: the user lacks the account's Allow Edit permission. */
+  readOnly?: boolean;
 }) {
   const [confirm, confirmDialog] = useConfirm();
   const isEditing = !!contact;
@@ -1723,6 +1731,7 @@ function ContactDialog({
   const [email, setEmail]           = useState("");
   const [isPrimary, setIsPrimary]   = useState(false);
   const [okToEmail, setOkToEmail]   = useState(false);
+  const [smsOptIn, setSmsOptIn]     = useState(false);
   const [notes, setNotes]           = useState("");
   const [phones, setPhones]         = useState<ContactPhone[]>([{ phone: "", type: "cell", isPrimary: true }]);
 
@@ -1735,6 +1744,7 @@ function ContactDialog({
       setEmail(contact.email ?? "");
       setIsPrimary(contact.isPrimary ?? false);
       setOkToEmail(contact.okToEmail ?? false);
+      setSmsOptIn(contact.smsOptIn ?? false);
       setNotes(contact.notes ?? "");
       setPhones(
         contact.phones?.length
@@ -1745,7 +1755,7 @@ function ContactDialog({
       );
     } else {
       setFirstName(""); setLastName(""); setContactType(""); setEmail("");
-      setIsPrimary(false); setOkToEmail(false); setNotes("");
+      setIsPrimary(false); setOkToEmail(false); setSmsOptIn(false); setNotes("");
       setPhones([{ phone: "", type: "cell", isPrimary: true }]);
     }
   }, [open, contact]);
@@ -1774,7 +1784,7 @@ function ContactDialog({
 
   function handleClose() {
     setFirstName(""); setLastName(""); setContactType(""); setEmail("");
-    setIsPrimary(false); setOkToEmail(false); setNotes("");
+    setIsPrimary(false); setOkToEmail(false); setSmsOptIn(false); setNotes("");
     setPhones([{ phone: "", type: "cell", isPrimary: true }]);
     onOpenChange(false);
   }
@@ -1793,6 +1803,7 @@ function ContactDialog({
       phoneType: (validPhones.find((p) => p.isPrimary) ?? validPhones[0])?.type ?? null,
       isPrimary,
       okToEmail,
+      smsOptIn,
       notes: notes.trim() || null,
     };
     try {
@@ -1804,7 +1815,9 @@ function ContactDialog({
         toast.success("Contact added");
       }
       handleClose();
-    } catch { toast.error(isEditing ? "Failed to update contact" : "Failed to add contact"); }
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, isEditing ? "Failed to update contact" : "Failed to add contact"));
+    }
   }
 
   async function handleDelete() {
@@ -1818,14 +1831,14 @@ function ContactDialog({
       await deleteContact({ id: contact.id, clientId });
       toast.success("Contact removed");
       handleClose();
-    } catch { toast.error("Failed to remove contact"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to remove contact")); }
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>{isEditing ? "Edit Contact" : "Add Contact"}</DialogTitle></DialogHeader>
-        <div className="grid gap-3 py-1">
+        <DialogHeader><DialogTitle>{readOnly ? "Contact" : isEditing ? "Edit Contact" : "Add Contact"}</DialogTitle></DialogHeader>
+        <fieldset disabled={readOnly} className="grid min-w-0 gap-3 py-1">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>First Name <span className="text-red-500 dark:text-red-400">*</span></Label>
@@ -1917,16 +1930,25 @@ function ContactDialog({
               OK to email
             </label>
           </div>
-        </div>
+          <label className="flex cursor-pointer items-start gap-1.5 text-sm">
+            <input type="checkbox" checked={smsOptIn} onChange={(e) => setSmsOptIn(e.target.checked)} className="mt-0.5 rounded border-slate-300 dark:border-neutral-700 accent-brand-500" />
+            <span>
+              Opted in to text messages
+              <span className="block text-xs text-muted-foreground">
+                Check only after this contact has confirmed consent. Automations text a contact only when this is on; changing their main phone number turns it off.
+              </span>
+            </span>
+          </label>
+        </fieldset>
         <DialogFooter className={isEditing ? "sm:justify-between" : undefined}>
-          {isEditing && (
+          {isEditing && !readOnly && (
             <Button variant="ghost" className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40" onClick={handleDelete} disabled={isDeleting}>
               {isDeleting ? "Removing…" : "Remove Contact"}
             </Button>
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleClose}>Cancel</Button>
-            <Button onClick={handleSave} disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
+            <Button variant="outline" onClick={handleClose}>{readOnly ? "Close" : "Cancel"}</Button>
+            {!readOnly && <Button onClick={handleSave} disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>}
           </div>
         </DialogFooter>
         {confirmDialog}
@@ -3154,7 +3176,8 @@ function AllContactsModal({
   contacts: ClientContact[];
   onClose: () => void;
   onOpenContact: (c: ClientContact) => void;
-  onAddContact: () => void;
+  /** Omitted when the user can't edit the account — the button is hidden. */
+  onAddContact?: () => void;
 }) {
   const [search, setSearch] = useState("");
 
@@ -3182,9 +3205,11 @@ function AllContactsModal({
               className="w-72"
               inputClassName="h-8 text-xs"
             />
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onAddContact}>
-              <Plus className="mr-1 h-3 w-3" /> Add Contact
-            </Button>
+            {onAddContact && (
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onAddContact}>
+                <Plus className="mr-1 h-3 w-3" /> Add Contact
+              </Button>
+            )}
             <button onClick={onClose} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-400">
               <X className="h-4 w-4" />
             </button>
@@ -3625,11 +3650,170 @@ interface Props {
   onExpandChange?: (v: boolean) => void;
 }
 
+// ── ClientPropertiesList ─────────────────────────────────────────────────────
+
+/**
+ * The Details tab's compact property list. Properties are created from
+ * More → Add Property and feed the Aerial Measurement tool. A property the
+ * client no longer has is archived, not deleted: it drops out of the job,
+ * estimate and contract pickers, keeps its history, and can be unarchived.
+ */
+function ClientPropertiesList({
+  clientId,
+  properties,
+  canEdit,
+  onAdd,
+  onEdit,
+}: {
+  clientId: string;
+  properties: ClientProperty[];
+  canEdit: boolean;
+  onAdd: () => void;
+  onEdit: (p: ClientProperty) => void;
+}) {
+  const [confirm, confirmDialog] = useConfirm();
+  const { mutateAsync: setArchived, isPending } = useSetClientPropertyArchived();
+  const [showArchived, setShowArchived] = useState(false);
+  const active = properties.filter((p) => !p.archivedAt);
+  const archived = properties.filter((p) => !!p.archivedAt);
+
+  async function handleArchive(p: ClientProperty, archive: boolean) {
+    const label = p.name || p.address || "this property";
+    if (archive) {
+      let openEstimates = 0;
+      try { openEstimates = await countOpenEstimatesForProperty(p.id); } catch { /* the database check still runs */ }
+      const ok = await confirm({
+        title: `Archive ${label}?`,
+        description: openEstimates > 0
+          ? `${openEstimates} open estimate${openEstimates === 1 ? " is" : "s are"} for this property and will keep pointing at it. Archived properties are hidden from job, estimate and contract pickers; past jobs, visits and invoices keep it, and you can unarchive it any time.`
+          : "Archived properties are hidden from job, estimate and contract pickers. Past jobs, visits and invoices keep it, and you can unarchive it any time.",
+        confirmLabel: "Archive",
+      });
+      if (!ok) return;
+    }
+    try {
+      await setArchived({ id: p.id, clientId, archived: archive, label: p.name || p.address });
+      toast.success(archive ? "Property archived" : "Property unarchived");
+    } catch (err) {
+      const e = err as { message?: unknown } | null;
+      // The archive guard (active jobs / primary property) explains itself.
+      toast.error(typeof e?.message === "string" && e.message && (err as { code?: string }).code === "23514"
+        ? e.message
+        : mutationErrorMessage(err, archive ? "Failed to archive property" : "Failed to unarchive property"));
+    }
+  }
+
+  function row(p: ClientProperty) {
+    const addr = [p.address, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean).join(" · ");
+    const isArchived = !!p.archivedAt;
+    return (
+      <li key={p.id} className={`flex items-start justify-between gap-2 px-3 py-2 ${isArchived ? "opacity-70" : ""}`}>
+        <div className="min-w-0 text-sm">
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
+            <span className="truncate font-medium text-slate-800 dark:text-neutral-100">{p.name || p.address || "Property"}</span>
+            {p.isMaster && (
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Primary</span>
+            )}
+            {isArchived && (
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Archived</span>
+            )}
+          </div>
+          {p.name && addr && <p className="truncate text-xs text-muted-foreground">{addr}</p>}
+          {(p.gateCode || p.notesToCrew) && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {p.gateCode && <span>Gate code: <span className="font-medium text-slate-700 dark:text-neutral-300">{p.gateCode}</span></span>}
+              {p.gateCode && p.notesToCrew && <span> · </span>}
+              {p.notesToCrew && <span>Crew: {p.notesToCrew}</span>}
+            </p>
+          )}
+        </div>
+        {canEdit && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {isArchived ? (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => handleArchive(p, false)}
+                className="rounded px-1.5 py-1 text-xs text-brand-600 dark:text-brand-400 hover:bg-muted"
+              >
+                Unarchive
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onEdit(p)}
+                  className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-700 dark:hover:text-neutral-300"
+                  title="Edit property"
+                  aria-label={`Edit property ${p.name || p.address || ""}`.trim()}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                {!p.isMaster && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => handleArchive(p, true)}
+                    className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-700 dark:hover:text-neutral-300"
+                    title="Archive property"
+                    aria-label={`Archive property ${p.name || p.address || ""}`.trim()}
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </li>
+    );
+  }
+
+  return (
+    <>
+      <div className="mb-3 mt-6 flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+          Properties{active.length > 0 ? ` (${active.length})` : ""}
+        </h3>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
+          >
+            <Plus className="h-3 w-3" /> Add
+          </button>
+        )}
+      </div>
+      {active.length === 0 ? (
+        <p className="text-xs text-slate-400 dark:text-neutral-500">No additional properties on file.</p>
+      ) : (
+        <ul className="divide-y rounded-md border">{active.map(row)}</ul>
+      )}
+      {archived.length > 0 && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            className="text-xs text-muted-foreground hover:underline"
+          >
+            {showArchived ? "Hide" : "Show"} {archived.length} archived propert{archived.length === 1 ? "y" : "ies"}
+          </button>
+          {showArchived && <ul className="mt-1.5 divide-y rounded-md border">{archived.map(row)}</ul>}
+        </div>
+      )}
+      {confirmDialog}
+    </>
+  );
+}
+
 export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }: Props) {
   const { can } = usePermissions();
   const { data: client, isLoading } = useClient(clientId);
   const { data: contacts } = useClientContacts(clientId);
-  const { data: properties } = useClientProperties(clientId);
+  // Archived properties are listed too (to unarchive); pickers elsewhere hide them.
+  const { data: properties } = useClientProperties(clientId, { includeArchived: true });
   const { data: clientTickets } = useTickets({ clientId });
   const { data: childClients } = useChildClients(clientId);
   const { data: parentClient } = useClient(client?.parentClientId ?? "");
@@ -3671,6 +3855,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   // A closed-lost lead never became a client either — keep the same simplified
   // lead layout (no Jobs/Accounting/Contracts) rather than the full client view.
   const isLeadLike = isLead || client?.status === "lost";
+  // Adding / changing contacts, properties or the parent link is an edit of the
+  // account — the database checks the same key (enforce_client_*_write_permission).
+  const canEditClient = can(isLeadLike ? "lead_allow_edit" : "client_allow_edit");
   const hasChildren = (childClients ?? []).length > 0;
   // "Combined balance" is meant to be the total owed across the whole
   // parent/child rollup — a commercial property-manager parent account that
@@ -3776,7 +3963,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             <EmailBouncesNotice
               clientId={clientId}
               addresses={[client.primaryEmail, client.billingEmail]}
-              canClear={can(isLead ? "lead_allow_edit" : "client_allow_edit")}
+              canClear={can(isLeadLike ? "lead_allow_edit" : "client_allow_edit")}
             />
             <SmsOptOutsNotice
               clientId={clientId}
@@ -3842,7 +4029,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                 </Button>
               )}
-              <PermissionGate permission={isLead ? "lead_allow_edit" : "client_allow_edit"}>
+              <PermissionGate permission={isLeadLike ? "lead_allow_edit" : "client_allow_edit"}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -3927,18 +4114,22 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <DropdownMenuItem onClick={() => { if (client.billingAddress) window.open(`https://maps.google.com/?q=${encodeURIComponent(client.billingAddress + " " + client.billingCity)}`, "_blank"); else toast.error("No address on file"); }}>
                       <Map className="mr-2 h-3.5 w-3.5" /> Show Client on Map
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setAddContactOpen(true); }}>
-                      <Plus className="mr-2 h-3.5 w-3.5" /> Add Contact
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setAddPropertyOpen(true); }}>
-                      <Plus className="mr-2 h-3.5 w-3.5" /> Add Property
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setAerialMeasurementOpen(true); }}>
-                      <Map className="mr-2 h-3.5 w-3.5" /> Aerial Measurement
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setLinkParentOpen(true)}>
-                      <Building2 className="mr-2 h-3.5 w-3.5" /> {client.parentClientId ? "Change Parent Account" : "Link Parent Account"}
-                    </DropdownMenuItem>
+                    {canEditClient && (
+                      <>
+                        <DropdownMenuItem onClick={() => { setAddContactOpen(true); }}>
+                          <Plus className="mr-2 h-3.5 w-3.5" /> Add Contact
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setAddPropertyOpen(true); }}>
+                          <Plus className="mr-2 h-3.5 w-3.5" /> Add Property
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setAerialMeasurementOpen(true); }}>
+                          <Map className="mr-2 h-3.5 w-3.5" /> Aerial Measurement
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setLinkParentOpen(true)}>
+                          <Building2 className="mr-2 h-3.5 w-3.5" /> {client.parentClientId ? "Change Parent Account" : "Link Parent Account"}
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     {can("client_allow_delete") && (
                       <DropdownMenuItem onClick={() => setMergeOpen(true)}>
                         <GitMerge className="mr-2 h-3.5 w-3.5" /> Merge Clients
@@ -4048,9 +4239,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   )}
                 </div>
                 <div className="ml-2 shrink-0 text-right">
-                  <p className={`font-medium ${child.balanceOutstandingCents > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
-                    {formatCurrency(child.balanceOutstandingCents)}
-                  </p>
+                  {can("client_view_balance") && (
+                    <p className={`font-medium ${child.balanceOutstandingCents > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                      {formatCurrency(child.balanceOutstandingCents)}
+                    </p>
+                  )}
                   <Badge variant="outline" className={`text-[9px] capitalize border ${STATUS_COLOR[child.status]}`}>
                     {child.status}
                   </Badge>
@@ -4142,14 +4335,16 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               {(contacts ?? []).length > 0 && (
                 <button className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline" onClick={() => setAllContactsOpen(true)}>All</button>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-1.5 text-xs text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
-                onClick={() => setAddContactOpen(true)}
-              >
-                <Plus className="mr-0.5 h-3 w-3" /> Add Contact
-              </Button>
+              {canEditClient && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-xs text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
+                  onClick={() => setAddContactOpen(true)}
+                >
+                  <Plus className="mr-0.5 h-3 w-3" /> Add Contact
+                </Button>
+              )}
             </div>
           </div>
           {(contacts ?? []).length === 0 ? (
@@ -4196,7 +4391,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         <div className="rounded-lg border border-border bg-card px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Office Notes</span>
-            <PermissionGate permission={isLead ? "lead_allow_edit" : "client_allow_edit"}>
+            <PermissionGate permission={isLeadLike ? "lead_allow_edit" : "client_allow_edit"}>
               <button
                 className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline"
                 onClick={() => setEditOpen(true)}
@@ -4374,57 +4569,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                   More → Add Property and feed the Aerial Measurement tool; the
                   old "Related Properties" card on Home was replaced by Open
                   Tickets, so this is where they're viewed and edited now. */}
-              <div className="mb-3 mt-6 flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                  Properties{properties && properties.length > 0 ? ` (${properties.length})` : ""}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setAddPropertyOpen(true)}
-                  className="flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
-                >
-                  <Plus className="h-3 w-3" /> Add
-                </button>
-              </div>
-              {(properties ?? []).length === 0 ? (
-                <p className="text-xs text-slate-400 dark:text-neutral-500">No additional properties on file.</p>
-              ) : (
-                <ul className="divide-y rounded-md border">
-                  {(properties ?? []).map((p) => {
-                    const addr = [p.address, [p.city, p.state].filter(Boolean).join(", "), p.zip].filter(Boolean).join(" · ");
-                    return (
-                      <li key={p.id} className="flex items-start justify-between gap-2 px-3 py-2">
-                        <div className="min-w-0 text-sm">
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
-                            <span className="truncate font-medium text-slate-800 dark:text-neutral-100">{p.name || p.address || "Property"}</span>
-                            {p.isMaster && (
-                              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Primary</span>
-                            )}
-                          </div>
-                          {p.name && addr && <p className="truncate text-xs text-muted-foreground">{addr}</p>}
-                          {(p.gateCode || p.notesToCrew) && (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              {p.gateCode && <span>Gate code: <span className="font-medium text-slate-700 dark:text-neutral-300">{p.gateCode}</span></span>}
-                              {p.gateCode && p.notesToCrew && <span> · </span>}
-                              {p.notesToCrew && <span>Crew: {p.notesToCrew}</span>}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setEditProperty(p)}
-                          className="shrink-0 rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-700 dark:hover:text-neutral-300"
-                          title="Edit property"
-                          aria-label={`Edit property ${p.name || p.address || ""}`.trim()}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <ClientPropertiesList
+                clientId={clientId}
+                properties={properties ?? []}
+                canEdit={canEditClient}
+                onAdd={() => setAddPropertyOpen(true)}
+                onEdit={setEditProperty}
+              />
             </div>
           </div>
         </TabsContent>
@@ -4472,13 +4623,14 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         open={!!editContact}
         onOpenChange={(o) => { if (!o) setEditContact(null); }}
         contact={editContact}
+        readOnly={!canEditClient}
       />
       {allContactsOpen && (
         <AllContactsModal
           contacts={contacts ?? []}
           onClose={() => setAllContactsOpen(false)}
           onOpenContact={(c) => { setAllContactsOpen(false); setEditContact(c); }}
-          onAddContact={() => { setAllContactsOpen(false); setAddContactOpen(true); }}
+          onAddContact={canEditClient ? () => { setAllContactsOpen(false); setAddContactOpen(true); } : undefined}
         />
       )}
       {/* Properties are created from the "More" menu's "Add Property" item (and the

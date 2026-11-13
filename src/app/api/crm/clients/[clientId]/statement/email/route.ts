@@ -13,6 +13,7 @@ import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars, resolveMergeTags } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
+import { fetchBillingContactCcEmails, mergeCcRecipients } from "@/lib/email/billing-contact-cc";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { escapeHtml } from "@/lib/utils/escape-html";
@@ -76,6 +77,8 @@ export async function POST(
     message?: string;
     detail?: boolean;
     minBalanceCents?: number;
+    /** CC the client's Billing contacts that are OK to email (default true). */
+    ccBillingContacts?: boolean;
   };
 
   if (body.to?.some((e) => !isValidEmail(e))) {
@@ -117,6 +120,21 @@ export async function POST(
   if (toEmails.length === 0) {
     return NextResponse.json({ error: allRecipientsBouncedMessage(bouncedEmails) }, { status: 422 });
   }
+
+  // Billing contacts (type "Billing", OK to email) are copied on statements,
+  // once each and never when they're already a To address.
+  let billingContactCc: string[] = [];
+  if (body.ccBillingContacts !== false) {
+    try {
+      billingContactCc = await fetchBillingContactCcEmails(createServiceClient(), { orgId: client.org_id as string, clientId });
+    } catch (err) {
+      log.warn("billing contacts lookup failed; sending without them", { clientId, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  const { deliverable: ccEmails, bounced: bouncedCc } = await partitionBouncedRecipients(
+    client.org_id as string,
+    mergeCcRecipients(requestedEmails, [], billingContactCc),
+  );
 
   const today = await todayISO(supabase);
   const statementDate = body.statementDate || today;
@@ -241,6 +259,7 @@ export async function POST(
   const { data: sendData, error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(orgName),
     to: toEmails,
+    ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
     subject: resolvedSubject,
     html,
     ...(replyTo ? { replyTo } : {}),
@@ -272,7 +291,7 @@ export async function POST(
     resend_message_id: sendData?.id ?? null,
     occurred_at: new Date().toISOString(),
     created_by: user.id,
-  }, { html });
+  }, { html, cc: ccEmails });
 
-  return NextResponse.json({ ok: true, bouncedSkipped: bouncedEmails });
+  return NextResponse.json({ ok: true, bouncedSkipped: [...bouncedEmails, ...bouncedCc] });
 }

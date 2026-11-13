@@ -140,6 +140,8 @@ export interface ClientProperty {
   notesToCrew: string | null;
   mapCode: string | null;
   isMaster: boolean;
+  /** Archived properties are hidden from job / estimate pickers; history keeps pointing at them. */
+  archivedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -159,6 +161,10 @@ export interface ClientContact {
   email: string | null;
   isPrimary: boolean;
   okToEmail: boolean;
+  /** This contact's own consent to be texted (automations text a contact only when true). */
+  smsOptIn: boolean;
+  smsOptInAt: string | null;
+  smsOptInSource: string | null;
   notes: string | null;
   deletedAt: string | null;
   createdAt: string;

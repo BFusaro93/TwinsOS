@@ -1895,6 +1895,42 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Purchasing",
     items: [
       {
+        q: "I edited a line on an approved PO and it went back to Pending. Why?",
+        a: "An approval only covers exactly what the approver saw. Any change to lines (item, quantity, price, taxable, project) or the vendor sends it back for approval, and approvals that no longer match are asked again.",
+      },
+      {
+        q: "My requisition was rejected. Do I keep the approvals I already had?",
+        a: "No. After you fix it and submit again, the whole approval chain starts over.",
+      },
+      {
+        q: "Why was my PO approved the moment I submitted it?",
+        a: "It was made from an approved requisition and only buys what that requisition already approved: same items, no more quantity, no higher price, within its approved total. Add anything beyond that and it goes through the normal PO approval chain.",
+      },
+      {
+        q: "How do I cancel a PO?",
+        a: "Open it and click Cancel PO. That works only until something is received. After a delivery has been received, use Mark Complete to close it short.",
+      },
+      {
+        q: "I deleted or canceled the PO I made from a requisition. Can I make a new one?",
+        a: "Yes. When no open PO remains, the requisition goes back to Approved so you can convert it again.",
+      },
+      {
+        q: "How do I finish a requisition I no longer need?",
+        a: "Use Close Requisition on approved, ordered or rejected requisitions. No more POs can be made from it, and existing POs are unaffected.",
+      },
+      {
+        q: "Why can't I delete a PO line or a goods receipt?",
+        a: "Its units were already added to stock. Edit the goods receipt and set the received quantity to 0 first (that takes them back out of stock), then delete it. This stops the same delivery from being received twice.",
+      },
+      {
+        q: "Why did an approval I expected to finish the PO add another approver?",
+        a: "The lines or total changed while it was in approval. If the new total crosses a higher approval threshold, that approver is added before it can be approved.",
+      },
+      {
+        q: "Can a discount make a PO total negative?",
+        a: "No. A discount larger than the item subtotal is capped at the subtotal; tax and shipping still apply.",
+      },
+      {
         q: "Why can't I delete a purchase order or requisition, or lower a PO line's quantity?",
         a: "The app blocks changes that would orphan stock or records. A PO that has goods receipts recorded against it can't be deleted — cancel it instead. A requisition that already has purchase orders created from it can't be deleted — cancel or close it. And a PO line's quantity can't be lowered below what has already been received; correct the goods receipt first, then edit the line.",
       },
@@ -2112,6 +2148,186 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Landscapt (CRM)",
     items: [
+      {
+        q: "Why is the payment link blank in my automation email?",
+        a: "The invoice is still a draft. Drafts can't be viewed or paid online, so [viewinvoiceonline] and [paymentlink] stay blank until the invoice is sent or printed.",
+      },
+      {
+        q: "What can a crew login see about our clients?",
+        a: "Only the clients on that crew's own stops: name, phone, address, gate code, property notes, contacts and timeline. Other clients' records and the client Files tab are not visible to crews.",
+      },
+      {
+        q: "Can a crew edit client details or timeline entries?",
+        a: "No. Crews can add notes, skip reasons and upsell suggestions to the timeline of clients on their stops, but they can't edit or delete entries, change contacts or properties, or create clients.",
+      },
+      {
+        q: "Why doesn't my draft invoice PDF have a \"View & Pay Online\" link?",
+        a: "Drafts aren't issued yet, so previews have no online link. Printing or emailing the invoice issues it, and those copies include the link.",
+      },
+      {
+        q: "A client opened an invoice link and saw \"not found\". Why?",
+        a: "The invoice is still a draft. The link starts working once the invoice is sent or printed.",
+      },
+      {
+        q: "Can visitors see my form's tag rules?",
+        a: "No. The public form only receives page-jump and show/hide rules; tags are applied on our server when the form is submitted.",
+      },
+      {
+        q: "I linked a job to a contract that isn't signed yet. Why aren't its visits being invoiced?",
+        a: "Visits on a Draft or Sent contract are held. Once you sign the contract, it covers them. If you cancel it without signing, they're billed per visit right away.",
+      },
+      {
+        q: "I signed a contract months after its start date. Will the earlier months be billed?",
+        a: "When you mark it Signed, Landscapt lists every month (or cycle) it hasn't billed since the start date. You can bill them all now on invoices dated today, bill only the current one, or start with the next cycle.",
+      },
+      {
+        q: "What happens to billing when I make a contract inactive and then active again?",
+        a: "While it's inactive, its visits bill per visit. When you make it active again, contract billing starts with the next cycle; the current cycle isn't billed again, and visits until then keep billing per visit.",
+      },
+      {
+        q: "I cancelled a contract that bills a month in advance. What about next month's invoice?",
+        a: "The cancel window lists any draft invoices dated after today. Leave them ticked to void them as the contract is cancelled.",
+      },
+      {
+        q: "Are materials on a contract job included in the contract price?",
+        a: "Each product has an \"In contract\" checkbox, on by default. When it's ticked, only the amount used above what was planned is billed (10 yards planned, 15 used bills 5). Untick it to bill the full amount. Materials bill when the visit is completed.",
+      },
+      {
+        q: "My contract was signed after its prorated first period ended. Is that invoice overdue?",
+        a: "No. A late prorated invoice is dated the day it's created, and its due date counts from then.",
+      },
+      {
+        q: "The billing run failed on the 31st. Is that month lost?",
+        a: "No. A missed month-end run is made up in the following month, before that month's own billing day, dated its original billing day.",
+      },
+      {
+        q: "I'm importing contracts that are already billing in another system. Will the current month be billed twice?",
+        a: "No. A contract imported as signed or active is marked as billed for the period in progress. Add a lastBilledDate column to set it yourself.",
+      },
+      {
+        q: "Why was my punch edit refused as \"overlaps another punch\"?",
+        a: "One person can't be clocked in on two stops at once. The message shows the clashing punch's times; fix or remove that one first.",
+      },
+      {
+        q: "Does the payroll lock cover pause time and visit clock times?",
+        a: "Yes. On a locked day, a visit's pause minutes, its paid/unpaid choice and its clock-in/out times can't change, and neither can punches, shifts or payroll corrections.",
+      },
+      {
+        q: "A storm crew worked past midnight. Which day is the 1am punch locked and paid on?",
+        a: "The day the shift started.",
+      },
+      {
+        q: "If I change \"Crew pauses are unpaid\", does it change past payroll?",
+        a: "No. Each day keeps the setting it ended under; only days ended after the change follow the new setting.",
+      },
+      {
+        q: "Does Payroll calculate overtime pay?",
+        a: "No. It reports overtime hours; apply your overtime pay rate in your payroll system.",
+      },
+      {
+        q: "Why are Labor Rate and Labor Cost blank in my Timesheet report?",
+        a: "They need the Show Wage Burden permission (Payroll Access). The same applies to the Cost column in Resource Time Utilization.",
+      },
+      {
+        q: "What labor rate do the Timesheet, Resource Time Utilization and job costing use?",
+        a: "The crew member's burden rate if one is set; otherwise the employee's hourly rate plus the company labor burden. All three use the same rate.",
+      },
+      {
+        q: "Does the KPI Scorecard's OT % use my overtime setting?",
+        a: "Yes. It uses the rule in Settings → Organization → Overtime (weekly or daily limit), the same rule as the Payroll tab.",
+      },
+      {
+        q: "Who gets texted when an automation sends to \"All contacts\"?",
+        a: "Only contacts with \"Opted in to text messages\" ticked on their contact record. The client's own primary and billing phones follow the client's opt-in.",
+      },
+      {
+        q: "A contact replied STOP. What happens?",
+        a: "That contact's text opt-in is turned off and the number is blocked. If they reply START from their main phone, they're opted back in.",
+      },
+      {
+        q: "Can I email a client marked \"OK to Email: No\"?",
+        a: "Yes, for a one-off email you write yourself; the Email dialog shows a warning first. Automations and campaigns still skip them.",
+      },
+      {
+        q: "How do I copy someone on every invoice and statement?",
+        a: "Add them as a contact with type \"Billing\" and tick \"OK to email\". They're CC'd on every invoice and statement email, and you can remove them from a single invoice send in the Send dialog.",
+      },
+      {
+        q: "Do imported clients and leads trigger my automations and Zapier?",
+        a: "Only if you tick \"Run automations for imported records\" on the import preview. New leads fire Lead created and new active clients fire Client created.",
+      },
+      {
+        q: "How do I remove a property a client no longer has?",
+        a: "Archive it from the Properties list on the client's Details tab. It disappears from job and estimate pickers but keeps its history, and you can unarchive it any time.",
+      },
+      {
+        q: "Why won't a property archive?",
+        a: "It still has an unfinished job (scheduled, in progress or on hold), or it's the client's primary address. Finish or move the jobs first, or change the client's address.",
+      },
+      {
+        q: "A client never paid their deposit, but the job is done and paid. Will they still be asked for it?",
+        a: "No. Once the estimate's invoices have all been sent and paid in full, the deposit stops showing as due on the proposal link and in the client portal, and the link won't take it.",
+      },
+      {
+        q: "How do I stop asking a client for a deposit?",
+        a: "Open the accepted estimate and click Waive deposit under Deposit Required; you can add a reason. The client is no longer asked for it. Undo makes it due again.",
+      },
+      {
+        q: "A client's bank transfer for a deposit bounced. Will I find out even if they accepted in the portal?",
+        a: "Yes. However the proposal was accepted, you get a Deposit failed notification, the client is emailed, it's logged on their timeline, and their proposal link re-opens so they can pay again.",
+      },
+      {
+        q: "A client got charged the deposit twice. What happens to the second payment?",
+        a: "It's added to the client's account as general credit, not tied to the estimate, and your admins are notified. Apply it to an invoice or refund it from Accounting → Payments.",
+      },
+      {
+        q: "I emailed an invoice to the wrong person. Can I kill the link?",
+        a: "Yes. Open the invoice and choose Revoke pay link from the ⋮ menu. Old links stop working right away, and the next email or PDF gets a new link.",
+      },
+      {
+        q: "Do I need to revoke the link when I void an invoice?",
+        a: "No. Voiding, merging, consolidating or deleting an invoice revokes its online links automatically.",
+      },
+      {
+        q: "Can a client still download the proposal they accepted after the link's 30 days are up?",
+        a: "Yes. An accepted proposal's link, including its PDF download, never expires.",
+      },
+      {
+        q: "Why does the portal home show a price range on an estimate?",
+        a: "It's a Good/Better/Best proposal. The range runs from the cheapest package to the most expensive, taken from the version the client was last sent.",
+      },
+      {
+        q: "What happens to a project's billing milestones when I cancel it?",
+        a: "Milestones that haven't been invoiced are removed, so nothing more can be billed. Invoiced milestones, invoices and purchase orders are kept.",
+      },
+      {
+        q: "Can I get the removed milestones back if I reopen a canceled project?",
+        a: "Yes. Clicking Reopen asks whether to bring back the milestones the cancel removed. Choose \"Yes, restore them\" to put them back, or \"No\" to reopen without them. Only the most recent cancel's milestones can be restored.",
+      },
+      {
+        q: "The contract price changed while the project was canceled. What happens to restored milestones?",
+        a: "The difference is spread across the restored milestones in proportion to their amounts, so the schedule covers the contract the same way it did before you canceled.",
+      },
+      {
+        q: "Why can't I approve a change order or invoice a milestone on a canceled project?",
+        a: "A canceled project takes no more scope or billing. Reopen the project first.",
+      },
+      {
+        q: "Can I approve a change order on a completed project?",
+        a: "Yes, but you'll be asked to confirm first, because the work has already been signed off.",
+      },
+      {
+        q: "Can two people approve a change order and invoice a milestone on the same project at the same moment?",
+        a: "Yes, safely. One waits for the other, so a milestone is never re-priced after it was billed or billed at an old amount.",
+      },
+      {
+        q: "Does a rep paid \"when invoiced\" keep commission on an invoice we wrote off or gave a goodwill credit on?",
+        a: "No. Commission is earned only on the part not settled by an AR write-off or account credit. If the statement was already created, the difference is taken back as an adjustment on the rep's next statement. Statements already created never change.",
+      },
+      {
+        q: "What if we remove the write-off or credit afterwards?",
+        a: "The rep's next statement gets the commission back as a positive adjustment.",
+      },
       {
         q: "How do I put bullets or line breaks in an invoice line description?",
         a: "A line's Description on the invoice is a multi-line box. Press Enter for a new line, and start a line with - or * and a space to turn it into a bullet. Line breaks and bullets, including ones copied over from an estimate, carry through to the printed PDF instead of running together as one sentence.",
@@ -3109,6 +3325,46 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "Does PTO count toward overtime?",
+        a: "No. On the Payroll tab, enter paid time off in the PTO column. It's paid and counted as Regular hours, but it never counts toward the overtime limit. Extra hours (shop time and other worked time) do count toward overtime.",
+      },
+      {
+        q: "What's the difference between Extra and PTO on the Payroll tab?",
+        a: "Extra is worked time that isn't on the clock, such as shop time, and counts toward overtime. PTO is paid time off: it's paid as Regular hours and never counts toward overtime. Both appear in the CSV, Excel and PDF exports.",
+      },
+      {
+        q: "Who can create invoice pay links?",
+        a: "Admins and anyone whose role has Email Invoices or Add/Modify Invoices. People who can only view invoices see existing links, and crew logins never see them.",
+      },
+      {
+        q: "Is there a limit on portal tickets?",
+        a: "Yes. Up to 10 tickets per account in any 10 minutes, a subject of up to 200 characters and a description of up to 5,000.",
+      },
+      {
+        q: "Who can change crew punches in Edit Job Times?",
+        a: "Admins and anyone whose role has the Dispatch Board or View & Edit Payroll Report permission. Others can see punches but not change them.",
+      },
+      {
+        q: "How is overtime calculated?",
+        a: "An admin chooses the rule in Settings → Organization → Overtime: hours over a weekly limit (default 40, Monday–Sunday weeks) or over a daily limit (default 8). Only worked hours count toward the limit; PTO is paid as Regular and never becomes overtime. The Payroll tab and its exports show Regular and OT hours for each person.",
+      },
+      {
+        q: "Why was my crew move refused?",
+        a: "Moving someone between crews, or marking who's working, needs the Teams, Dispatch Board or Payroll permission, so that their running job time on the old crew can be closed. Ask an admin for one of those.",
+      },
+      {
+        q: "Why can't I edit a client's contacts or properties?",
+        a: "Changing an account, including its contacts, properties and parent link, needs the Clients \"Allow Edit\" permission (Leads \"Allow Edit\" for leads). Ask an admin to add it to your role.",
+      },
+      {
+        q: "Why can't I see client balances?",
+        a: "Balances (the table column, the filter, sub-accounts, the merge screen) need the \"View Client Balance\" permission.",
+      },
+      {
+        q: "Who can waive a deposit?",
+        a: "Anyone with the Edit estimates or Add/modify payments permission.",
+      },
       {
         q: "Who can change a visit's price or quantity?",
         a: "Roles with Change Visit Price & Quantity (Settings → Roles, Scheduling Access). Starter roles that schedule or invoice have it ticked; untick it on any role that shouldn't re-price visits. Admins always can.",

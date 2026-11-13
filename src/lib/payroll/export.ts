@@ -14,7 +14,12 @@ export interface PayrollMemberTotals {
   shiftHours: number;
   jobHours: number;
   extra: number;
+  /** Paid time off — part of total and regular, never overtime. */
+  pto: number;
   total: number;
+  /** total split by the org's overtime rule. */
+  regular: number;
+  overtime: number;
   openPunches: number;
   openShifts: number;
   adjustedDays: number;
@@ -27,14 +32,17 @@ export function groupPayrollByMember(rows: PayrollRow[]): PayrollMemberTotals[] 
   for (const r of rows) {
     const m = map.get(r.crewMemberId) ?? {
       crewMemberId: r.crewMemberId, memberName: r.memberName, crewName: r.crewName,
-      days: [], shiftHours: 0, jobHours: 0, extra: 0, total: 0,
+      days: [], shiftHours: 0, jobHours: 0, extra: 0, pto: 0, total: 0, regular: 0, overtime: 0,
       openPunches: 0, openShifts: 0, adjustedDays: 0, noShiftDays: 0, longBreakDays: 0,
     };
     m.days.push(r);
     m.shiftHours += r.baseHours;
     m.jobHours += r.jobHours;
     m.extra += r.extraHours;
+    m.pto += r.ptoHours ?? 0;
     m.total += r.totalHours;
+    m.regular += r.regularHours;
+    m.overtime += r.overtimeHours;
     m.openPunches += r.openPunches;
     if (r.openShift) m.openShifts += 1;
     if (r.adjusted) m.adjustedDays += 1;
@@ -70,7 +78,8 @@ export function breakDetail(d: Pick<PayrollRow, "breakGaps" | "lunchMinutes" | "
 }
 
 export const DAILY_HEADERS = [
-  "Employee", "Crew", "Date", "Clock In", "Clock Out", "Break (min)", "Break Times", "Day Hours", "Job Hours", "Extra Hours", "Total Hours", "Status", "Note",
+  "Employee", "Crew", "Date", "Clock In", "Clock Out", "Break (min)", "Break Times", "Day Hours", "Job Hours", "Extra Hours", "PTO Hours", "Total Hours",
+  "Regular Hours", "OT Hours", "Status", "Note",
 ];
 
 /** Flags a day that needs a look before it is paid. */
@@ -89,7 +98,7 @@ export function dailyRows(members: PayrollMemberTotals[], tz: string): (string |
   return members.flatMap((m) =>
     m.days.map((d) => [
       m.memberName, d.crewName ?? "", d.workDate, clock(d.shiftStart, tz), clock(d.shiftEnd, tz), d.breakMinutes, breakDetail(d, tz),
-      r2(d.baseHours), r2(d.jobHours), r2(d.extraHours), r2(d.totalHours), dayStatus(d), d.note ?? "",
+      r2(d.baseHours), r2(d.jobHours), r2(d.extraHours), r2(d.ptoHours ?? 0), r2(d.totalHours), r2(d.regularHours), r2(d.overtimeHours), dayStatus(d), d.note ?? "",
     ])
   );
 }
@@ -98,13 +107,13 @@ export function dailyRows(members: PayrollMemberTotals[], tz: string): (string |
 export const DAYS_TO_REVIEW_NOTE =
   "Days to Review = days with a shift that was never ended (open) or job time but no Start Day (no shift). Hours on those days may be understated or missing.";
 
-export const SUMMARY_HEADERS = ["Employee", "Crew", "Days Worked", "Days to Review", "Day Hours", "Extra Hours", "Total Hours"];
+export const SUMMARY_HEADERS = ["Employee", "Crew", "Days Worked", "Days to Review", "Day Hours", "Extra Hours", "PTO Hours", "Total Hours", "Regular Hours", "OT Hours"];
 
 export function summaryRows(members: PayrollMemberTotals[]): (string | number)[][] {
   return members.map((m) => [
-    m.memberName, m.crewName ?? "", m.days.filter((d) => d.totalHours > 0).length,
+    m.memberName, m.crewName ?? "", m.days.filter((d) => d.totalHours - (d.ptoHours ?? 0) > 0).length,
     m.openShifts + m.noShiftDays,
-    r2(m.shiftHours), r2(m.extra), r2(m.total),
+    r2(m.shiftHours), r2(m.extra), r2(m.pto), r2(m.total), r2(m.regular), r2(m.overtime),
   ]);
 }
 

@@ -265,9 +265,13 @@ export function ClientsTable({
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const router = useRouter();
 
-  const { visible: cols, toggle: toggleCol } = useColumnPrefs("crm-clients-table-columns", CLIENT_DEFAULT_VISIBLE);
+  const { visible: savedCols, toggle: toggleCol } = useColumnPrefs("crm-clients-table-columns", CLIENT_DEFAULT_VISIBLE);
+  // Balances are behind View Client Balance, like the client page's Balance cards.
+  const canViewBalance = can("client_view_balance");
+  const columnDefs = canViewBalance ? CLIENT_COLUMNS : CLIENT_COLUMNS.filter((c) => c.key !== "balance");
+  const cols = canViewBalance ? savedCols : { ...savedCols, balance: false };
   // +checkbox +name +actions
-  const visibleColumnCount = 3 + CLIENT_COLUMNS.filter((c) => cols[c.key] ?? true).length;
+  const visibleColumnCount = 3 + columnDefs.filter((c) => cols[c.key] ?? true).length;
 
   function removeFilterRow(id: string) {
     setFilterRows((prev) => prev.filter((r) => r.id !== id));
@@ -371,7 +375,7 @@ export function ClientsTable({
           </div>
         )}
 
-        <ColumnSelector columns={CLIENT_COLUMNS} visible={cols} onToggle={toggleCol} />
+        <ColumnSelector columns={columnDefs} visible={cols} onToggle={toggleCol} />
 
         {/* Bulk Actions */}
         {selectedCount > 0 ? (

@@ -28,6 +28,7 @@ import { isPayrollDayLocked } from "@/lib/crew/payroll-lock";
 import {
   DAILY_HEADERS, DAYS_TO_REVIEW_NOTE, LONG_BREAK_MINUTES, SUMMARY_HEADERS, dailyRows, groupPayrollByMember, isLongBreak, offClockBreakdown, periodLabel, summaryRows,
 } from "@/lib/payroll/export";
+import { describeOvertimeRule } from "@/lib/payroll/overtime";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
@@ -59,7 +60,9 @@ export function PayrollReport() {
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [open, setOpen] = useState<Set<string>>(new Set());
-  const { data: rows = [], isLoading, error } = usePayroll(from, to);
+  const { data: report, isLoading, error } = usePayroll(from, to);
+  const rows = useMemo(() => report?.rows ?? [], [report]);
+  const overtimeLabel = report ? describeOvertimeRule(report.overtime) : null;
   const members = useMemo(() => groupPayrollByMember(rows), [rows]);
   const { data: lockedThrough = null } = usePayrollLock();
 
@@ -95,7 +98,11 @@ export function PayrollReport() {
     const text = (rows: (string | number)[][]) => rows.map((r) => r.map((c) => (typeof c === "number" ? fmt(c) : c)));
     try {
       await exportReportPDF(`Payroll ${periodLabel(from, to)}`, [
-        { heading: `Totals by employee — ${DAYS_TO_REVIEW_NOTE}`, columns: SUMMARY_HEADERS, rows: text(summaryRows(members)) },
+        {
+          heading: `Totals by employee — ${DAYS_TO_REVIEW_NOTE}${overtimeLabel ? ` ${overtimeLabel}.` : ""}`,
+          columns: SUMMARY_HEADERS,
+          rows: text(summaryRows(members)),
+        },
         // One table per employee (with its own total) instead of one long run of everyone's days.
         ...members.map((m) => {
           const dayRows = dailyRows([m], tz).map((r) => r.slice(2));
@@ -103,7 +110,7 @@ export function PayrollReport() {
             heading: `${m.memberName}${m.crewName ? ` — ${m.crewName}` : ""}`,
             columns: DAILY_HEADERS.slice(2),
             rows: text(dayRows),
-            totals: ["Total", "", "", "", "", fmt(m.shiftHours), fmt(m.jobHours), fmt(m.extra), fmt(m.total), "", ""],
+            totals: ["Total", "", "", "", "", fmt(m.shiftHours), fmt(m.jobHours), fmt(m.extra), fmt(m.pto), fmt(m.total), fmt(m.regular), fmt(m.overtime), "", ""],
           };
         }),
       ]);
@@ -117,6 +124,7 @@ export function PayrollReport() {
   }
 
   const grand = members.reduce((s, m) => s + m.total, 0);
+  const grandOvertime = members.reduce((s, m) => s + m.overtime, 0);
 
   return (
     <div className="space-y-4">
@@ -133,7 +141,10 @@ export function PayrollReport() {
         <Button variant="outline" size="sm" onClick={() => setRange(lastWeek(tz))}>Last week</Button>
         <Button variant="outline" size="sm" onClick={() => setRange(lastTwoWeeks(tz))}>Last 2 weeks</Button>
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">Total <strong className="text-foreground">{fmt(grand)} h</strong></span>
+          <span className="text-sm text-muted-foreground">
+            Total <strong className="text-foreground">{fmt(grand)} h</strong>
+            {grandOvertime > 0 && <> · OT <strong className="text-foreground">{fmt(grandOvertime)} h</strong></>}
+          </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1" disabled={rows.length === 0}>
@@ -155,6 +166,7 @@ export function PayrollReport() {
       <p className="text-xs text-muted-foreground">
         Paid time is each person&apos;s day — clocked in at the shop to clocked out at the shop — less lunch and unpaid pauses.
         Edit any day to change its hours or add shop time/PTO. The recorded hours stay visible and job costing is not changed.
+        {overtimeLabel && <> {overtimeLabel} (change it in Settings → Organization).</>}
       </p>
       {flagged > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-amber-600">
@@ -177,8 +189,11 @@ export function PayrollReport() {
                 <TableHead>Crew</TableHead>
                 <TableHead className="text-right">Day hours</TableHead>
                 <TableHead className="text-right">On jobs</TableHead>
-                <TableHead className="text-right">Extra</TableHead>
+                <TableHead className="text-right" title="Extra worked time (shop, travel). Counts toward overtime.">Extra</TableHead>
+                <TableHead className="text-right" title="Paid time off. Paid as regular hours, never overtime.">PTO</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Regular</TableHead>
+                <TableHead className="text-right">OT</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -194,7 +209,10 @@ export function PayrollReport() {
                       <TableCell className="text-right tabular-nums">{fmt(m.shiftHours)}</TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(m.jobHours)}</TableCell>
                       <TableCell className="text-right tabular-nums">{fmt(m.extra)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(m.pto)}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmt(m.total)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(m.regular)}</TableCell>
+                      <TableCell className={`text-right tabular-nums ${m.overtime > 0 ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>{fmt(m.overtime)}</TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         {(m.openShifts + m.openPunches + m.noShiftDays + m.longBreakDays) > 0 && (
                           <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300">
@@ -283,6 +301,7 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
   const save = useSavePayrollAdjustment();
   const [hours, setHours] = useState(row.hoursOverride != null ? String(row.hoursOverride) : "");
   const [extra, setExtra] = useState(row.extraHours ? String(row.extraHours) : "");
+  const [pto, setPto] = useState(row.ptoHours ? String(row.ptoHours) : "");
   const [note, setNote] = useState(row.note ?? "");
   // The inputs show what is paid for the day: the corrected value when the office set one,
   // else the recorded value. Only a value that differs from the RECORDED one is saved as a
@@ -298,7 +317,7 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
   const parse = (s: string): number | null => (s.trim() === "" || Number.isNaN(Number(s)) ? null : Math.max(0, Number(s)));
   const breakValue = parse(breakMins) != null ? Math.round(parse(breakMins) as number) : null;
   const dirty =
-    parse(hours) !== row.hoursOverride || (parse(extra) ?? 0) !== row.extraHours || (note.trim() || null) !== row.note ||
+    parse(hours) !== row.hoursOverride || (parse(extra) ?? 0) !== row.extraHours || (parse(pto) ?? 0) !== (row.ptoHours ?? 0) || (note.trim() || null) !== row.note ||
     startTime !== initStart || endTime !== initEnd || breakMins !== initBreak;
   const computed = row.noShift ? row.jobHours : row.shiftHours;
   const clock = (iso: string | null) =>
@@ -313,10 +332,11 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
       endTime: clear || !endTime || endTime === wall(row.recordedEnd) ? null : endTime,
       breakMinutes: clear || breakValue == null || breakValue === row.recordedBreakMinutes ? null : breakValue,
       extraHours: clear ? 0 : parse(extra) ?? 0,
+      ptoHours: clear ? 0 : parse(pto) ?? 0,
       note: clear ? null : note.trim() || null,
     });
     if (clear) {
-      setHours(""); setExtra(""); setNote("");
+      setHours(""); setExtra(""); setPto(""); setNote("");
       setStartTime(wall(row.recordedStart)); setEndTime(wall(row.recordedEnd)); setBreakMins(String(row.recordedBreakMinutes));
     }
   }
@@ -370,9 +390,14 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
       </TableCell>
       <TableCell className="text-right text-muted-foreground tabular-nums">{fmt(row.jobHours)}</TableCell>
       <TableCell className="text-right">
-        <Input disabled={locked} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="0.00" inputMode="decimal" className="h-8 w-20 text-right" />
+        <Input disabled={locked} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="0.00" inputMode="decimal" className="h-8 w-20 text-right" aria-label="Extra worked hours" title="Extra worked time (shop, travel). Counts toward overtime." />
+      </TableCell>
+      <TableCell className="text-right">
+        <Input disabled={locked} value={pto} onChange={(e) => setPto(e.target.value)} placeholder="0.00" inputMode="decimal" className="h-8 w-20 text-right" aria-label="PTO hours" title="Paid time off. Paid as regular hours, never overtime." />
       </TableCell>
       <TableCell className="text-right font-medium tabular-nums">{fmt(row.totalHours)}</TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(row.regularHours)}</TableCell>
+      <TableCell className={`text-right tabular-nums ${row.overtimeHours > 0 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>{fmt(row.overtimeHours)}</TableCell>
       <TableCell className="space-x-1 whitespace-nowrap">
         <Button size="sm" className="h-8" disabled={locked || !dirty || save.isPending} onClick={() => submit()}>Save</Button>
         {row.adjusted && (

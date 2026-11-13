@@ -98,6 +98,7 @@ export interface BillingContractRow {
   signed_at?: string | null;
   created_at?: string | null;
   last_billed_date?: string | null;
+  end_date?: string | null;
   /**
    * Not a column. The org's IANA time zone, so the `signed_at`/`created_at`
    * instants become the org's calendar date (a contract signed at 9pm Eastern
@@ -128,6 +129,16 @@ export interface BillingContractRow {
    * running contract. See monthGrid.
    */
   billing_anchor_date?: string | null;
+  /**
+   * `crm_contracts.reactivated_at`: when the contract was last switched from
+   * inactive back to active (Make Active). Billing resumes at the first cycle
+   * that starts on/after that day — the cycle in progress when it was
+   * reactivated is never billed (its visits bill per visit instead).
+   */
+  reactivated_at?: string | null;
+  /** Per-invoice amount and month overrides — read only to skip a $0 month. */
+  monthly_amount_cents?: number | null;
+  monthly_amounts?: Record<string, number | null> | null;
 }
 
 export interface BillingPlan {
@@ -150,6 +161,12 @@ export interface BillingPlan {
    * tests the contract term against it.
    */
   cycleStart: string;
+  /**
+   * Month-anchored cadences only: "missed_previous_run" when this plan bills
+   * the PREVIOUS run month's cycle, whose run the cron missed (month-end
+   * billing days have no other catch-up day). Otherwise absent.
+   */
+  via?: "natural" | "missed_first_cycle" | "missed_previous_run";
 }
 
 const VALID_FREQUENCIES: readonly BillingFrequency[] = [
@@ -269,7 +286,22 @@ function billableSince(contract: BillingContractRow): Ymd | null {
  */
 function clientActiveBy(contract: BillingContractRow, billingDay: Ymd): boolean {
   const reactivated = parseYmd(contract.client_active_since);
-  return !reactivated || dayDiff(reactivated, billingDay) >= 0;
+  if (reactivated && dayDiff(reactivated, billingDay) < 0) return false;
+  // Same rail for the contract itself: Make Active resumes billing at the
+  // next cycle, never the one in progress (its visits billed per visit).
+  const contractBack = contractReactivatedOn(contract);
+  return !contractBack || dayDiff(contractBack, billingDay) >= 0;
+}
+
+/** Org-calendar day the contract was last switched back to active, or null. */
+function contractReactivatedOn(contract: BillingContractRow): Ymd | null {
+  return instantToYmd(contract.reactivated_at, contract.time_zone);
+}
+
+/** The cycle amount for month key `key`: its override, else the flat amount. */
+function cycleAmountCents(contract: BillingContractRow, key: MonthKey): number {
+  const override = contract.monthly_amounts?.[key];
+  return Math.round(override ?? contract.monthly_amount_cents ?? 0);
 }
 
 /**
@@ -366,8 +398,53 @@ interface MonthTarget {
    * "bill 1 month in advance"). "missed_first_cycle" — advance billing only:
    * the cycle in progress, whose advance run (a month earlier) happened
    * before the contract was billable, so no run ever billed it.
+   * "missed_previous_run" — the previous run month's cycle, whose run the
+   * cron missed although the contract was billable then (see
+   * missedPreviousRun).
    */
-  via: "natural" | "missed_first_cycle";
+  via: "natural" | "missed_first_cycle" | "missed_previous_run";
+}
+
+/**
+ * The previous run month's cycle when the cron missed that run. A cycle whose
+ * billing day is the last day(s) of the month (billing day 28–31) has no
+ * later day in its run month to catch up on, so one failed or skipped run
+ * used to lose the month outright. Until THIS month's own billing day comes
+ * round, the previous run month's cycle is still billed, dated its own billing
+ * day, when all of these hold:
+ *  - it is a run month of the grid (quarterly/annual) and that cycle starts
+ *    on/after start_date, and on/before end_date;
+ *  - last_billed_date shows it unbilled;
+ *  - the contract was already billable on that run day (one that only became
+ *    billable later is a late start, which the late-cycle prompt handles —
+ *    not a missed run);
+ *  - neither the client nor the contract was reactivated after it started;
+ *  - its month bills more than $0.
+ * Callers still run their live-invoice-in-period check. Never offered to a
+ * manual Create Invoices click (billNow), which bills the current period.
+ */
+function missedPreviousRun(contract: BillingContractRow, g: MonthGrid, now: Ymd): MonthTarget | null {
+  const nowIdx = monthIndex(now.y, now.m);
+  // Only while this month's own run is still ahead: from its billing day on,
+  // the month's regular run (and its catch-up) owns the day, so this can
+  // never starve the current cycle.
+  if (now.d >= billingDayOf(g, nowIdx).d) return null;
+  const runIdx = nowIdx - 1;
+  const billedIdx = runIdx + g.advance;
+  const windowIdx = windowStartIdx(g, billedIdx);
+  if (windowIdx !== billedIdx) return null; // not a run month of the grid
+  if (g.span > 1 && windowIdx < g.originIdx) return null;
+  const last = parseYmd(contract.last_billed_date);
+  if (last && monthIndex(last.y, last.m) >= billedIdx) return null;
+  const cycleStart = billingDayOf(g, windowIdx);
+  if (contract.start_date && fmt(cycleStart) < contract.start_date) return null;
+  if (contract.end_date && contract.end_date < fmt(cycleStart)) return null;
+  const since = billableSince(contract);
+  if (!since || dayDiff(billingDayOf(g, runIdx), since) > 0) return null;
+  if (!clientActiveBy(contract, cycleStart)) return null;
+  const { m } = fromMonthIndex(billedIdx);
+  if (cycleAmountCents(contract, MONTH_KEYS[m - 1]) <= 0) return null;
+  return { windowIdx, billingMonthIdx: billedIdx, via: "missed_previous_run" };
 }
 
 /**
@@ -380,11 +457,20 @@ interface MonthTarget {
  * billed first, as long as it starts on/after the start date and isn't
  * back-dated before the contract became billable.
  */
-function resolveMonthTarget(contract: BillingContractRow, g: MonthGrid, today: Date): MonthTarget {
+function resolveMonthTarget(
+  contract: BillingContractRow,
+  g: MonthGrid,
+  today: Date,
+  opts: { allowPreviousRun: boolean } = { allowPreviousRun: true },
+): MonthTarget {
   const now = toYmd(today);
   const nowIdx = monthIndex(now.y, now.m);
   const naturalIdx = nowIdx + g.advance;
   const natural: MonthTarget = { windowIdx: windowStartIdx(g, naturalIdx), billingMonthIdx: naturalIdx, via: "natural" };
+  if (opts.allowPreviousRun) {
+    const previous = missedPreviousRun(contract, g, now);
+    if (previous) return previous;
+  }
   if (!g.advance) return natural;
 
   // The window in progress today (for quarterly/annual mid-window, the same
@@ -422,7 +508,7 @@ export function isBillingDueOn(contract: BillingContractRow, today: Date): boole
       // Never bill a cycle that began before the contract did — that is what
       // the first-period stub (prorate mode) or nothing (first full cycle) is for.
       if (contract.start_date && fmt(cycleStart) < contract.start_date) return false;
-      if (target.via === "missed_first_cycle") return true;
+      if (target.via === "missed_first_cycle" || target.via === "missed_previous_run") return true;
 
       // Quarterly/annual fire only in the run months of their grid, and
       // never for a cycle before the grid's first (the anchor is still ahead).
@@ -473,7 +559,8 @@ export function isBillingDueOn(contract: BillingContractRow, today: Date): boole
       const periodStart = addDays(anchor, Math.floor(elapsed / step) * step);
       const last = parseYmd(contract.last_billed_date);
       if (last && dayDiff(periodStart, last) >= 0) return false;
-      return true;
+      // Reactivated after the period began: billing resumes with the next one.
+      return clientActiveBy(contract, periodStart);
     }
 
     case "one_time":
@@ -539,7 +626,7 @@ export function planContractBilling(
   // month instead of the current one; the day is clamped to THAT month's
   // length, not today's.
   const g = monthGrid(contract, frequency, today);
-  const target = resolveMonthTarget(contract, g, today);
+  const target = resolveMonthTarget(contract, g, today, { allowPreviousRun: !opts.billNow });
   const bm = fromMonthIndex(target.billingMonthIdx);
   let invoiceDate: string;
   if (!opts.billNow) {
@@ -565,6 +652,7 @@ export function planContractBilling(
     periodStart: fmt({ y: start.y, m: start.m, d: 1 }),
     periodEnd: fmt({ y: end.y, m: end.m, d: daysInMonth(end.y, end.m) }),
     cycleStart: fmt(billingDayOf(g, target.windowIdx)),
+    via: target.via,
   };
 }
 
@@ -709,6 +797,9 @@ export function pendingLateCycle(contract: LateCycleContractRow, today: Date): L
 
   const plan = planContractBilling(contract, today, { billNow: false });
   if (!plan.periodStart || !plan.periodEnd) return null;
+  // A missed run of the PREVIOUS month is an earlier cycle, not the current
+  // one: unbilledContractCycles lists it with the other missed cycles.
+  if (plan.via === "missed_previous_run") return null;
   if (billedInPeriod(plan, contract.last_billed_date)) return null;
   if (termSkipReason(plan, contract)) return null;
   const override = contract.monthly_amounts?.[plan.monthKey];
@@ -730,7 +821,7 @@ export function pendingLateCycle(contract: LateCycleContractRow, today: Date): L
   };
 }
 
-/** The contract columns contractCoversServiceDay reads. */
+/** The contract columns contractCoverage reads. */
 export interface CoverageContractRow extends BillingContractRow {
   status?: string | null;
   is_active?: boolean | null;
@@ -740,32 +831,256 @@ export interface CoverageContractRow extends BillingContractRow {
 }
 
 /**
- * Whether the contract price already pays for service performed on `day`
- * (YYYY-MM-DD), so the visit must NOT also be billed per visit.
+ * What the contract means for service performed on `day` (YYYY-MM-DD):
+ *  - "covered": the contract price pays for it — do NOT bill the visit's
+ *    services per visit.
+ *  - "pending": the contract is still a draft / sent (not signed). The visit
+ *    is HELD: not billed per visit yet. Once the contract is signed the
+ *    contract covers it (the "missed cycles" prompt bills the cycles since the
+ *    start date); if it is cancelled without ever being signed, held visits
+ *    bill per visit like any other work.
+ *  - "none": bill it like work with no contract.
  *
- *  - Before start_date: never covered — the contract hadn't started (bill per visit).
- *  - A contract still in force (draft/sent included: it may yet be signed, and
- *    billing the visit now would double-bill once it is) covers its term up
- *    to end_date, and past it through the last cycle it billed in full.
- *  - A cancelled / expired / paused (is_active off) contract covers only
- *    days inside a cycle it actually billed (contractBilledThrough) — the
- *    cron has stopped, so anything later is billed per visit.
+ * Rules:
+ *  - Before start_date: none — the contract hadn't started.
+ *  - A contract still in force covers its term up to end_date, and past it
+ *    through the last cycle it billed in full.
+ *  - Reactivated (Make Active after Make Inactive): from the reactivation day
+ *    until the next cycle starts, only what it already billed is covered —
+ *    contract billing resumes with that next cycle, so those visits bill per
+ *    visit.
+ *  - A cancelled / expired / inactive contract covers only days inside a
+ *    cycle it actually billed (contractBilledThrough) — billing has stopped,
+ *    so anything later is billed per visit.
  *  - A deleted contract covers nothing.
  *
  * `outsideDatesIncluded` (snow's "storms outside the contract dates:
  * included") lifts the start/end-date limits for a contract in force.
+ */
+export type ContractCoverage = "covered" | "pending" | "none";
+
+export function contractCoverage(
+  contract: CoverageContractRow,
+  day: string,
+  opts: { outsideDatesIncluded?: boolean; today?: Date } = {},
+): ContractCoverage {
+  if (contract.deleted_at != null) return "none";
+  if (!opts.outsideDatesIncluded && contract.start_date && day < contract.start_date) return "none";
+  const inForce = contract.is_active !== false && contract.status !== "cancelled" && contract.status !== "expired";
+  const unsigned = contract.status === "draft" || contract.status === "sent";
+  const through = () => contractBilledThrough(contract, opts.today ?? new Date());
+  if (inForce && (opts.outsideDatesIncluded || !contract.end_date || day <= contract.end_date)) {
+    if (unsigned) return "pending";
+    const back = contractReactivatedOn(contract);
+    if (back) {
+      const resumes = firstCycleStartOnOrAfter(contract, back, opts.today ?? new Date());
+      if (resumes && day < resumes) {
+        const t = through();
+        return t != null && day <= t ? "covered" : "none";
+      }
+    }
+    return "covered";
+  }
+  if (unsigned) return "none";
+  const t = through();
+  return t != null && day <= t ? "covered" : "none";
+}
+
+/**
+ * Whether the contract price already pays for — or, for a draft/sent
+ * contract, will pay for — service performed on `day`, so the visit must NOT
+ * be billed per visit now. See contractCoverage.
  */
 export function contractCoversServiceDay(
   contract: CoverageContractRow,
   day: string,
   opts: { outsideDatesIncluded?: boolean; today?: Date } = {},
 ): boolean {
-  if (contract.deleted_at != null) return false;
-  if (!opts.outsideDatesIncluded && contract.start_date && day < contract.start_date) return false;
-  const inForce = contract.is_active !== false && contract.status !== "cancelled" && contract.status !== "expired";
-  if (inForce && (opts.outsideDatesIncluded || !contract.end_date || day <= contract.end_date)) return true;
-  const through = contractBilledThrough(contract, opts.today ?? new Date());
-  return through != null && day <= through;
+  return contractCoverage(contract, day, opts) !== "none";
+}
+
+/**
+ * First day of the first billing cycle that starts on/after `from`
+ * (YYYY-MM-DD), on the contract's own cycle grid. `one_time` has no cycles:
+ * returns null.
+ */
+function firstCycleStartOnOrAfter(contract: BillingContractRow, from: Ymd, today: Date): string | null {
+  const frequency = normalizeBillingFrequency(contract.billing_frequency);
+  if (frequency === "one_time") return null;
+  if (frequency === "weekly" || frequency === "biweekly") {
+    const step = frequency === "weekly" ? 7 : 14;
+    const anchor = billingAnchor(contract, today);
+    const elapsed = dayDiff(anchor, from);
+    if (elapsed <= 0) return fmt(anchor);
+    return fmt(addDays(anchor, Math.ceil(elapsed / step) * step));
+  }
+  const g = monthGrid(contract, frequency, today);
+  let w = windowStartIdx(g, monthIndex(from.y, from.m));
+  for (let i = 0; i < 40 && dayDiff(from, billingDayOf(g, w)) < 0; i += 1) w += g.span;
+  return fmt(billingDayOf(g, w));
+}
+
+// ── missed cycles (contract signed / activated late) ─────────────────────────
+
+/** One billing cycle a late-signed contract has not billed. */
+export interface ContractCycle {
+  frequency: BillingFrequency;
+  /** The cycle's "already billed" window, inclusive (YYYY-MM-DD). */
+  periodStart: string;
+  periodEnd: string;
+  /** First day of the cycle (the billing day it starts on). */
+  cycleStart: string;
+  /** The day the daily run bills it (a month earlier with "bill 1 month in advance"). */
+  runDay: string;
+  monthKey: MonthKey;
+  amountCents: number;
+  /**
+   * The cycle the daily run's next pass would bill (the late cycle
+   * pendingLateCycle reports, or the one due today). Every other cycle is an
+   * EARLIER one no run will ever bill on its own.
+   */
+  isCurrent: boolean;
+}
+
+const MAX_MISSED_CYCLES = 120;
+
+/**
+ * Every cycle from the contract's start date up to today that it should
+ * have billed by now and that its billing state doesn't already account for —
+ * e.g. a contract starting Aug 1 that sat as a draft until Nov 10 lists the
+ * Aug, Sep, Oct and Nov cycles. A cycle is listed when it:
+ *  - starts on/after start_date (the prorated stub covers any earlier part)
+ *    and on/before end_date;
+ *  - would have been billed by a run on or before today;
+ *  - lies after the cycle last_billed_date falls in (billing has moved past
+ *    it, by an invoice, a skip, or an import);
+ *  - starts on/after the contract's (and, when supplied, the client's)
+ *    reactivation day — cycles that passed while it was switched off were
+ *    billed per visit;
+ *  - bills more than $0.
+ * Callers still drop the cycles a live invoice already covers
+ * (regular invoices by their date, catch-up invoices by their span).
+ * Only signed/active, active, auto-generating contracts list anything;
+ * `one_time` contracts bill once on their own and list nothing.
+ */
+export function unbilledContractCycles(contract: LateCycleContractRow, today: Date): ContractCycle[] {
+  if (contract.status !== "signed" && contract.status !== "active") return [];
+  if (contract.is_active === false || contract.auto_generate === false) return [];
+  const frequency = normalizeBillingFrequency(contract.billing_frequency);
+  if (frequency === "one_time") return [];
+  const now = toYmd(today);
+  const out: ContractCycle[] = [];
+  const back = contractReactivatedOn(contract);
+  const clientBack = parseYmd(contract.client_active_since);
+  const resumedBy = (cycleStart: Ymd) =>
+    (!back || dayDiff(back, cycleStart) >= 0) && (!clientBack || dayDiff(clientBack, cycleStart) >= 0);
+  const last = parseYmd(contract.last_billed_date);
+  // The cycle the daily run itself targets today ("natural"): it is billed by
+  // that run (on its day, or by catch-up), so it is only ever listed as the
+  // CURRENT cycle, never as a missed one — and nothing after it is listed.
+  let naturalStart: string | null = null;
+
+  if (frequency === "weekly" || frequency === "biweekly") {
+    const step = frequency === "weekly" ? 7 : 14;
+    const anchor = billingAnchor(contract, today);
+    const elapsedNow = dayDiff(anchor, now);
+    if (elapsedNow >= 0) naturalStart = fmt(addDays(anchor, Math.floor(elapsedNow / step) * step));
+    let k = 0;
+    if (last) k = Math.max(0, Math.floor(dayDiff(anchor, last) / step) + 1);
+    for (let n = 0; n < MAX_MISSED_CYCLES; n += 1, k += 1) {
+      const start = addDays(anchor, k * step);
+      if (dayDiff(start, now) < 0) break;
+      if (contract.end_date && fmt(start) > contract.end_date) break;
+      if (!resumedBy(start)) continue;
+      const amount = cycleAmountCents(contract, MONTH_KEYS[start.m - 1]);
+      if (amount <= 0) continue;
+      out.push({
+        frequency, periodStart: fmt(start), periodEnd: fmt(addDays(start, step - 1)), cycleStart: fmt(start),
+        runDay: fmt(start), monthKey: MONTH_KEYS[start.m - 1], amountCents: amount, isCurrent: false,
+      });
+    }
+  } else {
+    const g = monthGrid(contract, frequency, today);
+    const billingMonthIdx = monthIndex(now.y, now.m) + g.advance;
+    const naturalW = windowStartIdx(g, billingMonthIdx);
+    // Only a run month's cycle is the run's to bill; a quarterly/annual cycle
+    // already in progress outside its run month is never billed by a run, so
+    // it stays on the list.
+    if (naturalW === billingMonthIdx) naturalStart = fmt({ ...fromMonthIndex(naturalW), d: 1 });
+    const anchor = parseYmd(contract.start_date) ?? billingAnchor(contract, today);
+    let w = windowStartIdx(g, monthIndex(anchor.y, anchor.m));
+    for (let i = 0; i < 40 && dayDiff(anchor, billingDayOf(g, w)) < 0; i += 1) w += g.span;
+    if (g.span > 1 && w < g.originIdx) w = g.originIdx;
+    if (last) {
+      const lastW = windowStartIdx(g, monthIndex(last.y, last.m));
+      if (lastW + g.span > w) w = lastW + g.span;
+    }
+    for (let n = 0; n < MAX_MISSED_CYCLES && w <= naturalW; n += 1, w += g.span) {
+      const cycleStart = billingDayOf(g, w);
+      const runDay = billingDayOf(g, w - g.advance);
+      if (dayDiff(runDay, now) < 0) break; // its run is still ahead
+      if (contract.end_date && fmt(cycleStart) > contract.end_date) break;
+      if (!resumedBy(cycleStart)) continue;
+      const { y, m } = fromMonthIndex(w);
+      const amount = cycleAmountCents(contract, MONTH_KEYS[m - 1]);
+      if (amount <= 0) continue;
+      const end = fromMonthIndex(w + g.span - 1);
+      out.push({
+        frequency,
+        periodStart: fmt({ y, m, d: 1 }),
+        periodEnd: fmt({ y: end.y, m: end.m, d: daysInMonth(end.y, end.m) }),
+        cycleStart: fmt(cycleStart),
+        runDay: fmt(runDay),
+        monthKey: MONTH_KEYS[m - 1],
+        amountCents: amount,
+        isCurrent: false,
+      });
+    }
+  }
+
+  // The cycle the daily run would bill next (late, or today on its billing day).
+  // A missed run of the previous month is the run's own to make up, so it is
+  // dropped rather than offered.
+  let runOwned: string | null = null;
+  if (isBillingDueOn(contract, today)) {
+    const plan = planContractBilling(contract, today, { billNow: false });
+    if (plan.via === "missed_previous_run") {
+      runOwned = plan.periodStart;
+    } else {
+      const current = out.find((c) => c.periodStart === plan.periodStart);
+      if (current) current.isCurrent = true;
+    }
+  }
+  return out.filter((c) => c.isCurrent || (c.periodStart !== naturalStart && c.periodStart !== runOwned));
+}
+
+/** A contract invoice as the "already billed" checks read it. */
+export interface ContractInvoiceRef {
+  invoice_date: string;
+  deleted_at?: string | null;
+  consolidated_into_id?: string | null;
+  proration_period_start?: string | null;
+  catch_up_period_start?: string | null;
+  catch_up_period_end?: string | null;
+}
+
+/**
+ * Whether `cycle` is already billed by one of the contract's invoices — read
+ * exactly the way the billing paths read it: a regular invoice (not the
+ * prorated stub, not a catch-up) dated inside the cycle's window, or a
+ * catch-up invoice whose span holds the cycle. A soft-deleted invoice counts
+ * only when Consolidate Invoices merged it (its charge lives on the merged
+ * invoice); a VOID invoice still counts, as it does for the billing paths.
+ */
+export function cycleBilledBy(cycle: Pick<ContractCycle, "periodStart" | "periodEnd">, invoices: ContractInvoiceRef[]): boolean {
+  return invoices.some((inv) => {
+    if (inv.deleted_at != null && inv.consolidated_into_id == null) return false;
+    if (inv.proration_period_start != null) return false;
+    if (inv.catch_up_period_start != null) {
+      return inv.catch_up_period_start <= cycle.periodStart && (inv.catch_up_period_end ?? inv.catch_up_period_start) >= cycle.periodStart;
+    }
+    return inv.invoice_date >= cycle.periodStart && inv.invoice_date <= cycle.periodEnd;
+  });
 }
 
 /**

@@ -7,6 +7,8 @@ import { hourInZone, todayInZone } from "@/lib/time/zone";
 import { labelPortalVisits, loadUpcomingPortalVisits } from "@/lib/portal/visit-labels";
 import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 import { fetchOrgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
+import { getPublishedProposal } from "@/lib/estimates/proposal-content";
+import { proposalTierTotalCents, tiersWithPricedLines } from "@/lib/estimates/proposal-deposit";
 
 interface EstimateRow {
   id: string;
@@ -140,6 +142,31 @@ export default async function PortalHomePage() {
   // Portal users can't read the org row under RLS — service client, this org only.
   const cardPaymentsAvailable = await fetchOrgCardPaymentsAvailable(createServiceClient(), ctx.orgId);
 
+  // Open estimates show the version the client was SENT (the same
+  // getPublishedProposal the Estimates page and the proposal link use), not
+  // edits the office hasn't sent yet. On a Good/Better/Best proposal the
+  // stored total is only the cheapest package, so the card shows the range
+  // across the packages instead.
+  const openEstimates = await Promise.all(
+    (estimatesRes.data ?? []).map(async (e) => {
+      const published = await getPublishedProposal(service, e.id, ctx.orgId);
+      const base = { ...e, accountName: accountNames.get(e.client_id) ?? null, total_max_cents: null as number | null };
+      if (!published) return base;
+      const c = published.content;
+      const tiers = c.tiersEnabled ? tiersWithPricedLines(c.lineItems) : [];
+      const tierTotals = tiers.map((t) => proposalTierTotalCents({ ...c, depositRequiredCents: 0 }, t));
+      const min = tierTotals.length > 0 ? Math.min(...tierTotals) : c.totalCents;
+      const max = tierTotals.length > 0 ? Math.max(...tierTotals) : c.totalCents;
+      return {
+        ...base,
+        title: c.description,
+        total_price_cents: min,
+        total_max_cents: max > min ? max : null,
+        expires_at: c.validUntil,
+      };
+    })
+  );
+
   // Map visits to shape PortalDashboard expects
   const upcomingRows = visitsRes.visits;
   const recentRows = recentRes.data ?? [];
@@ -178,7 +205,7 @@ export default async function PortalHomePage() {
       today={today}
       allowTickets={settingsRes.data?.allow_tickets !== false}
       allowEstimates={settingsRes.data?.allow_estimates !== false}
-      estimates={(estimatesRes.data ?? []).map((e) => ({ ...e, accountName: accountNames.get(e.client_id) ?? null }))}
+      estimates={openEstimates}
       cardPaymentsAvailable={cardPaymentsAvailable}
     />
   );

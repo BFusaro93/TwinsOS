@@ -43,10 +43,24 @@ export function projectCancelConfirmOptions(pendingMilestones: number): ConfirmO
     description:
       `Its ${pendingMilestones} billing milestone${pendingMilestones !== 1 ? "s" : ""} that haven't been invoiced ` +
       "will be removed, so nothing more can be billed from the schedule. Invoiced milestones, invoices and purchase " +
-      "orders are kept. Reopening the project does not bring the removed milestones back.",
+      "orders are kept. If you reopen the project later, you'll be asked whether to bring the removed milestones back.",
     confirmLabel: "Cancel project",
     cancelLabel: "Keep project",
     destructive: true,
+  };
+}
+
+/** Asked when reopening a canceled project whose cancel removed `count` pending milestones. */
+export function projectReopenConfirmOptions(count: number): ConfirmOptions {
+  return {
+    title: `Bring back the ${count} billing milestone${count !== 1 ? "s" : ""} cancelling removed?`,
+    description:
+      `Cancelling this project removed ${count} milestone${count !== 1 ? "s" : ""} that hadn't been invoiced. ` +
+      "Yes puts them back on the billing schedule — if the contract price changed while the project was canceled, " +
+      "the difference is spread across them so the schedule still matches the contract. " +
+      "No reopens the project without them (you can add milestones yourself).",
+    confirmLabel: "Yes, restore them",
+    cancelLabel: "No, reopen without them",
   };
 }
 

@@ -7,12 +7,14 @@ import {
   useUpdateCRMJobProduct,
   useDeleteCRMJobProduct,
   useSetJobProductStatus,
+  useSetJobProductIncludedInContract,
   type JobProductStatus,
   type CRMJobProduct,
 } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -158,9 +160,12 @@ export function JobProductsSection({
   services,
   visitId,
   commitDraftRef,
+  contractLinked = false,
 }: {
   jobId: string;
   services: JobProductServiceOption[];
+  /** The job is linked to a contract: shows each material's "Included in contract" flag. */
+  contractLinked?: boolean;
   /** When opened from one visit (dispatch slide-over): new products are scoped to that visit,
    *  and this visit's own products are listed alongside the job-level ones. */
   visitId?: string;
@@ -181,6 +186,7 @@ export function JobProductsSection({
   const updateJobProduct = useUpdateCRMJobProduct();
   const deleteJobProduct = useDeleteCRMJobProduct();
   const setJobProductStatus = useSetJobProductStatus();
+  const setIncluded = useSetJobProductIncludedInContract();
   const { data: productCatalog = [] } = useProducts();
   const serviceNameById = new Map(services.map((s) => [s.id, s.name]));
 
@@ -238,8 +244,14 @@ export function JobProductsSection({
         <div className="bg-slate-50 dark:bg-muted/40 border-b px-4 py-2 flex items-center justify-between">
           <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400 uppercase tracking-wide">Products</p>
         </div>
+        {contractLinked && (
+          <p className="border-b px-4 py-2 text-[11px] text-muted-foreground">
+            This job is on a contract. Materials marked <span className="font-medium">In contract</span> bill only what&apos;s used above
+            the planned quantity; unmarked ones bill in full. Either way they bill on the visit&apos;s invoice when the visit is completed.
+          </p>
+        )}
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
+        <table className={cn("w-full text-sm", contractLinked ? "min-w-[720px]" : "min-w-[640px]")}>
           <thead>
             <tr className="bg-slate-50 dark:bg-muted/40 border-b text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               <th className="px-4 py-3 text-left">Product</th>
@@ -248,6 +260,7 @@ export function JobProductsSection({
               <th className="px-4 py-3 text-right">QTY Invoiced</th>
               <th className="px-4 py-3 text-right">Unit Price</th>
               <th className="px-4 py-3 text-right">Total</th>
+              {contractLinked && <th className="px-2 py-3 text-center" title="Included in the contract: only the quantity used above plan is billed">In contract</th>}
               <th className="px-4 py-3 text-right">Status</th>
               <th className="px-4 py-3 w-20" />
             </tr>
@@ -255,7 +268,7 @@ export function JobProductsSection({
           <tbody>
             {jobProducts.length === 0 && !addingProduct && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400 dark:text-neutral-500 text-sm">
+                <td colSpan={contractLinked ? 9 : 8} className="px-4 py-6 text-center text-slate-400 dark:text-neutral-500 text-sm">
                   No products on this job yet.
                 </td>
               </tr>
@@ -296,6 +309,7 @@ export function JobProductsSection({
                         ? formatCurrency(Math.round(parseNonNegative(editProductPrice)! * 100) * parseNonNegative(editProductQty)!)
                         : "—"}
                     </td>
+                    {contractLinked && <td className="px-2 py-2 text-center text-xs text-muted-foreground">{p.includedInContract ? "Yes" : "No"}</td>}
                     <td className="px-2 py-2 text-right">
                       <span className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold", JOB_PRODUCT_STATUS_COLOR[p.status])}>
                         {JOB_PRODUCT_STATUS_LABEL[p.status]}
@@ -346,6 +360,28 @@ export function JobProductsSection({
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(p.unitPriceCents)}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold">{formatCurrency(p.unitPriceCents * (p.invoiceQty ?? p.qty))}</td>
+                    {contractLinked && (
+                      <td className="px-2 py-3 text-center">
+                        <Checkbox
+                          aria-label={`${p.productName} included in contract`}
+                          title={
+                            p.invoiceLineItemId
+                              ? "Already invoiced"
+                              : p.includedInContract
+                                ? `Included: only use above ${p.plannedQty ?? p.qty} planned is billed`
+                                : "Not included: the full quantity is billed"
+                          }
+                          checked={p.includedInContract}
+                          disabled={!!p.invoiceLineItemId || setIncluded.isPending}
+                          onCheckedChange={(v) =>
+                            setIncluded.mutate(
+                              { id: p.id, jobId, included: v === true },
+                              { onError: (err) => toast.error(mutationErrorMessage(err, "Couldn't update the product")) }
+                            )
+                          }
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right">
                       <JobProductStatusMenu
                         product={p}
@@ -431,6 +467,7 @@ export function JobProductsSection({
                     ? formatCurrency(Math.round(parseNonNegative(newProductPrice)! * 100) * parseNonNegative(newProductQty)!)
                     : "—"}
                 </td>
+                {contractLinked && <td className="px-2 py-2 text-center text-xs text-muted-foreground">Yes</td>}
                 <td className="px-2 py-2 text-right">
                   <span className={cn("inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold", JOB_PRODUCT_STATUS_COLOR.pending)}>
                     {JOB_PRODUCT_STATUS_LABEL.pending}
@@ -456,6 +493,7 @@ export function JobProductsSection({
                 <td className="px-4 py-2 text-right font-bold text-slate-800 dark:text-neutral-100">
                   {formatCurrency(jobProducts.reduce((s, p) => s + p.unitPriceCents * (p.invoiceQty ?? p.qty), 0))}
                 </td>
+                {contractLinked && <td />}
                 <td />
                 <td />
               </tr>

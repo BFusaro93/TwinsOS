@@ -8,6 +8,8 @@ import { daysBetweenYmd, isoInZone, todayInZone, zoneWallClockToInstant } from "
 import { BILLABLE_CONTRACT_STATUSES, monthlyRecurringCents } from "@/lib/reports/contract-schedule";
 import { loadVisitCosting, weightedTargetRate, type CostedVisit } from "@/lib/visit-costing";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { DEFAULT_OVERTIME_RULE, getOvertimeRule } from "@/lib/payroll/overtime";
 
 // ============================================================
 // Landscapt KPI Scorecard — computes every `auto` metric in the catalog
@@ -596,16 +598,29 @@ async function computeTimesheets(supabase: Client, w: YearWindow): Promise<Value
       .range(from, to)
   );
 
+  // Overtime follows the org's rule (Settings → Organization → Overtime — the
+  // same rule the Payroll tab uses): hours over N per Monday–Sunday week, or
+  // over N per day.
+  const orgId = await getEffectiveOrgId(supabase);
+  const rule = orgId ? await getOvertimeRule(supabase, orgId) : DEFAULT_OVERTIME_RULE;
+
   const weekly = new Map<string, number>();
+  const daily = new Map<string, number>();
   let totalHours = 0;
   for (const r of rows) {
     if (!r.work_date || !r.hours) continue;
     const key = `${r.member_name ?? "?"}|${weekKey(r.work_date)}`;
     weekly.set(key, (weekly.get(key) ?? 0) + r.hours);
+    const dayKey = `${r.member_name ?? "?"}|${r.work_date}`;
+    daily.set(dayKey, (daily.get(dayKey) ?? 0) + r.hours);
     totalHours += r.hours;
   }
   let otHours = 0;
-  for (const hours of weekly.values()) otHours += Math.max(0, hours - 40);
+  if (rule.mode === "daily") {
+    for (const hours of daily.values()) otHours += Math.max(0, hours - rule.dailyHours);
+  } else {
+    for (const hours of weekly.values()) otHours += Math.max(0, hours - rule.weeklyHours);
+  }
 
   return {
     ot_pct_hours: totalHours > 0 ? pctOf(otHours, totalHours) : null,

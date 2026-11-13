@@ -447,9 +447,14 @@ export async function recordNoLongerMatches(adminClient: AnyClient, enrollmentId
   return typeof data === "string" && data ? data : null;
 }
 
+/** Stop action for a run whose client is in another org. Its execution-log row
+ *  is written without the client id (guard_client_same_org would refuse it). */
+const CLIENT_ORG_MISMATCH_ACTION = "stopped_client_org_mismatch";
+
 /** The enrollment columns the "should this run still go on" checks need. */
 export interface EnrollmentGateRow {
   id: string;
+  org_id: string;
   sequence_id: string;
   client_id: string | null;
   estimate_id: string | null;
@@ -503,9 +508,14 @@ export async function enrollmentEndReason(
   if (enrollment.client_id) {
     const { data: clientRow } = await adminClient
       .from("clients")
-      .select("deleted_at")
+      .select("deleted_at, org_id")
       .eq("id", enrollment.client_id)
       .maybeSingle();
+    // An enrollment pointing at another org's client (only possible from rows
+    // written before guard_client_same_org) must never message that customer.
+    if (clientRow && clientRow.org_id !== enrollment.org_id) {
+      return { action: CLIENT_ORG_MISMATCH_ACTION, detail: "client belongs to another organization" };
+    }
     if (!clientRow || clientRow.deleted_at) {
       return { action: "stopped_client_deleted", detail: "client was deleted" };
     }
@@ -541,7 +551,8 @@ export async function stopEnrollment(
     .is("completed_at", null)
     .is("stopped_at", null);
   await logSequenceExecution(adminClient, {
-    orgId: params.orgId, enrollmentId: params.enrollId, sequenceId: params.sequenceId, clientId: params.clientId,
+    orgId: params.orgId, enrollmentId: params.enrollId, sequenceId: params.sequenceId,
+    clientId: params.action === CLIENT_ORG_MISMATCH_ACTION ? null : params.clientId,
     action: params.action, detail: params.detail,
   });
 }
@@ -1120,17 +1131,17 @@ async function runClaimedStep(
 
     if (field === "sales_person") {
       ({ error: updateErr } = await adminClient
-        .from("clients").update({ sales_rep_id: value || null }).eq("id", client_id));
+        .from("clients").update({ sales_rep_id: value || null }).eq("id", client_id).eq("org_id", orgId));
     } else if (field === "client_source") {
       ({ error: updateErr } = await adminClient
-        .from("clients").update({ source: value || null }).eq("id", client_id));
+        .from("clients").update({ source: value || null }).eq("id", client_id).eq("org_id", orgId));
     } else if (field === "billing_term") {
       // default_terms is the field the client's "Invoice terms" and every
       // invoice creator read; billing_terms is the legacy read-only "Terms"
       // display. Writing only the legacy one meant this step never changed how
       // the client was invoiced. Keep both in step.
       ({ error: updateErr } = await adminClient
-        .from("clients").update({ default_terms: value || null, billing_terms: value || null }).eq("id", client_id));
+        .from("clients").update({ default_terms: value || null, billing_terms: value || null }).eq("id", client_id).eq("org_id", orgId));
     } else if (field === "custom_field" && customFieldId) {
       const { data: def } = await adminClient
         .from("crm_custom_field_defs").select("name, field_type").eq("id", customFieldId).single();
@@ -1209,6 +1220,7 @@ async function runClaimedStep(
         .from("client_tags")
         .delete()
         .eq("client_id", client_id)
+        .eq("org_id", orgId)
         .in("tag", removeTags);
       if (removeErr) {
         return handleSendFailure(adminClient, {

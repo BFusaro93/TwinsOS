@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import type Stripe from "stripe";
 
 /**
  * Deterministic Stripe idempotency key for a charge/resource-creation
@@ -14,6 +15,48 @@ import { createHash } from "crypto";
 export function chargeIdempotencyKey(parts: (string | number)[], windowSeconds = 10): string {
   const bucket = Math.floor(Date.now() / (windowSeconds * 1000));
   return createHash("sha256").update([...parts, bucket].join(":")).digest("hex");
+}
+
+/** Whether Stripe answered this request from its idempotency cache (the
+ *  `Idempotent-Replayed` response header) rather than performing it. */
+function wasIdempotentReplay(resource: { lastResponse?: { headers?: unknown } }): boolean {
+  const headers = resource.lastResponse?.headers as
+    | { get?: (name: string) => string | null; [key: string]: unknown }
+    | undefined;
+  if (!headers) return false;
+  const value = typeof headers.get === "function" ? headers.get("idempotent-replayed") : headers["idempotent-replayed"];
+  return String(value ?? "").toLowerCase() === "true";
+}
+
+/**
+ * Creates a customer-facing PaymentIntent keyed by chargeIdempotencyKey, but
+ * never hands back one that has since been CANCELED.
+ *
+ * The 10-second bucket means a client who switches card -> bank -> card
+ * quickly sends the same key twice for the card intent; the second create is
+ * answered from Stripe's idempotency cache with the FIRST card intent — which
+ * the switch to bank already canceled, so its form could never be paid.
+ * Callers put the ids of intents they just canceled into `keyParts` (that
+ * alone gives the third request a new key); as a backstop, a replayed answer
+ * is re-read and, if it is canceled, a fresh intent is created under a key
+ * that also names the dead one.
+ */
+export async function createPaymentIntentNotCanceled(
+  stripe: Stripe,
+  params: Stripe.PaymentIntentCreateParams,
+  opts: { stripeAccount: string; keyParts: (string | number)[] }
+): Promise<Stripe.PaymentIntent> {
+  const first = await stripe.paymentIntents.create(params, {
+    stripeAccount: opts.stripeAccount,
+    idempotencyKey: chargeIdempotencyKey(opts.keyParts),
+  });
+  if (!wasIdempotentReplay(first)) return first;
+  const live = await stripe.paymentIntents.retrieve(first.id, undefined, { stripeAccount: opts.stripeAccount });
+  if (live.status !== "canceled") return live;
+  return stripe.paymentIntents.create(params, {
+    stripeAccount: opts.stripeAccount,
+    idempotencyKey: chargeIdempotencyKey([...opts.keyParts, "replaced", first.id]),
+  });
 }
 
 /**

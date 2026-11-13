@@ -194,6 +194,11 @@ export interface Estimate {
   depositFailedMethod: 'card' | 'us_bank_account' | null;
   depositFailedReason: string | null;
   depositFailedAt: string | null;
+  /** Staff waived the unpaid deposit (crm_set_estimate_deposit_waiver): it is
+   *  never shown to the client as due or payable. */
+  depositWaivedAt: string | null;
+  depositWaivedByName: string | null;
+  depositWaivedReason: string | null;
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
   displaySettings: DisplaySettings;

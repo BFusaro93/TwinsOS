@@ -45,6 +45,27 @@ export type SmsOptOutSource = "keyword" | "keyword_in_message" | "carrier_blocke
 type AnyClient = any;
 
 /**
+ * Per-contact consent (client_contacts.sms_opt_in) follows the contact's own
+ * number: a STOP or carrier block from any number on a contact turns that
+ * contact's consent off; a START from a contact's main phone turns it back on.
+ * Runs crm_set_contact_sms_consent_by_number (service role only). Returns an
+ * error message on failure, null on success. Idempotent.
+ */
+export async function setContactSmsConsentByNumber(
+  supabase: AnyClient,
+  params: { orgId: string; last10: string; optIn: boolean; source: SmsOptOutSource | "keyword" },
+): Promise<string | null> {
+  if (!/^[0-9]{10}$/.test(params.last10)) return null;
+  const { error } = await supabase.rpc("crm_set_contact_sms_consent_by_number", {
+    p_org_id: params.orgId,
+    p_last10: params.last10,
+    p_opt_in: params.optIn,
+    p_source: params.source,
+  });
+  return error ? error.message : null;
+}
+
+/**
  * Twilio error 21610: the number is on Twilio's / the carrier's opt-out list
  * (it texted STOP at that layer, e.g. while our webhook was down, or to a
  * Messaging Service with Advanced Opt-Out). Record a per-number opt-out for the
@@ -70,6 +91,11 @@ export async function recordCarrierOptOut(
   });
   // 23505 = already a live opt-out for this number in the org.
   if (error && error.code !== "23505") return error.message;
+
+  const contactErr = await setContactSmsConsentByNumber(supabase, {
+    orgId: params.orgId, last10, optIn: false, source: "carrier_blocked",
+  });
+  if (contactErr) return contactErr;
 
   if (params.clientId) {
     const { data: client, error: readErr } = await supabase

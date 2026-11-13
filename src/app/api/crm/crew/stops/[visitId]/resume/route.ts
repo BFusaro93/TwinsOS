@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
@@ -137,7 +138,14 @@ export async function POST(
       .eq("paused_at", row.paused_at);
     q = row.break_minutes == null ? q.is("break_minutes", null) : q.eq("break_minutes", row.break_minutes);
     const { error } = await q.select("id");
-    if (error) updateErrors.push(`${row.id}: ${error.message}`);
+    if (error) {
+      // Inside the payroll lock period: the database's own sentence, as a 409
+      // (adding pause minutes would change paid time on a locked day).
+      if (isPayrollLockedError(error.message)) {
+        return NextResponse.json({ error: error.message, code: "payroll_locked" }, { status: 409 });
+      }
+      updateErrors.push(`${row.id}: ${error.message}`);
+    }
   }
   if (updateErrors.length > 0) {
     return NextResponse.json({ error: `Failed to resume: ${updateErrors.join("; ")}` }, { status: 500 });

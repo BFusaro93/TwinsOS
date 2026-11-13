@@ -37,6 +37,7 @@ export function OnlinePaymentsGuide() {
           <TOCLink href="#fees">Processing fees — you set your own, the platform takes none</TOCLink>
           <TOCLink href="#security">How this is kept secure</TOCLink>
           <TOCLink href="#double-pay">What happens if a client pays twice</TOCLink>
+          <TOCLink href="#pay-links">Revoking a pay link</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
           <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
@@ -175,7 +176,8 @@ export function OnlinePaymentsGuide() {
           canceled at Stripe when a new one starts, and an open form is also canceled when the invoice changes
           another way: you record a payment, a saved card is charged, or the invoice is voided, deleted,
           merged or its total edited. That happens straight away from those screens, and a background sweep
-          every few minutes catches anything else.
+          every few minutes catches anything else. Switching back and forth quickly (card, then bank transfer,
+          then card again) always gives a fresh form that can be paid &mdash; never the one just canceled.
         </p>
         <p>
           If a payment still slips through on two devices and both payments
@@ -184,6 +186,24 @@ export function OnlinePaymentsGuide() {
           records the rest as a credit toward that client&apos;s future invoices. It can&apos;t undo
           a real duplicate charge on the client&apos;s card (that&apos;s a refund conversation), but
           it keeps your books honest either way.
+        </p>
+      </Section>
+
+      <Section id="pay-links" title="Revoking a pay link">
+        <p>
+          Every invoice email and PDF carries a <strong>View &amp; Pay Online</strong> link that works without
+          a login. If one went to the wrong person or was forwarded, open the invoice and choose{" "}
+          <strong>Revoke pay link</strong> from the &#8942; menu. Every link already sent for that invoice
+          stops working at once (the page says the link has been revoked); the invoice itself doesn&apos;t
+          change, and the next time you email it or download its PDF a new link is created. It needs the{" "}
+          <em>Send invoices</em> or <em>Add/modify invoices</em> permission and is recorded in the
+          invoice&apos;s audit trail.
+        </p>
+        <p>
+          You don&apos;t need to do this when an invoice is <strong>voided</strong>,{" "}
+          <strong>merged</strong> into another invoice, <strong>consolidated</strong> onto a parent account,
+          or <strong>deleted</strong>: its pay links are revoked automatically, and a void invoice never gets a
+          new one.
         </p>
       </Section>
 
@@ -223,9 +243,22 @@ export function OnlinePaymentsGuide() {
             be returned days after the client accepted, and a card can be declined. When that happens
             the acceptance stands &mdash; only the payment failed &mdash; and the estimate records
             the reason the bank or card network gave. You get a <strong>Deposit failed</strong>{" "}
-            notification and email, the client is emailed a link to pay it again, and their original
-            proposal link re-opens itself so they can pay it from the same link. It closes as soon
-            as a deposit is recorded.
+            notification and email, the client is emailed a link to pay it again, the failure is
+            logged on the client&apos;s timeline, and their original proposal link re-opens itself so
+            they can pay it from the same link. It closes as soon as a deposit is recorded. This works
+            the same whether the proposal was accepted through its link, in the client portal, or by
+            your office.
+          </li>
+          <li>
+            <strong>A deposit stops being asked for once the job is paid or you waive it.</strong> A
+            skipped deposit stays due until the estimate&apos;s own invoices have all been sent and paid
+            in full, or until you click <strong>Waive deposit</strong> on the estimate &mdash; after
+            that the proposal link and the portal no longer show it or take it.
+          </li>
+          <li>
+            <strong>A second deposit charge becomes general credit.</strong> If two deposit payments
+            get through for one estimate, the second is added to the client&apos;s account as ordinary
+            credit (not reserved for the estimate) and your admins are notified to apply or refund it.
           </li>
           <li>
             <strong>A refund comes out of unapplied credit before it comes off an invoice.</strong>{" "}

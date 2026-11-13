@@ -2,6 +2,7 @@
 
 import { phoneDedupeKey, toE164Us } from "@/lib/utils/phone";
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -172,6 +173,9 @@ function mapContact(row: any): ClientContact {
     email: row.email,
     isPrimary: row.is_primary,
     okToEmail: row.ok_to_email,
+    smsOptIn: row.sms_opt_in ?? false,
+    smsOptInAt: row.sms_opt_in_at ?? null,
+    smsOptInSource: row.sms_opt_in_source ?? null,
     notes: row.notes,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
@@ -202,6 +206,7 @@ function mapProperty(row: any): ClientProperty {
     notesToCrew: row.notes_to_crew,
     mapCode: row.map_code,
     isMaster: row.is_master,
+    archivedAt: row.archived_at ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -599,9 +604,25 @@ export function useClientContacts(clientId: string) {
   });
 }
 
-export function useClientProperties(clientId: string) {
-  return useQuery({
+/**
+ * A client's live properties. Archived ones are left out (pickers must not offer
+ * them) unless `includeArchived` is set — the client page lists them to unarchive.
+ * `keepId` keeps one archived property in the list: the one a record being edited
+ * already points at, so its picker still shows the current choice.
+ */
+export function useClientProperties(
+  clientId: string,
+  opts: { includeArchived?: boolean; keepId?: string | null } = {},
+) {
+  const { includeArchived = false, keepId = null } = opts;
+  // Stable per (includeArchived, keepId) so the filter doesn't re-run every render.
+  const select = useCallback(
+    (rows: ClientProperty[]) => rows.filter((p) => !p.archivedAt || (!!keepId && p.id === keepId)),
+    [keepId],
+  );
+  return useQuery<ClientProperty[], Error, ClientProperty[]>({
     queryKey: ["clients", clientId, "properties"],
+    select: includeArchived ? undefined : select,
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -858,6 +879,46 @@ export function useUpdateClientProperty() {
   });
 }
 
+/**
+ * Archive / unarchive a property. Archived properties drop out of the job,
+ * estimate and contract pickers; jobs, visits and estimates that already use
+ * one keep it. The database refuses while a job that isn't finished still uses
+ * the property, and for the primary (client address) property.
+ */
+export function useSetClientPropertyArchived() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, clientId, archived, label }: { id: string; clientId: string; archived: boolean; label?: string | null }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("client_properties")
+        .update({ archived_at: archived ? new Date().toISOString() : null })
+        .eq("id", id);
+      if (error) throw error;
+      await logClientActivity(supabase, clientId, `Property ${archived ? "archived" : "unarchived"}${label ? `: ${label}` : ""}`);
+    },
+    onSuccess: (_data, { clientId }) => {
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
+    },
+  });
+}
+
+/** Open estimates (not lost / accepted / invoiced) that point at a property — asked about before archiving it. */
+export async function countOpenEstimatesForProperty(propertyId: string): Promise<number> {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { count, error } = await (supabase as any)
+    .from("estimates")
+    .select("id", { count: "exact", head: true })
+    .eq("property_id", propertyId)
+    .not("stage", "in", "(lost,accepted,invoiced)")
+    .is("deleted_at", null);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export function useUpdateClientPropertyZones() {
   const qc = useQueryClient();
   return useMutation({
@@ -1076,11 +1137,42 @@ const IMPORT_STATUS_MAP: Record<string, "active" | "lead" | "inactive" | "cancel
   lost: "lost", "closed lost": "lost",
 };
 
+/** What the client / lead importers take: the mapped CSV rows, and whether the
+ *  import's new records should fire Lead / Client created (opt-in, off by default). */
+export type ClientImportInput = Record<string, string>[] | { rows: Record<string, string>[]; runAutomations?: boolean };
+
+function readImportInput(input: ClientImportInput): { rows: Record<string, string>[]; runAutomations: boolean } {
+  return Array.isArray(input) ? { rows: input, runAutomations: false } : { rows: input.rows, runAutomations: !!input.runAutomations };
+}
+
+/**
+ * "Run automations for imported records": fires Lead created / Client created
+ * (automations + Zapier) for the records this import created, server-side.
+ * Returns a warning line for the import summary when it couldn't.
+ */
+async function runImportAutomations(createdIds: string[]): Promise<string | null> {
+  if (createdIds.length === 0) return null;
+  try {
+    const res = await fetch("/api/crm/clients/import-automations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientIds: createdIds }),
+    });
+    if (res.ok) return null;
+    const json = await res.json().catch(() => ({}));
+    return `Records were imported, but their automations didn't run: ${(json as { error?: string }).error ?? res.statusText}`;
+  } catch {
+    return "Records were imported, but their automations didn't run (network error).";
+  }
+}
+
 export function useBulkImportClients() {
   const importOrgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
+    mutationFn: async (input: ClientImportInput): Promise<BulkImportResult> => {
+      const { rows, runAutomations } = readImportInput(input);
+      const createdIds: string[] = [];
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -1379,6 +1471,7 @@ export function useBulkImportClients() {
             if (email && !byEmail.has(email)) byEmail.set(email, newClient.id);
             if (phoneDigits && !byPhone.has(phoneDigits)) byPhone.set(phoneDigits, newClient.id);
             nameById.set(newClient.id, displayName);
+            createdIds.push(newClient.id);
             if (sharesContactWith) {
               warnings.push({
                 row: rowNum,
@@ -1446,9 +1539,14 @@ export function useBulkImportClients() {
         if (linkErr) warnings.push({ row: link.row, error: `"${link.displayName}": could not link to parent ${link.parentAccountNumber}: ${linkErr.message}` });
       }
 
-      // Timeline entry for leads the import converted (no automations: imports don't fire them).
+      // Timeline entry for leads the import converted. Conversions never fire
+      // automations; new records do only when the importer opted in.
       for (const id of convertedIds) {
         await logClientActivity(supabase, id, "Converted from lead to client (import)");
+      }
+      if (runAutomations) {
+        const automationWarning = await runImportAutomations(createdIds);
+        if (automationWarning) warnings.push({ row: 0, error: automationWarning });
       }
 
       return { succeeded, failed, skipped, warnings };
@@ -1922,6 +2020,9 @@ export function useAddClientNote() {
   });
 }
 
+/** What the contact dialog saves. Consent stamps (when / how) are set here, not by the caller. */
+export type ClientContactInput = Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt" | "smsOptInAt" | "smsOptInSource">;
+
 export function useAddClientContact() {
   const qc = useQueryClient();
   return useMutation({
@@ -1930,7 +2031,7 @@ export function useAddClientContact() {
       contact,
     }: {
       clientId: string;
-      contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
+      contact: ClientContactInput;
     }) => {
       const supabase = createClient();
       const primaryPhone = contact.phones?.find((p) => p.isPrimary) ?? contact.phones?.[0] ?? null;
@@ -1947,6 +2048,9 @@ export function useAddClientContact() {
         email:        contact.email,
         is_primary:   contact.isPrimary,
         ok_to_email:  contact.okToEmail,
+        // The contact's own text consent — automations text a contact only when it's on.
+        sms_opt_in:   contact.smsOptIn,
+        ...(contact.smsOptIn && { sms_opt_in_at: new Date().toISOString(), sms_opt_in_source: "manual" }),
         notes:        contact.notes,
       }).select("id").single();
       if (error) throw error;
@@ -1985,12 +2089,29 @@ export function useUpdateClientContact() {
     }: {
       id: string;
       clientId: string;
-      contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
+      contact: ClientContactInput;
     }) => {
       const supabase = createClient();
       const primaryPhone = contact.phones?.find((p) => p.isPrimary) ?? contact.phones?.[0] ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: before } = await (supabase as any)
+        .from("client_contacts")
+        .select("sms_opt_in")
+        .eq("id", id)
+        .maybeSingle();
+      const wasOptedIn = before?.sms_opt_in === true;
+      const nowIso = new Date().toISOString();
+      // Stamp consent changes like the client's own toggle. Changing the main phone
+      // while consent stays on is dropped by the database (consent was for the old number).
+      const consentPatch =
+        contact.smsOptIn && !wasOptedIn
+          ? { sms_opt_in: true, sms_opt_in_at: nowIso, sms_opt_in_source: "manual" }
+          : !contact.smsOptIn && wasOptedIn
+            ? { sms_opt_in: false, sms_opt_out_at: nowIso, sms_opt_out_source: "manual" }
+            : {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("client_contacts").update({
+        ...consentPatch,
         first_name:   contact.firstName,
         last_name:    contact.lastName,
         contact_type: contact.contactType,
@@ -2016,7 +2137,10 @@ export function useUpdateClientContact() {
           .is("deleted_at", null);
       }
       const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
-      await logClientActivity(supabase, clientId, `Contact updated${name ? `: ${name}` : ""}`);
+      const consentNote = "sms_opt_in" in consentPatch
+        ? consentPatch.sms_opt_in ? " (opted in to texts)" : " (opted out of texts)"
+        : "";
+      await logClientActivity(supabase, clientId, `Contact updated${name ? `: ${name}` : ""}${consentNote}`);
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
@@ -2197,7 +2321,9 @@ export function useBulkImportLeads() {
   return useMutation({
     // A BulkImportResult so the import dialog lists every failed or skipped row with its
     // reason (the counts-only toast hid which rows to fix).
-    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult & { created: number; matched: number }> => {
+    mutationFn: async (input: ClientImportInput): Promise<BulkImportResult & { created: number; matched: number }> => {
+      const { rows, runAutomations } = readImportInput(input);
+      const createdIds: string[] = [];
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -2275,11 +2401,17 @@ export function useBulkImportLeads() {
         if (newClient) {
           if (email) byEmail.set(email, newClient.id);
           if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
+          createdIds.push(newClient.id);
         }
         created++;
         } catch (err) {
           failed.push({ row: rowNum, error: err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Failed to save" });
         }
+      }
+
+      if (runAutomations) {
+        const automationWarning = await runImportAutomations(createdIds);
+        if (automationWarning) warnings.push({ row: 0, error: automationWarning });
       }
 
       return { succeeded: created, failed, skipped, warnings, created, matched };

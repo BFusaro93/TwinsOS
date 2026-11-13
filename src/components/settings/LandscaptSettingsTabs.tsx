@@ -94,7 +94,7 @@ import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { downloadCSV, exportCSV, readCSVFile, isBulkImportResult } from "@/lib/csv";
 import {
-  CLIENT_REQUIRED_COLUMNS, CLIENT_TEMPLATE_COLUMNS, clientToCsvRow,
+  CLIENT_REQUIRED_COLUMNS, CLIENT_TEMPLATE_COLUMNS, clientToCsvRow, IMPORT_AUTOMATIONS_OPTION,
   LEAD_REQUIRED_COLUMNS, LEAD_TEMPLATE_COLUMNS, leadToCsvRow,
   ESTIMATE_REQUIRED_COLUMNS, ESTIMATE_TEMPLATE_COLUMNS, estimateToCsvRow,
   INVOICE_REQUIRED_COLUMNS, INVOICE_TEMPLATE_COLUMNS, invoiceToCsvRow,
@@ -2273,13 +2273,16 @@ function ImportTile({
   templateColumns,
   requiredColumns,
   onStatus,
+  importOption,
 }: {
   label: string;
   icon: React.ReactNode;
-  onImport: (rows: Record<string, string>[]) => Promise<unknown>;
+  onImport: (rows: Record<string, string>[], options: { optionChecked: boolean }) => Promise<unknown>;
   templateColumns: string[];
   requiredColumns: string[];
   onStatus: (s: { type: "success" | "error"; message: string }) => void;
+  /** Opt-in checkbox above the Import button (unchecked every time); its value reaches onImport. */
+  importOption?: { label: string; hint?: string };
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [mappingOpen, setMappingOpen] = useState(false);
@@ -2292,6 +2295,7 @@ function ImportTile({
   const [importError, setImportError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportTileSummary | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [optionChecked, setOptionChecked] = useState(false);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -2332,7 +2336,7 @@ function ImportTile({
     setImportError(null);
     setSummary(null);
     try {
-      const result = summarizeImportResult(await onImport(parsedRows), parsedRows.length);
+      const result = summarizeImportResult(await onImport(parsedRows, { optionChecked }), parsedRows.length);
       const headline = [`${result.imported} ${label.toLowerCase()} imported`, ...result.notes].join(", ");
       if (result.needsReview) {
         // Failed, skipped or adjusted rows: keep the dialog open with the details,
@@ -2353,7 +2357,7 @@ function ImportTile({
     } finally { setImporting(false); }
   }
 
-  function resetAll() { setMappingOpen(false); setPreviewOpen(false); setRawRows([]); setCsvColumns([]); setColumnMapping({}); setParsedRows([]); setImportError(null); setSummary(null); setShowDetails(false); }
+  function resetAll() { setMappingOpen(false); setPreviewOpen(false); setRawRows([]); setCsvColumns([]); setColumnMapping({}); setParsedRows([]); setImportError(null); setSummary(null); setShowDetails(false); setOptionChecked(false); }
 
   const fieldLabel = (f: string) => f.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim();
 
@@ -2419,6 +2423,21 @@ function ImportTile({
                 </tbody>
               </table>
             </div>
+          )}
+          {importOption && !importError && !summary && parsedRows.length > 0 && (
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={optionChecked}
+                onChange={(e) => setOptionChecked(e.target.checked)}
+                disabled={importing}
+                className="mt-0.5 rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
+              />
+              <span>
+                {importOption.label}
+                {importOption.hint && <span className="block text-xs text-muted-foreground">{importOption.hint}</span>}
+              </span>
+            </label>
           )}
           {importError && <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-400">{importError}</div>}
           {summary && (
@@ -2612,8 +2631,8 @@ function ImportExportTab() {
             {[
               // Column lists are the page importers' own (lib/crm/import-export-columns), and the
               // raw importer result goes to the tile, which reports it in full.
-              { label: "Clients",   icon: <Users className="h-6 w-6" />,       onImport: (r: Record<string, string>[]) => bulkImportClients(r),   templateColumns: CLIENT_TEMPLATE_COLUMNS,   required: CLIENT_REQUIRED_COLUMNS },
-              { label: "Leads",     icon: <UserPlus className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportLeads(r),     templateColumns: LEAD_TEMPLATE_COLUMNS,     required: LEAD_REQUIRED_COLUMNS },
+              { label: "Clients",   icon: <Users className="h-6 w-6" />,       onImport: (r: Record<string, string>[], o: { optionChecked: boolean }) => bulkImportClients({ rows: r, runAutomations: o.optionChecked }), templateColumns: CLIENT_TEMPLATE_COLUMNS, required: CLIENT_REQUIRED_COLUMNS, importOption: IMPORT_AUTOMATIONS_OPTION },
+              { label: "Leads",     icon: <UserPlus className="h-6 w-6" />,    onImport: (r: Record<string, string>[], o: { optionChecked: boolean }) => bulkImportLeads({ rows: r, runAutomations: o.optionChecked }),   templateColumns: LEAD_TEMPLATE_COLUMNS,   required: LEAD_REQUIRED_COLUMNS,   importOption: IMPORT_AUTOMATIONS_OPTION },
               { label: "Estimates", icon: <FileText className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportEstimates(r), templateColumns: ESTIMATE_TEMPLATE_COLUMNS, required: ESTIMATE_REQUIRED_COLUMNS },
               { label: "Invoices",  icon: <Receipt className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportInvoices(r),  templateColumns: INVOICE_TEMPLATE_COLUMNS,  required: INVOICE_REQUIRED_COLUMNS },
               { label: "Contracts", icon: <FileSignature className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportContracts(r), templateColumns: [...CONTRACT_CSV_COLUMNS], required: ["clientName", "title"] },
@@ -2631,6 +2650,7 @@ function ImportExportTab() {
                 templateColumns={tile.templateColumns}
                 requiredColumns={tile.required}
                 onStatus={setImportStatus}
+                importOption={"importOption" in tile ? tile.importOption : undefined}
               />
             ))}
           </div>

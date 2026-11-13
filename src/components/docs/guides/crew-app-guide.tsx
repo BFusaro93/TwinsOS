@@ -187,6 +187,12 @@ export function CrewAppGuide() {
           the office called for specific materials on the job — a <strong>Materials called for</strong>{" "}
           card (see below).
         </p>
+        <p>
+          A crew login only ever sees the clients on its own stops. Other clients&apos; timelines,
+          contacts, properties and files stay with the office. Notes, skip reasons and upsell
+          suggestions the crew sends land on the client&apos;s timeline, but the crew can&apos;t edit
+          or delete timeline entries or change a client&apos;s details — call the office for that.
+        </p>
       </Section>
 
       <Section id="materials-called-for" title="Materials called for">
@@ -287,6 +293,11 @@ export function CrewAppGuide() {
             to follows your organization&apos;s time zone, not the phone&apos;s.
           </li>
           <li>
+            <strong>Paid or unpaid pauses are fixed at End Day.</strong> When the day ends, it keeps
+            the company&apos;s &ldquo;Crew pauses are unpaid&rdquo; setting as it was at that moment.
+            If the office changes the setting later, only days that end after the change follow it.
+          </li>
+          <li>
             <strong>Started a job after End Day?</strong> Storm call-back, or End Day tapped by
             mistake: starting a job reopens that person&apos;s shift for the day, and the time between
             End Day and the new job start is taken off as an unpaid break, so the hours worked after
@@ -354,7 +365,9 @@ export function CrewAppGuide() {
           The day clock is for the <strong>crew leader&apos;s login</strong> &mdash; the crew login (or
           the regular user linked to the crew), and only for that crew&apos;s own roster. Office staff
           fix anything after the fact in <strong>Report Center → Payroll</strong> (see the Report Center
-          guide) or with <strong>Edit Job Times</strong> on the dispatch board.
+          guide) or with <strong>Edit Job Times</strong> on the dispatch board (office punch edits need the
+          Dispatch Board or Payroll permission). A crew can&apos;t give one person two punches that
+          overlap on different stops &mdash; the edit is refused and names the clashing punch.
         </Callout>
       </Section>
 

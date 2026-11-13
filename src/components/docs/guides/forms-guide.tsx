@@ -175,6 +175,12 @@ export function FormsGuide() {
           treated as visited.
         </p>
         <p>
+          <strong>Tag rules stay private.</strong> The public form page only receives the Jump to page,
+          Show Field and Hide Field rules it needs to run. Add Tag and Remove Tag rules are applied on
+          the server when the form is submitted, so visitors can&apos;t see your tag names or which
+          answers trigger them.
+        </p>
+        <p>
           Email fields are also validated on the server: a value that isn&apos;t a well-formed
           email address is rejected with the field&apos;s label, not just caught in the visitor&apos;s
           browser.

@@ -96,7 +96,7 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
           )}
           {e.adjCount > 0 && (
             <span className="block">
-              Also includes {e.adjCount} adjustment line{e.adjCount === 1 ? "" : "s"} totaling {formatCurrency(e.adjCommission)} for refunds/voids since the last statement.
+              Also includes {e.adjCount} adjustment line{e.adjCount === 1 ? "" : "s"} totaling {formatCurrency(e.adjCommission)} for refunds, voids and write-offs since the last statement.
             </span>
           )}
           {e.adjCount > 0 && (
@@ -162,7 +162,7 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
             <p className="text-xs text-muted-foreground">on {formatCurrency(e.basis)} pre-tax revenue</p>
             {e.adjCount > 0 && (
               <p className={cn("mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300")}>
-                Includes <span className={cn("font-medium", negativeClass(e.adjCommission))}>{formatCurrency(e.adjCommission)}</span> in adjustments for refunds/voids since the last statement ({e.adjCount} line{e.adjCount === 1 ? "" : "s"}).
+                Includes <span className={cn("font-medium", negativeClass(e.adjCommission))}>{formatCurrency(e.adjCommission)}</span> in adjustments for refunds, voids, write-offs and account credits since the last statement ({e.adjCount} line{e.adjCount === 1 ? "" : "s"}).
               </p>
             )}
             {e.earlierCount > 0 && (
@@ -192,7 +192,7 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
         <div className="space-y-2">
           <h2 className="text-sm font-medium">Pending adjustments</h2>
           <p className="text-xs text-muted-foreground">
-            Refunds, voids and edits on invoices already paid out on a statement. These go on the rep&apos;s next statement, whatever period it covers.
+            Refunds, voids, write-offs, account credits and edits on invoices already paid out on a statement. These go on the rep&apos;s next statement, whatever period it covers.
           </p>
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full min-w-[720px] text-sm">

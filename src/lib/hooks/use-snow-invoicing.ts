@@ -63,6 +63,8 @@ export interface SnowContractRow {
   // covers storms inside a cycle it already invoiced (contractCoversServiceDay).
   last_billed_date?: string | null;
   billing_anchor_date?: string | null;
+  /** Make Active after Make Inactive: coverage resumes at the next cycle (contractCoverage). */
+  reactivated_at?: string | null;
   first_period_prorated_at?: string | null;
   billing_frequency?: string | null;
   billing_day_of_month?: number | null;
@@ -142,7 +144,7 @@ export async function loadContractsById(
     const rows = await fetchAllRows<SnowContractRow>(() =>
       supabase
         .from("crm_contracts")
-        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates, snow_outside_event_price_cents, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at, snow_inch_cap, snow_salt_cap, snow_cap_reset, snow_overage_description, snow_overage_per_inch_cents, snow_overage_per_salt_cents, snow_pushes_cap, snow_events_cap, snow_overage_per_push_cents, snow_overage_per_event_cents, covers_snow")
+        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates, snow_outside_event_price_cents, last_billed_date, billing_anchor_date, reactivated_at, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at, snow_inch_cap, snow_salt_cap, snow_cap_reset, snow_overage_description, snow_overage_per_inch_cents, snow_overage_per_salt_cents, snow_pushes_cap, snow_events_cap, snow_overage_per_push_cents, snow_overage_per_event_cents, covers_snow")
         .in("id", ids)
         .order("id", { ascending: true })
     );

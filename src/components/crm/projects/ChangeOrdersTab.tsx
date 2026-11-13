@@ -22,6 +22,7 @@ import {
 import { formatCurrency, todayLocalISODate } from "@/lib/utils";
 import { toast } from "sonner";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useConfirm } from "@/components/shared/useConfirm";
 import {
   useChangeOrders,
   useCreateChangeOrder,
@@ -187,6 +188,11 @@ export function ChangeOrdersTab({ project }: { project: Project }) {
   const { mutateAsync: approve, isPending: approving } = useApproveChangeOrder();
   const { mutateAsync: reverse, isPending: reversing } = useReverseChangeOrder();
   const [newOpen, setNewOpen] = useState(false);
+  const [askConfirm, confirmDialog] = useConfirm();
+  // A canceled project takes no more scope — the database refuses the approval too. A completed
+  // one still can, but the office is asked first: the work is already signed off.
+  const isCanceled = project.status === "canceled";
+  const isComplete = project.status === "complete";
 
   const approvedTotal = orders
     .filter((o) => o.status === "approved")
@@ -199,6 +205,7 @@ export function ChangeOrdersTab({ project }: { project: Project }) {
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       {/* Original → revised, the reason change orders exist */}
       <div className="grid grid-cols-3 gap-px overflow-hidden rounded border bg-muted">
         {[
@@ -214,6 +221,12 @@ export function ChangeOrdersTab({ project }: { project: Project }) {
           </div>
         ))}
       </div>
+
+      {isCanceled && orders.some((o) => o.status === "draft" || o.status === "pending_approval") && (
+        <p className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          This project is canceled, so its change orders can&apos;t be approved. Reopen the project first.
+        </p>
+      )}
 
       {pendingTotal !== 0 && (
         <p className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
@@ -286,13 +299,24 @@ export function ChangeOrdersTab({ project }: { project: Project }) {
                   <td className="px-3 py-2">
                     {canModify && o.status !== "approved" && (
                       <div className="flex items-center justify-end gap-1">
-                        <Button
+                        {!isCanceled && <Button
                           size="sm"
                           variant="outline"
                           className="h-7 gap-1 text-xs"
                           disabled={approving}
                           title={TREATMENT_HELP[o.billingTreatment]}
                           onClick={async () => {
+                            if (isComplete && !(await askConfirm({
+                              title: `Approve CO #${o.coNumber} on a completed project?`,
+                              description:
+                                `This project is marked complete. Approving changes its contract by ${formatCurrency(o.amountCents)} ` +
+                                "and adjusts the milestones that haven't been invoiced yet (or adds one), so there may be more to bill " +
+                                "after the job was signed off. Check this is a real change to the agreed scope.",
+                              confirmLabel: "Approve anyway",
+                              cancelLabel: "Not now",
+                            }))) {
+                              return;
+                            }
                             try {
                               await approve({ id: o.id, projectId: project.id });
                               toast.success(`CO #${o.coNumber} approved`);
@@ -303,7 +327,7 @@ export function ChangeOrdersTab({ project }: { project: Project }) {
                         >
                           <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                           Approve
-                        </Button>
+                        </Button>}
                         {o.status !== "rejected" && (
                           <Button
                             size="icon" variant="ghost" className="h-7 w-7 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"

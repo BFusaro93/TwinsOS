@@ -9,7 +9,7 @@ import { processEnrollmentImmediately } from "@/lib/automations/sequence-process
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
-import { contractCoversServiceDay, type CoverageContractRow } from "@/lib/contract-billing";
+import { contractCoverage, type ContractCoverage, type CoverageContractRow } from "@/lib/contract-billing";
 import {
   lineTotalCents,
   resolveAutoInvoiceTaxRateBps,
@@ -24,7 +24,9 @@ import { billableJobProductStatusesForVisit, visitLineAmount } from "@/lib/invoi
  *
  *   1. Parent-job bookkeeping — close one_time/waiting_list jobs once every
  *      sibling visit is terminal; stamp last_service_date on everything else.
- *   2. Auto-invoice (contract-less, non-snow jobs), honoring the client's
+ *   2. Auto-invoice (non-snow, non-project jobs; on a job whose contract
+ *      covers the visit, only its materials — see "contract mode" below),
+ *      honoring the client's
  *      invoice_frequency (daily/weekly/monthly visits fold into the period's
  *      open draft — one per client + period + sales rep + PO — via
  *      increment_invoice_totals; upon-completion bills each visit) and tax pass-through
@@ -75,7 +77,7 @@ export interface VisitCompletionSideEffectsResult {
   jobId: string | null;
   clientId: string | null;
   invoiced: boolean;
-  /** Set when invoicing was skipped, e.g. "already_invoiced", "contract", "snow", "zero_subtotal". */
+  /** Set when invoicing was skipped, e.g. "already_invoiced", "contract", "pending_contract", "snow", "zero_subtotal". */
   invoiceSkipReason: string | null;
   invoiceId: string | null;
   activityLogged: boolean;
@@ -278,35 +280,38 @@ export async function applyVisitCompletionSideEffects(
   }
 
   // ── 2. Auto-invoice ───────────────────────────────────────────────────────
-  // Create a draft invoice for any completed visit whose job has no contract.
-  // Jobs linked to a contract are billed on the contract's billing cycle instead.
-  // Project jobs are excluded too (milestone-billed). Snow jobs are excluded — they're billed exclusively through the dedicated
-  // Snow Invoicing page (per-inch/hourly rates this flat auto-invoice can't
-  // compute).
+  // Create a draft invoice for a completed visit. Project jobs are excluded
+  // (milestone-billed). Snow jobs are excluded — they're billed exclusively
+  // through the dedicated Snow Invoicing page (per-inch/hourly rates this flat
+  // auto-invoice can't compute).
   try {
-    // A contract-linked job bills inside the contract price only for service
-    // the contract pays for (contractCoversServiceDay): inside its term while
-    // it is in force, and — once it is cancelled / expired / switched
-    // inactive — only inside a cycle it already billed (the cron has stopped,
-    // so anything later is billed like normal per-visit work; anything
-    // earlier must NOT be billed again). A visit before the start date is not
-    // covered. Draft/sent contracts count as in force: they may still be
-    // signed, and billing the visit now would double-bill once they are.
-    let contractCoversVisit = false;
+    // A contract-linked job (contractCoverage):
+    //  - "covered": the contract price pays for the visit's SERVICES, so they
+    //    are not billed here (inside its term while in force; once cancelled /
+    //    expired / switched inactive, only inside a cycle it already billed).
+    //    Its MATERIALS still bill on this per-visit invoice ("contract mode"):
+    //    a product flagged "Included in contract" bills only the quantity
+    //    used above what was planned; an un-flagged one bills in full.
+    //  - "pending": the contract is still a draft / sent. The visit is held —
+    //    nothing billed yet. Signing or cancelling it re-runs this billing
+    //    (/api/crm/contracts/[id]/release-held-visits).
+    //  - "none": billed like any visit with no contract.
+    let coverage: ContractCoverage = "none";
     if (j?.contract_id) {
       const { data: contractRow } = await supabase
         .from("crm_contracts")
-        .select("status, is_active, deleted_at, start_date, end_date, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at")
+        .select("status, is_active, deleted_at, start_date, end_date, last_billed_date, billing_anchor_date, reactivated_at, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at")
         .eq("id", j.contract_id)
         .maybeSingle();
       const c = contractRow as CoverageContractRow | null;
       const visitDay = visit.scheduled_date && visit.scheduled_date <= today ? visit.scheduled_date : today;
-      contractCoversVisit = !!c && contractCoversServiceDay(c, visitDay);
+      if (c) coverage = contractCoverage({ ...c, time_zone: await getOrgTimeZone(supabase, orgId) }, visitDay);
     }
+    const contractMode = coverage === "covered";
     if (!j) {
       result.invoiceSkipReason = "job_not_found";
-    } else if (j.contract_id && contractCoversVisit) {
-      result.invoiceSkipReason = "contract";
+    } else if (coverage === "pending") {
+      result.invoiceSkipReason = "pending_contract";
     } else if (j.job_type === "snow") {
       result.invoiceSkipReason = "snow";
     } else if (j.job_type === "project") {
@@ -381,9 +386,12 @@ export async function applyVisitCompletionSideEffects(
         // for their history), which a whole-job visit never bills. A visit
         // linked to a stopped service still bills that service's own line.
         const allServices: JobServiceRow[] = j.crm_job_services ?? [];
-        const services = visitJobServiceId
-          ? allServices.filter((s) => s.id === visitJobServiceId)
-          : allServices.filter((s) => s.included !== false);
+        // Contract mode bills no services (the contract price covers them).
+        const services = contractMode
+          ? []
+          : visitJobServiceId
+            ? allServices.filter((s) => s.id === visitJobServiceId)
+            : allServices.filter((s) => s.included !== false);
         // Rich-text editors store these as HTML ("<p>Lawn mow</p>"); invoice line
         // descriptions are plain text, so flatten before they become a line.
         const visitInvoiceDescription: string | null = visit.invoice_description ? stripHtml(visit.invoice_description) : null;
@@ -438,7 +446,7 @@ export async function applyVisitCompletionSideEffects(
             })
           // The job-rate line is for a job with no services at all — a job
           // whose services were all stopped bills nothing for the visit.
-          : allServices.length === 0 && (visit.rate_cents ?? j.rate_cents)
+          : !contractMode && allServices.length === 0 && (visit.rate_cents ?? j.rate_cents)
             ? (() => {
                 const amount = visitLineAmount(visit, { rateCents: j.rate_cents ?? 0, qty: 1 });
                 const label = visitInvoiceDescription ?? jobInvoiceDescription ?? "Service";
@@ -478,7 +486,7 @@ export async function applyVisitCompletionSideEffects(
         // planned materials at completion as before.
         let productQuery = supabase
           .from("crm_job_products")
-          .select("id, product_id, product_name, qty, invoice_qty, unit_price_cents, visit_id")
+          .select("id, product_id, product_name, qty, planned_qty, invoice_qty, unit_price_cents, visit_id, included_in_contract")
           .eq("job_id", j.id);
         if (visitJobServiceId) {
           productQuery = productQuery.or(`job_service_id.eq.${visitJobServiceId},job_service_id.is.null`);
@@ -496,9 +504,11 @@ export async function applyVisitCompletionSideEffects(
           product_id: string | null;
           product_name: string;
           qty: number;
+          planned_qty: number | null;
           invoice_qty: number | null;
           unit_price_cents: number;
           visit_id: string | null;
+          included_in_contract: boolean | null;
         };
         // A material added for one specific visit is billed with THAT visit only — otherwise
         // whichever visit completes first would invoice another day's materials. Job-level
@@ -520,11 +530,28 @@ export async function applyVisitCompletionSideEffects(
             productTaxable.set(t.id, t.is_taxable ?? false);
           }
         }
-        const productLines: AutoInvoiceLine[] = ((pendingProductRows ?? []) as PendingProductRow[]).map((p) => {
-          const billedQty = p.invoice_qty ?? p.qty;
-          return {
+        // Contract mode: a material "Included in contract" bills only what was
+        // used above its planned quantity (10 yd planned, 15 used → 5 yd); one
+        // used within plan bills nothing and is settled as "Used, not billed"
+        // below. An un-flagged material bills its full quantity.
+        const includedWithinPlan: string[] = [];
+        const productLines: AutoInvoiceLine[] = [];
+        for (const p of (pendingProductRows ?? []) as PendingProductRow[]) {
+          const usedQty = Number(p.invoice_qty ?? p.qty);
+          let billedQty = usedQty;
+          let description = p.product_name;
+          if (contractMode && p.included_in_contract !== false) {
+            const planned = Number(p.planned_qty ?? p.qty);
+            billedQty = Math.max(0, Math.round((usedQty - planned) * 10000) / 10000);
+            if (billedQty <= 0) {
+              includedWithinPlan.push(p.id);
+              continue;
+            }
+            description = `${p.product_name} — ${billedQty} above the ${planned} included in the contract`;
+          }
+          productLines.push({
             name: p.product_name,
-            description: p.product_name,
+            description,
             qty: billedQty,
             rate_cents: p.unit_price_cents,
             total_cents: lineTotalCents(p.unit_price_cents, billedQty),
@@ -532,8 +559,18 @@ export async function applyVisitCompletionSideEffects(
             is_taxable: p.product_id ? (productTaxable.get(p.product_id) ?? false) : false,
             jobProductId: p.id,
             productId: p.product_id,
-          };
-        });
+          });
+        }
+        // Settle included materials used within plan: they left the shelf
+        // (stock is decremented from pending) and the contract price pays for
+        // them, so they leave the "still to bill" sweep.
+        for (const jobProductId of includedWithinPlan) {
+          const { error: settleErr } = await supabase.rpc("set_job_product_status", {
+            p_job_product_id: jobProductId,
+            p_new_status: "used_no_invoice",
+          });
+          if (settleErr) log.error("included material settle failed", { jobProductId, error: settleErr.message });
+        }
 
         // Single-visit jobs: estimate sub-items flagged "On invoice" print as their own
         // rows under their service; their amount comes out of the service row, so the
@@ -627,7 +664,7 @@ export async function applyVisitCompletionSideEffects(
         }
 
         if (subtotal <= 0) {
-          result.invoiceSkipReason = "zero_subtotal";
+          result.invoiceSkipReason = contractMode ? "contract" : "zero_subtotal";
         } else {
           // Clients billed daily/weekly/monthly get every visit of the same
           // period folded into one draft instead of one invoice per visit:

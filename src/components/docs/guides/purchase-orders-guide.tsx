@@ -12,9 +12,9 @@ const REQ_STATUSES: [string, string][] = [
   ["Draft", "Being built. Not visible to approvers yet."],
   ["Pending Approval", "Submitted. Routed through the org's configured approval chain."],
   ["Approved", "Chain resolved with no rejection. Can now be converted to a PO."],
-  ["Rejected", "An approver rejected it. Only action from here is Reset to Draft."],
-  ["Ordered", "A PO has been created from it (see Converting, below)."],
-  ["Closed", "Done — no further action expected."],
+  ["Rejected", "An approver rejected it. Reset to Draft to fix and resubmit, or Close it."],
+  ["Ordered", "A PO has been created from it (see Converting, below). Goes back to Approved if every PO made from it is deleted or canceled."],
+  ["Closed", "Done — set with Close Requisition. No more POs can be made from it and its lines are locked."],
 ];
 
 const PO_STATUSES: [string, string][] = [
@@ -25,7 +25,7 @@ const PO_STATUSES: [string, string][] = [
   ["Ordered", "Manually flagged as sent to the vendor — a status label only, no email or PDF is sent."],
   ["Partially Fulfilled", "At least one line item has been received, but not all of it yet."],
   ["Completed", "Fully received — or forced complete anyway (see the Mark Complete callout)."],
-  ["Canceled", "Called off before completion."],
+  ["Canceled", "Called off with Cancel PO before anything was received. Reset to Requested reopens it."],
 ];
 
 export function PurchaseOrdersGuide() {
@@ -66,9 +66,11 @@ export function PurchaseOrdersGuide() {
           no &ldquo;+ New Receipt&rdquo; button; every receipt starts from a PO).
         </p>
         <p>
-          A Requisition and the PO it produces are two <strong>separate, independently
-          approved</strong> records — converting an approved Requisition to a PO does not skip or
-          inherit PO-level approval. The new PO always starts fresh at Requested.
+          A Requisition and the PO it produces are two separate records, and the new PO always
+          starts at Requested. When you submit a PO made from an approved requisition, it is
+          approved straight away if the requisition already covers it (see{" "}
+          <strong>How approval actually works</strong>); otherwise it goes through the PO approval
+          chain like any other PO.
         </p>
       </Section>
 
@@ -113,9 +115,14 @@ export function PurchaseOrdersGuide() {
           </tbody>
         </Table>
         <p>
-          Rejected has exactly one way forward — <strong>Reset to Draft</strong>. This is a bare
-          status change; it doesn&apos;t clear the rejection reason from the approval history or
-          restart a chain automatically. You&apos;ll need to submit again once you&apos;re ready.
+          From Rejected, click <strong>Reset to Draft</strong>, make your changes, and submit again.
+          A resubmitted requisition starts the whole approval chain over: approvals given before
+          the rejection don&apos;t carry over, so every step is asked again.
+        </p>
+        <p>
+          <strong>Close Requisition</strong> (shown on Approved, Ordered and Rejected requisitions)
+          marks it finished: no more purchase orders can be made from it and its lines can&apos;t be
+          edited. Purchase orders already made from it aren&apos;t affected.
         </p>
       </Section>
 
@@ -136,19 +143,28 @@ export function PurchaseOrdersGuide() {
         <Callout>
           <strong>A PO line can&apos;t be lowered below what&apos;s already been received.</strong>{" "}
           If goods receipts already recorded 10 of a line, its quantity can&apos;t be cut under 10
-          &mdash; correct the goods receipt first. Likewise a <strong>PO with goods receipts can&apos;t
-          be deleted</strong> (the stock it added would have nothing to trace to) &mdash; cancel it
-          instead, and a <strong>Requisition that already has purchase orders can&apos;t be
-          deleted</strong> &mdash; cancel or close it.
+          &mdash; correct the goods receipt first. Likewise a <strong>PO with goods received
+          can&apos;t be deleted or canceled</strong> (the stock it added would have nothing to trace
+          to) &mdash; use <strong>Mark Complete</strong> to close it short instead, and a{" "}
+          <strong>Requisition that already has purchase orders can&apos;t be deleted</strong>{" "}
+          &mdash; use <strong>Close Requisition</strong>.
         </Callout>
         <Callout>
-          <strong>Editing line items on a pending or approved record silently resubmits it for
-          approval.</strong> Change a quantity or add a line on a Requisition or PO that&apos;s
-          already Pending Approval or Approved, and it automatically re-runs the full approval
-          chain against the new total — you&apos;ll see a toast (&ldquo;re-submitted for
-          approval&rdquo;), but an approver who already signed off won&apos;t get any more warning
-          than a normal new approval request. This is intentional (the total changed, so it should
-          be re-reviewed) but easy to be surprised by.
+          <strong>A PO line that was received into stock can&apos;t be deleted directly.</strong>{" "}
+          Edit its goods receipt and set the received quantity to 0 first &mdash; that takes the
+          units back out of stock &mdash; then delete the line. The same applies to deleting a
+          receipt: a receipt whose units went into stock can only be corrected, not removed, so the
+          same delivery can never be received twice.
+        </Callout>
+        <Callout>
+          <strong>Any change to the lines or vendor of a pending or approved record sends it back
+          through approval.</strong> Adding, removing or editing a line (product, quantity, unit
+          cost, taxable flag or project), or picking a different vendor, on a Requisition or PO
+          that&apos;s Pending Approval or Approved re-submits it &mdash; you&apos;ll see a toast
+          (&ldquo;re-submitted for approval&rdquo;). An approval only counts for exactly what the
+          approver saw, so every approver whose approval no longer matches is asked again, even if
+          the total went down. Changing only tax rate, shipping or discount re-asks approval only
+          when the total goes up. Once a record is Ordered, only an admin can change its vendor.
         </Callout>
       </Section>
 
@@ -180,9 +196,11 @@ export function PurchaseOrdersGuide() {
           duplicating the first.
         </p>
         <p>
-          Nothing locks a requisition after conversion — you can click Convert (or Split) again and
-          create additional POs from the same requisition. Its own line items are never modified by
-          converting.
+          Its own line items are never modified by converting. If every PO made from a requisition
+          is later deleted or canceled, the requisition goes back to <strong>Approved</strong> (with
+          the same approved total) so you can make a new PO from it; reopening one of those POs
+          with Reset to Requested moves the requisition back to Ordered. A Closed requisition is
+          never reopened this way.
         </p>
       </Section>
 
@@ -269,6 +287,31 @@ export function PurchaseOrdersGuide() {
             — an earlier step is still pending.&rdquo;
           </li>
           <li>
+            <strong>A PO made from an approved requisition approves itself when the requisition
+            covers it.</strong> On submit, the PO is approved without a chain when every line is a
+            line of that requisition (same catalog item and project, at a unit cost no higher than
+            requested), the quantities across all open POs made from the requisition stay within
+            the requisition&apos;s, and those POs together don&apos;t cost more than the
+            requisition&apos;s approved total. Anything else &mdash; an extra item, a higher price,
+            more than was requested &mdash; goes through the normal PO approval chain.
+          </li>
+          <li>
+            <strong>Each approval covers what the approver saw.</strong> If the lines or vendor
+            change while a record is still going through its chain, the last approval doesn&apos;t
+            finish it: earlier approvals that no longer match are asked again, and if the total now
+            crosses a higher threshold, that step&apos;s approver is added. The record stays
+            Pending until the rebuilt chain is done.
+          </li>
+          <li>
+            <strong>A rejection restarts the chain.</strong> When a rejected record is submitted
+            again, every step is asked again &mdash; approvals from before the rejection
+            don&apos;t carry over.
+          </li>
+          <li>
+            Approving a record you submitted yourself is allowed when you hold the step&apos;s
+            role.
+          </li>
+          <li>
             <strong>Approval thresholds use the total the system calculates.</strong> A
             requisition&apos;s or PO&apos;s subtotal, sales tax and grand total are always worked out
             from its line items, tax rate, shipping and discount &mdash; whenever a line or one of
@@ -342,13 +385,18 @@ export function PurchaseOrdersGuide() {
       <Section id="mark-complete" title="The &ldquo;Mark Complete Anyway&rdquo; override">
         <Callout>
           A PO that isn&apos;t fully received still has a way to close it out: clicking{" "}
-          <strong>Mark Complete</strong> on an under-received PO opens a confirmation reading{" "}
-          <em>&ldquo;Marking this PO complete without receiving it will not update
-          parts/inventory. Are you sure you want to mark it complete anyway?&rdquo;</em> —
-          confirming closes the PO but silently skips the inventory update for whatever was never
-          formally received. Use this deliberately (e.g. an order that was partially canceled by
-          the vendor), not as a shortcut to skip receiving.
+          <strong>Mark Complete</strong> on an under-received PO asks you to confirm closing it
+          short &mdash; the rest won&apos;t be received and parts/inventory won&apos;t be updated
+          for it. Use this deliberately (e.g. an order the vendor could only partly fill), not as a
+          shortcut to skip receiving.
         </Callout>
+        <p>
+          <strong>Cancel PO</strong> is for calling off an order before anything arrives. It shows
+          on Requested, Pending, Approved, Ordered and Rejected POs that have nothing received yet,
+          and asks you to confirm. Once any goods are received the PO can&apos;t be canceled
+          &mdash; use Mark Complete to close it short. A canceled PO can be reopened with{" "}
+          <strong>Reset to Requested</strong>.
+        </p>
       </Section>
 
       <Section id="spend-reports" title="Spend and repair cost reports">
@@ -397,9 +445,9 @@ export function PurchaseOrdersGuide() {
             tax-exempt line, that only becomes possible once it&apos;s a PO line.
           </li>
           <li>
-            <strong>Nothing prevents converting the same requisition twice.</strong> Convert or
-            Split by Vendor can be clicked more than once, creating extra POs against the same
-            requisition — there&apos;s no lock after the first conversion.
+            <strong>A discount can&apos;t make a total negative.</strong> A discount larger than
+            the lines&apos; subtotal is capped at the subtotal, so the most it can do is bring the
+            lines to $0 &mdash; tax on any taxable amount left and shipping still apply.
           </li>
         </ul>
       </Section>

@@ -38,7 +38,7 @@ interface ImportExportMenuProps {
   onExport: () => void;
   /** Called with the parsed rows after the user confirms an import.
    *  May return a Promise — the dialog stays in a loading state until it resolves. */
-  onImport: (rows: Record<string, string>[]) => Promise<unknown> | void;
+  onImport: (rows: Record<string, string>[], options: { optionChecked: boolean }) => Promise<unknown> | void;
   /** Column names for the blank import template download */
   templateColumns: string[];
   /** Template filename, e.g. "parts-template.csv" */
@@ -48,6 +48,9 @@ interface ImportExportMenuProps {
   /** Hide the Import CSV / Download Template actions (e.g. the caller lacks
    *  a bulk-create permission) while still allowing Export. */
   hideImport?: boolean;
+  /** An opt-in checkbox shown above the Import button, unchecked every time
+   *  (e.g. "Run automations for imported records"). Its value reaches onImport. */
+  importOption?: { label: string; hint?: string };
 }
 
 /** Normalize a header string for fuzzy matching: lowercase, strip spaces/punctuation, collapse */
@@ -179,6 +182,7 @@ export function ImportExportMenu({
   templateFilename,
   requiredColumns,
   hideImport,
+  importOption,
 }: ImportExportMenuProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -215,6 +219,7 @@ export function ImportExportMenu({
   const [importError, setImportError] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<BulkImportResult | null>(null);
   const [showFailedRows, setShowFailedRows] = useState(false);
+  const [optionChecked, setOptionChecked] = useState(false);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -287,7 +292,7 @@ export function ImportExportMenu({
     setImportError(null);
     setImportSummary(null);
     try {
-      const result = await onImport(parsedRows);
+      const result = await onImport(parsedRows, { optionChecked });
       if (isBulkImportResult(result)) {
         // Row-level result: show a summary instead of just closing, so a
         // partial failure (e.g. 187 imported, 13 failed) is visible with
@@ -329,6 +334,7 @@ export function ImportExportMenu({
     setImportError(null);
     setImportSummary(null);
     setShowFailedRows(false);
+    setOptionChecked(false);
   }
 
   const previewCols = parsedRows.length > 0 ? Object.keys(parsedRows[0]) : [];
@@ -490,6 +496,22 @@ export function ImportExportMenu({
                 </tbody>
               </table>
             </div>
+          )}
+
+          {importOption && !parseError && !importSummary && parsedRows.length > 0 && (
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={optionChecked}
+                onChange={(e) => setOptionChecked(e.target.checked)}
+                disabled={importing}
+                className="mt-0.5 rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
+              />
+              <span>
+                {importOption.label}
+                {importOption.hint && <span className="block text-xs text-muted-foreground">{importOption.hint}</span>}
+              </span>
+            </label>
           )}
 
           {importError && (

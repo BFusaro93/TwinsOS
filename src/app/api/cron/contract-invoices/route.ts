@@ -116,7 +116,7 @@ export async function GET(request: Request) {
     contracts = await fetchAllRows<Record<string, unknown>>(() =>
       sb
         .from("crm_contracts")
-        .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, billing_anchor_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
+        .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, billing_anchor_date, reactivated_at, signed_at, created_at, start_billing_mode, first_period_prorated_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
         // A cancelled client's contract must not keep billing — generate.ts already
         // treats cancelled clients (and deleted ones) as inactive for visits, but the
         // invoicing paths only checked deleted_at, so a cancelled client kept getting
@@ -253,10 +253,12 @@ export async function GET(request: Request) {
     const baseDescription = lineItems.length > 0 ? lineItems.join("\n") : contract.title;
     const description = `${baseDescription}\n${stub.label}\n${stub.formula}`;
 
-    // Dated no later than the period's last day (the day before the first regular billing
-    // day): (contract_id, invoice_date) is unique, so a stub dated "today" on the billing day
-    // itself would block that day's regular invoice and lose the cycle.
-    const stubInvoiceDate = todayStr < stub.periodEnd ? todayStr : stub.periodEnd;
+    // Dated the day it is created, like every other invoice — a contract signed after its stub
+    // period ended used to get a stub back-dated to that period's last day, born overdue. The
+    // per-date unique index covers regular contract invoices only, so this can share a date
+    // with that day's regular invoice; crm_invoices_one_prorated_stub_per_contract backstops
+    // a second stub.
+    const stubInvoiceDate = todayStr;
     const { data: stubInvoice, error: stubErr } = await sb
       .from("crm_invoices")
       .insert({
@@ -280,8 +282,8 @@ export async function GET(request: Request) {
       .select("id")
       .single();
     if (stubErr || !stubInvoice) {
-      // 23505 = a regular invoice already holds today's date for this contract;
-      // the marker isn't set, so tomorrow's run retries on a free date.
+      // 23505 = a live stub already exists (a concurrent manual Create Invoices);
+      // the marker isn't set, so tomorrow's run re-checks and skips it.
       results.push({ contractId: contract.id, status: "skipped", reason: stubErr?.message ?? "prorated invoice insert failed" });
       continue;
     }
@@ -358,18 +360,34 @@ export async function GET(request: Request) {
     let existingQuery = sb
       .from("crm_invoices")
       .select("id")
-      .eq("client_id", contract.client_id)
+      // Contract only, not client + contract: moving a contract to another
+      // client must not make its already-billed period look unbilled.
       .eq("contract_id", contract.id)
-      // The prorated first-period stub is a separate invoice; it must not
-      // count as this period's regular invoice.
+      // The prorated first-period stub and a missed-cycles catch-up invoice are
+      // separate invoices; neither counts as this period's regular invoice.
       .is("proration_period_start", null)
+      .is("catch_up_period_start", null)
       // A source voided by Consolidate Invoices still counts as billed: its charge lives on
       // the consolidated invoice, which carries no contract_id.
       .or("deleted_at.is.null,consolidated_into_id.not.is.null")
       .limit(1);
     if (plan.periodStart) existingQuery = existingQuery.gte("invoice_date", plan.periodStart);
     if (plan.periodEnd) existingQuery = existingQuery.lte("invoice_date", plan.periodEnd);
-    const { data: existing } = await existingQuery.maybeSingle();
+    let { data: existing } = await existingQuery.maybeSingle();
+    // A missed-cycles catch-up invoice whose span holds this cycle also bills it.
+    if (!existing && plan.periodStart && plan.periodEnd) {
+      const { data: catchUp } = await sb
+        .from("crm_invoices")
+        .select("id")
+        .eq("contract_id", contract.id)
+        .not("catch_up_period_start", "is", null)
+        .lte("catch_up_period_start", plan.periodEnd)
+        .gte("catch_up_period_end", plan.periodStart)
+        .or("deleted_at.is.null,consolidated_into_id.not.is.null")
+        .limit(1)
+        .maybeSingle();
+      existing = catchUp;
+    }
 
     if (existing) {
       results.push({ contractId: contract.id, status: "skipped", reason: alreadyBilledReason(plan) });

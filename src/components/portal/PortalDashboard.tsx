@@ -77,6 +77,8 @@ interface Estimate {
   estimate_number: string;
   title: string | null;
   total_price_cents: number;
+  /** Good/Better/Best: the most expensive package (total_price_cents is the cheapest). */
+  total_max_cents?: number | null;
   status: string;
   expires_at: string | null;
   accountName?: string | null;
@@ -308,7 +310,9 @@ export default function PortalDashboard({
                       <span className="block truncate text-slate-700">{est.title ?? `Est. #${est.estimate_number}`}</span>
                       <SubAccountLabel name={est.accountName} />
                     </span>
-                    <span className="shrink-0 font-semibold text-slate-900">{fmt(est.total_price_cents)}</span>
+                    <span className="shrink-0 font-semibold text-slate-900">
+                      {est.total_max_cents ? `${fmt(est.total_price_cents)} – ${fmt(est.total_max_cents)}` : fmt(est.total_price_cents)}
+                    </span>
                   </li>
                 ))}
               </ul>

@@ -39,6 +39,7 @@ const STATUS_ROWS: [string, string, string][] = [
 const CONTACT_TYPES = [
   "Owner",
   "Primary",
+  "Billing",
   "Spouse",
   "Property Manager",
   "District Manager",
@@ -435,6 +436,18 @@ export function ClientsGuide() {
           Existing estimate lines keep the quantities they already have; the property&apos;s
           measurements apply to services you add afterward.
         </Callout>
+        <p>
+          <strong>Archiving a property.</strong> When a client no longer has a location (they sold
+          a lot, a rental changed hands), click the archive icon on its row. An archived property
+          disappears from the job, estimate, contract and sales-meeting pickers, but every job,
+          visit, estimate and invoice that already used it keeps it, and it stays on the client
+          under <strong>Show archived properties</strong>, where <strong>Unarchive</strong> puts it
+          back. A property can&apos;t be archived while a job that isn&apos;t finished (scheduled,
+          in progress or on hold, including contract and recurring jobs) still uses it &mdash;
+          finish, cancel or move those jobs first. If open estimates are for the property you&apos;re
+          asked to confirm. The Primary property is the client&apos;s own address and can&apos;t be
+          archived; change the client&apos;s address instead.
+        </p>
       </Section>
 
       <Section id="custom-fields" title="Custom Fields & zone measurements">
@@ -542,6 +555,22 @@ export function ClientsGuide() {
           A contact can have multiple phone numbers on file. Toggle the star (★) next to a number
           to mark it primary — the same star toggle exists on the client&apos;s own phone numbers,
           independent of any contact.
+        </p>
+        <p>
+          <strong>Text consent is per contact.</strong> Each contact has its own{" "}
+          <strong>Opted in to text messages</strong> box &mdash; tick it only after that person has
+          confirmed they want texts. An automation text step set to send to <em>All contacts</em>{" "}
+          texts a contact&apos;s main phone only when that contact has opted in; the client&apos;s
+          own primary and billing phones go by the client&apos;s own opt-in. A STOP (or a carrier
+          block) from any of a contact&apos;s numbers turns that contact&apos;s box off, and a START
+          from their main phone turns it back on. Changing a contact&apos;s main phone number turns
+          the box off too, because consent was given for the old number &mdash; tick it again in the
+          same save once they&apos;ve confirmed the new one.
+        </p>
+        <p>
+          <strong>Billing contacts.</strong> A contact typed <strong>Billing</strong> with{" "}
+          <strong>OK to email</strong> ticked is copied (CC) on the client&apos;s invoice and
+          statement emails. See Invoicing for details.
         </p>
       </Section>
 
@@ -690,6 +719,27 @@ export function ClientsGuide() {
       </Section>
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Who can add, edit and delete.</strong> Your role&apos;s Clients and Leads
+            permissions are checked by the system itself, not just by hidden buttons. Adding a client
+            needs <em>Add Client</em> (a lead needs <em>Add Lead</em>; CSV imports also accept{" "}
+            <em>Bulk Create</em> or <em>Imports</em>). Changing a client &mdash; including adding,
+            editing, archiving or removing its contacts and properties, or linking a parent account
+            &mdash; needs <em>Allow Edit</em> (leads and lost leads use the Leads <em>Allow Edit</em>).
+            Cancelling, activating and converting keep their own permissions, and Bulk Edit fields
+            work with <em>Bulk Edit</em>. Without the permission the action is refused with a
+            &ldquo;You do not have permission&rdquo; message, and the buttons for it are hidden.
+          </li>
+          <li>
+            <strong>Balances follow View Client Balance.</strong> Without it, the Balance column on
+            the Clients table, the Balance filter, sub-account balances and the balance shown when
+            merging clients are hidden.
+          </li>
+          <li>
+            <strong>Emailing a client who isn&apos;t OK to email.</strong> If a client is marked{" "}
+            <strong>OK to Email: No</strong>, the Email dialog shows a warning. You can still send a
+            one-off email you write yourself; automations and campaigns keep skipping them.
+          </li>
           <li>
             <strong>Inactive and lost clients.</strong> Marking a client Inactive, Lost or Cancelled stops new recurring and package visits and stops their contract invoices. Reactivating resumes both.
           </li>

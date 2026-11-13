@@ -270,7 +270,7 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     defaultTarget: 10,
     lowerIsBetter: true,
     source:
-      "Timesheets: per employee per week, hours above 40 ÷ total clocked hours. Approximate — only visit clock time is tracked, not shop or drive time.",
+      "Timesheets: overtime hours ÷ total clocked hours, using your overtime rule (Settings → Organization → Overtime: hours over the weekly limit per employee per Monday–Sunday week, or over the daily limit per day; default 40 per week). Approximate — only visit clock time is tracked, not shop or drive time.",
   },
   {
     key: "fleet_avg_safety_score",

@@ -34,7 +34,7 @@ function isLead(c: Client): boolean {
   return c.status === "lead" || c.status === "lost";
 }
 
-function ClientSummary({ client }: { client: Client }) {
+function ClientSummary({ client, showBalance }: { client: Client; showBalance: boolean }) {
   const address = clientAddress(client);
   return (
     <div className="min-w-0 text-left">
@@ -43,7 +43,9 @@ function ClientSummary({ client }: { client: Client }) {
         {[client.accountNumber ? `#${client.accountNumber}` : null, client.status].filter(Boolean).join(" · ")}
       </div>
       <div className="truncate text-xs text-muted-foreground">{address || "No address"}</div>
-      <div className="text-xs text-muted-foreground">Balance {formatCurrency(client.balanceOutstandingCents)}</div>
+      {showBalance && (
+        <div className="text-xs text-muted-foreground">Balance {formatCurrency(client.balanceOutstandingCents)}</div>
+      )}
     </div>
   );
 }
@@ -67,6 +69,7 @@ export function MergeClientsDialog({ open, onOpenChange, clientId }: MergeClient
   const router = useRouter();
   const { can, isLoading: permsLoading } = usePermissions();
   const allowed = can("client_allow_delete");
+  const showBalance = can("client_view_balance");
 
   const [term, setTerm] = useState("");
   const [other, setOther] = useState<Client | null>(null);
@@ -168,7 +171,7 @@ export function MergeClientsDialog({ open, onOpenChange, clientId }: MergeClient
                     onClick={() => setOther(c)}
                     className="flex w-full items-center px-3 py-2 hover:bg-muted/60 focus:bg-muted/60 focus:outline-none"
                   >
-                    <ClientSummary client={c} />
+                    <ClientSummary client={c} showBalance={showBalance} />
                   </button>
                 ))
               )}
@@ -215,7 +218,7 @@ export function MergeClientsDialog({ open, onOpenChange, clientId }: MergeClient
                       <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                         {selected ? "Keep" : "Merge away & delete"}
                       </div>
-                      <ClientSummary client={c} />
+                      <ClientSummary client={c} showBalance={showBalance} />
                     </button>
                   );
                 })}

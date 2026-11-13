@@ -27,14 +27,19 @@ export async function buildInvoiceExtras(
   if (!params.invoiceId) return {};
   const { data: inv } = await supabase
     .from("crm_invoices")
-    .select("id, invoice_number, invoice_date, due_date, terms, subtotal_cents, tax_cents, total_cents, balance_cents")
+    .select("id, status, invoice_number, invoice_date, due_date, terms, subtotal_cents, tax_cents, total_cents, balance_cents")
     .eq("id", params.invoiceId)
     .eq("org_id", params.orgId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!inv) return {};
 
-  const token = await getOrCreateInvoiceShareToken(supabase, { orgId: params.orgId, invoiceId: params.invoiceId });
+  // A draft isn't issued yet: the public invoice page refuses drafts, so no link is
+  // created for one (the link tags come out empty). Void/deleted invoices get none
+  // either (getOrCreateInvoiceShareToken).
+  const token = inv.status === "draft"
+    ? null
+    : await getOrCreateInvoiceShareToken(supabase, { orgId: params.orgId, invoiceId: params.invoiceId });
   const url = token ? buildInvoiceViewUrl(token) : "";
   const due = fmtDay(inv.due_date as string | null);
   return {

@@ -1,6 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { memberVisitPauseMinutes } from "@/lib/crew/visit-pause";
 import { getCrewBreaksUnpaid, isBreakUnpaid } from "@/lib/crew/break-policy";
+import { payrollPunchDate, type PunchShiftWindow } from "@/lib/payroll/punch-date";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone, shiftYmd } from "@/lib/time/zone";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
@@ -9,51 +12,75 @@ type AnySupabase = any;
 export { getCrewBreaksUnpaid, isBreakUnpaid };
 
 /**
- * Fully-loaded labor $/hr (cents) per crew member: the member's own
- * labor_burden_cents_per_hour when set (> 0), else the linked employee's
- * hourly_rate_cents × (1 + the org's labor_burden_bps/10000) — the same
- * fallback rpt_job_visits and the crew-average reports use. 0 when neither is
- * configured. Without it a crew whose burden field was never filled in costed
- * every punch at $0 while the reports (which did fall back) showed a rate.
- * The employee rate and org burden are read with the service client: pay
- * columns aren't SELECT-able by the crew/authenticated roles that call this.
+ * Fully-loaded labor $/hr (cents) per crew member — THE labor-rate rule, from
+ * the database's crm_crew_member_labor_rates() (crm_labor_rate_cents): the
+ * member's own labor_burden_cents_per_hour when set (> 0), else the linked
+ * employee's hourly_rate_cents × (1 + the org's labor_burden_bps/10000). 0 when
+ * neither is configured. rpt_timesheets, Resource Time Utilization and
+ * rpt_job_visits' crew average use the same function, so they all agree.
+ *
+ * Read with the service client: the burden field and pay rates are hidden from
+ * end users without Show Wage Burden (crew logins included), but stored job
+ * costing must not depend on who triggered the recompute. `memberIds` must
+ * already be authorized for the caller (they come from punches the caller's
+ * session could read).
  */
-export async function memberLaborRatesCents(
-  supabase: AnySupabase,
-  memberIds: string[],
-  orgId: string | null | undefined
-): Promise<Map<string, number>> {
+export async function memberLaborRatesCents(memberIds: string[]): Promise<Map<string, number>> {
   const rates = new Map<string, number>();
   if (memberIds.length === 0) return rates;
-  const { data: members } = await supabase
-    .from("crm_crew_members")
-    .select("id, employee_id, labor_burden_cents_per_hour")
-    .in("id", memberIds);
-  const rows = (members ?? []) as { id: string; employee_id: string | null; labor_burden_cents_per_hour: number | null }[];
-  const needFallback = rows.filter((m) => !(Number(m.labor_burden_cents_per_hour ?? 0) > 0) && m.employee_id);
-  const hourlyByEmployee = new Map<string, number>();
-  let burdenBps = 0;
-  if (needFallback.length > 0) {
-    const admin = createServiceClient();
-    const [{ data: emps }, { data: overhead }] = await Promise.all([
-      admin.from("crm_employees").select("id, hourly_rate_cents").in("id", needFallback.map((m) => m.employee_id as string)),
-      orgId
-        ? admin.from("crm_overhead_settings").select("labor_burden_bps").eq("org_id", orgId).maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
-    for (const e of (emps ?? []) as { id: string; hourly_rate_cents: number | null }[]) {
-      hourlyByEmployee.set(e.id, Number(e.hourly_rate_cents ?? 0));
-    }
-    burdenBps = Number((overhead as { labor_burden_bps: number | null } | null)?.labor_burden_bps ?? 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createServiceClient() as any;
+  const { data } = await admin.rpc("crm_crew_member_labor_rates", { p_member_ids: memberIds });
+  for (const r of (data ?? []) as { crew_member_id: string; rate_cents: number | null }[]) {
+    rates.set(r.crew_member_id, Number(r.rate_cents ?? 0));
   }
-  for (const m of rows) {
-    const own = Number(m.labor_burden_cents_per_hour ?? 0);
-    rates.set(
-      m.id,
-      own > 0 ? own : Math.round((hourlyByEmployee.get(m.employee_id ?? "") ?? 0) * (1 + burdenBps / 10000))
-    );
-  }
+  for (const id of memberIds) if (!rates.has(id)) rates.set(id, 0);
   return rates;
+}
+
+/**
+ * "Crew pauses are unpaid" for each punch, the way payroll decides it: the
+ * snapshot taken on the member's day shift when that day ended
+ * (crm_crew_day_shifts.breaks_unpaid — the shift payroll files the punch
+ * under, payrollPunchDate), else the org's current setting. The visit's own
+ * break_paid override is applied on top by the caller. Shifts are read with the
+ * service client (an office login without Dispatch/Payroll can't see them).
+ * Keyed by punch index.
+ */
+async function punchDayBreaksUnpaid(
+  orgId: string | null | undefined,
+  punches: { crew_member_id: string; clocked_in_at: string | null }[],
+  orgBreaksUnpaid: boolean
+): Promise<boolean[]> {
+  const fallback = punches.map(() => orgBreaksUnpaid);
+  if (!orgId || punches.length === 0) return fallback;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const admin = createServiceClient() as any;
+    const tz = await getOrgTimeZone(admin, orgId);
+    const dates = punches.filter((p) => p.clocked_in_at).map((p) => isoInZone(new Date(p.clocked_in_at as string), tz)).sort();
+    if (dates.length === 0) return fallback;
+    const { data } = await admin
+      .from("crm_crew_day_shifts")
+      .select("crew_member_id, work_date, started_at, ended_at, breaks_unpaid")
+      .eq("org_id", orgId)
+      .is("deleted_at", null)
+      .in("crew_member_id", [...new Set(punches.map((p) => p.crew_member_id))])
+      .gte("work_date", shiftYmd(dates[0], -1))
+      .lte("work_date", dates[dates.length - 1]);
+    const byKey = new Map<string, PunchShiftWindow & { breaks_unpaid: boolean | null }>();
+    for (const sh of (data ?? []) as (PunchShiftWindow & { crew_member_id: string; breaks_unpaid: boolean | null })[]) {
+      byKey.set(`${sh.crew_member_id}|${sh.work_date}`, sh);
+    }
+    const shiftFor = (memberId: string, workDate: string) => byKey.get(`${memberId}|${workDate}`);
+    return punches.map((p) => {
+      if (!p.clocked_in_at) return orgBreaksUnpaid;
+      const day = payrollPunchDate(shiftFor, p.crew_member_id, p.clocked_in_at, tz);
+      return byKey.get(`${p.crew_member_id}|${day}`)?.breaks_unpaid ?? orgBreaksUnpaid;
+    });
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -68,8 +95,9 @@ export async function memberLaborRatesCents(
  * Pause time (the visit's break_minutes, written by Pause/Resume on every
  * visit in the stop, so the anchor's value is the stop's) is deducted from each
  * member's span — capped at the time that member's punch overlaps the visit's
- * clock window (memberVisitPauseMinutes) — when the break is UNPAID (org default, or the visit's
- * break_paid override); when PAID the full span is costed. Hours elsewhere
+ * clock window (memberVisitPauseMinutes) — when the break is UNPAID (the visit's
+ * break_paid override, else the setting snapshotted on the member's day shift
+ * when it ended, else the org's current setting); when PAID the full span is costed. Hours elsewhere
  * (computeActualHours, crm_recompute_job_actual_hours, rpt_job_visits) are net
  * of break either way: hours measure productivity on site, pay is a separate
  * question. A member's cost never goes below 0.
@@ -96,16 +124,18 @@ export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string)
     .eq("id", visitId)
     .maybeSingle();
   const orgBreaksUnpaid = await getCrewBreaksUnpaid(supabase, visitRow?.org_id as string | undefined);
-  const pauseUnpaid = !!visitRow && isBreakUnpaid(visitRow.break_paid as boolean | null, orgBreaksUnpaid);
+  // Per punch: the visit's break_paid override, else the member's day snapshot, else the org.
+  const dayUnpaid = await punchDayBreaksUnpaid(visitRow?.org_id as string | undefined, punches, orgBreaksUnpaid);
 
   const memberIds = [...new Set(punches.map((p) => p.crew_member_id))];
-  const rateById = await memberLaborRatesCents(supabase, memberIds, visitRow?.org_id as string | undefined);
+  const rateById = await memberLaborRatesCents(memberIds);
 
   let total = 0;
-  for (const p of punches) {
+  for (const [i, p] of punches.entries()) {
     if (!p.clocked_in_at) continue;
     const inMs = new Date(p.clocked_in_at).getTime();
     const outMs = new Date(p.clocked_out_at).getTime();
+    const pauseUnpaid = !!visitRow && isBreakUnpaid(visitRow.break_paid as boolean | null, dayUnpaid[i]);
     const unpaidBreakMins = pauseUnpaid
       ? memberVisitPauseMinutes({
           pauseMinutes: visitRow?.break_minutes as number | null,

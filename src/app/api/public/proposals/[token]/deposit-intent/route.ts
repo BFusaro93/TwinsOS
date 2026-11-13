@@ -5,11 +5,12 @@ import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
-import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { createPaymentIntentNotCanceled } from "@/lib/stripe/idempotency";
 import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { buildProposalContent, getPublishedProposal, isChangedSinceSent, PROPOSAL_ESTIMATE_SELECT } from "@/lib/estimates/proposal-content";
 import { PROPOSAL_TIERS, proposalDepositCents } from "@/lib/estimates/proposal-deposit";
+import { estimateDepositDueCents, estimateSettledByInvoices, isEstimateAccepted } from "@/lib/estimates/deposit-due";
 
 const BodySchema = z.object({
   paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
@@ -18,9 +19,6 @@ const BodySchema = z.object({
   // tiers the proposal actually has (proposalDepositCents).
   selectedTier: z.enum(PROPOSAL_TIERS).optional(),
 });
-
-// Stages that mean the proposal has been accepted (by any route).
-const ACCEPTED_STAGES = ["accepted", "won", "invoiced"];
 
 /**
  * Public, unauthenticated "pay the deposit on this proposal" endpoint.
@@ -87,7 +85,7 @@ export async function POST(
 
   const { data: estimate } = await supabase
     .from("estimates")
-    .select("id, org_id, client_id, estimate_number, stage, deposit_required_cents, deposit_collected_cents, deposit_pending_cents, total_cents, deposit_pending_intent_id, deposit_pending_method, deposit_failed_at, portal_accepted_at")
+    .select("id, org_id, client_id, estimate_number, stage, deposit_required_cents, deposit_collected_cents, deposit_pending_cents, total_cents, deposit_pending_intent_id, deposit_pending_method, deposit_failed_at, deposit_waived_at, portal_accepted_at")
     .eq("id", shareToken.estimate_id)
     .eq("org_id", shareToken.org_id)
     .is("deleted_at", null)
@@ -126,19 +124,39 @@ export async function POST(
   // still read from the estimate, never the request, so re-opening grants no
   // new power — only another attempt at the same number. The webhook clears
   // deposit_failed_at the moment a deposit lands, which closes the link again.
-  const isRetry = !!estimate.deposit_failed_at && (estimate.deposit_collected_cents ?? 0) === 0;
+  //
   // A required deposit the client skipped at acceptance (deposits are
   // optional) is still due, and the accepted page shows it with a way to pay.
   // Same narrow shape as a retry: accepted, nothing collected, nothing
-  // clearing, amount from the estimate.
-  const isAccepted =
-    !!shareToken.accepted_at || !!estimate.portal_accepted_at || ACCEPTED_STAGES.includes(estimate.stage as string);
+  // clearing, amount from the estimate. Neither applies once staff have
+  // WAIVED the deposit or the estimate's invoices are issued and paid in full
+  // (estimateDepositDueCents — the same rule the proposal page and the portal
+  // display by).
+  const isAccepted = isEstimateAccepted({
+    tokenAcceptedAt: shareToken.accepted_at,
+    portalAcceptedAt: estimate.portal_accepted_at,
+    stage: estimate.stage,
+  });
+  const settledByInvoices = isAccepted ? await estimateSettledByInvoices(supabase, estimate.id) : false;
+  const depositNoLongerDue = isAccepted && (!!estimate.deposit_waived_at || settledByInvoices);
+  const isRetry =
+    !!estimate.deposit_failed_at && (estimate.deposit_collected_cents ?? 0) === 0 && !depositNoLongerDue;
   const isOwed =
-    isAccepted &&
-    (estimate.deposit_required_cents ?? 0) > 0 &&
-    (estimate.deposit_collected_cents ?? 0) === 0 &&
-    (estimate.deposit_pending_cents ?? 0) === 0;
+    estimateDepositDueCents({
+      accepted: isAccepted,
+      stage: estimate.stage,
+      requiredCents: estimate.deposit_required_cents,
+      collectedCents: estimate.deposit_collected_cents,
+      pendingCents: estimate.deposit_pending_cents,
+      totalCents: estimate.total_cents,
+      waivedAt: estimate.deposit_waived_at,
+      settledByInvoices,
+    }) > 0;
   const isAfterAcceptance = isRetry || isOwed;
+
+  if (depositNoLongerDue && (estimate.deposit_collected_cents ?? 0) === 0) {
+    return NextResponse.json({ error: "No deposit is due on this proposal." }, { status: 409 });
+  }
 
   if (tokenExpired && !isAfterAcceptance) {
     return NextResponse.json({ error: "Proposal link has expired" }, { status: 410 });
@@ -268,6 +286,10 @@ export async function POST(
   // So the outstanding intent is remembered on the estimate and handed back
   // instead of creating a second one. Stripe charges a given PaymentIntent at
   // most once, which makes the whole flow genuinely idempotent.
+  // An intent canceled below (method switch / stale amount) goes into the new
+  // intent's idempotency key, so card -> bank -> card inside the 10-second
+  // window can't be answered with the canceled card intent.
+  let supersededIntentId = "";
   if (estimate.deposit_pending_intent_id) {
     try {
       const existing = await stripe.paymentIntents.retrieve(
@@ -310,6 +332,7 @@ export async function POST(
       // transfer) or a stale amount. Cancel it so it can never be confirmed
       // later, then fall through and create the one they actually want.
       if (reusable) {
+        supersededIntentId = existing.id;
         await stripe.paymentIntents.cancel(
           existing.id,
           {},
@@ -322,7 +345,8 @@ export async function POST(
     }
   }
 
-  const paymentIntent = await stripe.paymentIntents.create(
+  const paymentIntent = await createPaymentIntentNotCanceled(
+    stripe,
     {
       amount: totalChargeCents,
       currency: "usd",
@@ -346,12 +370,13 @@ export async function POST(
       // Keyed on the method too: card and ACH are genuinely different intents
       // for the same deposit, and a client who starts one and switches must
       // not be handed back the other.
-      idempotencyKey: chargeIdempotencyKey([
+      keyParts: [
         "crm_estimate_deposit",
         estimate.id,
         totalChargeCents,
         paymentMethod,
-      ]),
+        supersededIntentId,
+      ],
     }
   );
 

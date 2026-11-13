@@ -123,6 +123,11 @@ function MilestoneTab({ project }: { project: Project }) {
         totalCents={project.contractPrice}
         showTargetDate
         basisLabel="contract price"
+        invoiceBlockedReason={
+          project.status === "canceled"
+            ? "This project is canceled, so its milestones can't be invoiced. Reopen the project first."
+            : null
+        }
       />
     </div>
   );
