@@ -1535,6 +1535,9 @@ export function SnowDispatchBoard() {
         id: v.id,
         updates: { status: "scheduled", dispatched_at: null },
         jobId: v.jobId,
+        // Re-checked against the database, not this board's cached rows: a crew may have
+        // clocked in since the last refresh.
+        onlyIfNotStarted: true,
       })));
       const skipped = started.length + notDispatched.length;
       toast.success(

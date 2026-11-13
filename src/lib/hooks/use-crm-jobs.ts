@@ -1452,6 +1452,7 @@ export function useUpdateVisit() {
       jobId,
       jobType,
       overrideMinDays,
+      onlyIfNotStarted,
     }: {
       id: string;
       updates: Partial<{
@@ -1492,6 +1493,10 @@ export function useUpdateVisit() {
       jobType?: string;
       /** Dispatch a package step ahead of its Min Days spacing (after the scheduler confirmed). */
       overrideMinDays?: boolean;
+      /** Only write while the visit is still dispatched and the crew has not clocked in —
+       *  checked on the fresh row AND again in the update itself, so a crew that starts
+       *  between the board's last refresh and this write is never reset (Cancel Dispatch). */
+      onlyIfNotStarted?: boolean;
     }) => {
       const supabase = createClient();
 
@@ -1520,6 +1525,9 @@ export function useUpdateVisit() {
         const { data } = await (supabase as any)
           .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status, crew_id, notes_to_crew, clocked_in_at, clocked_out_at').eq('id', id).single();
         before = data ?? null;
+      }
+      if (onlyIfNotStarted && before && (before.status !== 'dispatched' || before.clocked_in_at)) {
+        throw new Error('The crew has already started this stop, so it can\'t be un-dispatched.');
       }
       // Same lockout the visit API routes refuse: ownership checks key off the visit's crew,
       // so re-crewing a stop mid-clock shuts the crew that is working it out of clock-out,
@@ -1626,11 +1634,16 @@ export function useUpdateVisit() {
       if (typeof dbUpdates.budgeted_hours === 'number') dbUpdates.budgeted_hours = roundHours(dbUpdates.budgeted_hours);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      let visitUpdate = (supabase as any)
         .from('crm_job_visits')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update(dbUpdates as any)
         .eq('id', id);
+      if (onlyIfNotStarted) visitUpdate = visitUpdate.eq('status', 'dispatched').is('clocked_in_at', null).select('id');
+      const { data: writtenRows, error } = await visitUpdate;
+      if (!error && onlyIfNotStarted && (!writtenRows || writtenRows.length === 0)) {
+        throw new Error('The crew has already started this stop, so it can\'t be un-dispatched.');
+      }
       if (error) {
         // One crew can only appear once per multi-crew stop
         // (crm_job_visits_crew_group_crew_unique).

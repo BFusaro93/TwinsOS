@@ -697,9 +697,9 @@ export function SnowGuide() {
             <strong>Per Push</strong> job each push is priced by its own depth, and an hourly range
             bills that push&apos;s hours. On a <strong>Per Event, Per Inch</strong> job the
             storm&apos;s deepest reading picks the range once; if it is an hourly range, the storm
-            bills the hours of its billed stops (the lead crew&apos;s first push) × the rate. Return
-            trips and extra crews stay unbilled there, so use Per Push when every trip should bill
-            its hours. Budgeted hours are for planning only and do not change what is billed.
+            bills the on-site hours of every visit on the storm (the first push, return trips and
+            extra crews) × the rate, as one line on the invoice. Use Per Push when you want each
+            trip as its own line. Budgeted hours are for planning only and do not change what is billed.
           </li>
           <li>
             <strong>A flat price per push</strong> (the same amount whatever the depth, for example a

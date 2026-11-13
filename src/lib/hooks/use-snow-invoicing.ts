@@ -13,7 +13,7 @@ import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidatio
 import { contractCoversServiceDay } from "@/lib/contract-billing";
 import { loadSnowCapStatuses } from "@/lib/snow-cap-loader";
 import { capOverageWarning } from "@/lib/snow-caps";
-import { hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, productLineTotalCents, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
+import { hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, productLineTotalCents, snowBillableHours, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -229,12 +229,32 @@ export function useUninvoicedSnowVisits(filters: {
         v.job?.contractId && v.job.invoiceType === "monthly_flat_rate"
           ? capStatuses.get(v.job.contractId)?.overageByVisit.get(v.id)
           : undefined;
-      const visits = liftStormDepths((data.map(mapVisit)) as CRMJobVisit[])
+      const candidates = liftStormDepths((data.map(mapVisit)) as CRMJobVisit[])
         .filter((v) => v.job?.invoiceType !== "monthly_flat_rate" || !!v.job?.contractId)
-        .filter((v) => !v.job?.contractId || contractEnded(v) || !!capOverageOf(v))
-        // Extra crews and return trips on a once-per-storm job are on the
-        // record only; the lead's first push carries the charge.
-        .filter((v) => !isUnbilledSnowVisit(v));
+        .filter((v) => !v.job?.contractId || contractEnded(v) || !!capOverageOf(v));
+      // Extra crews and return trips on a once-per-storm job are on the
+      // record only; the lead's first push carries the charge.
+      const visits = candidates.filter((v) => !isUnbilledSnowVisit(v));
+      // …but a Per Event Per Inch job in an HOURLY depth range bills the on-site hours of
+      // the whole storm, so the hours those unbilled visits worked ride on the first billed
+      // visit of the storm (computeGroupAmountCents adds them in).
+      const extraHoursByStorm = new Map<string, number>();
+      for (const v of candidates) {
+        if (v.job?.invoiceType !== "per_event_per_inch" || !v.stormEventId) continue;
+        if (!isUnbilledSnowVisit(v) || v.status === "skipped" || v.status === "cancelled") continue;
+        const key = `${v.jobId}::${v.stormEventId}`;
+        extraHoursByStorm.set(key, (extraHoursByStorm.get(key) ?? 0) + snowBillableHours(v));
+      }
+      const extraHoursClaimed = new Set<string>();
+      for (let i = 0; i < visits.length; i++) {
+        const v = visits[i];
+        if (v.job?.invoiceType !== "per_event_per_inch" || !v.stormEventId) continue;
+        const key = `${v.jobId}::${v.stormEventId}`;
+        const extra = extraHoursByStorm.get(key);
+        if (!extra || extraHoursClaimed.has(key)) continue;
+        extraHoursClaimed.add(key);
+        visits[i] = { ...v, stormExtraHours: extra } as typeof v;
+      }
 
       if (visits.length === 0) return [];
 

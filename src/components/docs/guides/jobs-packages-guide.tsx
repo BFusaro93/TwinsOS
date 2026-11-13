@@ -133,7 +133,10 @@ export function JobsPackagesGuide() {
             priced over a number of visits (say 30 mows) is capped at that many visits. Only
             scheduled, dispatched, in-progress and completed visits count toward the cap: a visit
             that is skipped, cancelled or deleted is made up — the generator adds another visit later
-            in the season, within the job&apos;s End Date.
+            in the season, within the job&apos;s End Date. You can also set a cap by hand: in Add Job,
+            each service on a recurring job has a <strong>Visits</strong> box (blank means no limit,
+            repeat until the End Date), and the same field is on the service&apos;s Edit row in the job
+            detail. It must be a whole number of 1 or more.
           </li>
           <li>
             <strong>Schedules need to be set up first.</strong> A recurring job&apos;s schedule is picked from
