@@ -38,7 +38,24 @@ const BodySchema = z.object({
   visitIds: z
     .array(z.string().uuid())
     .min(2, "Need at least 2 visits to optimize a route.")
-    .max(MAX_STOPS, `Route optimization supports up to ${MAX_STOPS} stops at a time — select fewer visits (e.g. one crew) and optimize in batches.`),
+    .max(MAX_STOPS, `Route optimization supports up to ${MAX_STOPS} stops at a time — select fewer visits (e.g. one crew) and optimize in batches.`)
+    .optional(),
+  /**
+   * Master Route builder: order JOBS (a route's stops) instead of dated visits.
+   * Exactly one of visitIds / jobIds is sent; the response keeps the
+   * `orderedVisitIds` / `driveTimes[].visitId` keys but they then hold job ids.
+   */
+  jobIds: z
+    .array(z.string().uuid())
+    .min(2, "Need at least 2 jobs to optimize a route.")
+    .max(MAX_STOPS, `Route optimization supports up to ${MAX_STOPS} stops at a time.`)
+    .optional(),
+  /**
+   * "shop" (default) anchors the tour on the crew's shop / company address.
+   * "first" keeps the first id in the list as stop #1 and routes from there
+   * (the Master Route builder's "Optimize Route").
+   */
+  startAt: z.enum(["shop", "first"]).default("shop"),
   /**
    * nearest_first — leave the shop and take the closest stop each time.
    * furthest_first — drive out to the far end first and work back in, so the
@@ -48,7 +65,7 @@ const BodySchema = z.object({
   strategy: z.enum(["nearest_first", "furthest_first"]).default("nearest_first"),
   /** Crew whose starting address anchors the tour. */
   crewId: z.string().uuid().nullable().optional(),
-});
+}).refine((b) => !!b.visitIds !== !!b.jobIds, { message: "Send either visitIds or jobIds." });
 
 /** Greedy nearest-neighbour from index 0. */
 function nearestNeighbor(matrix: number[][]): number[] {
@@ -187,7 +204,9 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const { visitIds, strategy, crewId } = parsed.data;
+  const { strategy, crewId, startAt } = parsed.data;
+  const jobMode = !!parsed.data.jobIds;
+  const visitIds = (parsed.data.jobIds ?? parsed.data.visitIds) as string[];
 
   const keyResult = await resolveGoogleMapsKey(sb, profile.org_id);
   if ("error" in keyResult) {
@@ -200,8 +219,25 @@ export async function POST(request: Request) {
   // cookie-scoped client, we must filter by org_id ourselves here or a caller
   // could pass visitIds belonging to another tenant and get their addresses
   // back. org_id always comes from the authenticated session, never the request.
+  const CLIENT_COLS = `
+        service_address, service_city, service_state, service_zip,
+        billing_address, billing_city, billing_state, billing_zip`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: visits } = await (sb as any)
+  const { data: visits } = jobMode
+    // Job mode (Master Route builder): the ids are crm_jobs ids, resolved the same way.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? await (sb as any)
+        .from("crm_jobs")
+        .select(`
+          id, service_address, service_city, service_state, service_zip,
+          clients(${CLIENT_COLS}),
+          client_properties(address, city, state, zip)
+        `)
+        .in("id", visitIds)
+        .eq("org_id", profile.org_id)
+        .is("deleted_at", null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    : await (sb as any)
     .from("crm_job_visits")
     // The address a stop is routed to is resolved the same way the board, the
     // crew app and the geocoder resolve it (see resolveStopAddress) — job
@@ -235,9 +271,13 @@ export async function POST(request: Request) {
 
   type VisitWithAddr = { id: string; address: string };
   const withAddresses: VisitWithAddr[] = [];
-  for (const v of visits) {
+  // Keep the caller's order (the DB returns rows in arbitrary order) so "first" means first.
+  const idRank = new Map(visitIds.map((id, i) => [id, i]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sortedRows = [...(visits as any[])].sort((a, b) => (idRank.get(a.id) ?? 0) - (idRank.get(b.id) ?? 0));
+  for (const v of sortedRows) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const job = embeddedOne((v as any).crm_jobs);
+    const job = jobMode ? (v as any) : embeddedOne((v as any).crm_jobs);
     const resolved = resolveStopAddress({
       job,
       property: embeddedOne(job?.client_properties),
@@ -263,7 +303,7 @@ export async function POST(request: Request) {
   // route didn't begin where the crew actually begins — and the result changed
   // depending on how the board happened to be sorted.
   let originAddress: string | null = null;
-  if (crewId) {
+  if (crewId && startAt === "shop") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: crew } = await (sb as any)
       .from("crm_crews")
@@ -286,7 +326,7 @@ export async function POST(request: Request) {
 
   // A crew with no starting address of its own starts from the company address
   // (Settings → Organization → Company Address).
-  if (!originAddress) {
+  if (!originAddress && startAt === "shop") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: org } = await (sb as any)
       .from("organizations")
