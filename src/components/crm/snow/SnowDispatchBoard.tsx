@@ -100,6 +100,7 @@ const SNOW_FILTER_TABS: { value: string; label: string }[] = [
 ];
 
 const SNOW_COLUMNS: ColumnDef[] = [
+  { key: "date", label: "Date" },
   { key: "service", label: "Service" },
   { key: "address", label: "Address" },
   { key: "city", label: "City", defaultHidden: true },
@@ -341,6 +342,9 @@ function AddJobsDialog({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
   const [jobSearch, setJobSearch] = useState("");
+  // Per-job date overrides (job id → yyyy-mm-dd); jobs without one follow the dispatch date.
+  const [rowDates, setRowDates] = useState<Map<string, string>>(new Map());
+  const [bulkDate, setBulkDate] = useState("");
 
   const { data: masterSlots } = useMasterRouteSlots();
   const selectedRoute = routes.find((r) => r.id === routeId);
@@ -371,10 +375,10 @@ function AddJobsDialog({
         const overTrigger = maxTriggerInches !== "" && job.inchTrigger != null && job.inchTrigger > parseFloat(maxTriggerInches);
         const rank = PRIORITY_RANK[job.clientPriority ?? "low"] ?? 3;
         const underPriority = minPriority !== "" && rank > (PRIORITY_RANK[minPriority] ?? 3);
-        const dayNotAuthorized = !!job.scheduleDays?.length && !job.scheduleDays.includes(dayAbbrForDate(date));
+        const dayNotAuthorized = !!job.scheduleDays?.length && !job.scheduleDays.includes(dayAbbrForDate(rowDates.get(job.id) ?? date));
         return { job, excluded: overTrigger || underPriority || dayNotAuthorized };
       });
-  }, [candidateJobIds, snowJobs, maxTriggerInches, minPriority, date]);
+  }, [candidateJobIds, snowJobs, maxTriggerInches, minPriority, date, rowDates]);
 
   // The search narrows what is listed (and what Select all / Unselect all act on);
   // jobs already ticked stay ticked while hidden and are still added.
@@ -393,6 +397,8 @@ function AddJobsDialog({
   if (open && !seeded) {
     setSeeded(true);
     setJobSearch("");
+    setRowDates(new Map());
+    setBulkDate("");
     setDate(eventDate);
     setMaxTriggerInches(forecastDepthInches != null ? String(forecastDepthInches) : "");
   }
@@ -433,6 +439,7 @@ function AddJobsDialog({
       .map((c) => ({
         jobId: c.job.id,
         clientId: c.job.clientId,
+        date: rowDates.get(c.job.id) ?? null,
         // Explicit crew pick, else the job's Master Route crew, else the job's own crew.
         crewId: defaultCrewId
           || (routeId ? selectedRoute?.defaultCrewId : masterSlots?.get(c.job.id)?.routeCrewId)
@@ -531,6 +538,25 @@ function AddJobsDialog({
               aria-label="Search snow jobs"
             />
           </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">Date for the {selectedIds.size} selected:</span>
+            <Input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} className="h-8 w-40 text-xs" aria-label="Date for the selected jobs" />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!bulkDate || selectedIds.size === 0}
+              onClick={() => setRowDates((prev) => { const next = new Map(prev); selectedIds.forEach((id) => next.set(id, bulkDate)); return next; })}
+            >
+              Set date
+            </Button>
+            {rowDates.size > 0 && (
+              <button type="button" className="text-[11px] text-muted-foreground underline hover:text-foreground" onClick={() => setRowDates(new Map())}>
+                Reset all to {date}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -563,6 +589,7 @@ function AddJobsDialog({
                   <th className="px-3 py-2">Trigger</th>
                   <th className="px-3 py-2">Priority</th>
                   <th className="px-3 py-2">Crew</th>
+                  <th className="px-3 py-2">Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -581,7 +608,19 @@ function AddJobsDialog({
                     </td>
                     <td className="px-3 py-2">{job.inchTrigger != null ? `${job.inchTrigger}"` : "—"}</td>
                     <td className="px-3 py-2">{job.clientPriority ?? "—"}</td>
-                    <td className="px-3 py-2">{job.crewName ?? "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <Input
+                        type="date"
+                        value={rowDates.get(job.id) ?? date}
+                        onChange={(e) => setRowDates((prev) => {
+                          const next = new Map(prev);
+                          if (!e.target.value || e.target.value === date) next.delete(job.id); else next.set(job.id, e.target.value);
+                          return next;
+                        })}
+                        className={cn("h-7 w-36 text-xs", rowDates.has(job.id) && "border-brand-400")}
+                        aria-label={`Date for ${job.clientName ?? "job"}`}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1116,6 +1155,42 @@ function isFlatPerEvent(v: CRMJobVisit): boolean {
   return (v.job?.invoiceType ?? "per_event") === "per_event";
 }
 
+/** "Mon 11/16" for a yyyy-mm-dd date (read at noon so a timezone never shifts the day). */
+function shortDateLabel(ymd: string | null | undefined): string {
+  if (!ymd) return "—";
+  const d = new Date(`${ymd}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/** A stop's date. Office users can change it (a storm that runs several days has stops on different days);
+ *  the crew sees the stop on the day it is scheduled for. */
+function VisitDateCell({ visit, canEdit, onSave }: { visit: CRMJobVisit; canEdit: boolean; onSave: (id: string, date: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(visit.scheduledDate ?? "");
+  const [saving, setSaving] = useState(false);
+  const label = shortDateLabel(visit.scheduledDate);
+  if (!canEdit || visit.status === "completed" || visit.status === "cancelled") return <span>{label}</span>;
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setValue(visit.scheduledDate ?? ""); }}>
+      <PopoverTrigger asChild>
+        <button type="button" title="Change this stop's date" className="rounded px-1 -mx-1 underline decoration-dotted underline-offset-2 hover:bg-muted">{label}</button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 space-y-2 p-3" align="start">
+        <Input type="date" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 text-xs" />
+        <Button
+          size="sm"
+          className="h-7 w-full text-xs"
+          disabled={saving || !value || value === visit.scheduledDate}
+          onClick={async () => { setSaving(true); try { await onSave(visit.id, value); setOpen(false); } finally { setSaving(false); } }}
+        >
+          Move to this date
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** The service a snow stop is for — several snow jobs at one address are told apart by it. */
 function visitServiceName(v: CRMJobVisit): string {
   return v.job?.services?.[0]?.serviceName || v.job?.invoiceDescription || "Snow Service";
@@ -1167,8 +1242,8 @@ export function SnowDispatchBoard() {
   const [crewFilters, setCrewFilters] = useState<string[]>([]); // crew ids, plus "none" for Unassigned
   const [statsOpen, setStatsOpen] = useState(false);
   const [outcomeDialog, setOutcomeDialog] = useState<{ ids: string[]; status: "skipped" | "cancelled" } | null>(null);
-  const [visibleKeys, setVisibleKeys] = // v2: Service joined the column set — a saved v1 layout would have hidden it for everyone who had customized columns.
-  usePersistedColumns("snow_dispatch_v2", SNOW_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key));
+  const [visibleKeys, setVisibleKeys] = // v3: Date joined (v2: Service) the column set — a saved v1 layout would have hidden it for everyone who had customized columns.
+  usePersistedColumns("snow_dispatch_v3", SNOW_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key));
   const isVisible = (k: string) => visibleKeys.includes(k);
   const [multiCrewOpen, setMultiCrewOpen] = useState(false);
   const [messageChannel, setMessageChannel] = useState<SnowMessageChannel | null>(null);
@@ -1179,6 +1254,8 @@ export function SnowDispatchBoard() {
   const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
   const [cityFilters, setCityFilters] = useState<string[]>([]);
   const [zipFilters, setZipFilters] = useState<string[]>([]);
+  const [dateFilters, setDateFilters] = useState<string[]>([]);
+  const [moveDate, setMoveDate] = useState("");
   const { mutateAsync: updateVisitStatus } = useUpdateVisitStatus();
   const [statusFilter, setStatusFilter] = useState("all");
   const [routeStrategy, setRouteStrategy] = useState<"furthest_first" | "nearest_first">("nearest_first");
@@ -1323,6 +1400,7 @@ export function SnowDispatchBoard() {
       if (priorityFilters.length > 0 && !priorityFilters.includes(v.clientPriority ?? "none")) return false;
       if (cityFilters.length > 0 && !cityFilters.includes(v.job?.serviceCity ?? "—")) return false;
       if (zipFilters.length > 0 && !zipFilters.includes(v.job?.serviceZip ?? "—")) return false;
+      if (dateFilters.length > 0 && !dateFilters.includes(v.scheduledDate ?? "—")) return false;
       if (q) {
         const hay = [
           v.clientName, visitServiceName(v), v.job?.serviceAddress, v.job?.serviceCity, v.job?.serviceState, v.job?.serviceZip, v.job?.notesToCrew,
@@ -1332,11 +1410,12 @@ export function SnowDispatchBoard() {
       }
       return true;
     });
-  }, [visits, search, crewFilters, statusFilter, tableOnlySelected, selectedVisitIds, serviceFilters, priorityFilters, cityFilters, zipFilters, crewNameById]);
+  }, [visits, search, crewFilters, statusFilter, tableOnlySelected, selectedVisitIds, serviceFilters, priorityFilters, cityFilters, zipFilters, dateFilters, crewNameById]);
 
   // Options for the value filters come from the stops on this storm.
   const serviceOptions = useMemo(() => [...new Set(visits.map(visitServiceName))].sort(), [visits]);
   const cityOptions = useMemo(() => [...new Set(visits.map((v) => v.job?.serviceCity ?? "—"))].sort(), [visits]);
+  const dateOptions = useMemo(() => [...new Set(visits.map((v) => v.scheduledDate ?? "—"))].sort(), [visits]);
   const zipOptions = useMemo(() => [...new Set(visits.map((v) => v.job?.serviceZip ?? "—"))].sort(), [visits]);
 
   const allShownSelected = filteredVisits.length > 0 && filteredVisits.every((v) => selectedVisitIds.has(v.id));
@@ -1356,7 +1435,8 @@ export function SnowDispatchBoard() {
     const counters = new Map<string, number>();
     const result = new Map<string, number>();
     for (const v of visits) {
-      const key = effectiveCrewIdOf(v) ?? "none";
+      // A storm can run several days; each crew's route is numbered within its day.
+      const key = `${effectiveCrewIdOf(v) ?? "none"}|${v.scheduledDate ?? ""}`;
       const n = (counters.get(key) ?? 0) + 1;
       counters.set(key, n);
       result.set(v.id, n);
@@ -1448,7 +1528,8 @@ export function SnowDispatchBoard() {
     // swapped from a stale order and undid the first.
     if (reordering) return;
     const crewKey = effectiveCrewIdOf(v) ?? "none";
-    const group = filteredVisits.filter((x) => (effectiveCrewIdOf(x) ?? "none") === crewKey);
+    // Only stops of the same crew on the same day swap places.
+    const group = filteredVisits.filter((x) => (effectiveCrewIdOf(x) ?? "none") === crewKey && x.scheduledDate === v.scheduledDate);
     const idx = group.findIndex((x) => x.id === v.id);
     const neighbor = group[idx + dir];
     if (!neighbor) return;
@@ -1459,6 +1540,36 @@ export function SnowDispatchBoard() {
     setDriveMins(new Map());
     setReordering(true);
     try { await persistOrder(ids); } catch { toast.error("Failed to reorder"); } finally { setReordering(false); }
+  }
+
+  /** Moves stops to another day (a storm that runs several days has stops on different days). Completed and
+   *  cancelled stops stay put. Returns how many moved and the first reason any refused (e.g. a crew is clocked in). */
+  async function moveVisitsToDate(visitIds: string[], date: string): Promise<{ moved: number; skipped: number; error: string | null }> {
+    const targets = visitIds
+      .map((id) => visits.find((x) => x.id === id))
+      .filter((v): v is CRMJobVisit => !!v && v.status !== "completed" && v.status !== "cancelled" && v.scheduledDate !== date);
+    const results = await Promise.allSettled(targets.map((v) => updateVisitMutation({ id: v.id, updates: { scheduled_date: date }, jobId: v.jobId })));
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    setDriveMins(new Map());
+    return {
+      moved: results.length - failed.length,
+      skipped: visitIds.length - targets.length,
+      error: failed[0] ? (failed[0].reason instanceof Error ? failed[0].reason.message : "Failed to move") : null,
+    };
+  }
+
+  async function moveToDate(visitIds: string[], date: string) {
+    if (!date) return;
+    const r = await moveVisitsToDate(visitIds, date);
+    if (r.error) toast.warning(`${r.moved} moved. ${r.error}`);
+    else if (r.moved === 0) toast.info("Nothing to move — those stops are already on that date or are finished.");
+    else toast.success(`${r.moved} stop${r.moved > 1 ? "s" : ""} moved to ${shortDateLabel(date)}${r.skipped ? ` (${r.skipped} left as is)` : ""}`);
+    if (r.moved > 0) setMoveDate("");
+  }
+
+  async function saveVisitDate(id: string, date: string) {
+    const r = await moveVisitsToDate([id], date);
+    if (r.error) { toast.error(r.error); throw new Error(r.error); }
   }
 
   async function changeCrew(visitIds: string[], crewId: string | null) {
@@ -1481,12 +1592,16 @@ export function SnowDispatchBoard() {
   async function optimizeRoutes() {
     // Selected stops if any, else everything currently shown. Each crew is routed on its own.
     const pool = selectedVisitIds.size > 0 ? visits.filter((v) => selectedVisitIds.has(v.id)) : filteredVisits;
+    // One route per crew per day (a multi-day storm has a route for each day).
     const byCrew = new Map<string, CRMJobVisit[]>();
+    const crewOfKey = new Map<string, string>();
     for (const v of pool) {
       const crewId = effectiveCrewIdOf(v);
       if (!crewId) continue;
-      if (!byCrew.has(crewId)) byCrew.set(crewId, []);
-      byCrew.get(crewId)!.push(v);
+      const key = `${crewId}|${v.scheduledDate ?? ""}`;
+      crewOfKey.set(key, crewId);
+      if (!byCrew.has(key)) byCrew.set(key, []);
+      byCrew.get(key)!.push(v);
     }
     const routable = [...byCrew.entries()].filter(([, list]) => list.length >= 2);
     if (routable.length === 0) {
@@ -1496,11 +1611,12 @@ export function SnowDispatchBoard() {
     setOptimizing(true);
     try {
       const results = await Promise.all(routable.map(async ([crewId, list]) => {
+        const apiCrewId = crewOfKey.get(crewId) ?? crewId;
         try {
           const res = await fetch("/api/crm/route-optimize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ visitIds: list.map((v) => v.id), strategy: routeStrategy, crewId }),
+            body: JSON.stringify({ visitIds: list.map((v) => v.id), strategy: routeStrategy, crewId: apiCrewId }),
           });
           const data = await res.json() as RouteResult;
           return res.ok ? { crewId, data } : { crewId, error: data.error ?? "Route optimization failed" };
@@ -1523,10 +1639,11 @@ export function SnowDispatchBoard() {
       const pointers = new Map<string, number>();
       const merged = visits.map((v) => {
         const crewId = effectiveCrewIdOf(v);
-        if (!crewId || !members.get(crewId)?.has(v.id)) return v.id;
-        const ptr = pointers.get(crewId) ?? 0;
-        pointers.set(crewId, ptr + 1);
-        return queues.get(crewId)![ptr] ?? v.id;
+        const key = crewId ? `${crewId}|${v.scheduledDate ?? ""}` : "";
+        if (!crewId || !members.get(key)?.has(v.id)) return v.id;
+        const ptr = pointers.get(key) ?? 0;
+        pointers.set(key, ptr + 1);
+        return queues.get(key)![ptr] ?? v.id;
       });
 
       const dt = new Map<string, { mins: number; fromShop: boolean }>();
@@ -1705,6 +1822,7 @@ export function SnowDispatchBoard() {
             </PopoverContent>
           </Popover>
 
+          <ValueFilter label="Dates" options={dateOptions} selected={dateFilters} onChange={setDateFilters} />
           <ValueFilter label="Services" options={serviceOptions} selected={serviceFilters} onChange={setServiceFilters} />
           <ValueFilter label="Priorities" options={["high", "normal", "low", "none"]} selected={priorityFilters} onChange={setPriorityFilters} />
           <ValueFilter label="Cities" options={cityOptions} selected={cityFilters} onChange={setCityFilters} />
@@ -1757,7 +1875,7 @@ export function SnowDispatchBoard() {
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setStatsOpen((o) => !o)}>{statsOpen ? "Hide Crew Stats" : "Show Crew Stats"}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPrintOpen(true)}>Print Route Sheets…</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setServiceFilters([]); setPriorityFilters([]); setCityFilters([]); setZipFilters([]); setSelectedVisitIds(new Set()); }}>
+              <DropdownMenuItem onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setServiceFilters([]); setPriorityFilters([]); setCityFilters([]); setZipFilters([]); setDateFilters([]); setSelectedVisitIds(new Set()); }}>
                 Clear Filters &amp; Selection
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -1842,6 +1960,7 @@ export function SnowDispatchBoard() {
                   priority: v.clientPriority ?? null,
                   amountCents: amountByVisitId.get(v.id) ?? 0,
                   budgetedHours: v.budgetedHours ?? 0,
+                  date: v.scheduledDate ?? null,
                   lat: v.job?.lat ?? null,
                   lng: v.job?.lng ?? null,
                 };
@@ -1858,6 +1977,7 @@ export function SnowDispatchBoard() {
               onAssignCrew={changeCrew}
               onDispatch={(ids) => dispatchVisits(ids)}
               onOpenMultiCrew={() => setMultiCrewOpen(true)}
+              onMoveToDate={moveToDate}
               onTableOnlySelected={setTableOnlySelected}
             />
           ) : (
@@ -1885,6 +2005,10 @@ export function SnowDispatchBoard() {
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMultiCrewOpen(true)}>
                 <Users className="mr-1 h-3 w-3" />Assign crews…
               </Button>
+              <div className="flex items-center gap-1">
+                <Input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} className="h-7 w-36 text-xs" aria-label="Move selected stops to date" />
+                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!moveDate} onClick={() => void moveToDate([...selectedVisitIds], moveDate)}>Move to date</Button>
+              </div>
               <Button size="sm" className="h-7 text-xs" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
                 Close Out…
               </Button>
@@ -1922,6 +2046,7 @@ export function SnowDispatchBoard() {
                 <th className="w-12 px-2 py-2.5">#</th>
                 <th className="w-8 px-2 py-2.5">St</th>
                 <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
+                {isVisible("date") && <th className="px-2 py-2.5">Date</th>}
                 {isVisible("service") && <th className="px-2 py-2.5">Service</th>}
                 {isVisible("address") && <th className="px-2 py-2.5">Address</th>}
                 {isVisible("city") && <th className="px-2 py-2.5">City</th>}
@@ -2053,6 +2178,11 @@ export function SnowDispatchBoard() {
                           </button>
                         )}
                       </td>
+                      {isVisible("date") && (
+                        <td className="px-2 py-2 text-muted-foreground whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <VisitDateCell visit={v} canEdit={canManage} onSave={saveVisitDate} />
+                        </td>
+                      )}
                       {isVisible("service") && <td className="px-2 py-2 text-muted-foreground">{visitServiceName(v)}</td>}
                       {isVisible("address") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceAddress ?? "—"}</td>}
                       {isVisible("city") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceCity ?? "—"}</td>}

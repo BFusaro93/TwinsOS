@@ -244,7 +244,20 @@ export function SnowGuide() {
             Actions) selects every stop the filters currently show, so you can filter to a zip
             and reassign or dispatch all of it at once. Add Jobs has the same select-all checkbox
             plus <em>Select all</em> / <em>Unselect all</em> links and a search box that narrows the
-            list (Select all then acts on the jobs shown).
+            list (Select all then acts on the jobs shown). For a storm that runs several days, each job in Add Jobs
+            has its own <strong>Date</strong> (it starts as the dispatch date): tick the jobs for a
+            day, pick the date and click <strong>Set date</strong>, repeat for the next day, then
+            Add to Dispatch. Authorized-day checks use each job&apos;s own date; contract-date
+            checks still use the dispatch date at the top.
+          </li>
+          <li>
+            <strong>Storms that run several days.</strong> Every stop has its own <strong>Date</strong>{" "}
+            (a column, and a <strong>Dates</strong> filter). Click a stop&apos;s date to move just
+            that stop, or tick several stops and use <strong>Move to date</strong> in the selection
+            bar (or the map&apos;s selection panel). Finished and cancelled stops don&apos;t move,
+            and a stop a crew has clocked into can&apos;t change day. The crew sees a stop on the
+            day it is scheduled for. Route order is kept per crew per day, so Optimize Routes and
+            the up/down arrows work within one day at a time.
           </li>
           <li>
             <strong>Changing crews.</strong> The Crew column is a dropdown on every row. To move
@@ -328,7 +341,7 @@ export function SnowGuide() {
             It saves on the visit only and shows the job&apos;s note until you override it.
           </li>
           <li>
-            <strong>Columns.</strong> The column chooser shows or hides Service, Address, City, State, Zip, Priority, Trigger,
+            <strong>Columns.</strong> The column chooser shows or hides Date, Service, Address, City, State, Zip, Priority, Trigger,
             Crew, Depth, Temp, Notes to Crew and Amt, and remembers your choice.
           </li>
           <li>

@@ -429,7 +429,8 @@ export function useAddJobsToStormEvent() {
     }: {
       stormEventId: string;
       date: string;
-      jobs: { jobId: string; clientId: string; crewId?: string | null }[];
+      /** `date` on a job overrides the batch date — a storm that runs several days has stops on different days. */
+      jobs: { jobId: string; clientId: string; crewId?: string | null; date?: string | null }[];
     }) => {
       const supabase = createClient();
 
@@ -484,7 +485,7 @@ export function useAddJobsToStormEvent() {
       const rows = newJobs.map((j, i) => ({
         job_id: j.jobId,
         client_id: j.clientId,
-        scheduled_date: date,
+        scheduled_date: j.date || date,
         men_count: menByJob.get(j.jobId) ?? 1,
         crew_id: j.crewId ?? null,
         storm_event_id: stormEventId,

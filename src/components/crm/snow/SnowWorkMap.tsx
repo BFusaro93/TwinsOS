@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Hand, ListOrdered, MousePointerClick, PenLine, Route as RouteIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
@@ -23,6 +24,8 @@ export interface SnowMapStop {
   priority: string | null;
   amountCents: number;
   budgetedHours: number;
+  /** The stop's date (yyyy-mm-dd). */
+  date: string | null;
   lat: number | null;
   lng: number | null;
 }
@@ -58,6 +61,7 @@ export function SnowWorkMap({
   onAssignCrew,
   onDispatch,
   onOpenMultiCrew,
+  onMoveToDate,
   onTableOnlySelected,
 }: {
   apiKey: string;
@@ -74,6 +78,7 @@ export function SnowWorkMap({
   onAssignCrew: (visitIds: string[], crewId: string | null) => Promise<void>;
   onDispatch: (visitIds: string[]) => Promise<void>;
   onOpenMultiCrew: () => void;
+  onMoveToDate: (visitIds: string[], date: string) => Promise<void>;
   onTableOnlySelected: (v: boolean) => void;
 }) {
   const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
@@ -85,6 +90,7 @@ export function SnowWorkMap({
   const [showRoutes, setShowRoutes] = useState(false);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [assignCrewId, setAssignCrewId] = useState("");
+  const [moveDate, setMoveDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [drawPoints, setDrawPoints] = useState<google.maps.LatLngLiteral[]>([]);
   const [shapeClosed, setShapeClosed] = useState(false);
@@ -385,6 +391,17 @@ export function SnowWorkMap({
                     Update
                   </Button>
                 </div>
+                <div className="flex gap-1.5">
+                  <Input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} className="h-7 flex-1 text-xs" aria-label="Move selected stops to date" />
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={busy || !moveDate}
+                    onClick={() => void run(async () => { await onMoveToDate([...selectedIds], moveDate); setMoveDate(""); })}
+                  >
+                    Move to date
+                  </Button>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onOpenMultiCrew}>Assign crews…</Button>
                   <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => void run(() => onDispatch([...selectedIds]))}>Dispatch</Button>
@@ -401,7 +418,7 @@ export function SnowWorkMap({
               <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setFocusedId(null)} aria-label="Close stop details"><X className="h-3 w-3" /></button>
             </div>
             <p className="text-muted-foreground">{focused.address || "No address"}</p>
-            <p>{focused.serviceName} · {focused.status}{focused.priority ? ` · ${focused.priority} priority` : ""}</p>
+            <p>{focused.date ?? "No date"} · {focused.serviceName} · {focused.status}{focused.priority ? ` · ${focused.priority} priority` : ""}</p>
             <p>Crew: <span className="font-medium">{focused.crewLabel}</span></p>
             {canManage && (
               <div className="flex gap-1.5 pt-1">
