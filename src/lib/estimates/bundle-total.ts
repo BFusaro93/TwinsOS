@@ -4,7 +4,7 @@ import type { EstimateTemplateItem } from "@/types/crm-estimates";
 export function bundleTotalCents(items: EstimateTemplateItem[]): number {
   return items.reduce((sum, item) => {
     const line = Math.max(0, Math.round(item.qty * item.rateCents * item.visits) - (item.discountCents ?? 0));
-    const subs = (item.subitems ?? []).reduce((s, sub) => s + Math.round(sub.qty * sub.rateCents), 0);
+    const subs = (item.subitems ?? []).reduce((s, sub) => s + Math.round(sub.qty * sub.rateCents * sub.visits), 0);
     return sum + line + subs;
   }, 0);
 }

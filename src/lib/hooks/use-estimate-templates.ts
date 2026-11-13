@@ -17,10 +17,11 @@ function mapSubitem(row: any): EstimateTemplateItemSubitem {
     serviceId: row.service_id ?? null,
     name: row.name,
     qty: Number(row.qty),
+    visits: row.visits ?? 1,
     rateCents: row.rate_cents,
     costCents: row.cost_cents,
     invoice: row.invoice ?? true,
-    printOnInvoice: row.print_on_invoice ?? true,
+    printOnInvoice: row.print_on_invoice ?? false,
     printOnEstimate: row.print_on_estimate ?? true,
     sortOrder: row.sort_order ?? 0,
   };
@@ -221,6 +222,8 @@ export interface TemplateSubitemInput {
   serviceId: string | null;
   name: string;
   qty: number;
+  /** Defaults to 1 (charged once for the whole line). */
+  visits?: number;
   rateCents: number;
   costCents: number;
   invoice?: boolean;
@@ -241,10 +244,12 @@ export function useUpsertTemplateSubitem() {
         service_id: item.serviceId,
         name: item.name,
         qty: item.qty,
+        visits: item.visits ?? 1,
         rate_cents: item.rateCents,
         cost_cents: item.costCents,
         invoice: item.invoice ?? true,
-        print_on_invoice: item.printOnInvoice ?? true,
+        // Off unless the office turns it on (matches the estimate sub-item default).
+        print_on_invoice: item.printOnInvoice ?? false,
         print_on_estimate: item.printOnEstimate ?? true,
         sort_order: item.sortOrder ?? 0,
       };
@@ -302,9 +307,10 @@ export async function copyTemplateSubitemsToLine(
     service_id: s.serviceId,
     name: s.name,
     qty: s.qty,
+    visits: s.visits,
     rate_cents: s.rateCents,
     cost_cents: s.costCents,
-    total_cents: Math.round(s.qty * s.rateCents),
+    total_cents: Math.round(s.qty * s.rateCents * s.visits),
     invoice: s.invoice,
     print_on_invoice: s.printOnInvoice,
     print_on_estimate: s.printOnEstimate,

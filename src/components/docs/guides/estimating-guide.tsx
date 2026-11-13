@@ -402,7 +402,13 @@ export function EstimatingGuide() {
           Manage them under <strong>Settings → Estimates → Service Bundles</strong>. In the bundle
           editor, click <strong>+ Add sub-item</strong> under any bundle item to attach a product or a
           subservice to it. Search finds your products (not maintenance parts) and your subservices; each
-          sub-item has its own quantity (default 1) and rate, and a delete icon when you hover the row.
+          sub-item has its own <strong>Visits</strong> (default 1 = charged once for the whole line; set it
+          to the bundle item&apos;s visits to charge it on every visit), quantity (default 1) and rate, and
+          a delete icon when you hover the row. Its total is Qty &times; Rate &times; Visits, and the
+          amber warning appears if Visits is neither 1 nor the item&apos;s visits. The same{" "}
+          <strong>On estimate</strong> and <strong>On invoice</strong> buttons as on an estimate line sit
+          beside the sub-item&apos;s name, and you can type its unit <strong>Cost</strong> in the row
+          (internal, never shown to the client); both come along when the bundle is applied.
           When you apply the bundle to an estimate, its sub-items come with it, including when you
           pick it from <strong>Apply bundle&hellip;</strong> on an estimate that already exists.
         </p>

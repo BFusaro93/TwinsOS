@@ -395,7 +395,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                     {item.rateCents > 0 && ` — $${(item.rateCents / 100).toFixed(2)}`}
                     {(item.subitems ?? []).map((sub) => (
                       <span key={sub.id} className="block pl-3 text-brand-500 dark:text-brand-500">
-                        + {sub.name}{sub.qty !== 1 ? ` × ${sub.qty}` : ""}
+                        + {sub.name}{sub.qty !== 1 ? ` × ${sub.qty}` : ""}{sub.visits > 1 ? ` × ${sub.visits} visits` : ""}
                       </span>
                     ))}
                   </li>

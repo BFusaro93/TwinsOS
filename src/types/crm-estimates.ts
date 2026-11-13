@@ -288,6 +288,8 @@ export interface EstimateTemplateItemSubitem {
   serviceId: string | null;
   name: string;
   qty: number;
+  /** Times charged: total = qty x rate x visits. 1 = once for the whole line; the line's visits = every visit. */
+  visits: number;
   rateCents: number;
   costCents: number;
   invoice: boolean;

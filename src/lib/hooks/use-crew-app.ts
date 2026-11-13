@@ -170,7 +170,7 @@ function crewVisitSelect(hidePricing: boolean): string {
   return `
     ${visitCols},
     clients(display_name, primary_phone, gate_lock_code, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
-    crm_crews(name),
+    crm_crews!crm_job_visits_crew_id_fkey(name),
     crm_jobs:crew_job(${jobCols}, ${jobEmbeds}, crm_job_services:crew_job_services(${serviceCols}, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
   `;
 }
