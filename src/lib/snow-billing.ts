@@ -1,6 +1,7 @@
 import { formatCurrency } from "@/lib/utils";
 import type { SnowRateTier } from "@/lib/hooks/use-snow-rate-tiers";
 import type { CRMJobVisit } from "@/types/crm-jobs";
+import { formatInZone } from "@/lib/time/zone";
 import { capPartText, type SnowCapOverage } from "@/lib/snow-caps";
 
 export const INVOICE_TYPE_LABEL: Record<string, string> = {
@@ -19,7 +20,7 @@ export const INVOICE_TYPE_LABEL: Record<string, string> = {
  *  still the upper range's own start. The open-ended top
  *  tier (maxInches: null) bills ratePerInchCents × depth instead of a flat
  *  amount. */
-export function priceWithTiers(depth: number, tiers: SnowRateTier[]): number | null {
+export function findSnowTier(depth: number, tiers: SnowRateTier[]): SnowRateTier | null {
   if (tiers.length === 0) return null;
   const sorted = [...tiers].sort((a, b) => a.minInches - b.minInches);
   // The highest tier that starts below the depth — or that starts exactly AT
@@ -33,14 +34,31 @@ export function priceWithTiers(depth: number, tiers: SnowRateTier[]): number | n
   }
   // No tier's range contains this depth (below the lowest tier's minInches,
   // or above the highest bounded tier with no open-ended tier to catch the
-  // overflow) — null, not 0, so the caller's `tiered ?? flatRateFallback`
-  // actually falls back instead of billing $0.
+  // overflow) — null, so the caller's `tiered ?? flatRateFallback` actually
+  // falls back instead of billing $0.
   if (index === -1) return null;
   const tier = sorted[index];
-  if (tier.maxInches == null) return Math.round((tier.ratePerInchCents ?? 0) * depth);
   const isLast = index === sorted.length - 1;
-  if (depth <= tier.maxInches || !isLast) return tier.rateCents ?? 0;
-  return null;
+  if (tier.maxInches != null && depth > tier.maxInches && isLast) return null;
+  return tier;
+}
+
+/** Prices a depth against a job's configured tiers (e.g. 0-3in flat $X,
+ *  3-6in flat $Y, ... 12+in $D/in, or an all-inclusive top range billed
+ *  hourly). A tier covers min < depth <= max, so a boundary depth belongs to
+ *  the LOWER range (exactly 3" on "0–3 / 3–6" is the first tier) and the first
+ *  tier also covers a depth equal to its own min (e.g. 0). A depth that falls
+ *  in a gap between ranges (a legacy "0–3 / 3.01–6" setup and 3.005") also
+ *  bills the lower range, while 3.01" there is still the upper range's own
+ *  start. The open-ended top flat tier (maxInches: null) bills
+ *  ratePerInchCents × depth. A range billed "hourly" bills `billableHours` ×
+ *  its hourly rate (rateCents) — the caller supplies the hours on site. */
+export function priceWithTiers(depth: number, tiers: SnowRateTier[], billableHours = 0): number | null {
+  const tier = findSnowTier(depth, tiers);
+  if (!tier) return null;
+  if (tier.billAs === "hourly") return Math.round(billableHours * (tier.rateCents ?? 0));
+  if (tier.maxInches == null) return Math.round((tier.ratePerInchCents ?? 0) * depth);
+  return tier.rateCents ?? 0;
 }
 
 /** Tier ranges must be contiguous: each range starts where the previous one
@@ -230,6 +248,21 @@ export function snowBillableHours(
   return Math.max(0, Math.round(hours * 100) / 100);
 }
 
+/** "7:05 AM – 8:40 AM" from the visit's clock stamps in the org's zone — the optional time
+ *  suffix on a snow invoice line (service option "Show visit times on snow invoice lines").
+ *  Null when the crew never clocked a start AND end for the visit. */
+export function visitTimeRangeText(
+  visit: Pick<CRMJobVisit, "clockedInAt" | "clockedOutAt">,
+  timeZone: string
+): string | null {
+  if (!visit.clockedInAt || !visit.clockedOutAt) return null;
+  const opts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const start = formatInZone(visit.clockedInAt, timeZone, opts);
+  const end = formatInZone(visit.clockedOutAt, timeZone, opts);
+  if (start === "—" || end === "—") return null;
+  return `${start} – ${end}`;
+}
+
 /** A per-inch depth only counts once it was actually recorded — an unrecorded
  *  depth (null) or 0 leaves the visit unpriced ($0, flagged in the queue for a
  *  depth) rather than billing the bottom range. */
@@ -250,7 +283,10 @@ export function computeGroupAmountCents(groupVisits: SnowBillableVisit[], tiersB
     if (depths.length === 0) return 0;
     const maxDepth = Math.max(...depths);
     const tiers = job?.id ? tiersByJobId?.get(job.id) : undefined;
-    const tiered = tiers?.length ? priceWithTiers(maxDepth, tiers) : null;
+    // An hourly range bills the on-site hours of every visit in the storm's billing group
+    // (the deepest reading only picks the range; see liftStormDepths).
+    const groupHours = groupVisits.reduce((sum, v) => sum + snowBillableHours(v), 0);
+    const tiered = tiers?.length ? priceWithTiers(maxDepth, tiers, groupHours) : null;
     return tiered ?? Math.round((job?.ratePerInchCents ?? 0) * maxDepth);
   }
   if (invoiceType === "per_push_per_inch") {
@@ -258,7 +294,7 @@ export function computeGroupAmountCents(groupVisits: SnowBillableVisit[], tiersB
     const depth = recordedDepth(visit);
     if (depth == null) return 0;
     const tiers = job?.id ? tiersByJobId?.get(job.id) : undefined;
-    const tiered = tiers?.length ? priceWithTiers(depth, tiers) : null;
+    const tiered = tiers?.length ? priceWithTiers(depth, tiers, snowBillableHours(visit)) : null;
     return tiered ?? Math.round((job?.ratePerInchCents ?? 0) * depth);
   }
   if (invoiceType === "hourly") {
@@ -299,6 +335,10 @@ export function describeAmount(visit: SnowBillableVisit, groupSize: number, tier
   const splitSuffix = groupSize > 1 ? ` (split ÷${groupSize})` : "";
   if (invoiceType === "per_event_per_inch") {
     const tiers = visit.job?.id ? tiersByJobId?.get(visit.job.id) : undefined;
+    const hourlyTier = tiers?.length && visit.snowDepthInches != null ? findSnowTier(visit.snowDepthInches, tiers) : null;
+    if (hourlyTier?.billAs === "hourly") {
+      return `event max depth ${visit.snowDepthInches}" is in the hourly range — on-site hours × ${formatCurrency(hourlyTier.rateCents ?? 0)}/hr${splitSuffix}`;
+    }
     if (tiers?.length) return `event max depth via rate tiers${splitSuffix}`;
     return `event max depth × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in${splitSuffix}`;
   }
@@ -306,6 +346,10 @@ export function describeAmount(visit: SnowBillableVisit, groupSize: number, tier
     const tiers = visit.job?.id ? tiersByJobId?.get(visit.job.id) : undefined;
     const pushLabel = (visit.pushNumber ?? 1) > 1 ? `push ${visit.pushNumber}: ` : "";
     if (visit.snowDepthInches == null) return `${pushLabel}no depth recorded`;
+    const hourlyTier = tiers?.length ? findSnowTier(visit.snowDepthInches, tiers) : null;
+    if (hourlyTier?.billAs === "hourly") {
+      return `${pushLabel}${visit.snowDepthInches}" hourly range: ${snowBillableHours(visit)} hrs × ${formatCurrency(hourlyTier.rateCents ?? 0)}/hr`;
+    }
     if (tiers?.length) return `${pushLabel}${visit.snowDepthInches}" via rate ranges`;
     return `${pushLabel}${visit.snowDepthInches}" × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in`;
   }

@@ -62,6 +62,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
+import { buildSnowStopsCsv, downloadCsv, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
 import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDialog";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -342,6 +343,7 @@ function AddJobsDialog({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
   const [jobSearch, setJobSearch] = useState("");
+  const [serviceFilter, setServiceFilter] = useState("");
   // Per-job date overrides (job id → yyyy-mm-dd); jobs without one follow the dispatch date.
   const [rowDates, setRowDates] = useState<Map<string, string>>(new Map());
   const [bulkDate, setBulkDate] = useState("");
@@ -382,14 +384,19 @@ function AddJobsDialog({
 
   // The search narrows what is listed (and what Select all / Unselect all act on);
   // jobs already ticked stay ticked while hidden and are still added.
+  const serviceOptions = useMemo(
+    () => [...new Set(candidates.flatMap(({ job }) => (job.services ?? []).map((s) => s.serviceName).filter(Boolean)))].sort((a, b) => a.localeCompare(b)),
+    [candidates],
+  );
   const visibleCandidates = useMemo(() => {
     const q = jobSearch.trim().toLowerCase();
-    if (!q) return candidates;
-    return candidates.filter(({ job }) =>
+    const byService = serviceFilter ? candidates.filter(({ job }) => (job.services ?? []).some((s) => s.serviceName === serviceFilter)) : candidates;
+    if (!q) return byService;
+    return byService.filter(({ job }) =>
       [job.clientName, job.serviceAddress, job.serviceCity, job.serviceZip, job.crewName, job.services?.[0]?.serviceName, job.invoiceDescription]
         .filter(Boolean).join(" ").toLowerCase().includes(q)
     );
-  }, [candidates, jobSearch]);
+  }, [candidates, jobSearch, serviceFilter]);
 
   // Each opening starts from this storm's own date and forecast, not whatever
   // the dialog was last left at.
@@ -397,6 +404,7 @@ function AddJobsDialog({
   if (open && !seeded) {
     setSeeded(true);
     setJobSearch("");
+    setServiceFilter("");
     setRowDates(new Map());
     setBulkDate("");
     setDate(eventDate);
@@ -538,6 +546,18 @@ function AddJobsDialog({
               aria-label="Search snow jobs"
             />
           </div>
+          {serviceOptions.length > 1 && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground">Service:</span>
+              <Select value={serviceFilter || "all"} onValueChange={(v) => setServiceFilter(v === "all" ? "" : v)}>
+                <SelectTrigger className="h-8 w-56 text-xs" aria-label="Filter by service"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All services</SelectItem>
+                  {serviceOptions.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-[11px] text-muted-foreground">Date for the {selectedIds.size} selected:</span>
             <Input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} className="h-8 w-40 text-xs" aria-label="Date for the selected jobs" />
@@ -567,7 +587,7 @@ function AddJobsDialog({
           ) : candidates.length === 0 ? (
             <p className="text-center text-sm text-slate-400 dark:text-neutral-500 py-12">No snow jobs found{routeId ? " on this route" : ""}.</p>
           ) : visibleCandidates.length === 0 ? (
-            <p className="text-center text-sm text-slate-400 dark:text-neutral-500 py-12">No snow jobs match &ldquo;{jobSearch.trim()}&rdquo;.</p>
+            <p className="text-center text-sm text-slate-400 dark:text-neutral-500 py-12">No snow jobs match{jobSearch.trim() ? <> &ldquo;{jobSearch.trim()}&rdquo;</> : " this filter"}.</p>
           ) : (
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
@@ -1269,7 +1289,10 @@ export function SnowDispatchBoard() {
   const { mutateAsync: saveOrderToRoutes, isPending: savingOrder } = useSaveStormOrderToRoutes();
   const { mutateAsync: addStormPush, isPending: addingPush } = useAddStormPush();
 
-  const activeEvent = events.find((e) => e.id === selectedEventId) ?? events[0] ?? null;
+  // Inactive storms are hidden from the picker unless asked for (or currently open).
+  const [showInactiveEvents, setShowInactiveEvents] = useState(false);
+  const inactiveEventCount = events.filter((e) => !e.isActive).length;
+  const activeEvent = events.find((e) => e.id === selectedEventId) ?? events.find((e) => e.isActive) ?? events[0] ?? null;
   // Adding a visit to a Complete storm puts it back to Working (DB trigger);
   // the board doesn't offer it at all until someone does that on purpose.
   const stormComplete = activeEvent?.dispatchStatus === "complete";
@@ -1284,6 +1307,18 @@ export function SnowDispatchBoard() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  async function toggleEventActive() {
+    if (!activeEvent) return;
+    const next = !activeEvent.isActive;
+    try {
+      await updateStormEvent({ id: activeEvent.id, patch: { is_active: next } });
+      if (!next) setShowInactiveEvents(false);
+      toast.success(next ? "Storm event marked active" : "Storm event marked inactive — hidden from the picker");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update storm event");
+    }
   }
 
   async function advanceStatus(next: StormEventStatus) {
@@ -1484,6 +1519,43 @@ export function SnowDispatchBoard() {
     } catch {
       toast.error("Dispatch failed");
     }
+  }
+
+  /** Puts dispatched stops the crew hasn't started back to scheduled; started stops are refused. */
+  async function cancelDispatch(ids: string[]) {
+    const { cancellable, started, notDispatched } = splitCancelDispatchTargets(visits.filter((v) => ids.includes(v.id)));
+    if (cancellable.length === 0) {
+      toast.info(started.length > 0
+        ? `${started.length} selected stop${started.length !== 1 ? "s have" : " has"} already been started by the crew — it can't be un-dispatched.`
+        : "None of the selected stops are dispatched.");
+      return;
+    }
+    try {
+      await Promise.all(cancellable.map((v) => updateVisitMutation({
+        id: v.id,
+        updates: { status: "scheduled", dispatched_at: null },
+        jobId: v.jobId,
+      })));
+      const skipped = started.length + notDispatched.length;
+      toast.success(
+        `${cancellable.length} stop${cancellable.length !== 1 ? "s" : ""} back to scheduled` +
+        (started.length > 0 ? ` — ${started.length} already started, left as is` : "") +
+        (skipped > started.length ? ` (${notDispatched.length} weren't dispatched)` : "")
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cancel dispatch failed");
+    }
+  }
+
+  function exportStops() {
+    const rows = filteredVisits.map((v) => ({
+      visit: v,
+      service: visitServiceName(v),
+      crew: crewNameOf(v) ?? "",
+      amountCents: amountByVisitId.get(v.id) ?? null,
+    }));
+    downloadCsv(`snow-stops-${activeEvent?.eventDate ?? "export"}.csv`, buildSnowStopsCsv(rows));
+    toast.success(`Exported ${rows.length} stop${rows.length !== 1 ? "s" : ""}`);
   }
 
   async function applyOutcome(reason: string) {
@@ -1693,11 +1765,20 @@ export function SnowDispatchBoard() {
         <Select value={effectiveEventId} onValueChange={setSelectedEventId}>
           <SelectTrigger className="h-9 max-lg:h-11 w-64 max-w-full text-sm"><SelectValue placeholder="Select a storm event…" /></SelectTrigger>
           <SelectContent>
-            {events.map((e) => (
-              <SelectItem key={e.id} value={e.id}>{e.name} — {e.eventDate}</SelectItem>
+            {events.filter((e) => showInactiveEvents || e.isActive || e.id === effectiveEventId).map((e) => (
+              <SelectItem key={e.id} value={e.id}>{e.name} — {e.eventDate}{e.isActive ? "" : " (inactive)"}</SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {inactiveEventCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowInactiveEvents((v) => !v)}
+            className="text-[11px] text-muted-foreground underline hover:text-foreground"
+          >
+            {showInactiveEvents ? "Hide" : "Show"} {inactiveEventCount} inactive
+          </button>
+        )}
         {canManage && (
           <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setNewEventOpen(true)}>
             <Plus className="h-3.5 w-3.5" />New Storm Event
@@ -1722,6 +1803,10 @@ export function SnowDispatchBoard() {
                   <DropdownMenuItem onSelect={() => advanceStatus("pending")}>Pending</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => advanceStatus("working")}>Working (Dispatch)</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => advanceStatus("complete")}>Complete</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => void toggleEventActive()}>
+                    {activeEvent.isActive ? "Mark storm inactive" : "Mark storm active"}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
@@ -1845,6 +1930,9 @@ export function SnowDispatchBoard() {
                   <DropdownMenuItem onSelect={() => void dispatchVisits(selectedVisitIds.size > 0 ? [...selectedVisitIds] : null)}>
                     {selectedVisitIds.size > 0 ? "Dispatch Selected" : "Dispatch All Assigned"}
                   </DropdownMenuItem>
+                  <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => void cancelDispatch([...selectedVisitIds])}>
+                    Cancel Dispatch
+                  </DropdownMenuItem>
                   <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setCloseOutIds(new Set(selectedVisitIds))}>
                     Close Out Selected…
                   </DropdownMenuItem>
@@ -1875,6 +1963,7 @@ export function SnowDispatchBoard() {
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setStatsOpen((o) => !o)}>{statsOpen ? "Hide Crew Stats" : "Show Crew Stats"}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPrintOpen(true)}>Print Route Sheets…</DropdownMenuItem>
+              <DropdownMenuItem disabled={filteredVisits.length === 0} onSelect={exportStops}>Export Stops (CSV)</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setServiceFilters([]); setPriorityFilters([]); setCityFilters([]); setZipFilters([]); setDateFilters([]); setSelectedVisitIds(new Set()); }}>
                 Clear Filters &amp; Selection
               </DropdownMenuItem>

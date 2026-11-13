@@ -19,10 +19,14 @@ export interface DraftTier {
   maxInches: string; // "" = open-ended top tier
   rateDollars: string; // flat rate for a bounded tier
   ratePerInchDollars: string; // per-inch rate for the open-ended tier
+  billAs: "flat" | "hourly"; // hourly: rateDollars is the hourly rate
+  budgetedHours: string; // planned on-site hours for an hourly range
 }
 
-function toDraft(t: { minInches: number; maxInches: number | null; rateCents: number | null; ratePerInchCents: number | null }): DraftTier {
+function toDraft(t: { minInches: number; maxInches: number | null; rateCents: number | null; ratePerInchCents: number | null; billAs?: "flat" | "hourly"; budgetedHours?: number | null }): DraftTier {
   return {
+    billAs: t.billAs === "hourly" ? "hourly" : "flat",
+    budgetedHours: t.budgetedHours != null ? String(t.budgetedHours) : "",
     minInches: String(t.minInches),
     maxInches: t.maxInches != null ? String(t.maxInches) : "",
     rateDollars: t.rateCents != null ? (t.rateCents / 100).toFixed(2) : "",
@@ -40,7 +44,20 @@ export function parseTierDrafts(tiers: DraftTier[]): TierInput[] | null {
       return null;
     }
     const isOpenEnded = t.maxInches.trim() === "";
-    if (isOpenEnded) {
+    if (t.billAs === "hourly") {
+      const hourlyCents = Math.round(parseFloat(t.rateDollars || "0") * 100);
+      if (!hourlyCents) {
+        toast.error("An hourly range needs an hourly rate.");
+        return null;
+      }
+      const maxInches = isOpenEnded ? null : parseFloat(t.maxInches);
+      if (maxInches != null && !Number.isFinite(maxInches)) {
+        toast.error("Every bounded range needs an ending depth.");
+        return null;
+      }
+      const hrs = parseFloat(t.budgetedHours);
+      parsed.push({ minInches, maxInches, rateCents: hourlyCents, ratePerInchCents: null, billAs: "hourly", budgetedHours: Number.isFinite(hrs) && hrs > 0 ? hrs : null });
+    } else if (isOpenEnded) {
       const ratePerInchCents = Math.round(parseFloat(t.ratePerInchDollars || "0") * 100);
       if (!ratePerInchCents) {
         toast.error("The open-ended top tier needs a rate per inch.");
@@ -82,7 +99,7 @@ export function SnowRateTierRows({
 }) {
   function addTier() {
     const last = tiers[tiers.length - 1];
-    onChange([...tiers, { minInches: last?.maxInches || "", maxInches: "", rateDollars: "", ratePerInchDollars: "" }]);
+    onChange([...tiers, { minInches: last?.maxInches || "", maxInches: "", rateDollars: "", ratePerInchDollars: "", billAs: "flat", budgetedHours: "" }]);
   }
   function removeTier(i: number) {
     onChange(tiers.filter((_, j) => j !== i));
@@ -104,7 +121,7 @@ export function SnowRateTierRows({
         {perPush
           ? "Prices each push by the depth recorded for that push (e.g. 0–3\" = $165, 3–6\" = $299)"
           : "Prices the storm by its total depth (e.g. 0–3\" = $165, 3–6\" = $299)"}
-        {" "}instead of a flat rate per inch. Start each range where the last one ends; a depth exactly on a boundary (3&quot;) bills the lower range. Leave the last range&apos;s &quot;to&quot; blank for an open-ended top range billed per inch.
+        {" "}instead of a flat rate per inch. Start each range where the last one ends; a depth exactly on a boundary (3&quot;) bills the lower range. Leave the last range&apos;s &quot;to&quot; blank for an open-ended top range billed per inch — or choose Hourly for an all-inclusive top range billed on the hours on site{perPush ? "" : " (all of the storm's pushes)"}.
       </p>
       {tiers.length === 0 && (
         <p className="text-xs italic text-slate-400 dark:text-neutral-500">
@@ -130,7 +147,34 @@ export function SnowRateTierRows({
             className="h-8 w-24 px-2 text-sm"
           />
           <span className="text-xs text-slate-400 dark:text-neutral-500">in.</span>
-          {t.maxInches.trim() === "" ? (
+          <select
+            value={t.billAs}
+            onChange={(e) => updateTier(i, { billAs: e.target.value as "flat" | "hourly" })}
+            className="h-8 rounded-md border border-input bg-background px-1.5 text-xs"
+            aria-label="Bill as"
+          >
+            <option value="flat">{t.maxInches.trim() === "" ? "Per inch" : "Flat"}</option>
+            <option value="hourly">Hourly</option>
+          </select>
+          {t.billAs === "hourly" ? (
+            <>
+              <span className="text-xs text-slate-400 dark:text-neutral-500">$</span>
+              <Input
+                type="number" min="0" step="0.01" placeholder="0.00"
+                value={t.rateDollars}
+                onChange={(e) => updateTier(i, { rateDollars: e.target.value })}
+                className="h-8 w-24 px-2 text-sm"
+              />
+              <span className="text-xs text-slate-400 dark:text-neutral-500">/ hr, budget</span>
+              <Input
+                type="number" min="0" step="0.25" placeholder="hrs"
+                value={t.budgetedHours}
+                onChange={(e) => updateTier(i, { budgetedHours: e.target.value })}
+                className="h-8 w-20 px-2 text-sm"
+              />
+              <span className="text-xs text-slate-400 dark:text-neutral-500">hrs</span>
+            </>
+          ) : t.maxInches.trim() === "" ? (
             <>
               <span className="text-xs text-slate-400 dark:text-neutral-500">$</span>
               <Input
@@ -243,9 +287,11 @@ export function SnowRateTiersSummary({ jobId, perPush }: { jobId: string; perPus
               {t.maxInches != null ? `${t.minInches}" – ${t.maxInches}"` : `${t.minInches}"+`}
             </span>
             <span>
-              {t.maxInches != null
-                ? `${formatCurrency(t.rateCents ?? 0)} flat`
-                : `${formatCurrency(t.ratePerInchCents ?? 0)} / in.`}
+              {t.billAs === "hourly"
+                ? `${formatCurrency(t.rateCents ?? 0)} / hr${t.budgetedHours ? ` · ${t.budgetedHours} hrs budgeted` : ""}`
+                : t.maxInches != null
+                  ? `${formatCurrency(t.rateCents ?? 0)} flat`
+                  : `${formatCurrency(t.ratePerInchCents ?? 0)} / in.`}
             </span>
           </div>
         ))}

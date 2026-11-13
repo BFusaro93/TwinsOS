@@ -1,5 +1,6 @@
 "use client";
 
+import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { MenHoursCalcPopover } from "@/components/crm/jobs/MenHoursCalcPopover";
 import { VisitCrewsSection } from "@/components/crm/dispatch/VisitCrewsSection";
 import { useState, useEffect, useRef } from "react";
@@ -2459,6 +2460,22 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   className="text-sm resize-none"
                   placeholder={defaultPreview || "e.g. Weekly lawn maintenance — mow, trim, blow…"}
                 />
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400 mb-1 block">Invoice Terms</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Overrides the client&apos;s default terms on invoices generated from this job. Leave on the client&apos;s default to follow the client.
+                </p>
+                <Select
+                  defaultValue={job.invoiceTerms || "client_default"}
+                  onValueChange={(v) => patch("invoice_terms", v === "client_default" ? null : v)}
+                >
+                  <SelectTrigger className="w-56 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client_default">Client&apos;s default terms</SelectItem>
+                    {BILLING_TERMS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex justify-end">
                 <Button size="sm" disabled={saving || Object.keys(edits).length === 0} onClick={handleSave}>

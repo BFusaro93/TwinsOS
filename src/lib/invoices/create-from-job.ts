@@ -274,7 +274,7 @@ export async function createInvoiceFromJob(
   }
   const { data: job, error: jobErr } = await supabase
     .from("crm_jobs")
-    .select("org_id, sales_rep_id, job_type, estimate_id, clients(default_tax_rate_bps, default_terms, is_taxable), crm_job_services(id, service_id, is_taxable, crm_services(is_taxable))")
+    .select("org_id, sales_rep_id, job_type, estimate_id, invoice_terms, clients(default_tax_rate_bps, default_terms, is_taxable), crm_job_services(id, service_id, is_taxable, crm_services(is_taxable))")
     .eq("id", jobId)
     .single();
   if (jobErr) throw jobErr;
@@ -283,6 +283,7 @@ export async function createInvoiceFromJob(
     sales_rep_id: string | null;
     job_type: string;
     estimate_id: string | null;
+    invoice_terms: string | null;
     clients: { default_tax_rate_bps: number | null; default_terms: string | null; is_taxable: boolean | null } | null;
     crm_job_services: { id: string; service_id: string | null; is_taxable: boolean | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
   };
@@ -398,7 +399,7 @@ export async function createInvoiceFromJob(
   // from the caller still wins.
   const { data: orgRow } = await supabase
     .from("organizations").select("default_billing_terms").eq("id", orgId).maybeSingle();
-  const terms = resolveInvoiceTerms(jobRow.clients?.default_terms, (orgRow as { default_billing_terms: string | null } | null)?.default_billing_terms);
+  const terms = resolveInvoiceTerms(jobRow.invoice_terms || jobRow.clients?.default_terms, (orgRow as { default_billing_terms: string | null } | null)?.default_billing_terms);
   const invoiceDate = input.invoiceDate || todayInZone(await getOrgTimeZone(supabase, orgId));
 
   const { data, error } = await supabase
