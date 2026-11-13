@@ -32,7 +32,10 @@ export interface PayrollRow {
   /** Shift time not on a job: drive, shop, loading. Informational. */
   otherHours: number;
   hoursOverride: number | null;
+  /** Extra WORKED time (shop, travel…) — counts toward overtime. */
   extraHours: number;
+  /** Paid time off — paid and counted as Regular hours, never toward overtime. */
+  ptoHours: number;
   note: string | null;
   /** The hours payroll starts from: override, else shift, else job hours when there is no shift. */
   baseHours: number;
@@ -149,7 +152,7 @@ export async function computePayroll(
     supabase.from("crm_crew_members").select("id, name, crew_id").eq("org_id", orgId),
     supabase.from("crm_crews").select("id, name").eq("org_id", orgId),
     fetchAllRows<unknown>(() => supabase.from("crm_crew_daily_members").select("member_id, crew_id, work_date").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
-    fetchAllRows<unknown>(() => supabase.from("crm_payroll_adjustments").select("crew_member_id, work_date, hours_override, extra_hours, note, start_override, end_override, break_override").eq("org_id", orgId).is("deleted_at", null).gte("work_date", from).lte("work_date", to)),
+    fetchAllRows<unknown>(() => supabase.from("crm_payroll_adjustments").select("crew_member_id, work_date, hours_override, extra_hours, pto_hours, note, start_override, end_override, break_override").eq("org_id", orgId).is("deleted_at", null).gte("work_date", from).lte("work_date", to)),
     // Soft-deleted rows are the ones that matter: an absence is cleared (deleted_at = the
     // return time) when the person is put back on the day, which is what turns the gap into break.
     fetchAllRows<unknown>(() => supabase.from("crm_crew_day_absences").select("crew_member_id, work_date, created_at, deleted_at").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
@@ -162,8 +165,8 @@ export async function computePayroll(
   const overrideByDay = new Map<string, string>(
     ((overrides ?? []) as { member_id: string; crew_id: string; work_date: string }[]).map((o) => [`${o.member_id}|${o.work_date}`, o.crew_id])
   );
-  const adjByKey = new Map<string, { hours_override: number | null; extra_hours: number; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null }>(
-    ((adjustments ?? []) as { crew_member_id: string; work_date: string; hours_override: number | null; extra_hours: number; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null }[])
+  const adjByKey = new Map<string, { hours_override: number | null; extra_hours: number; pto_hours?: number | null; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null }>(
+    ((adjustments ?? []) as { crew_member_id: string; work_date: string; hours_override: number | null; extra_hours: number; pto_hours?: number | null; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null }[])
       .map((a) => [`${a.crew_member_id}|${a.work_date}`, a])
   );
   const gapsByKey = new Map<string, PayrollBreakGap[]>();
@@ -256,6 +259,7 @@ export async function computePayroll(
     const override = adj?.hours_override != null ? Number(adj.hours_override) : null;
     const base = override ?? computed;
     const extra = Number(adj?.extra_hours ?? 0);
+    const pto = Number(adj?.pto_hours ?? 0);
 
     rows.push({
       crewMemberId: memberId,
@@ -273,12 +277,13 @@ export async function computePayroll(
       otherHours: end ? Math.max(0, r2(shiftHours - jobHours)) : 0,
       hoursOverride: override,
       extraHours: extra,
+      ptoHours: pto,
       note: adj?.note ?? null,
       baseHours: r2(base),
-      totalHours: r2(base + extra),
-      regularHours: r2(base + extra),
+      totalHours: r2(base + extra + pto),
+      regularHours: r2(base + extra + pto),
       overtimeHours: 0,
-      adjusted: !!adj && (override != null || extra > 0 || !!adj.note || !!adj.start_override || !!adj.end_override || adj.break_override != null),
+      adjusted: !!adj && (override != null || extra > 0 || pto > 0 || !!adj.note || !!adj.start_override || !!adj.end_override || adj.break_override != null),
       noShift,
       autoStart: !adj?.start_override && shift?.source === "auto_first_job",
       openShift,

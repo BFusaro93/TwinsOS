@@ -8576,6 +8576,7 @@ export type Database = {
           id: string
           note: string | null
           org_id: string
+          pto_hours: number
           start_override: string | null
           updated_at: string
           updated_by: string | null
@@ -8593,6 +8594,7 @@ export type Database = {
           id?: string
           note?: string | null
           org_id?: string
+          pto_hours?: number
           start_override?: string | null
           updated_at?: string
           updated_by?: string | null
@@ -8610,6 +8612,7 @@ export type Database = {
           id?: string
           note?: string | null
           org_id?: string
+          pto_hours?: number
           start_override?: string | null
           updated_at?: string
           updated_by?: string | null
@@ -20574,6 +20577,10 @@ export type Database = {
       }
       crm_remove_visit_crew: {
         Args: { p_visit_id: string }
+        Returns: undefined
+      }
+      crm_reorder_invoice_lines: {
+        Args: { p_invoice_id: string; p_line_ids: string[] }
         Returns: undefined
       }
       crm_resolve_invoice_line_service: {

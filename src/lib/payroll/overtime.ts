@@ -9,8 +9,9 @@ type AnySupabase = any;
  * Settings → Organization. One of:
  *   - weekly: hours over `weeklyHours` (default 40) in a Monday–Sunday workweek
  *   - daily:  hours over `dailyHours` (default 8) in one work day
- * A day's hours are its paid total — day hours (or the office's hour override)
- * plus extra hours — the same figure the Payroll tab's Total shows.
+ * Only WORKED hours count toward the threshold: day hours (or the office's
+ * hour override) plus Extra hours. PTO hours are paid and always Regular — they
+ * never push anyone into overtime (owner rule).
  *
  * Pure apart from getOvertimeRule's read: safe in client components.
  */
@@ -77,11 +78,15 @@ export function overtimeComputeRange(rule: OvertimeRule, from: string, to: strin
  * (overtimeComputeRange).
  */
 export function applyOvertime(rows: PayrollRow[], rule: OvertimeRule): PayrollRow[] {
+  // PTO is paid but never overtime: split only the worked part, then add PTO to Regular.
+  const pto = (r: PayrollRow) => Math.max(0, r.ptoHours ?? 0);
+  const workedOf = (r: PayrollRow) => Math.max(0, r.totalHours - pto(r));
   if (rule.mode === "daily") {
     for (const r of rows) {
-      const total = Math.max(0, r.totalHours);
-      r.regularHours = r2(Math.min(total, rule.dailyHours));
-      r.overtimeHours = r2(total - r.regularHours);
+      const worked = workedOf(r);
+      const regularWorked = Math.min(worked, rule.dailyHours);
+      r.regularHours = r2(regularWorked + pto(r));
+      r.overtimeHours = r2(worked - regularWorked);
     }
     return rows;
   }
@@ -96,11 +101,11 @@ export function applyOvertime(rows: PayrollRow[], rule: OvertimeRule): PayrollRo
     days.sort((a, b) => a.workDate.localeCompare(b.workDate));
     let worked = 0;
     for (const r of days) {
-      const total = Math.max(0, r.totalHours);
-      const regular = Math.min(total, Math.max(0, rule.weeklyHours - worked));
-      r.regularHours = r2(regular);
-      r.overtimeHours = r2(total - regular);
-      worked += total;
+      const dayWorked = workedOf(r);
+      const regular = Math.min(dayWorked, Math.max(0, rule.weeklyHours - worked));
+      r.regularHours = r2(regular + pto(r));
+      r.overtimeHours = r2(dayWorked - regular);
+      worked += dayWorked;
     }
   }
   return rows;

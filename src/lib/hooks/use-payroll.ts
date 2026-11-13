@@ -40,7 +40,10 @@ export interface PayrollAdjustmentInput {
   startTime: string | null;
   endTime: string | null;
   breakMinutes: number | null;
+  /** Extra worked time — counts toward overtime. */
   extraHours: number;
+  /** Paid time off — paid, never overtime. */
+  ptoHours: number;
   note: string | null;
 }
 

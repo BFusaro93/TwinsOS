@@ -422,7 +422,7 @@ export function OrganizationTab() {
           </SettingRow>
           <SettingRow
             label="Overtime"
-            description="How the Payroll tab and its exports split each person's paid hours into regular and overtime (OT). Weekly counts hours over the limit in a Monday–Sunday week; daily counts hours over the limit in one day. Extra hours added on the Payroll tab count toward it."
+            description="How the Payroll tab and its exports split each person's paid hours into regular and overtime (OT). Weekly counts hours over the limit in a Monday–Sunday week; daily counts hours over the limit in one day. Extra hours added on the Payroll tab count toward it; PTO hours are paid but never count toward overtime."
           >
             <div className="flex flex-wrap items-center justify-end gap-2">
               <select

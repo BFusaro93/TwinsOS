@@ -2144,6 +2144,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Why is the payment link blank in my automation email?",
+        a: "The invoice is still a draft. Drafts can't be viewed or paid online, so [viewinvoiceonline] and [paymentlink] stay blank until the invoice is sent or printed.",
+      },
+      {
         q: "What can a crew login see about our clients?",
         a: "Only the clients on that crew's own stops: name, phone, address, gate code, property notes, contacts and timeline. Other clients' records and the client Files tab are not visible to crews.",
       },
@@ -3313,6 +3317,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Users & Settings",
     items: [
       {
+        q: "Does PTO count toward overtime?",
+        a: "No. On the Payroll tab, enter paid time off in the PTO column. It's paid and counted as Regular hours, but it never counts toward the overtime limit. Extra hours (shop time and other worked time) do count toward overtime.",
+      },
+      {
+        q: "What's the difference between Extra and PTO on the Payroll tab?",
+        a: "Extra is worked time that isn't on the clock, such as shop time, and counts toward overtime. PTO is paid time off: it's paid as Regular hours and never counts toward overtime. Both appear in the CSV, Excel and PDF exports.",
+      },
+      {
         q: "Who can create invoice pay links?",
         a: "Admins and anyone whose role has Email Invoices or Add/Modify Invoices. People who can only view invoices see existing links, and crew logins never see them.",
       },
@@ -3326,7 +3338,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How is overtime calculated?",
-        a: "An admin chooses the rule in Settings → Organization → Overtime: hours over a weekly limit (default 40, Monday–Sunday weeks) or over a daily limit (default 8). The Payroll tab and its exports show Regular and OT hours for each person.",
+        a: "An admin chooses the rule in Settings → Organization → Overtime: hours over a weekly limit (default 40, Monday–Sunday weeks) or over a daily limit (default 8). Only worked hours count toward the limit; PTO is paid as Regular and never becomes overtime. The Payroll tab and its exports show Regular and OT hours for each person.",
       },
       {
         q: "Why was my crew move refused?",

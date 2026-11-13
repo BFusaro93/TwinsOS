@@ -447,7 +447,7 @@ export function ReportCenterGuide() {
             are used instead and the day is flagged.
           </li>
           <li>
-            <strong>Totals by person.</strong> One row per employee with Day hours, On jobs, Extra,
+            <strong>Totals by person.</strong> One row per employee with Day hours, On jobs, Extra, PTO,
             Total, <strong>Regular</strong> and <strong>OT</strong>. Click a row to open the day-by-day
             detail, which shows each day&apos;s regular and overtime hours too.
           </li>
@@ -456,8 +456,9 @@ export function ReportCenterGuide() {
             your company&apos;s overtime rule, set by an admin in{" "}
             <strong>Settings → Organization → Overtime</strong>: either hours over a weekly limit
             (default 40) in a Monday&ndash;Sunday week, or hours over a daily limit (default 8) in one
-            day. The rule in use is printed above the table. A day&apos;s hours are its Total &mdash;
-            day hours (or your override) plus Extra hours. With the weekly rule, days earlier in the
+            day. The rule in use is printed above the table. Only <strong>worked</strong> hours count
+            toward the limit: day hours (or your override) plus Extra hours. <strong>PTO</strong> hours are
+            paid and always counted as Regular &mdash; they never push anyone into overtime. With the weekly rule, days earlier in the
             same week count toward the limit even when your period starts mid-week, and the overtime
             lands on the day the limit is passed. Overtime hours are reported, not priced: apply the
             overtime pay rate in your payroll system.
@@ -467,7 +468,8 @@ export function ReportCenterGuide() {
             clock-out times</strong>, the <strong>unpaid break minutes</strong> (the number you enter is the
             day&apos;s whole unpaid break, replacing the recorded breaks rather than adding to them), or type the hours
             directly to override them (up to 48 hours for a day); add <strong>Extra</strong> hours
-            (shop time, PTO, anything not on the clock, also up to 48); write a <strong>note</strong> saying why; and click <strong>Save</strong>. An
+            (worked time not on the clock, such as shop time, also up to 48; counts toward overtime) or{" "}
+            <strong>PTO</strong> hours (paid time off, up to 48; paid as Regular, never overtime); write a <strong>note</strong> saying why; and click <strong>Save</strong>. An
             end time earlier than the start is read as the next morning, for storm work past
             midnight. The reset arrow puts the day back to the recorded figures. Edited days show an{" "}
             <em>adjusted</em> badge.
