@@ -163,6 +163,8 @@ export interface CRMJob {
   /** Dispatcher-set "high priority" flag shown as a stand-out icon on the dispatch board. Distinct from `priority` above (route order). */
   isHighPriority: boolean;
   contractId: string | null;
+  /** Snow: which contract cap this job counts toward (null = inches). */
+  snowCapKind?: "inches" | "salt" | null;
   schedule: string | null;
   scheduleDays: string[];
   packageName: string | null;

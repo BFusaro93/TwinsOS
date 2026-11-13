@@ -234,6 +234,14 @@ export interface CRMContract {
   snowOutsideDates: SnowOutsideDates;
   /** bill_per_event: what a Monthly Flat Rate snow job bills per storm outside the dates (cents); null = not set. */
   snowOutsideEventPriceCents: number | null;
+  /** Snow caps: inches / salt applications the flat price covers per period; null = no cap. */
+  snowInchCap: number | null;
+  snowSaltCap: number | null;
+  snowCapReset: "contract_year" | "monthly";
+  snowOverageDescription: string | null;
+  /** What each inch / salt over its cap bills (cents); null = not set. */
+  snowOveragePerInchCents: number | null;
+  snowOveragePerSaltCents: number | null;
   source: string | null;
   salesRepId: string | null;
   saleType: "new" | "renewal" | null;

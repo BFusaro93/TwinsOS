@@ -622,6 +622,7 @@ function mapJobFull(row: any): CRMJob {
   return {
     ...mapJob(row),
     contractId: row.contract_id ?? null,
+    snowCapKind: row.snow_cap_kind === "salt" || row.snow_cap_kind === "inches" ? row.snow_cap_kind : null,
     schedule: row.schedule ?? null,
     scheduleDays: row.schedule_days ?? [],
     packageName: row.package_name ?? null,

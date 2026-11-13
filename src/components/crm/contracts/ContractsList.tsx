@@ -61,6 +61,7 @@ import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
+import { SnowCapsSection, type SnowCapJob, type SnowCapsFields } from "@/components/crm/contracts/SnowCapsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -275,7 +276,7 @@ function ContractTemplateBar({
 
 // ── contract details tab ──────────────────────────────────────────────────────
 
-interface DetailsState {
+interface DetailsState extends SnowCapsFields {
   clientId: string;
   title: string;
   startDate: string;
@@ -323,6 +324,8 @@ function ContractDetailsTab({
   billingAnchorDate,
   hadMonthOverrides,
   coversSnow,
+  contractId,
+  snowJobs,
 }: {
   state: DetailsState;
   onChange: (patch: Partial<DetailsState>) => void;
@@ -337,6 +340,9 @@ function ContractDetailsTab({
   hadMonthOverrides?: boolean;
   /** The contract covers snow (a linked snow job) — shows the storms-outside-dates setting. */
   coversSnow?: boolean;
+  contractId?: string;
+  /** The contract's linked snow jobs, for tagging what each counts toward (inch vs salt cap). */
+  snowJobs?: SnowCapJob[];
 }) {
   const isMonthly = state.billingFrequency === "monthly";
   const subMonthly = state.billingFrequency === "weekly" || state.billingFrequency === "biweekly";
@@ -471,6 +477,15 @@ function ContractDetailsTab({
           )}
         </Section>
       </div>
+
+      {(coversSnow || state.snowInchCap != null || state.snowSaltCap != null) && (
+        <SnowCapsSection
+          state={state}
+          onChange={onChange}
+          contractId={contractId}
+          snowJobs={snowJobs ?? []}
+        />
+      )}
 
       <Section label="Invoice Description">
         <FieldRow label="Line Item">
@@ -1307,6 +1322,12 @@ export function ContractDialog({
     includeSubProperties: contract?.includeSubProperties ?? true,
     snowOutsideDates: contract?.snowOutsideDates ?? "bill_per_event",
     snowOutsideEventPriceCents: contract?.snowOutsideEventPriceCents ?? null,
+    snowInchCap: contract?.snowInchCap ?? null,
+    snowSaltCap: contract?.snowSaltCap ?? null,
+    snowCapReset: contract?.snowCapReset ?? "contract_year",
+    snowOverageDescription: contract?.snowOverageDescription ?? "",
+    snowOveragePerInchCents: contract?.snowOveragePerInchCents ?? null,
+    snowOveragePerSaltCents: contract?.snowOveragePerSaltCents ?? null,
   });
 
   const [source, setSource] = useState(contract?.source ?? "");
@@ -1422,6 +1443,12 @@ export function ContractDialog({
             include_sub_properties: details.includeSubProperties,
             snow_outside_dates: details.snowOutsideDates,
             snow_outside_event_price_cents: details.snowOutsideEventPriceCents,
+            snow_inch_cap: details.snowInchCap,
+            snow_salt_cap: details.snowSaltCap,
+            snow_cap_reset: details.snowCapReset,
+            snow_overage_description: details.snowOverageDescription.trim() || null,
+            snow_overage_per_inch_cents: details.snowOveragePerInchCents,
+            snow_overage_per_salt_cents: details.snowOveragePerSaltCents,
             source: source || null,
             sales_rep_id: salesRepId || null,
             sale_type: saleType,
@@ -1544,6 +1571,14 @@ export function ContractDialog({
               lastBilledDate={contract?.lastBilledDate}
               billingAnchorDate={contract?.billingAnchorDate}
               coversSnow={(linkedJobs ?? []).some((j) => j.jobType === "snow")}
+              contractId={contract?.id}
+              snowJobs={(linkedJobs ?? [])
+                .filter((j) => j.jobType === "snow" && j.invoiceType === "monthly_flat_rate")
+                .map((j) => ({
+                  id: j.id,
+                  label: j.services?.[0]?.serviceName ?? j.invoiceDescription ?? "Snow job",
+                  kind: j.snowCapKind === "salt" ? ("salt" as const) : ("inches" as const),
+                }))}
               hadMonthOverrides={
                 !!contract &&
                 normalizeBillingFrequency(contract.billingFrequency) !== "monthly" &&

@@ -44,6 +44,12 @@ function mapContract(row: any): CRMContract {
     includeSubProperties: row.include_sub_properties ?? true,
     snowOutsideDates: row.snow_outside_dates === "included" || row.snow_outside_dates === "dont_service" ? row.snow_outside_dates : "bill_per_event",
     snowOutsideEventPriceCents: row.snow_outside_event_price_cents ?? null,
+    snowInchCap: row.snow_inch_cap != null ? Number(row.snow_inch_cap) : null,
+    snowSaltCap: row.snow_salt_cap ?? null,
+    snowCapReset: row.snow_cap_reset === "monthly" ? "monthly" : "contract_year",
+    snowOverageDescription: row.snow_overage_description ?? null,
+    snowOveragePerInchCents: row.snow_overage_per_inch_cents ?? null,
+    snowOveragePerSaltCents: row.snow_overage_per_salt_cents ?? null,
     source: row.source ?? null,
     salesRepId: row.sales_rep_id ?? null,
     saleType: row.sale_type ?? null,
@@ -386,6 +392,13 @@ const CONTRACT_FINANCIAL_FIELDS = [
   // the per-storm price.
   "snow_outside_dates",
   "snow_outside_event_price_cents",
+  // Caps and overage prices change what a snow season costs the client.
+  "snow_inch_cap",
+  "snow_salt_cap",
+  "snow_cap_reset",
+  "snow_overage_description",
+  "snow_overage_per_inch_cents",
+  "snow_overage_per_salt_cents",
 ] as const;
 
 /** Stable, null-tolerant equality for contract field values (dates, numbers, jsonb). */

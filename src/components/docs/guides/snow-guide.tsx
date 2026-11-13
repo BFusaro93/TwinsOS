@@ -55,6 +55,7 @@ export function SnowGuide() {
           <TOCLink href="#board-tools">Filters, crews, route order, map, and weather</TOCLink>
           <TOCLink href="#worked-scenario">Worked scenario: a 6&quot; storm</TOCLink>
           <TOCLink href="#invoicing">Snow invoicing and the three rate types</TOCLink>
+          <TOCLink href="#contract-caps">Contract caps and overage (inches and salts)</TOCLink>
           <TOCLink href="#interval-billing">Interval billing (rate by inches)</TOCLink>
           <TOCLink href="#services-on-snow-jobs">Services on a snow job: one per job, and when their price counts</TOCLink>
           <TOCLink href="#why-separate">Why snow billing has its own screen</TOCLink>
@@ -482,6 +483,59 @@ export function SnowGuide() {
           charge — a morning push and an afternoon push during the same event are one line, priced
           off the storm&apos;s single deepest reading, not two separate charges. Per Push and
           Hourly jobs are the opposite: each visit prices and invoices on its own.
+        </p>
+      </Section>
+
+      <Section id="contract-caps" title="Contract caps and overage (inches and salts)">
+        <p>
+          A Monthly Flat Rate snow contract can include a <strong>cap</strong> — an{" "}
+          <strong>inch cap</strong> (for example 60 or 80 inches) and/or a <strong>salt cap</strong>{" "}
+          (for example 35 salt applications). The flat price covers snow work up to the cap; once it is
+          used up, further work bills as <strong>overage</strong> in Snow Invoicing instead. Open the
+          contract and use <strong>Snow Caps &amp; Overage</strong> (it appears once a snow job is linked):
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li><strong>Inch cap</strong> and <strong>Salt cap</strong> — either, both, or neither. Blank means no limit.</li>
+          <li>
+            <strong>Cap resets</strong> — <em>each contract year</em> (counted from the contract&apos;s start
+            date, so a contract starting Nov 1 resets every Nov 1) or <em>monthly</em> (each calendar month).
+          </li>
+          <li><strong>Overage description</strong> — the text on the overage invoice line (default &quot;Snow overage&quot;).</li>
+          <li>
+            <strong>Overage per inch</strong> / <strong>per salt</strong> — what each inch or salt over its cap
+            bills. If a cap is set without its overage price, the overage visits stay in the queue at $0 with a
+            warning telling you to set one.
+          </li>
+          <li>
+            <strong>Linked snow jobs count toward</strong> — tag each linked job as counting toward the
+            <em> inch cap</em> (plowing, the default) or the <em>salt cap</em> (salting).
+          </li>
+        </ul>
+        <p>
+          <strong>How work is counted.</strong> Only completed visits count — skipped and cancelled ones don&apos;t
+          — and only storms the contract covers (storms outside its dates follow the &quot;Storms outside the
+          contract dates&quot; setting and are never counted). <em>Inches</em> count once per storm, on its deepest
+          recorded depth across the contract&apos;s plowing visits (the same &quot;priced once on its deepest
+          reading&quot; rule as Per Event, Per Inch); a storm with no depth recorded counts 0, so enter depths.
+          Storms add up through the period in date order. <em>Salts</em> count one per completed salting visit —
+          a second push that salts again is a second application, an extra crew on the same stop is not — and
+          are counted per salt job, so one property&apos;s salting doesn&apos;t use up another&apos;s cap.
+        </p>
+        <p>
+          <strong>What bills.</strong> Visits inside the cap stay covered by the contract. A storm that crosses the
+          inch cap bills only the inches beyond it (an 8&quot; storm that takes the season from 76&quot; to 84&quot; of an
+          80&quot; cap bills 4&quot; × the overage price per inch), as one line on the storm&apos;s first visit; later
+          storms bill their full depth. A salt past the cap bills its overage price on its own visit. These
+          appear in Snow Invoicing with an <strong>Overage</strong> tag and the overage description, as their own
+          invoice separate from the contract&apos;s invoice. Generating twice never double-bills, and voiding an
+          overage invoice puts its visits back in the queue.
+        </p>
+        <p>
+          <strong>Seeing usage.</strong> The contract shows the period&apos;s usage (&quot;42 of 80 in used&quot;,
+          &quot;28 of 35 salts used&quot;) and, on the Snow Jobs board, a stop whose cap is already used up shows an{" "}
+          <strong>Overage</strong> chip so the crew and dispatcher know it will bill separately. Caps are counted
+          from the visits, not stored, so correcting a depth or a completed visit updates the usage immediately —
+          but a charge already invoiced is not changed afterwards.
         </p>
       </Section>
 
