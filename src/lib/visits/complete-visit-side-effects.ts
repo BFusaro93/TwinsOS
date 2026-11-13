@@ -145,6 +145,7 @@ type JobRow = {
   invoice_description: string | null;
   rate_cents: number | null;
   po_number: string | null;
+  invoice_terms: string | null;
   sales_rep_id: string | null;
   crm_job_services: JobServiceRow[] | null;
   clients: { invoice_frequency: string | null; default_tax_rate_bps: number | null; default_terms: string | null; is_taxable: boolean | null } | null;
@@ -204,7 +205,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 1. Parent-job bookkeeping ─────────────────────────────────────────────
   const { data: jobData } = await supabase
     .from("crm_jobs")
-    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_id, service_name, qty, rate_cents, max_visits, is_taxable, invoice_desc, included, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
+    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, invoice_terms, sales_rep_id, crm_job_services(id, service_id, service_name, qty, rate_cents, max_visits, is_taxable, invoice_desc, included, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
     .eq("id", visit.job_id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -735,7 +736,7 @@ export async function applyVisitCompletionSideEffects(
               .eq("id", orgId)
               .maybeSingle();
             const invoiceTerms = resolveInvoiceTerms(
-              j.clients?.default_terms,
+              j.invoice_terms || j.clients?.default_terms,
               (orgTermsRow as { default_billing_terms: string | null } | null)?.default_billing_terms,
             );
             // A batch draft collects the whole period, so it is dated the

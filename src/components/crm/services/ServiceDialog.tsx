@@ -81,6 +81,7 @@ interface FormState {
   showInFieldUpsells: boolean;
   upsellPitch: string;
   trackChemicals: boolean;
+  invoiceTimeOnLines: boolean;
   invoiceDescription: string;
   descriptionOnEstimate: string;
   rateMatrixField: string;
@@ -103,7 +104,7 @@ function emptyForm(): FormState {
     targetRateCents: "", targetRateWithDriveCents: "",
     taskColor: "#3B82F6",
     isActive: true, showInSnowDispatch: false,
-    onlyForEstimates: false, trackChemicals: false,
+    onlyForEstimates: false, trackChemicals: false, invoiceTimeOnLines: false,
     showInFieldUpsells: false, upsellPitch: "",
     invoiceDescription: "", descriptionOnEstimate: "",
     rateMatrixField: "", rateMatrixCalc: "qty_x_rate_x_visits",
@@ -135,6 +136,7 @@ function serviceToForm(s: CRMService): FormState {
     showInFieldUpsells: s.showInFieldUpsells,
     upsellPitch: s.upsellPitch ?? "",
     trackChemicals: s.trackChemicals,
+    invoiceTimeOnLines: s.invoiceTimeOnLines ?? false,
     invoiceDescription: s.invoiceDescription ?? "",
     descriptionOnEstimate: s.descriptionOnEstimate ?? "",
     rateMatrixField: s.rateMatrixField ?? "",
@@ -828,6 +830,7 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
       show_in_field_upsells: form.showInFieldUpsells,
       upsell_pitch: form.upsellPitch.trim() || null,
       track_chemicals: form.trackChemicals,
+      invoice_time_on_lines: form.invoiceTimeOnLines,
       invoice_description: form.invoiceDescription.trim() || null,
       description_on_estimate: form.descriptionOnEstimate.trim() || null,
       rate_matrix_field: form.rateMatrixField || null,
@@ -1110,6 +1113,7 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
                 { key: "showInFieldUpsells", label: "Show in Field Upsells" },
                 { key: "onlyForEstimates",   label: "Only for Estimates" },
                 { key: "trackChemicals",     label: "Track Chemicals" },
+                { key: "invoiceTimeOnLines", label: "Show visit times on snow invoice lines" },
               ] as { key: keyof FormState; label: string }[]).map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
                   <Checkbox

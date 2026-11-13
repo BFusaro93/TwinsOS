@@ -13,6 +13,10 @@ export interface SnowRateTier {
   maxInches: number | null;
   rateCents: number | null;
   ratePerInchCents: number | null;
+  /** 'hourly' = rateCents is an HOURLY rate (billed on on-site hours); else a flat / per-inch range. */
+  billAs: "flat" | "hourly";
+  /** Planned on-site hours for an hourly range (informational). */
+  budgetedHours: number | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,6 +29,8 @@ function mapTier(row: any): SnowRateTier {
     maxInches: row.max_inches != null ? Number(row.max_inches) : null,
     rateCents: row.rate_cents ?? null,
     ratePerInchCents: row.rate_per_inch_cents ?? null,
+    billAs: row.bill_as === "hourly" ? "hourly" : "flat",
+    budgetedHours: row.budgeted_hours != null ? Number(row.budgeted_hours) : null,
   };
 }
 
@@ -77,6 +83,8 @@ export interface TierInput {
   maxInches: number | null;
   rateCents: number | null;
   ratePerInchCents: number | null;
+  billAs?: "flat" | "hourly";
+  budgetedHours?: number | null;
 }
 
 /** Replaces a job's entire tier set in one call — simplest consistent model
@@ -116,6 +124,8 @@ export function useSaveSnowRateTiers() {
             max_inches: t.maxInches,
             rate_cents: t.rateCents,
             rate_per_inch_cents: t.ratePerInchCents,
+            bill_as: t.billAs ?? "flat",
+            budgeted_hours: t.billAs === "hourly" ? t.budgetedHours ?? null : null,
           }))
         );
         if (insErr) throw insErr;

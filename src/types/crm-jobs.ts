@@ -28,6 +28,8 @@ export interface CRMService {
   showInFieldUpsells: boolean;
   upsellPitch: string | null;
   trackChemicals: boolean;
+  /** Snow: append the visit's start–end clock times to this service's invoice line. */
+  invoiceTimeOnLines?: boolean;
   invoiceDescription: string | null;
   descriptionOnEstimate: string | null;
   callScriptNotes: string | null;
@@ -94,6 +96,8 @@ export interface CRMJobService {
   timeEnd: string | null;
   included: boolean;
   sortOrder: number;
+  /** From crm_services.invoice_time_on_lines (snow invoicing). */
+  serviceInvoiceTimeOnLines?: boolean;
   serviceInvoiceDescription: string | null; // from crm_services.invoice_description, for the job-level invoice-desc fallback preview
   /** Days that must elapse after this service's visit completes before the next package-sequenced service is due, if this row came from a Package. */
   minDays: number | null;
@@ -185,6 +189,8 @@ export interface CRMJob {
   source: string | null;
   paymentType: string | null;
   poNumber: string | null;
+  /** Job-level invoice terms override (client terms format); null = use the client's default terms. */
+  invoiceTerms?: string | null;
   dateSold: string | null;
   whenToInvoice: string | null;
   invoiceSeparately: boolean;
