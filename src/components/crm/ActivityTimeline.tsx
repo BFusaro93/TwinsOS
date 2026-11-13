@@ -13,6 +13,7 @@ import {
   Zap, MessageSquare, Plus, Ticket,
 } from "lucide-react";
 import type { ClientActivity } from "@/types/crm";
+import { SentEmailDialog, type SentEmailSummary } from "@/components/crm/email-activity/SentEmailDialog";
 
 const TYPE_META: Record<string, { icon: React.ElementType; color: string; label: string }> = {
   note:      { icon: MessageSquare, color: "bg-muted text-slate-600 dark:text-neutral-400",    label: "Note" },
@@ -67,8 +68,10 @@ function ActivityRow({
   onPaymentClick,
   onInvoiceClick,
   onJobClick,
+  onEmailClick,
 }: {
   item: ClientActivity;
+  onEmailClick?: (email: SentEmailSummary) => void;
   onTicketClick?: (id: string) => void;
   onPaymentClick?: (id: string) => void;
   onInvoiceClick?: (id: string) => void;
@@ -92,15 +95,20 @@ function ActivityRow({
   // Visits tab instead of Overview, since that's the row this entry is about.
   const isVisitCompletionEntry = item.activityType === "job" && !!item.subject?.startsWith("Visit completed");
 
+  // Email rows open the sent message (rows logged before bodies were kept show
+  // an explanatory empty state). Tickets keep their own click-through.
+  const isEmailEntry = item.activityType === "email" && !isTicketEntry && !!onEmailClick;
+
   function handleClick() {
-    if (isTicketEntry && onTicketClick) onTicketClick(item.refId!);
+    if (isEmailEntry) onEmailClick!({ id: item.id, subject: item.subject, sentTo: item.sentTo, occurredAt: item.occurredAt, summary: item.body });
+    else if (isTicketEntry && onTicketClick) onTicketClick(item.refId!);
     else if (isPaymentEntry && onPaymentClick) onPaymentClick(item.refId!);
     else if (isInvoiceEntry && onInvoiceClick) onInvoiceClick(item.refId!);
     else if (isJobEntry && onJobClick) onJobClick(item.refId!, { openVisitsTab: isVisitCompletionEntry });
     else if (href) router.push(href);
   }
 
-  const isClickable = (isTicketEntry && !!onTicketClick) || (isPaymentEntry && !!onPaymentClick)
+  const isClickable = isEmailEntry || (isTicketEntry && !!onTicketClick) || (isPaymentEntry && !!onPaymentClick)
     || (isInvoiceEntry && !!onInvoiceClick) || (isJobEntry && !!onJobClick) || !!href;
 
   return (
@@ -164,6 +172,7 @@ export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick, onIn
   const { mutateAsync: addNote, isPending } = useAddClientNote();
   const [noteText, setNoteText] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
+  const [viewingEmail, setViewingEmail] = useState<SentEmailSummary | null>(null);
 
   async function handleAddNote() {
     const body = noteText.trim();
@@ -246,11 +255,13 @@ export function ActivityTimeline({ clientId, onTicketClick, onPaymentClick, onIn
                 onPaymentClick={onPaymentClick}
                 onInvoiceClick={onInvoiceClick}
                 onJobClick={onJobClick}
+                onEmailClick={setViewingEmail}
               />
             ))}
           </div>
         )}
       </div>
+      <SentEmailDialog email={viewingEmail} onClose={() => setViewingEmail(null)} />
     </div>
   );
 }
