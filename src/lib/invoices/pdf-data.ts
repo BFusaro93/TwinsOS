@@ -1,4 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
+import { resolveDefaultInvoicePdfTemplate } from "@/lib/invoices/default-pdf-template";
 import { createElement } from "react";
 import { InvoiceDocument, InvoiceDocumentMulti } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import { fetchOrgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
@@ -59,17 +60,7 @@ async function buildInvoicePDFData(
   // Invoice's own pdf_template_id wins; otherwise fall back to the org's default template.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let template: any = inv.crm_invoice_pdf_templates ?? null;
-  if (!template) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: defaultTemplate } = await (supabase as any)
-      .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes")
-      .eq("org_id", inv.org_id)
-      .eq("is_default", true)
-      .is("deleted_at", null)
-      .maybeSingle();
-    template = defaultTemplate ?? null;
-  }
+  if (!template) template = await resolveDefaultInvoicePdfTemplate(supabase, inv.org_id);
   const layoutKey: InvoicePDFLayoutKey = (template?.layout_key as InvoicePDFLayoutKey) ?? "default";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
