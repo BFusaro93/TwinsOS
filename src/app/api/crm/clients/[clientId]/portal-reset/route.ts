@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("portal-reset");
 
@@ -19,6 +20,8 @@ export async function DELETE(
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Staff impersonating an org act on that org, not their own (profiles.org_id).
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Granular per-role permission (shared with portal-invite) — admins
   // always pass, otherwise gated by crm_roles.permissions.client_reset_portal_password.

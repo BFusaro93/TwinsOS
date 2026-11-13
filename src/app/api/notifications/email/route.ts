@@ -19,6 +19,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM_EQUIPT, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { sendPushToUser } from "@/lib/notifications/send-push";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 type NotifType =
   | "wo_created"
@@ -90,6 +91,8 @@ export async function POST(request: Request) {
     .select("org_id, name, role")
     .eq("id", user.id)
     .single();
+  // Staff impersonating an org act on that org, not their own (profiles.org_id).
+  if (callerProfile) callerProfile.org_id = (await getEffectiveOrgId(userClient)) ?? callerProfile.org_id;
   if (!callerProfile) {
     return NextResponse.json({ error: "Profile not found" }, { status: 403 });
   }

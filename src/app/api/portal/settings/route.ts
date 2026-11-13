@@ -2,13 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 async function getOrgId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-  return profile?.org_id ?? null;
+  // Staff impersonating an org act on that org (profiles.org_id is their own).
+  return (await getEffectiveOrgId(supabase)) ?? profile?.org_id ?? null;
 }
 
 const optText = (max: number) => z.string().max(max).nullish();
