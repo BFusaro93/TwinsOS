@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/api/auth";
 import { notifyInjuryReported } from "@/lib/injury-notify";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -24,6 +25,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile?.org_id) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  // Staff impersonating an org act on that org, not their own (profiles.org_id).
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   const db = adminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

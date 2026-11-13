@@ -16,6 +16,7 @@ import type { BlockType } from "@/types/crm-documents";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 export async function POST(
   req: NextRequest,
@@ -33,6 +34,8 @@ export async function POST(
     .select("org_id")
     .eq("id", user.id)
     .single();
+  // Staff impersonating an org act on that org, not their own (profiles.org_id).
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile?.org_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   if (!(await hasAnySettingsPermission(supabase, ["document_template_edit", "document_template_add"]))) {

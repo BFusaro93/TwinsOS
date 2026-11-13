@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { notifyMentions } from "@/lib/comment-mention-notify";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /**
  * POST /api/comments/mention-notify
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
   if (!callerProfile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  // Staff impersonating an org act on that org, not their own (profiles.org_id).
+  if (callerProfile) callerProfile.org_id = (await getEffectiveOrgId(supabase)) ?? callerProfile.org_id;
 
   let body: {
     recordType?: string;

@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { formatCurrency } from "@/lib/utils";
 import { EMAIL_FROM, EMAIL_FROM_EQUIPT, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 // `linkPath` has an `{id}` slot the deep link is built from — list pages that
 // only support auto-opening a record via `?id=` (po/requisitions, po/orders)
@@ -80,6 +81,8 @@ export async function POST(request: Request) {
     .select("org_id")
     .eq("id", user.id)
     .single();
+  // Staff impersonating an org act on that org, not their own (profiles.org_id).
+  if (callerProfile) callerProfile.org_id = (await getEffectiveOrgId(supabase)) ?? callerProfile.org_id;
   if (!callerProfile || entity.org_id !== callerProfile.org_id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
