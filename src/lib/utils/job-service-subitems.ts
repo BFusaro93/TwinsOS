@@ -11,6 +11,8 @@ export function mapServiceSubitems(raw: unknown): CRMJobServiceSubitem[] {
       name: r.name as string,
       qty: Number(r.qty ?? 1),
       sortOrder: (r.sort_order as number) ?? 0,
+      rateCents: typeof r.rate_cents === "number" ? r.rate_cents : null,
+      printOnInvoice: r.print_on_invoice === true,
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }

@@ -1013,9 +1013,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               Edit Estimate (#{estimate.estimateNumber})
               <span className="ml-2 text-slate-400 dark:text-neutral-500 text-sm font-normal">—</span>
               <span className="ml-2">
-                <Badge variant="outline" className={cn("text-[10px] border-transparent", stageColor(effectiveStage))}>
-                  {stageName(effectiveStage)}
-                </Badge>
+                {effectiveStage === "accepted" && estimateJobs.length > 0 ? (
+                  <Badge variant="outline" className="text-[10px] border-transparent bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                    Converted
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className={cn("text-[10px] border-transparent", stageColor(effectiveStage))}>
+                    {stageName(effectiveStage)}
+                  </Badge>
+                )}
               </span>
               {estimate.reason && (effectiveStage === "accepted" || effectiveStage === "lost") && (
                 <span className="ml-2 text-xs text-muted-foreground font-normal">

@@ -2063,6 +2063,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Can I hide a line on an invoice without deleting it?",
+        a: "Yes. Hover the line on the invoice and click the eye icon to hide it from the customer. Its amount rolls into the nearest visible line above it (or below, if none is above), so the printed rows still add up to the Subtotal. The line stays on the invoice with its amount, tax, visit and product links, so totals and accounting sync don't change, and the job and visit are untouched. It applies to the PDF, the emailed invoice and the online invoice page; your own screen still shows every line, dimmed. Put a dump run directly under the service it belongs to before hiding it. Prefer this over deleting: deleting a visit's only line can make the visit look unbilled, and deleting a product line sends it back to pending. A locked invoice can't be changed until unlocked.",
+      },
+      {
+        q: "How do I show an estimate's sub-services or materials as their own rows on the invoice?",
+        a: "On the estimate, click the On invoice button beside the sub-item's name (it reads Not on invoice until you turn it on). When the estimate is converted to a one-time, waiting-list or recurring job, the invoice lists that sub-item as its own row (quantity x rate) under the service, and the amount comes out of the service row so the total doesn't change. Sub-items left off stay inside the service price. The setting is captured at conversion, so changing it afterwards doesn't affect an existing job. To change it on a job later, open the job and click the On invoice / Not on invoice tag beside the sub-item; it applies to invoices created from then on. On a recurring job each visit's invoice lists the sub-item's per-visit share (its total divided by the line's visits); to charge a sub-item on every visit, set its Visits to the line's visits. Package jobs always bill one service line. You can still hide any invoice row with the eye icon.",
+      },
+      {
         q: "Can I edit a void invoice?",
         a: "No. A void invoice is read-only: its lines, amounts, dates, terms and notes can't be changed, and it shows nothing due. You can still print, lock or delete it. To bill the work again, use Duplicate as draft.",
       },
@@ -2232,7 +2240,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Is estimate equipment cost per visit?",
-        a: "Yes. Enter what one visit uses; the line's equipment cost is that times its visits. Sub-items are for the whole line.",
+        a: "Yes. Enter what one visit uses; the line's equipment cost is that times its visits. A sub-item has its own Visits (default 1, charged once for the whole line); its total is Qty x Rate x Visits. Use 1 or the line's visits; any other number shows a warning because a sub-item can't be limited to some visits, so its price is spread across all of them.",
       },
       {
         q: "Why did the man-hour calculator's Adjust Cost change my line cost?",
@@ -2480,7 +2488,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What are sub-items on a service bundle or estimate line?",
-        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the On estimate / Hidden button beside a sub-item's name controls whether it is printed under the line for the client. On the PDF a hidden sub-item's amount is included in the line's total, and section subtotals include every priced sub-item, so they add up to the estimate total. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
+        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the On estimate / Hidden button beside a sub-item's name controls whether it is printed under the line for the client. On the PDF a hidden sub-item's amount is included in the line's total, and section subtotals include every priced sub-item, so they add up to the estimate total. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; by default they never bill separately and don't change inventory. On an estimate, the On invoice / Not on invoice button beside a sub-item lets you print it as its own row on the invoice for one-time and waiting-list jobs (its amount comes out of the service row, so the total never changes); recurring and package jobs keep a single service line.",
       },
       {
         q: "How do I add a service from my catalog as a sub-item on an estimate line?",
@@ -2788,7 +2796,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What's the difference between an estimate's stage and its approval status?",
-        a: "Stage (Draft/Quote/Sent/Accepted/Lost/Invoiced) tracks where the estimate sits in the sales process. Approval Status (Not Required/Pending/Approved/Rejected) is a separate internal sign-off gate — an estimate can be stuck 'Pending' approval even though its stage already says 'Sent', which blocks it from actually going out.",
+        a: "Stage (Draft/Quote/Sent/Accepted/Lost/Invoiced) tracks where the estimate sits in the sales process. Approval Status (Not Required/Pending/Approved/Rejected) is a separate internal sign-off gate — an estimate can be stuck 'Pending' approval even though its stage already says 'Sent', which blocks it from actually going out. Once an Accepted estimate has been converted to a job, its pill reads Converted (the stage itself stays Accepted).",
       },
       {
         q: "Why can't I pick a client as a parent account?",

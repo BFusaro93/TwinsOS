@@ -1,3 +1,4 @@
+import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
 import { NextRequest, NextResponse } from "next/server";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { safeHexColor } from "@/lib/utils/safe-color";
@@ -271,7 +272,7 @@ export async function POST(req: NextRequest) {
   );
   const orgNameHtml = escapeHtml(orgName);
 
-  const lineItems: { name: string | null; description: string; qty: number; rate_cents: number; total_cents: number; discount_cents?: number | null; sort_order: number }[] =
+  const lineItems: { name: string | null; description: string; qty: number; rate_cents: number; total_cents: number; discount_cents?: number | null; sort_order: number; hide_on_print?: boolean | null }[] =
     (inv.crm_invoice_line_items ?? []).sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order);
 
   const clientDisplayName = (inv.clients?.display_name as string) ?? "";
@@ -382,7 +383,17 @@ export async function POST(req: NextRequest) {
       ? `<img src="${escapeHtml(invoiceLogoUrl)}" alt="${orgNameHtml}" style="max-height:48px" />`
       : "",
     // Was always "" while the Documents picker and preview offered it.
-    "[invoicegrid]":        buildInvoiceGridHtml(lineItems),
+    "[invoicegrid]":        buildInvoiceGridHtml(
+      rollUpHiddenLines(lineItems.map((li) => ({
+        name: li.name,
+        description: li.description ?? "",
+        qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
+        rateCents: li.rate_cents ?? 0,
+        totalCents: li.total_cents ?? 0,
+        discountCents: li.discount_cents ?? 0,
+        hideOnPrint: !!li.hide_on_print,
+      }))).map((l) => ({ name: l.name, description: l.description, qty: l.qty, total_cents: l.totalCents, discount_cents: l.discountCents })),
+    ),
   };
 
   const resolvedSubject = resolveSubjectMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
@@ -419,14 +430,15 @@ export async function POST(req: NextRequest) {
 
   // Render the invoice PDF for attachment — same pipeline as the "Print"/
   // "Download PDF" buttons (src/app/api/crm/invoices/[id]/pdf/route.ts).
-  const pdfLineItems: InvoicePDFLineItem[] = lineItems.map((li) => ({
+  const pdfLineItems: InvoicePDFLineItem[] = rollUpHiddenLines(lineItems.map((li) => ({
     name: li.name,
     description: li.description ?? "",
     qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
     rateCents: li.rate_cents ?? 0,
     totalCents: li.total_cents ?? 0,
     discountCents: li.discount_cents ?? 0,
-  }));
+    hideOnPrint: !!li.hide_on_print,
+  })));
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
   const statement = (
