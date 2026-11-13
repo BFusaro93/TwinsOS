@@ -122,6 +122,8 @@ interface ServiceRow {
   /** True once the user has typed a date into this row — the header Start
    *  Date then stops re-syncing it. */
   startDateEdited: boolean;
+  /** Recurring only: total visits this service may get. Blank = no limit (repeats on the schedule). */
+  maxVisits?: string;
   /** Per-service notes — crew note for this service's visits, its invoice line wording, and an office-only note. */
   jobNote?: string;
   invoiceDesc?: string;
@@ -703,6 +705,13 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     }
     if (jobType === "package" && !packageId) { toast.error("Package is required for package jobs"); return; }
     if (services.some((s) => !s.serviceName)) { toast.error("Select a service for each row"); return; }
+    if (jobType === "recurring" && services.some((s) => {
+      const raw = (s.maxVisits ?? "").trim();
+      return raw !== "" && (!Number.isInteger(Number(raw)) || Number(raw) < 1);
+    })) {
+      toast.error("Visits must be a whole number of 1 or more, or left blank for no limit.");
+      return;
+    }
     if (rf.isRequired("crew") && !crewId) { toast.error("Crew is required"); return; }
     if (rf.isRequired("sales_rep") && !salesRepId) { toast.error("Sales Rep is required"); return; }
     if (jobType === "waiting_list" && startDate && completeByDate && completeByDate < startDate) {
@@ -788,6 +797,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           included: true,
           sortOrder: idx,
           minDays: s.minDays,
+          maxVisits: jobType === "recurring" && (s.maxVisits ?? "").trim() !== "" ? Number(s.maxVisits) : null,
           jobNote: richOrNull(s.jobNote ?? ""),
           invoiceDesc: s.invoiceDesc?.trim() || null,
           internalNote: richOrNull(s.internalNote ?? ""),
@@ -1301,6 +1311,24 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
+                  {jobType === "recurring" && (
+                    <label className="flex items-center gap-2 border-t border-dashed px-3 py-1.5 text-xs text-slate-500 dark:text-neutral-400">
+                      Visits
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={svc.maxVisits ?? ""}
+                        onChange={(e) => updateService(i, { maxVisits: e.target.value })}
+                        placeholder="No limit"
+                        aria-label="Total visits for this service (blank for no limit)"
+                        className="h-7 w-24 text-xs"
+                      />
+                      <span className="font-normal text-slate-400 dark:text-neutral-500">
+                        Total visits for this service. Leave blank to repeat on the schedule until the End date.
+                      </span>
+                    </label>
+                  )}
                   <details className="border-t border-dashed px-3 py-1.5" open={!!(svc.jobNote || svc.invoiceDesc || svc.internalNote)}>
                     <summary className="cursor-pointer text-xs text-slate-500 dark:text-neutral-400">Service notes &amp; invoice description</summary>
                     <div className="mt-2 flex flex-col gap-3 pb-1">

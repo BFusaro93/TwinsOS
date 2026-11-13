@@ -241,6 +241,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [svcBHrs, setSvcBHrs] = useState("");
   const [svcTeamSize, setSvcTeamSize] = useState("1");
+  // Recurring jobs only: total visits the service may get. Blank = no limit.
+  const [svcMaxVisits, setSvcMaxVisits] = useState("");
   const [svcTreatedArea, setSvcTreatedArea] = useState("");
   const [svcJobNote, setSvcJobNote] = useState("");
   const [svcInvoiceDesc, setSvcInvoiceDesc] = useState("");
@@ -626,7 +628,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     }
   }
 
-  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null; teamSize?: number | null; treatedArea?: number | null; jobNote?: string | null; invoiceDesc?: string | null; internalNote?: string | null }) {
+  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null; teamSize?: number | null; maxVisits?: number | null; treatedArea?: number | null; jobNote?: string | null; invoiceDesc?: string | null; internalNote?: string | null }) {
     setEditingSvcId(s.id);
     setSvcJobNote(s.jobNote ?? "");
     setSvcInvoiceDesc(s.invoiceDesc ?? "");
@@ -637,6 +639,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     const crew = s.teamSize && s.teamSize > 0 ? s.teamSize : 1;
     setSvcBHrs(s.budgetedHours != null ? String(roundHours(s.budgetedHours * crew, 4)) : "0");
     setSvcTeamSize(String(crew));
+    setSvcMaxVisits(s.maxVisits != null ? String(s.maxVisits) : "");
     setSvcTreatedArea(s.treatedArea != null ? String(s.treatedArea) : "");
   }
 
@@ -644,6 +647,20 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     if (!editingSvcId) return;
     try {
       const prevSvc = services.find((x) => x.id === editingSvcId);
+      // Visit limit: blank = no limit; otherwise a whole number of at least 1.
+      let nextMaxVisits: number | null | undefined;
+      if (job?.jobType === "recurring") {
+        const raw = svcMaxVisits.trim();
+        if (raw === "") nextMaxVisits = null;
+        else {
+          const n = Number(raw);
+          if (!Number.isInteger(n) || n < 1) {
+            toast.error("Visits must be a whole number of 1 or more, or left blank for no limit.");
+            return;
+          }
+          nextMaxVisits = n;
+        }
+      }
       const nextJobNote = isBlankRich(svcJobNote) ? null : svcJobNote;
       await updateJobService.mutateAsync({
         id: editingSvcId,
@@ -653,6 +670,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           ...(svcRateLocked ? {} : { rate_cents: svcRate ? Math.round(parseFloat(svcRate) * 100) : null }),
           budgeted_hours: roundHours((parseFloat(svcBHrs) || 0) / Math.max(1, Math.floor(parseFloat(svcTeamSize)) || 1), 4),
           team_size: Math.max(1, Math.floor(parseFloat(svcTeamSize)) || 1),
+          ...(nextMaxVisits !== undefined ? { max_visits: nextMaxVisits } : {}),
           treated_area: parseFloat(svcTreatedArea) > 0 ? parseFloat(svcTreatedArea) : null,
           job_note: nextJobNote,
           invoice_desc: svcInvoiceDesc.trim() || null,
@@ -680,7 +698,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }
       setEditingSvcId(null);
-      toast.success("Service updated");
+      const raisedLimit =
+        nextMaxVisits !== undefined &&
+        (prevSvc?.maxVisits ?? null) !== nextMaxVisits &&
+        (nextMaxVisits === null || (prevSvc?.maxVisits ?? 0) < nextMaxVisits);
+      toast.success(raisedLimit ? "Service updated — press Generate Visits on the Visits tab to schedule the added visits" : "Service updated");
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Failed to update service"));
     }
@@ -1899,6 +1921,21 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 onChange={(e) => setSvcQty(e.target.value)}
                                 className="h-7 w-20 text-right text-sm ml-auto"
                               />
+                              {job.jobType === "recurring" && (
+                                <label className="mt-1 flex items-center justify-end gap-1 text-[10px] font-normal normal-case text-slate-500 dark:text-neutral-400" title="Total visits this service gets across the whole job. Leave blank for no limit (it repeats on the schedule).">
+                                  Visits
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={svcMaxVisits}
+                                    onChange={(e) => setSvcMaxVisits(e.target.value)}
+                                    placeholder="No limit"
+                                    aria-label="Total visits for this service (blank for no limit)"
+                                    className="h-6 w-16 text-right text-xs"
+                                  />
+                                </label>
+                              )}
                             </td>
                             <td className="px-2 py-2 text-right">
                               <Input
@@ -1933,7 +1970,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 <span className="block text-[10px] text-slate-400 dark:text-neutral-500">{s.teamSize} crew · {formatHours(s.budgetedHours)}h each</span>
                               ) : null}
                             </td>
-                            <td className="px-4 py-3 text-right tabular-nums">{s.qty ?? 1}</td>
+                            <td className="px-4 py-3 text-right tabular-nums">
+                              {s.qty ?? 1}
+                              {job.jobType === "recurring" && s.maxVisits != null && (
+                                <span className="block text-[10px] text-slate-400 dark:text-neutral-500">
+                                  limit {s.maxVisits} visit{s.maxVisits !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               {svcRateLocked
                                 ? <span className="text-xs text-slate-400 dark:text-neutral-500" title={snowRule?.note}>{s.rateCents ? `${formatCurrency(s.rateCents)} (not used)` : "Not used"}</span>
