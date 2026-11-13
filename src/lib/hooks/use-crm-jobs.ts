@@ -1798,6 +1798,7 @@ export function useCreateClientJob() {
           conflict_days: values.conflictDays,
           inch_trigger: values.inchTrigger ?? null,
           invoice_type: values.invoiceType || null,
+          snow_cap_kind: values.snowCapKind ?? null,
           rate_per_inch_cents: values.ratePerInchCents ?? null,
           asset_type: values.assetType || null,
           sales_rep_id: values.salesRepId || null,

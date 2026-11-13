@@ -512,8 +512,13 @@ export function SnowGuide() {
             warning telling you to set one.
           </li>
           <li>
-            <strong>Linked snow jobs count toward</strong> — tag each linked job as <em>plowing</em> (the
-            default; counts toward the inch, event and push caps) or <em>salting</em> (counts toward the salt cap).
+            <strong>Linked snow jobs count toward</strong> — each Monthly Flat Rate snow job is tagged{" "}
+            <em>plowing</em> (counts toward the inch, event and push caps) or <em>salting</em> (counts toward the
+            salt cap). Set it when you create the job (<strong>Counts toward contract caps as</strong>, which
+            defaults to salting when a service is named like salt or de-icing, otherwise plowing), on the job&apos;s
+            detail, or here on the contract. Several plowing jobs on one contract (say a truck plow and a shovel
+            crew) never double-count inches or events — each storm counts once, on its deepest reading — but
+            pushes are counted per job.
           </li>
         </ul>
         <p>

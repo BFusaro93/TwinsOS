@@ -268,6 +268,8 @@ export interface NewClientJobFormValues {
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
+  /** Monthly Flat Rate snow job: which contract cap it counts toward (null = plowing). */
+  snowCapKind?: "inches" | "salt" | null;
   ratePerInchCents: number | null;
   assetType: string | null;
   salesRepId: string | null;

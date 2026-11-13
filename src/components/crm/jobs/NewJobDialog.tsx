@@ -14,6 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SnowCapKindSelect, guessSnowCapKind } from "@/components/crm/jobs/SnowCapKindSelect";
+import type { SnowCapKind } from "@/lib/snow-caps";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import { DecimalInput } from "@/components/shared/DecimalInput";
@@ -218,6 +220,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
   // Snow-specific billing fields
   const [invoiceType, setInvoiceType] = useState<string | null>(null);
+  // null = not chosen: salting if a service reads like salt, else plowing.
+  const [snowCapKindChoice, setSnowCapKindChoice] = useState<SnowCapKind | null>(null);
   const [inchTrigger, setInchTrigger] = useState<number | null>(null);
   const [ratePerInchCents, setRatePerInchCents] = useState<number | null>(null);
   const [assetType, setAssetType] = useState("");
@@ -747,6 +751,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         conflictDays: [],
         inchTrigger: jobType === "snow" ? inchTrigger : null,
         invoiceType: jobType === "snow" ? invoiceType : null,
+        snowCapKind: jobType === "snow" && invoiceType === "monthly_flat_rate" ? (snowCapKindChoice ?? guessSnowCapKind(services.map((s) => s.serviceName))) : null,
         ratePerInchCents: jobType === "snow" ? ratePerInchCents : null,
         assetType: jobType === "snow" ? (assetType || null) : null,
         salesRepId,
@@ -1104,6 +1109,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       </SelectContent>
                     </Select>
                   </div>
+                  {invoiceType === "monthly_flat_rate" && (
+                    <SnowCapKindSelect
+                      value={snowCapKindChoice ?? guessSnowCapKind(services.map((s) => s.serviceName))}
+                      onChange={setSnowCapKindChoice}
+                    />
+                  )}
                 </div>
                 {(invoiceType === "per_event_per_inch" || invoiceType === "per_push_per_inch") && (
                   <SnowRateTiersDraftEditor
