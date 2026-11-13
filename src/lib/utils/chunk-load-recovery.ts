@@ -1,13 +1,22 @@
 const RELOAD_KEY = "chunk-reload-at";
 const RELOAD_WINDOW_MS = 30_000;
 
+/**
+ * A tab opened before a deploy asks webpack for a module id that only exists
+ * in the old build, so webpack's require does `modules[id].call(...)` on
+ * undefined. Chrome/Edge: "reading 'call'"; Safari: "evaluating 'e[o].call'".
+ */
+function isStaleWebpackModuleError(text: string): boolean {
+  return /reading 'call'|evaluating '\w+\[\w+\]\.call'/.test(text);
+}
+
 /** True when the error is a stale-deploy "Loading chunk N failed" failure. */
 export function isChunkLoadError(error: unknown): boolean {
   const e = error as { name?: string; message?: string } | null;
   const text = `${e?.name ?? ""} ${e?.message ?? ""}`;
   return /ChunkLoadError|Loading chunk [\w-]+ failed|Failed to fetch dynamically imported module|error loading dynamically imported module/i.test(
     text,
-  );
+  ) || isStaleWebpackModuleError(text);
 }
 
 /**
@@ -27,4 +36,16 @@ export function reloadOnceForChunkError(error: unknown): boolean {
   }
   window.location.reload();
   return true;
+}
+
+/** Window-level net for rejections/errors that never reach a React boundary. */
+export function installChunkLoadRecovery(): () => void {
+  const onRejection = (e: PromiseRejectionEvent) => void reloadOnceForChunkError(e.reason);
+  const onError = (e: ErrorEvent) => void reloadOnceForChunkError(e.error);
+  window.addEventListener("unhandledrejection", onRejection);
+  window.addEventListener("error", onError);
+  return () => {
+    window.removeEventListener("unhandledrejection", onRejection);
+    window.removeEventListener("error", onError);
+  };
 }
