@@ -66,6 +66,7 @@ import {
   useLineItemSubitems,
   useDeleteSubitem,
   useToggleSubitemPrint,
+  useUpsertSubitem,
   type LineItemSubitem,
 } from "@/lib/hooks/use-line-item-subitems";
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
@@ -141,11 +142,92 @@ const STATUS_COLOR: Record<LineItemStatus, string> = {
 
 // ── sub-item rows ─────────────────────────────────────────────────────────────
 
-function SubitemRows({ lineItemId, onAddClick, readOnly = false }: { lineItemId: string; onAddClick: () => void; readOnly?: boolean }) {
+/** Sub-item number cell: edits locally, saves once on blur/Enter (not per keystroke). Read-only renders plain text. */
+function SubitemNumCell({
+  value,
+  display,
+  onCommit,
+  readOnly,
+  title,
+  step,
+  min = 0,
+}: {
+  value: number;
+  display: string;
+  onCommit: (v: number) => Promise<void> | void;
+  readOnly: boolean;
+  title?: string;
+  step?: number;
+  min?: number;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  if (readOnly) return <span title={title}>{display}</span>;
+  function commit() {
+    const raw = draft;
+    setDraft(null);
+    if (raw === null) return;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < min || n === value) return;
+    void onCommit(n);
+  }
+  return (
+    <input
+      type="number"
+      value={draft ?? value}
+      step={step ?? "any"}
+      min={min}
+      title={title}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+      className="w-full rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none"
+    />
+  );
+}
+
+/** A sub-item's Visits should be 1 (once, whole line) or the line's visits (every visit); anything else spreads unevenly. */
+export function subitemVisitsMismatch(subVisits: number, parentVisits: number): boolean {
+  return parentVisits > 1 && subVisits !== 1 && subVisits !== parentVisits;
+}
+
+function SubitemRows({ lineItemId, onAddClick, readOnly = false, parentVisits = 1 }: { lineItemId: string; onAddClick: () => void; readOnly?: boolean; parentVisits?: number }) {
   const { data: subitems = [], isLoading } = useLineItemSubitems(lineItemId);
   const { mutateAsync: deleteSubitem } = useDeleteSubitem();
   const { mutate: togglePrint } = useToggleSubitemPrint();
+  const { mutateAsync: upsertSubitem } = useUpsertSubitem();
   const [editingSubitem, setEditingSubitem] = useState<LineItemSubitem | null>(null);
+
+  /** Saves an edited qty / rate / cost straight from the grid (same row the dialog writes). */
+  async function saveNumbers(s: LineItemSubitem, patch: { qty?: number; visits?: number; rateCents?: number; costCents?: number }) {
+    const qty = patch.qty ?? s.qty;
+    const visits = patch.visits ?? s.visits;
+    const rateCents = patch.rateCents ?? s.rateCents;
+    try {
+      await upsertSubitem({
+        lineItemId,
+        item: {
+          id: s.id,
+          type: s.type,
+          productId: s.productId,
+          serviceId: s.serviceId,
+          name: s.name,
+          qty,
+          visits,
+          rateCents,
+          costCents: patch.costCents ?? s.costCents,
+          totalCents: Math.round(qty * rateCents * visits),
+          confirmQty: s.confirmQty,
+          invoice: s.invoice,
+          printOnInvoice: s.printOnInvoice,
+          printOnEstimate: s.printOnEstimate,
+          createInstalledProduct: s.createInstalledProduct,
+          sortOrder: s.sortOrder,
+        },
+      });
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save sub-item"));
+    }
+  }
 
   async function handleDelete(s: LineItemSubitem) {
     try { await deleteSubitem({ id: s.id, lineItemId }); }
@@ -185,14 +267,14 @@ function SubitemRows({ lineItemId, onAddClick, readOnly = false }: { lineItemId:
               {s.printOnEstimate ? "On estimate" : "Hidden"}
             </button>
             {/* Same idea for the invoice: a ticked sub-item prints as its own row under the
-                service on a single-visit job's invoice (one-time / waiting list); unticked
+                service on a one-time, waiting-list or recurring job's invoice (per visit on recurring); unticked
                 ones stay folded into the service's price. Totals never change. */}
             <button
               type="button"
               onClick={() => togglePrint({ id: s.id, lineItemId, field: "printOnInvoice", value: !s.printOnInvoice })}
               title={s.printOnInvoice
-                ? "Printed on the invoice as its own row (one-time and waiting-list jobs) — click to fold it into the service price"
-                : "Folded into the service price on the invoice — click to print it as its own row (one-time and waiting-list jobs)"}
+                ? "Printed on the invoice as its own row (one-time, waiting-list and recurring jobs) — click to fold it into the service price"
+                : "Folded into the service price on the invoice — click to print it as its own row (one-time, waiting-list and recurring jobs)"}
               aria-pressed={s.printOnInvoice}
               className={`ml-1 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium align-middle ${
                 s.printOnInvoice
@@ -203,24 +285,39 @@ function SubitemRows({ lineItemId, onAddClick, readOnly = false }: { lineItemId:
               <Printer className="h-3 w-3" />
               {s.printOnInvoice ? "On invoice" : "Not on invoice"}
             </button>
+            {subitemVisitsMismatch(s.visits, parentVisits) && (
+              <span
+                className="ml-2 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                title={"This sub-item is charged " + s.visits + " times but the line has " + parentVisits + " visits. A sub-item can't be limited to some visits: on the job its price is spread across all " + parentVisits + " visits, with uneven cents on each invoice. Set Visits to 1 (once for the whole line) or " + parentVisits + " (every visit)."}
+              >
+                ⚠ Visits ≠ line&apos;s {parentVisits}
+              </span>
+            )}
           </td>
-          <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400" title="Sub-items are for the whole line, not per visit">{s.qty}</td>
-          <td colSpan={5} />
+          <td className="w-12 px-2 py-1 text-center tabular-nums text-slate-600 dark:text-neutral-400" title="Times this is charged. 1 = once for the whole line; set to the line's visits to charge every visit.">
+            <SubitemNumCell value={s.visits} display={String(s.visits)} readOnly={readOnly} min={1} step={1}
+              onCommit={(v) => saveNumbers(s, { visits: Math.max(1, Math.round(v)) })} />
+          </td>
+          <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400" title="Quantity per visit"><SubitemNumCell value={s.qty} display={String(s.qty)} readOnly={readOnly} min={0.0001}
+              onCommit={(v) => saveNumbers(s, { qty: v })} /></td>
+          <td colSpan={4} />
           <td className="w-20 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400">
-            ${(s.rateCents / 100).toFixed(2)}
+            <SubitemNumCell value={s.rateCents / 100} display={"$" + (s.rateCents / 100).toFixed(2)} readOnly={readOnly} step={0.01}
+              title="Unit rate" onCommit={(v) => saveNumbers(s, { rateCents: Math.round(v * 100) })} />
           </td>
           <td
             className="w-20 px-2 py-1 text-right tabular-nums font-medium text-slate-700 dark:text-neutral-300"
-            title="For the whole line — sub-items are not multiplied by visits"
+            title="Qty × rate × visits"
           >
             {centsToDisplay(s.totalCents)}
           </td>
           <td />
           <td className="w-20 px-2 py-1 text-right tabular-nums text-muted-foreground" title="Unit cost">
-            ${(s.costCents / 100).toFixed(2)}
+            <SubitemNumCell value={s.costCents / 100} display={"$" + (s.costCents / 100).toFixed(2)} readOnly={readOnly} step={0.01}
+              title="Unit cost" onCommit={(v) => saveNumbers(s, { costCents: Math.round(v * 100) })} />
           </td>
           <td className="w-20 px-2 py-1 text-right tabular-nums text-muted-foreground" title="Total cost = unit cost × qty">
-            {centsToDisplay(s.costCents * s.qty)}
+            {centsToDisplay(s.costCents * s.qty * s.visits)}
           </td>
           <td />
           <td className="px-2 py-1">
@@ -250,7 +347,7 @@ function SubitemRows({ lineItemId, onAddClick, readOnly = false }: { lineItemId:
                 className="text-[11px] text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline">
                 + Add Product / Service
               </button>
-              <span className="ml-2 text-[10px] text-muted-foreground">Sub-items are for the whole line (not per visit).</span>
+              <span className="ml-2 text-[10px] text-muted-foreground">Sub-item Visits: 1 charges it once for the whole line; set it to the line's visits to charge it on every visit.</span>
             </>
           )}
         </td>
@@ -258,6 +355,7 @@ function SubitemRows({ lineItemId, onAddClick, readOnly = false }: { lineItemId:
       {editingSubitem && (
         <AddSubitemDialog
           lineItemId={lineItemId}
+          parentVisits={parentVisits}
           subitem={editingSubitem}
           open={true}
           onClose={() => setEditingSubitem(null)}
@@ -709,7 +807,7 @@ function LineItemRow({
   // the line's displayed TP / T.Cost / GM% roll them up. The stored row values
   // stay sub-item-free — the estimate rollup adds sub-items separately.
   const subitemRevenueCents = subitems.reduce((a, si) => a + si.totalCents, 0);
-  const subitemCostCents = subitems.reduce((a, si) => a + Math.round(si.costCents * si.qty), 0);
+  const subitemCostCents = subitems.reduce((a, si) => a + Math.round(si.costCents * si.qty * si.visits), 0);
   const rolledRevenueCents = row.totalCents + subitemRevenueCents;
   const equipmentChargeCents = lineEquipment.reduce(
     (a, e) => a + lineEquipmentCostCents(Math.round(e.qty * effectiveChargeCents(e.rateCents, e.chargeRateCents)), row.visits),
@@ -1165,6 +1263,7 @@ function LineItemRow({
           lineItemId={item.id}
           onAddClick={() => setAddSubitemOpen(true)}
           readOnly={converted}
+          parentVisits={lineVisits(row.visits)}
         />
       )}
       {expanded && (
@@ -1194,6 +1293,7 @@ function LineItemRow({
       {addSubitemOpen && (
         <AddSubitemDialog
           lineItemId={item.id}
+          parentVisits={lineVisits(row.visits)}
           open={true}
           onClose={() => setAddSubitemOpen(false)}
         />

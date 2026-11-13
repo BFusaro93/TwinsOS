@@ -828,7 +828,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const subitemRevenueCents = subitems.reduce((s: number, si: any) => s + (si.total_cents ?? 0), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subitemCost = (si: any) => Math.round((si.cost_cents ?? 0) * (si.qty ?? 1));
+  const subitemCost = (si: any) => Math.round((si.cost_cents ?? 0) * (si.qty ?? 1) * (si.visits ?? 1));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const productSubitemCostCents = subitems.filter((si: any) => si.type === "product").reduce((s: number, si: any) => s + subitemCost(si), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

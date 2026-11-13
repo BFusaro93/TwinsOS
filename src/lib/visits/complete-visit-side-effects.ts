@@ -125,6 +125,7 @@ type JobServiceRow = {
   id: string;
   service_id?: string | null;
   service_name: string;
+  max_visits?: number | null;
   qty: number | null;
   rate_cents: number | null;
   is_taxable: boolean | null;
@@ -203,7 +204,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 1. Parent-job bookkeeping ─────────────────────────────────────────────
   const { data: jobData } = await supabase
     .from("crm_jobs")
-    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_id, service_name, qty, rate_cents, is_taxable, invoice_desc, included, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
+    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_id, service_name, qty, rate_cents, max_visits, is_taxable, invoice_desc, included, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
     .eq("id", visit.job_id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -542,7 +543,7 @@ export async function applyVisitCompletionSideEffects(
         const itemizedServiceLines: AutoInvoiceLine[] = services.length > 0
           ? serviceLines.flatMap((line, idx) => {
               const svc = services[idx];
-              const split = svc ? splitPrintedSubitems({ qty: line.qty, rateCents: line.rate_cents, totalCents: line.total_cents }, printedBySvc.get(svc.id)) : null;
+              const split = svc ? splitPrintedSubitems({ qty: line.qty, rateCents: line.rate_cents, totalCents: line.total_cents }, printedBySvc.get(svc.id), j.job_type === "recurring" ? (svc.max_visits ?? 0) : 1) : null;
               if (!split || !svc) return [line];
               return [
                 { ...line, rate_cents: split.parent.rateCents, total_cents: split.parent.totalCents },

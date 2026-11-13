@@ -457,12 +457,15 @@ export function InvoicingGuide() {
           Sub-services and materials added under an estimate line are priced inside the service, so an
           invoice normally shows one service line at the combined price. On the estimate, each sub-item has
           an <strong>On invoice</strong> button (next to <em>On estimate</em>). With it on, and for{" "}
-          <strong>one-time and waiting-list jobs</strong>, the invoice lists that sub-item as its own row
+          <strong>one-time, waiting-list and recurring jobs</strong>, the invoice lists that sub-item as its own row
           under the service and takes its amount out of the service row &mdash; the total is unchanged.
           Sub-items left off stay folded into the service price. The rows are ordinary invoice lines, so you
           can still hide any of them with the eye icon described above. The choice is captured when the
-          estimate is converted to a job, so changing it later doesn&apos;t alter an existing job, and
-          recurring and package jobs always bill a single service line.
+          estimate is converted to a job, so changing the estimate later doesn&apos;t alter an existing job.
+          To change it on a job, open the job and click the <strong>On invoice / Not on invoice</strong> tag
+          beside the sub-item under its service; it applies to invoices created from then on, not ones
+          already built. On a recurring job every visit&apos;s invoice shows the sub-item&apos;s per-visit share
+          (its total &divide; the line&apos;s visits). Package jobs always bill a single service line.
         </p>
       </Section>
 

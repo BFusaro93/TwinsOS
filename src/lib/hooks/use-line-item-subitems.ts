@@ -39,6 +39,8 @@ export interface LineItemSubitem {
   serviceId: string | null;
   name: string;
   qty: number;
+  /** Times this is charged: total = qty x rate x visits. 1 = once for the whole line; the line's visits = every visit. */
+  visits: number;
   rateCents: number;
   costCents: number;
   totalCents: number;
@@ -64,6 +66,7 @@ function mapRow(row: any): LineItemSubitem {
     serviceId: row.service_id ?? null,
     name: row.name,
     qty: row.qty,
+    visits: row.visits ?? 1,
     rateCents: row.rate_cents,
     costCents: row.cost_cents,
     totalCents: row.total_cents,
@@ -107,6 +110,8 @@ export interface UpsertSubitemPayload {
     serviceId?: string | null;
     name: string;
     qty: number;
+    /** Defaults to 1 (charged once for the whole line). */
+    visits?: number;
     rateCents: number;
     costCents: number;
     totalCents: number;
@@ -133,6 +138,7 @@ export function useUpsertSubitem() {
         service_id: item.serviceId ?? null,
         name: item.name,
         qty: item.qty,
+        visits: item.visits ?? 1,
         rate_cents: item.rateCents,
         cost_cents: item.costCents,
         total_cents: item.totalCents,
@@ -217,7 +223,7 @@ export function useToggleSubitemPrint() {
 /**
  * Internal cost of the sub-items under the given estimate lines, split by type
  * (product → Product/Materials, subservice → Service) for the estimate's cost
- * breakdown. Mirrors recalcEstimateTotals: cost = unit cost × qty.
+ * breakdown. Mirrors recalcEstimateTotals: cost = unit cost × qty × visits.
  */
 export function useEstimateSubitemCosts(lineItemIds: string[]) {
   const key = [...lineItemIds].sort().join(",");
@@ -228,14 +234,14 @@ export function useEstimateSubitemCosts(lineItemIds: string[]) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("estimate_line_item_subitems")
-        .select("type, cost_cents, qty")
+        .select("type, cost_cents, qty, visits")
         .in("line_item_id", lineItemIds)
         .is("deleted_at", null);
       if (error) throw error;
       const out = { product: 0, subservice: 0 };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const r of (data ?? []) as any[]) {
-        const cost = Math.round((r.cost_cents ?? 0) * (r.qty ?? 1));
+        const cost = Math.round((r.cost_cents ?? 0) * (r.qty ?? 1) * (r.visits ?? 1));
         if (r.type === "subservice") out.subservice += cost;
         else out.product += cost;
       }

@@ -2068,7 +2068,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I show an estimate's sub-services or materials as their own rows on the invoice?",
-        a: "On the estimate, click the On invoice button beside the sub-item's name (it reads Not on invoice until you turn it on). When the estimate is converted to a one-time or waiting-list job, the invoice lists that sub-item as its own row (quantity x rate) under the service, and the amount comes out of the service row so the total doesn't change. Sub-items left off stay inside the service price. The setting is captured at conversion, so changing it afterwards doesn't affect an existing job. Recurring and package jobs always bill one service line. You can still hide any invoice row with the eye icon.",
+        a: "On the estimate, click the On invoice button beside the sub-item's name (it reads Not on invoice until you turn it on). When the estimate is converted to a one-time, waiting-list or recurring job, the invoice lists that sub-item as its own row (quantity x rate) under the service, and the amount comes out of the service row so the total doesn't change. Sub-items left off stay inside the service price. The setting is captured at conversion, so changing it afterwards doesn't affect an existing job. To change it on a job later, open the job and click the On invoice / Not on invoice tag beside the sub-item; it applies to invoices created from then on. On a recurring job each visit's invoice lists the sub-item's per-visit share (its total divided by the line's visits); to charge a sub-item on every visit, set its Visits to the line's visits. Package jobs always bill one service line. You can still hide any invoice row with the eye icon.",
       },
       {
         q: "Can I edit a void invoice?",
@@ -2240,7 +2240,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Is estimate equipment cost per visit?",
-        a: "Yes. Enter what one visit uses; the line's equipment cost is that times its visits. Sub-items are for the whole line.",
+        a: "Yes. Enter what one visit uses; the line's equipment cost is that times its visits. A sub-item has its own Visits (default 1, charged once for the whole line); its total is Qty x Rate x Visits. Use 1 or the line's visits; any other number shows a warning because a sub-item can't be limited to some visits, so its price is spread across all of them.",
       },
       {
         q: "Why did the man-hour calculator's Adjust Cost change my line cost?",
@@ -2796,7 +2796,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What's the difference between an estimate's stage and its approval status?",
-        a: "Stage (Draft/Quote/Sent/Accepted/Lost/Invoiced) tracks where the estimate sits in the sales process. Approval Status (Not Required/Pending/Approved/Rejected) is a separate internal sign-off gate — an estimate can be stuck 'Pending' approval even though its stage already says 'Sent', which blocks it from actually going out.",
+        a: "Stage (Draft/Quote/Sent/Accepted/Lost/Invoiced) tracks where the estimate sits in the sales process. Approval Status (Not Required/Pending/Approved/Rejected) is a separate internal sign-off gate — an estimate can be stuck 'Pending' approval even though its stage already says 'Sent', which blocks it from actually going out. Once an Accepted estimate has been converted to a job, its pill reads Converted (the stage itself stays Accepted).",
       },
       {
         q: "Why can't I pick a client as a parent account?",
