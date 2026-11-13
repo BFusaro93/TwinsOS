@@ -2072,8 +2072,8 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "A line's Description on the invoice is a multi-line box. Press Enter for a new line, and start a line with - or * and a space to turn it into a bullet. Line breaks and bullets, including ones copied over from an estimate, carry through to the printed PDF instead of running together as one sentence.",
       },
       {
-        q: "Why does my invoice email show the View & Pay button twice, or without its color?",
-        a: "The invoice button follows your Invoice Email template. A button or link you place in the template stays where you put it and is sent as a button in the invoice template's color (your company brand color if it has none); if the template has no invoice link, one View & Pay Invoice Online button is added at the bottom instead, never both. A link inside a sentence stays a plain link. The send dialog's Preview tab shows what the client will get.",
+        q: "Where does the View & Pay button go in an invoice email, and what color is it?",
+        a: "Wherever your Invoice Email template puts it. A button or link to the invoice in the template stays in place and is sent as a button in the invoice template's color (your company brand color if it has none). If the template has no invoice link, one View & Pay Invoice Online button is added at the bottom instead, so the email never shows two. A link inside a sentence stays a plain link. The send dialog's Preview tab shows what the client will get.",
       },
       {
         q: "Can I hide a line on an invoice without deleting it?",
