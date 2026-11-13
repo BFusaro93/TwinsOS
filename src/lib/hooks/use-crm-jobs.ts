@@ -622,6 +622,7 @@ function mapJobFull(row: any): CRMJob {
   return {
     ...mapJob(row),
     contractId: row.contract_id ?? null,
+    snowCapKind: row.snow_cap_kind === "salt" || row.snow_cap_kind === "inches" ? row.snow_cap_kind : null,
     schedule: row.schedule ?? null,
     scheduleDays: row.schedule_days ?? [],
     packageName: row.package_name ?? null,
@@ -1797,6 +1798,7 @@ export function useCreateClientJob() {
           conflict_days: values.conflictDays,
           inch_trigger: values.inchTrigger ?? null,
           invoice_type: values.invoiceType || null,
+          snow_cap_kind: values.snowCapKind ?? null,
           rate_per_inch_cents: values.ratePerInchCents ?? null,
           asset_type: values.assetType || null,
           sales_rep_id: values.salesRepId || null,

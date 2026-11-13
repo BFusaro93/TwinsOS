@@ -67,6 +67,7 @@ import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
 import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
 import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
+import { useSnowCapJobFlags } from "@/lib/hooks/use-snow-caps";
 import { computeGroupAmountCents, hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, splitGroupAmountByVisit, type SnowBillableVisit } from "@/lib/snow-billing";
 import { toast } from "sonner";
 import {
@@ -1198,6 +1199,7 @@ export function SnowDispatchBoard() {
   const effectiveEventId = activeEvent?.id ?? "";
 
   const { data: visits = [], isLoading: visitsLoading, refetch: refetchVisits } = useStormEventVisits(effectiveEventId);
+  const { data: capFlags } = useSnowCapJobFlags(visits.map((v) => v.job?.contractId).filter((c): c is string => !!c));
 
   function toggleSelect(id: string) {
     setSelectedVisitIds((prev) => {
@@ -1989,6 +1991,11 @@ export function SnowDispatchBoard() {
                         <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{v.clientName ?? "—"}</Link>
                         {(v.pushNumber ?? 1) > 1 && (
                           <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
+                        )}
+                        {capFlags?.get(v.jobId)?.over && v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled" && (
+                          <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`${capFlags.get(v.jobId)!.label} — this stop bills as overage, not under the contract price`}>
+                            Overage
+                          </Badge>
                         )}
                         {v.handedOffFromCrewId && (
                           <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`The crew app handed this stop off from ${crewNameById.get(v.handedOffFromCrewId) ?? "another crew"} — they couldn't make it`}>

@@ -61,6 +61,7 @@ import type { ColumnDef } from "@/components/shared/ColumnChooser";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
+import { SnowCapsSection, type SnowCapJob, type SnowCapsFields } from "@/components/crm/contracts/SnowCapsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -275,7 +276,7 @@ function ContractTemplateBar({
 
 // ── contract details tab ──────────────────────────────────────────────────────
 
-interface DetailsState {
+interface DetailsState extends SnowCapsFields {
   clientId: string;
   title: string;
   startDate: string;
@@ -296,6 +297,8 @@ interface DetailsState {
   includeSubProperties: boolean;
   snowOutsideDates: SnowOutsideDates;
   snowOutsideEventPriceCents: number | null;
+  /** The contract includes snow — turns on the snow settings below. */
+  coversSnow: boolean;
 }
 
 /**
@@ -322,7 +325,9 @@ function ContractDetailsTab({
   lastBilledDate,
   billingAnchorDate,
   hadMonthOverrides,
-  coversSnow,
+  hasSnowJob,
+  contractId,
+  snowJobs,
 }: {
   state: DetailsState;
   onChange: (patch: Partial<DetailsState>) => void;
@@ -335,8 +340,11 @@ function ContractDetailsTab({
   billingAnchorDate?: string | null;
   /** A non-monthly contract (set via API/import) whose per-month amounts differ from its flat amount. */
   hadMonthOverrides?: boolean;
-  /** The contract covers snow (a linked snow job) — shows the storms-outside-dates setting. */
-  coversSnow?: boolean;
+  /** A snow job is linked — the snow toggle can't be switched off while one is. */
+  hasSnowJob?: boolean;
+  contractId?: string;
+  /** The contract's linked snow jobs, for tagging what each counts toward (inch vs salt cap). */
+  snowJobs?: SnowCapJob[];
 }) {
   const isMonthly = state.billingFrequency === "monthly";
   const subMonthly = state.billingFrequency === "weekly" || state.billingFrequency === "biweekly";
@@ -436,7 +444,22 @@ function ContractDetailsTab({
           <FieldRow label="End Date">
             <Input type="date" className="h-8 w-44 text-sm" value={state.endDate} onChange={(e) => onChange({ endDate: e.target.value })} />
           </FieldRow>
-          {(coversSnow || state.snowOutsideDates !== "bill_per_event" || state.snowOutsideEventPriceCents != null) && (
+          <FieldRow label="Snow">
+            <label className="flex items-center gap-2 pt-1.5 text-sm">
+              <Checkbox
+                checked={state.coversSnow}
+                disabled={hasSnowJob && state.coversSnow}
+                onCheckedChange={(v) => onChange({ coversSnow: v === true })}
+                aria-label="This contract includes snow service"
+              />
+              This contract includes snow service
+            </label>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Turns on the snow settings: storms outside the contract dates, and caps &amp; overage.
+              {hasSnowJob ? " Locked on while a snow job is linked." : ""}
+            </p>
+          </FieldRow>
+          {state.coversSnow && (
             <FieldRow label="Storms outside the contract dates">
               <div className="space-y-1">
                 <Select value={state.snowOutsideDates} onValueChange={(v) => onChange({ snowOutsideDates: v as SnowOutsideDates })}>
@@ -471,6 +494,15 @@ function ContractDetailsTab({
           )}
         </Section>
       </div>
+
+      {state.coversSnow && (
+        <SnowCapsSection
+          state={state}
+          onChange={onChange}
+          contractId={contractId}
+          snowJobs={snowJobs ?? []}
+        />
+      )}
 
       <Section label="Invoice Description">
         <FieldRow label="Line Item">
@@ -1307,6 +1339,17 @@ export function ContractDialog({
     includeSubProperties: contract?.includeSubProperties ?? true,
     snowOutsideDates: contract?.snowOutsideDates ?? "bill_per_event",
     snowOutsideEventPriceCents: contract?.snowOutsideEventPriceCents ?? null,
+    snowInchCap: contract?.snowInchCap ?? null,
+    snowSaltCap: contract?.snowSaltCap ?? null,
+    snowPushesCap: contract?.snowPushesCap ?? null,
+    snowEventsCap: contract?.snowEventsCap ?? null,
+    snowOveragePerPushCents: contract?.snowOveragePerPushCents ?? null,
+    snowOveragePerEventCents: contract?.snowOveragePerEventCents ?? null,
+    coversSnow: contract?.coversSnow ?? false,
+    snowCapReset: contract?.snowCapReset ?? "contract_year",
+    snowOverageDescription: contract?.snowOverageDescription ?? "",
+    snowOveragePerInchCents: contract?.snowOveragePerInchCents ?? null,
+    snowOveragePerSaltCents: contract?.snowOveragePerSaltCents ?? null,
   });
 
   const [source, setSource] = useState(contract?.source ?? "");
@@ -1400,6 +1443,23 @@ export function ContractDialog({
           monthlyAmounts,
           invoiceLineItems: details.lineItems,
           defaultService: details.defaultService || undefined,
+          snowFields: details.coversSnow
+            ? {
+                covers_snow: true,
+                snow_outside_dates: details.snowOutsideDates,
+                snow_outside_event_price_cents: details.snowOutsideEventPriceCents,
+                snow_inch_cap: details.snowInchCap,
+                snow_salt_cap: details.snowSaltCap,
+                snow_pushes_cap: details.snowPushesCap,
+                snow_events_cap: details.snowEventsCap,
+                snow_cap_reset: details.snowCapReset,
+                snow_overage_description: details.snowOverageDescription.trim() || null,
+                snow_overage_per_inch_cents: details.snowOveragePerInchCents,
+                snow_overage_per_salt_cents: details.snowOveragePerSaltCents,
+                snow_overage_per_push_cents: details.snowOveragePerPushCents,
+                snow_overage_per_event_cents: details.snowOveragePerEventCents,
+              }
+            : undefined,
         });
         toast.success("Contract created");
       } else {
@@ -1422,6 +1482,17 @@ export function ContractDialog({
             include_sub_properties: details.includeSubProperties,
             snow_outside_dates: details.snowOutsideDates,
             snow_outside_event_price_cents: details.snowOutsideEventPriceCents,
+            snow_inch_cap: details.snowInchCap,
+            snow_salt_cap: details.snowSaltCap,
+            snow_pushes_cap: details.snowPushesCap,
+            snow_events_cap: details.snowEventsCap,
+            snow_overage_per_push_cents: details.snowOveragePerPushCents,
+            snow_overage_per_event_cents: details.snowOveragePerEventCents,
+            covers_snow: details.coversSnow,
+            snow_cap_reset: details.snowCapReset,
+            snow_overage_description: details.snowOverageDescription.trim() || null,
+            snow_overage_per_inch_cents: details.snowOveragePerInchCents,
+            snow_overage_per_salt_cents: details.snowOveragePerSaltCents,
             source: source || null,
             sales_rep_id: salesRepId || null,
             sale_type: saleType,
@@ -1543,7 +1614,15 @@ export function ContractDialog({
               createdAt={contract?.createdAt}
               lastBilledDate={contract?.lastBilledDate}
               billingAnchorDate={contract?.billingAnchorDate}
-              coversSnow={(linkedJobs ?? []).some((j) => j.jobType === "snow")}
+              hasSnowJob={(linkedJobs ?? []).some((j) => j.jobType === "snow")}
+              contractId={contract?.id}
+              snowJobs={(linkedJobs ?? [])
+                .filter((j) => j.jobType === "snow" && j.invoiceType === "monthly_flat_rate")
+                .map((j) => ({
+                  id: j.id,
+                  label: j.services?.[0]?.serviceName ?? j.invoiceDescription ?? "Snow job",
+                  kind: j.snowCapKind === "salt" ? ("salt" as const) : ("inches" as const),
+                }))}
               hadMonthOverrides={
                 !!contract &&
                 normalizeBillingFrequency(contract.billingFrequency) !== "monthly" &&

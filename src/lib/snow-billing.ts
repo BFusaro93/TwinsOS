@@ -1,6 +1,7 @@
 import { formatCurrency } from "@/lib/utils";
 import type { SnowRateTier } from "@/lib/hooks/use-snow-rate-tiers";
 import type { CRMJobVisit } from "@/types/crm-jobs";
+import { capPartText, type SnowCapOverage } from "@/lib/snow-caps";
 
 export const INVOICE_TYPE_LABEL: Record<string, string> = {
   per_event: "Per Event",
@@ -128,6 +129,9 @@ export type SnowBillableVisit = CRMJobVisit & {
   /** Hourly job sharing ONE crew stop with another hourly job: this visit's
    *  share (0–1) of the stop's on-site time. Unset = the whole span. */
   hourlyStopShare?: number | null;
+  /** Monthly Flat Rate visit the contract covers but that is past its inch / salt
+   *  cap: bills as overage (snow-caps.ts) instead of staying in the flat price. */
+  capOverage?: SnowCapOverage;
   /** Why the visit can't be priced (shown in the queue instead of a silent $0). */
   billingWarning?: string | null;
   /** Materials the crew recorded as used on this storm visit, not yet billed. */
@@ -262,6 +266,7 @@ export function computeGroupAmountCents(groupVisits: SnowBillableVisit[], tiersB
     return Math.round(snowBillableHours(visit) * (job?.rateCents ?? 0));
   }
   if (invoiceType === "monthly_flat_rate") {
+    if (visit.capOverage) return visit.capOverage.amountCents;
     // Only reaches Snow Invoicing for a storm the contract doesn't cover; it
     // bills the contract's price per storm outside its dates (0 = not set —
     // the queue shows a warning instead of billing).
@@ -309,6 +314,7 @@ export function describeAmount(visit: SnowBillableVisit, groupSize: number, tier
     return `${snowBillableHours(visit)} hrs on site${shared} × ${formatCurrency(visit.job?.rateCents ?? 0)}/hr`;
   }
   if (invoiceType === "monthly_flat_rate") {
+    if (visit.capOverage) return `overage: ${visit.capOverage.parts.map(capPartText).join("; ")}`;
     return visit.contractOutsidePriceCents != null
       ? "storm outside the contract — price per storm"
       : "storm outside the contract";

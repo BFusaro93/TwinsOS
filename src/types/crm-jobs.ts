@@ -163,6 +163,8 @@ export interface CRMJob {
   /** Dispatcher-set "high priority" flag shown as a stand-out icon on the dispatch board. Distinct from `priority` above (route order). */
   isHighPriority: boolean;
   contractId: string | null;
+  /** Snow: which contract cap this job counts toward (null = inches). */
+  snowCapKind?: "inches" | "salt" | null;
   schedule: string | null;
   scheduleDays: string[];
   packageName: string | null;
@@ -266,6 +268,8 @@ export interface NewClientJobFormValues {
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
+  /** Monthly Flat Rate snow job: which contract cap it counts toward (null = plowing). */
+  snowCapKind?: "inches" | "salt" | null;
   ratePerInchCents: number | null;
   assetType: string | null;
   salesRepId: string | null;
