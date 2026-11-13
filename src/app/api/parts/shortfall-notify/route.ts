@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/api/auth";
 import { notifyPartStockShort } from "@/lib/part-shortfall-notify";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const bodySchema = z.object({
   woPartId: z.string().uuid(),
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("org_id, status").eq("id", user.id).single();
+  // Staff impersonating an org act on that org, not their own (profiles.org_id).
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile?.org_id || profile.status === "inactive") {
     return NextResponse.json({ error: "Profile not found" }, { status: 403 });
   }
