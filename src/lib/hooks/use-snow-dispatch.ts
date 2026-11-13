@@ -429,7 +429,8 @@ export function useAddJobsToStormEvent() {
     }: {
       stormEventId: string;
       date: string;
-      jobs: { jobId: string; clientId: string; crewId?: string | null }[];
+      /** `date` on a job overrides the batch date — a storm that runs several days has stops on different days. */
+      jobs: { jobId: string; clientId: string; crewId?: string | null; date?: string | null }[];
     }) => {
       const supabase = createClient();
 
@@ -484,7 +485,7 @@ export function useAddJobsToStormEvent() {
       const rows = newJobs.map((j, i) => ({
         job_id: j.jobId,
         client_id: j.clientId,
-        scheduled_date: date,
+        scheduled_date: j.date || date,
         men_count: menByJob.get(j.jobId) ?? 1,
         crew_id: j.crewId ?? null,
         storm_event_id: stormEventId,
@@ -519,22 +520,20 @@ export function useAddJobsToStormEvent() {
 }
 
 /**
- * Per Push jobs bill every push on its own depth, and each push is its own
- * visit on the storm (crm_job_visits.push_number). Creates the job's next push
+ * Every return trip to a site on a storm is its own visit (crm_job_visits.push_number),
+ * so its times, depth and crew are on record. Per Push / Hourly jobs bill each one;
+ * once-per-storm jobs record extras at $0 (isUnbilledExtraPush). Creates the job's next push
  * from its latest one: same storm, client, crew and men, appended to the end
  * of the storm's stop order, dated the org's today (never before the previous
  * push) so it shows on the crew's list for the day it is plowed. The DB guard
- * (crm_job_visits_push_number_guard) rejects push 2+ on any other billing type.
+ * (crm_job_visits_push_number_guard) rejects push 2+ on a non-snow job.
  */
 export function useAddStormPush() {
   const qc = useQueryClient();
   const timeZone = useOrgTimeZone();
   return useMutation({
-    mutationFn: async (source: CRMJobVisit): Promise<number> => {
+    mutationFn: async ({ source, billable = false }: { source: CRMJobVisit; billable?: boolean }): Promise<number> => {
       if (!source.stormEventId) throw new Error("Only a storm visit can get another push.");
-      if (source.job?.invoiceType !== "per_push_per_inch") {
-        throw new Error("Only Per Push jobs bill each push separately — this job bills once per storm.");
-      }
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: pushes, error: pushErr } = await (supabase as any)
@@ -572,6 +571,8 @@ export function useAddStormPush() {
         storm_event_id: source.stormEventId,
         order_num: orderNum,
         status: "scheduled",
+        // Once-per-storm jobs: bill this return trip as its own charge (e.g. a second salting).
+        bill_push: billable,
       };
       // A second dispatcher adding the same push at once loses the unique
       // (job, storm, push) race with 23505 — take the next number instead.
@@ -579,12 +580,28 @@ export function useAddStormPush() {
         const pushNumber = lastPush + attempt;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any).from("crm_job_visits").insert({ ...row, push_number: pushNumber });
-        if (!error) return pushNumber;
+        if (!error) {
+          // Timeline row so the client's record shows every return trip (liability).
+          if (source.clientId) {
+            const { data: auth } = await supabase.auth.getUser();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any).from("client_activity").insert({
+              client_id: source.clientId,
+              activity_type: "job",
+              subject: `Snow push ${pushNumber} added ${row.scheduled_date}${billable ? " (billed)" : ""}`,
+              ref_id: source.jobId,
+              ref_table: "crm_jobs",
+              created_by: auth.user?.id ?? null,
+              occurred_at: new Date().toISOString(),
+            });
+          }
+          return pushNumber;
+        }
         if ((error as { code?: string }).code !== "23505") throw error;
       }
       throw new Error("Another push was just added for this job — refresh and try again.");
     },
-    onSuccess: (_d, source) => {
+    onSuccess: (_d, { source }) => {
       qc.invalidateQueries({ queryKey: ["crm-job-visits", "storm-event", source.stormEventId] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       qc.invalidateQueries({ queryKey: ["storm-events"] });

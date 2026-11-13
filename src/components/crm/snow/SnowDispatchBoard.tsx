@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,7 +24,10 @@ import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DispatchWeather } from "@/components/crm/dispatch/DispatchWeather";
 import { SearchInput } from "@/components/shared/SearchInput";
-import { DispatchMap, type DispatchMapStop } from "@/components/crm/dispatch/DispatchMap";
+import { SnowWorkMap, type SnowMapStop } from "@/components/crm/snow/SnowWorkMap";
+import { MasterRoutesDialog } from "@/components/crm/snow/MasterRoutesDialog";
+import { SnowMessageDialog, type SnowMessageChannel } from "@/components/crm/snow/SnowMessageDialog";
+import { SnowNoEmailDialog } from "@/components/crm/snow/SnowNoEmailDialog";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -59,16 +62,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
+import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDialog";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
 import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
 import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
-import { computeGroupAmountCents, hourlyStopShares, splitGroupAmountByVisit, type SnowBillableVisit } from "@/lib/snow-billing";
+import { useSnowCapJobFlags } from "@/lib/hooks/use-snow-caps";
+import { computeGroupAmountCents, hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, splitGroupAmountByVisit, type SnowBillableVisit } from "@/lib/snow-billing";
 import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
   Calendar, Smartphone, CalendarCheck, CheckCircle2, XCircle, CornerDownRight,
-  ListChecks, ThermometerSnowflake, Ruler, HelpCircle, MapPin, ArrowUp, ArrowDown, Route as RouteIcon,
+  ListChecks, ThermometerSnowflake, Ruler, HelpCircle, MapPin, ArrowUp, ArrowDown, Route as RouteIcon, Search,
 } from "lucide-react";
 import type { CRMJobVisit, VisitStatus, StormEventStatus } from "@/types/crm-jobs";
 
@@ -95,9 +100,13 @@ const SNOW_FILTER_TABS: { value: string; label: string }[] = [
 ];
 
 const SNOW_COLUMNS: ColumnDef[] = [
+  { key: "date", label: "Date" },
+  { key: "service", label: "Service" },
   { key: "address", label: "Address" },
   { key: "city", label: "City", defaultHidden: true },
+  { key: "state", label: "State", defaultHidden: true },
   { key: "zip", label: "Zip", defaultHidden: true },
+  { key: "priority", label: "Priority", defaultHidden: true },
   { key: "trigger", label: "Trigger" },
   { key: "crew", label: "Crew" },
   { key: "depth", label: "Depth" },
@@ -332,6 +341,10 @@ function AddJobsDialog({
   const [defaultCrewId, setDefaultCrewId] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
+  const [jobSearch, setJobSearch] = useState("");
+  // Per-job date overrides (job id → yyyy-mm-dd); jobs without one follow the dispatch date.
+  const [rowDates, setRowDates] = useState<Map<string, string>>(new Map());
+  const [bulkDate, setBulkDate] = useState("");
 
   const { data: masterSlots } = useMasterRouteSlots();
   const selectedRoute = routes.find((r) => r.id === routeId);
@@ -362,16 +375,30 @@ function AddJobsDialog({
         const overTrigger = maxTriggerInches !== "" && job.inchTrigger != null && job.inchTrigger > parseFloat(maxTriggerInches);
         const rank = PRIORITY_RANK[job.clientPriority ?? "low"] ?? 3;
         const underPriority = minPriority !== "" && rank > (PRIORITY_RANK[minPriority] ?? 3);
-        const dayNotAuthorized = !!job.scheduleDays?.length && !job.scheduleDays.includes(dayAbbrForDate(date));
+        const dayNotAuthorized = !!job.scheduleDays?.length && !job.scheduleDays.includes(dayAbbrForDate(rowDates.get(job.id) ?? date));
         return { job, excluded: overTrigger || underPriority || dayNotAuthorized };
       });
-  }, [candidateJobIds, snowJobs, maxTriggerInches, minPriority, date]);
+  }, [candidateJobIds, snowJobs, maxTriggerInches, minPriority, date, rowDates]);
+
+  // The search narrows what is listed (and what Select all / Unselect all act on);
+  // jobs already ticked stay ticked while hidden and are still added.
+  const visibleCandidates = useMemo(() => {
+    const q = jobSearch.trim().toLowerCase();
+    if (!q) return candidates;
+    return candidates.filter(({ job }) =>
+      [job.clientName, job.serviceAddress, job.serviceCity, job.serviceZip, job.crewName, job.services?.[0]?.serviceName, job.invoiceDescription]
+        .filter(Boolean).join(" ").toLowerCase().includes(q)
+    );
+  }, [candidates, jobSearch]);
 
   // Each opening starts from this storm's own date and forecast, not whatever
   // the dialog was last left at.
   const [seeded, setSeeded] = useState(false);
   if (open && !seeded) {
     setSeeded(true);
+    setJobSearch("");
+    setRowDates(new Map());
+    setBulkDate("");
     setDate(eventDate);
     setMaxTriggerInches(forecastDepthInches != null ? String(forecastDepthInches) : "");
   }
@@ -412,6 +439,7 @@ function AddJobsDialog({
       .map((c) => ({
         jobId: c.job.id,
         clientId: c.job.clientId,
+        date: rowDates.get(c.job.id) ?? null,
         // Explicit crew pick, else the job's Master Route crew, else the job's own crew.
         crewId: defaultCrewId
           || (routeId ? selectedRoute?.defaultCrewId : masterSlots?.get(c.job.id)?.routeCrewId)
@@ -499,6 +527,38 @@ function AddJobsDialog({
           </div>
         </div>
 
+        <div className="shrink-0 border-b px-5 py-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={jobSearch}
+              onChange={(e) => setJobSearch(e.target.value)}
+              placeholder="Search clients, address, city, zip, crew…"
+              className="h-8 pl-8 text-xs"
+              aria-label="Search snow jobs"
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">Date for the {selectedIds.size} selected:</span>
+            <Input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} className="h-8 w-40 text-xs" aria-label="Date for the selected jobs" />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!bulkDate || selectedIds.size === 0}
+              onClick={() => setRowDates((prev) => { const next = new Map(prev); selectedIds.forEach((id) => next.set(id, bulkDate)); return next; })}
+            >
+              Set date
+            </Button>
+            {rowDates.size > 0 && (
+              <button type="button" className="text-[11px] text-muted-foreground underline hover:text-foreground" onClick={() => setRowDates(new Map())}>
+                Reset all to {date}
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           {jobsLoading ? (
             <div className="p-5 space-y-2">
@@ -506,19 +566,34 @@ function AddJobsDialog({
             </div>
           ) : candidates.length === 0 ? (
             <p className="text-center text-sm text-slate-400 dark:text-neutral-500 py-12">No snow jobs found{routeId ? " on this route" : ""}.</p>
+          ) : visibleCandidates.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 dark:text-neutral-500 py-12">No snow jobs match &ldquo;{jobSearch.trim()}&rdquo;.</p>
           ) : (
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
                 <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                  <th className="w-8 px-3 py-2" />
+                  <th className="w-8 px-3 py-2">
+                    <Checkbox
+                      checked={visibleCandidates.every((c) => selectedIds.has(c.job.id)) ? true : visibleCandidates.some((c) => selectedIds.has(c.job.id)) ? "indeterminate" : false}
+                      onCheckedChange={() => setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (visibleCandidates.every((c) => next.has(c.job.id))) visibleCandidates.forEach((c) => next.delete(c.job.id));
+                        else visibleCandidates.forEach((c) => next.add(c.job.id));
+                        return next;
+                      })}
+                      aria-label="Select or unselect all listed jobs"
+                      className="h-3.5 w-3.5"
+                    />
+                  </th>
                   <th className="px-3 py-2">Client</th>
                   <th className="px-3 py-2">Trigger</th>
                   <th className="px-3 py-2">Priority</th>
                   <th className="px-3 py-2">Crew</th>
+                  <th className="px-3 py-2">Date</th>
                 </tr>
               </thead>
               <tbody>
-                {candidates.map(({ job, excluded }) => (
+                {visibleCandidates.map(({ job, excluded }) => (
                   <tr
                     key={job.id}
                     className={cn("border-b cursor-pointer", excluded ? "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400" : "hover:bg-slate-50 dark:hover:bg-muted/40")}
@@ -533,7 +608,19 @@ function AddJobsDialog({
                     </td>
                     <td className="px-3 py-2">{job.inchTrigger != null ? `${job.inchTrigger}"` : "—"}</td>
                     <td className="px-3 py-2">{job.clientPriority ?? "—"}</td>
-                    <td className="px-3 py-2">{job.crewName ?? "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <Input
+                        type="date"
+                        value={rowDates.get(job.id) ?? date}
+                        onChange={(e) => setRowDates((prev) => {
+                          const next = new Map(prev);
+                          if (!e.target.value || e.target.value === date) next.delete(job.id); else next.set(job.id, e.target.value);
+                          return next;
+                        })}
+                        className={cn("h-7 w-36 text-xs", rowDates.has(job.id) && "border-brand-400")}
+                        aria-label={`Date for ${job.clientName ?? "job"}`}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -542,7 +629,11 @@ function AddJobsDialog({
         </div>
 
         <div className="shrink-0 flex items-center justify-between border-t bg-card px-5 py-3">
-          <p className="text-xs text-muted-foreground">{selectedIds.size} of {candidates.length} selected</p>
+          <p className="text-xs text-muted-foreground">
+            {selectedIds.size} of {candidates.length} selected
+            <button type="button" className="ml-2 underline hover:text-foreground" onClick={() => setSelectedIds((prev) => new Set([...prev, ...visibleCandidates.map((c) => c.job.id)]))}>Select all</button>
+            <button type="button" className="ml-2 underline hover:text-foreground" onClick={() => setSelectedIds((prev) => { const next = new Set(prev); visibleCandidates.forEach((c) => next.delete(c.job.id)); return next; })}>Unselect all</button>
+          </p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button size="sm" className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleAdd} disabled={addJobs.isPending}>
@@ -1058,6 +1149,79 @@ function effectiveCrewIdOf(v: CRMJobVisit): string | null {
   return v.crewId ?? v.job?.crewId ?? null;
 }
 
+/** Flat Per Event job: a return trip is no-charge unless marked billed (e.g. a second salting). On
+ *  Per Event, Per Inch a return trip is simply part of the event — its depth counts toward the storm's deepest reading. */
+function isFlatPerEvent(v: CRMJobVisit): boolean {
+  return (v.job?.invoiceType ?? "per_event") === "per_event";
+}
+
+/** "Mon 11/16" for a yyyy-mm-dd date (read at noon so a timezone never shifts the day). */
+function shortDateLabel(ymd: string | null | undefined): string {
+  if (!ymd) return "—";
+  const d = new Date(`${ymd}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/** A stop's date. Office users can change it (a storm that runs several days has stops on different days);
+ *  the crew sees the stop on the day it is scheduled for. */
+function VisitDateCell({ visit, canEdit, onSave }: { visit: CRMJobVisit; canEdit: boolean; onSave: (id: string, date: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(visit.scheduledDate ?? "");
+  const [saving, setSaving] = useState(false);
+  const label = shortDateLabel(visit.scheduledDate);
+  if (!canEdit || visit.status === "completed" || visit.status === "cancelled") return <span>{label}</span>;
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setValue(visit.scheduledDate ?? ""); }}>
+      <PopoverTrigger asChild>
+        <button type="button" title="Change this stop's date" className="rounded px-1 -mx-1 underline decoration-dotted underline-offset-2 hover:bg-muted">{label}</button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 space-y-2 p-3" align="start">
+        <Input type="date" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 text-xs" />
+        <Button
+          size="sm"
+          className="h-7 w-full text-xs"
+          disabled={saving || !value || value === visit.scheduledDate}
+          onClick={async () => { setSaving(true); try { await onSave(visit.id, value); setOpen(false); } finally { setSaving(false); } }}
+        >
+          Move to this date
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The service a snow stop is for — several snow jobs at one address are told apart by it. */
+function visitServiceName(v: CRMJobVisit): string {
+  return v.job?.services?.[0]?.serviceName || v.job?.invoiceDescription || "Snow Service";
+}
+
+/** A multi-select checklist filter chip for the board's dark action bar. */
+function ValueFilter({ label, options, selected, onChange }: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const toggleValue = (o: string) => onChange(selected.includes(o) ? selected.filter((x) => x !== o) : [...selected, o]);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+          {selected.length === 0 ? `All ${label}` : `${selected.length} ${label}`}
+          <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 max-h-72 overflow-y-auto p-1" align="start">
+        <FilterOptionRow checked={selected.length === 0} onToggle={() => onChange([])}>All {label}</FilterOptionRow>
+        {options.map((o) => (
+          <FilterOptionRow key={o} checked={selected.includes(o)} onToggle={() => toggleValue(o)}>{o}</FilterOptionRow>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function SnowDispatchBoard() {
   const { can, isLoading: permissionsLoading } = usePermissions();
   const canManage = can("snow_dispatch_manage");
@@ -1078,13 +1242,26 @@ export function SnowDispatchBoard() {
   const [crewFilters, setCrewFilters] = useState<string[]>([]); // crew ids, plus "none" for Unassigned
   const [statsOpen, setStatsOpen] = useState(false);
   const [outcomeDialog, setOutcomeDialog] = useState<{ ids: string[]; status: "skipped" | "cancelled" } | null>(null);
-  const [visibleKeys, setVisibleKeys] = usePersistedColumns("snow_dispatch", SNOW_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key));
+  const [visibleKeys, setVisibleKeys] = // v3: Date joined (v2: Service) the column set — a saved v1 layout would have hidden it for everyone who had customized columns.
+  usePersistedColumns("snow_dispatch_v3", SNOW_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key));
   const isVisible = (k: string) => visibleKeys.includes(k);
+  const [multiCrewOpen, setMultiCrewOpen] = useState(false);
+  const [messageChannel, setMessageChannel] = useState<SnowMessageChannel | null>(null);
+  const [noEmailOpen, setNoEmailOpen] = useState(false);
+  // Map: narrow the table to the stops picked on it.
+  const [tableOnlySelected, setTableOnlySelected] = useState(false);
+  const [serviceFilters, setServiceFilters] = useState<string[]>([]);
+  const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
+  const [cityFilters, setCityFilters] = useState<string[]>([]);
+  const [zipFilters, setZipFilters] = useState<string[]>([]);
+  const [dateFilters, setDateFilters] = useState<string[]>([]);
+  const [moveDate, setMoveDate] = useState("");
   const { mutateAsync: updateVisitStatus } = useUpdateVisitStatus();
   const [statusFilter, setStatusFilter] = useState("all");
   const [routeStrategy, setRouteStrategy] = useState<"furthest_first" | "nearest_first">("nearest_first");
   const [optimizing, setOptimizing] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [routesOpen, setRoutesOpen] = useState(false);
   const { data: orgSettings } = useOrgSettings();
   // Minutes to ARRIVE at each stop (from the previous stop, or the shop for a crew's first stop).
   const [driveMins, setDriveMins] = useState<Map<string, { mins: number; fromShop: boolean }>>(new Map());
@@ -1099,6 +1276,7 @@ export function SnowDispatchBoard() {
   const effectiveEventId = activeEvent?.id ?? "";
 
   const { data: visits = [], isLoading: visitsLoading, refetch: refetchVisits } = useStormEventVisits(effectiveEventId);
+  const { data: capFlags } = useSnowCapJobFlags(visits.map((v) => v.job?.contractId).filter((c): c is string => !!c));
 
   function toggleSelect(id: string) {
     setSelectedVisitIds((prev) => {
@@ -1149,16 +1327,20 @@ export function SnowDispatchBoard() {
     // Two hourly jobs at one crew stop each bill their share of it (as Snow Invoicing does).
     const shares = hourlyStopShares(visits);
     const byGroup = new Map<string, SnowBillableVisit[]>();
-    for (const visit of visits) {
+    const zeroIds: string[] = [];
+    for (const visit of liftStormDepths(visits)) {
       const v: SnowBillableVisit = shares.has(visit.id) ? { ...visit, hourlyStopShare: shares.get(visit.id) } : visit;
       // Skipped and cancelled stops are called off, not plowed — nothing is billed for them, so
       // they get no amount (their row shows "—") and stay out of the totals and crew stats.
       if (v.status === "skipped" || v.status === "cancelled") continue;
+      // An extra crew, or a return trip on a once-per-storm job, is recorded but bills $0.
+      if (isUnbilledSnowVisit(v)) { zeroIds.push(v.id); continue; }
       const key = billingGroupKey(v);
       if (!byGroup.has(key)) byGroup.set(key, []);
       byGroup.get(key)!.push(v);
     }
     const result = new Map<string, number>();
+    for (const id of zeroIds) result.set(id, 0);
     for (const groupVisits of byGroup.values()) {
       const total = computeGroupAmountCents(groupVisits, tiersByJobId);
       for (const [visitId, amount] of splitGroupAmountByVisit(groupVisits, total)) {
@@ -1176,23 +1358,32 @@ export function SnowDispatchBoard() {
   );
 
   const crewNameById = useMemo(() => new Map(crews.map((c) => [c.id, c.name])), [crews]);
+  // Client messaging works on the selected stops; "Jobs without emails" falls back to everything shown.
+  const selectedStops = useMemo(() => visits.filter((v) => selectedVisitIds.has(v.id)), [visits, selectedVisitIds]);
+  const crewNameOf = useCallback(
+    (v: CRMJobVisit) => (effectiveCrewIdOf(v) ? crewNameById.get(effectiveCrewIdOf(v)!) : null) ?? v.crewName ?? null,
+    [crewNameById],
+  );
+  const canEmailClients = can("email_activity_send");
+  const canTextClients = can("sms_send");
 
   // Each job's latest push on this storm — "Add push" hangs off that row only.
   const latestPushVisitIdByJob = useMemo(() => {
     const best = new Map<string, CRMJobVisit>();
     for (const v of visits) {
+      if (v.crewGroupSecondary) continue; // an extra crew's visit isn't a push of its own
       const cur = best.get(v.jobId);
       if (!cur || (v.pushNumber ?? 1) > (cur.pushNumber ?? 1)) best.set(v.jobId, v);
     }
     return new Map([...best].map(([jobId, v]) => [jobId, v.id]));
   }, [visits]);
 
-  /** Per Push jobs: each push is its own visit on the storm, billed on its own depth. */
-  async function addPush(v: CRMJobVisit) {
+  /** Another visit to the site on this storm. Per Push / Hourly bill it; once-per-storm jobs record it at $0. */
+  async function addPush(v: CRMJobVisit, billable = false) {
     if (stormComplete) return;
     try {
-      const n = await addStormPush(v);
-      toast.success(`Push ${n} added for ${v.clientName ?? "this job"}`);
+      const n = await addStormPush({ source: v, billable });
+      toast.success(`Push ${n} added for ${v.clientName ?? "this job"}${billable ? " — billed as its own charge" : ""}`);
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Failed to add a push");
     }
@@ -1204,23 +1395,48 @@ export function SnowDispatchBoard() {
       const crewId = effectiveCrewIdOf(v);
       if (crewFilters.length > 0 && !crewFilters.includes(crewId ?? "none")) return false;
       if (statusFilter !== "all" && v.status !== statusFilter) return false;
+      if (tableOnlySelected && selectedVisitIds.size > 0 && !selectedVisitIds.has(v.id)) return false;
+      if (serviceFilters.length > 0 && !serviceFilters.includes(visitServiceName(v))) return false;
+      if (priorityFilters.length > 0 && !priorityFilters.includes(v.clientPriority ?? "none")) return false;
+      if (cityFilters.length > 0 && !cityFilters.includes(v.job?.serviceCity ?? "—")) return false;
+      if (zipFilters.length > 0 && !zipFilters.includes(v.job?.serviceZip ?? "—")) return false;
+      if (dateFilters.length > 0 && !dateFilters.includes(v.scheduledDate ?? "—")) return false;
       if (q) {
         const hay = [
-          v.clientName, v.job?.serviceAddress, v.job?.serviceCity, v.job?.serviceZip, v.job?.notesToCrew,
+          v.clientName, visitServiceName(v), v.job?.serviceAddress, v.job?.serviceCity, v.job?.serviceState, v.job?.serviceZip, v.job?.notesToCrew,
           crewId ? crewNameById.get(crewId) : null,
         ].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [visits, search, crewFilters, statusFilter, crewNameById]);
+  }, [visits, search, crewFilters, statusFilter, tableOnlySelected, selectedVisitIds, serviceFilters, priorityFilters, cityFilters, zipFilters, dateFilters, crewNameById]);
+
+  // Options for the value filters come from the stops on this storm.
+  const serviceOptions = useMemo(() => [...new Set(visits.map(visitServiceName))].sort(), [visits]);
+  const cityOptions = useMemo(() => [...new Set(visits.map((v) => v.job?.serviceCity ?? "—"))].sort(), [visits]);
+  const dateOptions = useMemo(() => [...new Set(visits.map((v) => v.scheduledDate ?? "—"))].sort(), [visits]);
+  const zipOptions = useMemo(() => [...new Set(visits.map((v) => v.job?.serviceZip ?? "—"))].sort(), [visits]);
+
+  const allShownSelected = filteredVisits.length > 0 && filteredVisits.every((v) => selectedVisitIds.has(v.id));
+  const someShownSelected = filteredVisits.some((v) => selectedVisitIds.has(v.id));
+  /** Select (or clear) every stop currently shown — filters narrow what "all" means. */
+  function toggleSelectAllShown() {
+    setSelectedVisitIds((prev) => {
+      const next = new Set(prev);
+      if (allShownSelected) filteredVisits.forEach((v) => next.delete(v.id));
+      else filteredVisits.forEach((v) => next.add(v.id));
+      return next;
+    });
+  }
 
   // Stop number within the crew's route, following order_num.
   const stopNumberById = useMemo(() => {
     const counters = new Map<string, number>();
     const result = new Map<string, number>();
     for (const v of visits) {
-      const key = effectiveCrewIdOf(v) ?? "none";
+      // A storm can run several days; each crew's route is numbered within its day.
+      const key = `${effectiveCrewIdOf(v) ?? "none"}|${v.scheduledDate ?? ""}`;
       const n = (counters.get(key) ?? 0) + 1;
       counters.set(key, n);
       result.set(v.id, n);
@@ -1312,7 +1528,8 @@ export function SnowDispatchBoard() {
     // swapped from a stale order and undid the first.
     if (reordering) return;
     const crewKey = effectiveCrewIdOf(v) ?? "none";
-    const group = filteredVisits.filter((x) => (effectiveCrewIdOf(x) ?? "none") === crewKey);
+    // Only stops of the same crew on the same day swap places.
+    const group = filteredVisits.filter((x) => (effectiveCrewIdOf(x) ?? "none") === crewKey && x.scheduledDate === v.scheduledDate);
     const idx = group.findIndex((x) => x.id === v.id);
     const neighbor = group[idx + dir];
     if (!neighbor) return;
@@ -1323,6 +1540,36 @@ export function SnowDispatchBoard() {
     setDriveMins(new Map());
     setReordering(true);
     try { await persistOrder(ids); } catch { toast.error("Failed to reorder"); } finally { setReordering(false); }
+  }
+
+  /** Moves stops to another day (a storm that runs several days has stops on different days). Completed and
+   *  cancelled stops stay put. Returns how many moved and the first reason any refused (e.g. a crew is clocked in). */
+  async function moveVisitsToDate(visitIds: string[], date: string): Promise<{ moved: number; skipped: number; error: string | null }> {
+    const targets = visitIds
+      .map((id) => visits.find((x) => x.id === id))
+      .filter((v): v is CRMJobVisit => !!v && v.status !== "completed" && v.status !== "cancelled" && v.scheduledDate !== date);
+    const results = await Promise.allSettled(targets.map((v) => updateVisitMutation({ id: v.id, updates: { scheduled_date: date }, jobId: v.jobId })));
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    setDriveMins(new Map());
+    return {
+      moved: results.length - failed.length,
+      skipped: visitIds.length - targets.length,
+      error: failed[0] ? (failed[0].reason instanceof Error ? failed[0].reason.message : "Failed to move") : null,
+    };
+  }
+
+  async function moveToDate(visitIds: string[], date: string) {
+    if (!date) return;
+    const r = await moveVisitsToDate(visitIds, date);
+    if (r.error) toast.warning(`${r.moved} moved. ${r.error}`);
+    else if (r.moved === 0) toast.info("Nothing to move — those stops are already on that date or are finished.");
+    else toast.success(`${r.moved} stop${r.moved > 1 ? "s" : ""} moved to ${shortDateLabel(date)}${r.skipped ? ` (${r.skipped} left as is)` : ""}`);
+    if (r.moved > 0) setMoveDate("");
+  }
+
+  async function saveVisitDate(id: string, date: string) {
+    const r = await moveVisitsToDate([id], date);
+    if (r.error) { toast.error(r.error); throw new Error(r.error); }
   }
 
   async function changeCrew(visitIds: string[], crewId: string | null) {
@@ -1345,12 +1592,16 @@ export function SnowDispatchBoard() {
   async function optimizeRoutes() {
     // Selected stops if any, else everything currently shown. Each crew is routed on its own.
     const pool = selectedVisitIds.size > 0 ? visits.filter((v) => selectedVisitIds.has(v.id)) : filteredVisits;
+    // One route per crew per day (a multi-day storm has a route for each day).
     const byCrew = new Map<string, CRMJobVisit[]>();
+    const crewOfKey = new Map<string, string>();
     for (const v of pool) {
       const crewId = effectiveCrewIdOf(v);
       if (!crewId) continue;
-      if (!byCrew.has(crewId)) byCrew.set(crewId, []);
-      byCrew.get(crewId)!.push(v);
+      const key = `${crewId}|${v.scheduledDate ?? ""}`;
+      crewOfKey.set(key, crewId);
+      if (!byCrew.has(key)) byCrew.set(key, []);
+      byCrew.get(key)!.push(v);
     }
     const routable = [...byCrew.entries()].filter(([, list]) => list.length >= 2);
     if (routable.length === 0) {
@@ -1360,11 +1611,12 @@ export function SnowDispatchBoard() {
     setOptimizing(true);
     try {
       const results = await Promise.all(routable.map(async ([crewId, list]) => {
+        const apiCrewId = crewOfKey.get(crewId) ?? crewId;
         try {
           const res = await fetch("/api/crm/route-optimize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ visitIds: list.map((v) => v.id), strategy: routeStrategy, crewId }),
+            body: JSON.stringify({ visitIds: list.map((v) => v.id), strategy: routeStrategy, crewId: apiCrewId }),
           });
           const data = await res.json() as RouteResult;
           return res.ok ? { crewId, data } : { crewId, error: data.error ?? "Route optimization failed" };
@@ -1387,10 +1639,11 @@ export function SnowDispatchBoard() {
       const pointers = new Map<string, number>();
       const merged = visits.map((v) => {
         const crewId = effectiveCrewIdOf(v);
-        if (!crewId || !members.get(crewId)?.has(v.id)) return v.id;
-        const ptr = pointers.get(crewId) ?? 0;
-        pointers.set(crewId, ptr + 1);
-        return queues.get(crewId)![ptr] ?? v.id;
+        const key = crewId ? `${crewId}|${v.scheduledDate ?? ""}` : "";
+        if (!crewId || !members.get(key)?.has(v.id)) return v.id;
+        const ptr = pointers.get(key) ?? 0;
+        pointers.set(key, ptr + 1);
+        return queues.get(key)![ptr] ?? v.id;
       });
 
       const dt = new Map<string, { mins: number; fromShop: boolean }>();
@@ -1450,6 +1703,10 @@ export function SnowDispatchBoard() {
             <Plus className="h-3.5 w-3.5" />New Storm Event
           </Button>
         )}
+        <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setRoutesOpen(true)}>
+          <RouteIcon className="h-3.5 w-3.5" />Master Routes
+        </Button>
+        <MasterRoutesDialog open={routesOpen} onOpenChange={setRoutesOpen} />
 
         {activeEvent && (
           <>
@@ -1565,6 +1822,12 @@ export function SnowDispatchBoard() {
             </PopoverContent>
           </Popover>
 
+          <ValueFilter label="Dates" options={dateOptions} selected={dateFilters} onChange={setDateFilters} />
+          <ValueFilter label="Services" options={serviceOptions} selected={serviceFilters} onChange={setServiceFilters} />
+          <ValueFilter label="Priorities" options={["high", "normal", "low", "none"]} selected={priorityFilters} onChange={setPriorityFilters} />
+          <ValueFilter label="Cities" options={cityOptions} selected={cityFilters} onChange={setCityFilters} />
+          <ValueFilter label="Zips" options={zipOptions} selected={zipFilters} onChange={setZipFilters} />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
@@ -1574,6 +1837,9 @@ export function SnowDispatchBoard() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem onSelect={toggleSelectAllShown} disabled={filteredVisits.length === 0}>
+                {allShownSelected ? "Unselect All Shown" : "Select All Shown"}
+              </DropdownMenuItem>
               {canManage && (
                 <>
                   <DropdownMenuItem onSelect={() => void dispatchVisits(selectedVisitIds.size > 0 ? [...selectedVisitIds] : null)}>
@@ -1599,9 +1865,17 @@ export function SnowDispatchBoard() {
                   <DropdownMenuSeparator />
                 </>
               )}
+              {canEmailClients && (
+                <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setMessageChannel("email")}>Email Clients…</DropdownMenuItem>
+              )}
+              {canTextClients && (
+                <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setMessageChannel("sms")}>Text Clients…</DropdownMenuItem>
+              )}
+              <DropdownMenuItem disabled={filteredVisits.length === 0} onSelect={() => setNoEmailOpen(true)}>Jobs Without Emails…</DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setStatsOpen((o) => !o)}>{statsOpen ? "Hide Crew Stats" : "Show Crew Stats"}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPrintOpen(true)}>Print Route Sheets…</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setSelectedVisitIds(new Set()); }}>
+              <DropdownMenuItem onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setServiceFilters([]); setPriorityFilters([]); setCityFilters([]); setZipFilters([]); setDateFilters([]); setSelectedVisitIds(new Set()); }}>
                 Clear Filters &amp; Selection
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -1669,9 +1943,9 @@ export function SnowDispatchBoard() {
       {mapOpen && activeEvent && (
         <div className="mx-4 overflow-hidden rounded-lg border shrink-0">
           {orgSettings?.googleMapsApiKey ? (
-            <DispatchMap
+            <SnowWorkMap
               apiKey={orgSettings.googleMapsApiKey}
-              stops={filteredVisits.map((v): DispatchMapStop => {
+              stops={filteredVisits.map((v): SnowMapStop => {
                 const crewId = effectiveCrewIdOf(v);
                 return {
                   visitId: v.id,
@@ -1679,13 +1953,32 @@ export function SnowDispatchBoard() {
                   order: stopNumberById.get(v.id) ?? 0,
                   clientName: v.clientName ?? "Unknown client",
                   address: [v.job?.serviceAddress, v.job?.serviceCity].filter(Boolean).join(", "),
+                  serviceName: visitServiceName(v),
                   crewKey: crewId ?? "__none__",
                   crewLabel: (crewId && crewNameById.get(crewId)) || "Unassigned",
-                  statusLabel: v.status,
+                  status: v.status,
+                  priority: v.clientPriority ?? null,
+                  amountCents: amountByVisitId.get(v.id) ?? 0,
+                  budgetedHours: v.budgetedHours ?? 0,
+                  date: v.scheduledDate ?? null,
                   lat: v.job?.lat ?? null,
                   lng: v.job?.lng ?? null,
                 };
               })}
+              selectedIds={selectedVisitIds}
+              canManage={canManage}
+              crews={crews}
+              tableOnlySelected={tableOnlySelected}
+              reordering={reordering}
+              onToggle={toggleSelect}
+              onSelectMany={(ids) => setSelectedVisitIds((prev) => new Set([...prev, ...ids]))}
+              onClearSelection={() => { setSelectedVisitIds(new Set()); setTableOnlySelected(false); }}
+              onMoveStop={(id, dir) => { const v = visits.find((x) => x.id === id); if (v) void moveStop(v, dir); }}
+              onAssignCrew={changeCrew}
+              onDispatch={(ids) => dispatchVisits(ids)}
+              onOpenMultiCrew={() => setMultiCrewOpen(true)}
+              onMoveToDate={moveToDate}
+              onTableOnlySelected={setTableOnlySelected}
             />
           ) : (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
@@ -1709,10 +2002,23 @@ export function SnowDispatchBoard() {
                   {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMultiCrewOpen(true)}>
+                <Users className="mr-1 h-3 w-3" />Assign crews…
+              </Button>
+              <div className="flex items-center gap-1">
+                <Input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} className="h-7 w-36 text-xs" aria-label="Move selected stops to date" />
+                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!moveDate} onClick={() => void moveToDate([...selectedVisitIds], moveDate)}>Move to date</Button>
+              </div>
               <Button size="sm" className="h-7 text-xs" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
                 Close Out…
               </Button>
             </>
+          )}
+          {canEmailClients && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMessageChannel("email")}>Email clients…</Button>
+          )}
+          {canTextClients && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMessageChannel("sms")}>Text clients…</Button>
           )}
           <button className="ml-auto text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => setSelectedVisitIds(new Set())}>Clear</button>
         </div>
@@ -1728,13 +2034,25 @@ export function SnowDispatchBoard() {
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
               <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                <th className="w-8 px-2 py-2.5" />
+                <th className="w-8 px-2 py-2.5">
+                  <Checkbox
+                    checked={allShownSelected ? true : someShownSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAllShown}
+                    disabled={filteredVisits.length === 0}
+                    aria-label="Select all shown stops"
+                    className="h-3.5 w-3.5"
+                  />
+                </th>
                 <th className="w-12 px-2 py-2.5">#</th>
                 <th className="w-8 px-2 py-2.5">St</th>
                 <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
+                {isVisible("date") && <th className="px-2 py-2.5">Date</th>}
+                {isVisible("service") && <th className="px-2 py-2.5">Service</th>}
                 {isVisible("address") && <th className="px-2 py-2.5">Address</th>}
                 {isVisible("city") && <th className="px-2 py-2.5">City</th>}
+                {isVisible("state") && <th className="px-2 py-2.5">State</th>}
                 {isVisible("zip") && <th className="px-2 py-2.5">Zip</th>}
+                {isVisible("priority") && <th className="px-2 py-2.5">Priority</th>}
                 {isVisible("trigger") && <th className="px-2 py-2.5">Trigger</th>}
                 {isVisible("crew") && <th className="px-2 py-2.5">Crew</th>}
                 {isVisible("depth") && <th className="px-2 py-2.5 text-right">Depth</th>}
@@ -1799,21 +2117,78 @@ export function SnowDispatchBoard() {
                         {(v.pushNumber ?? 1) > 1 && (
                           <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
                         )}
-                        {canManage && !stormComplete && v.job?.invoiceType === "per_push_per_inch" && latestPushVisitIdByJob.get(v.jobId) === v.id && (
+                        {capFlags?.get(v.jobId)?.over && v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled" && (
+                          <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`${capFlags.get(v.jobId)!.label} — this stop bills as overage, not under the contract price`}>
+                            Overage
+                          </Badge>
+                        )}
+                        {v.handedOffFromCrewId && (
+                          <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`The crew app handed this stop off from ${crewNameById.get(v.handedOffFromCrewId) ?? "another crew"} — they couldn't make it`}>
+                            Handed off from {crewNameById.get(v.handedOffFromCrewId) ?? "another crew"}
+                          </Badge>
+                        )}
+                        {v.crewGroupId && (
+                          <Badge variant="outline" className="ml-1.5 px-1.5 py-0 text-[9px]" title={v.crewGroupSecondary ? "Extra crew on this stop — the lead crew's visit carries the charge" : "Lead crew on a stop with more than one crew — bills the stop"}>
+                            {v.crewGroupSecondary ? "Extra crew" : "Lead"}
+                          </Badge>
+                        )}
+                        {canManage && !stormComplete && latestPushVisitIdByJob.get(v.jobId) === v.id && (
+                          isFlatPerEvent(v) ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  title="Another visit to this site on this storm"
+                                  disabled={addingPush}
+                                  className="ml-1.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 max-lg:py-1.5"
+                                >
+                                  <Plus className="h-2.5 w-2.5" />Add push<ChevronDown className="h-2.5 w-2.5 opacity-60" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" className="w-64">
+                                <DropdownMenuItem onSelect={() => void addPush(v, false)}>
+                                  No charge — record the visit only
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => void addPush(v, true)}>
+                                  Bill it — its own charge (e.g. a second salting)
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : (
+                            <button
+                              type="button"
+                              title={v.job?.invoiceType === "per_event_per_inch" ? "Add another visit on this storm — part of the event: its depth counts toward the storm's deepest reading, no separate charge" : "Add another push for this job on this storm — billed on its own depth"}
+                              disabled={addingPush}
+                              onClick={() => void addPush(v)}
+                              className="ml-1.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 max-lg:py-1.5"
+                            >
+                              <Plus className="h-2.5 w-2.5" />Add push
+                            </button>
+                          )
+                        )}
+                        {(v.pushNumber ?? 1) > 1 && isFlatPerEvent(v) && !v.crewGroupSecondary && (
                           <button
                             type="button"
-                            title="Add another push for this job on this storm — billed on its own depth"
-                            disabled={addingPush}
-                            onClick={() => void addPush(v)}
-                            className="ml-1.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 max-lg:py-1.5"
+                            disabled={!canManage}
+                            onClick={() => void updateVisitMutation({ id: v.id, updates: { bill_push: !v.billPush }, jobId: v.jobId }).catch(() => toast.error("Failed to change billing"))}
+                            title={v.billPush ? "Billed as its own charge — click to make it no charge" : "No charge (the storm's first push carries the price) — click to bill it"}
+                            className={cn("ml-1.5 rounded border px-1.5 py-0 text-[9px] disabled:opacity-60", v.billPush ? "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400" : "text-muted-foreground")}
                           >
-                            <Plus className="h-2.5 w-2.5" />Add push
+                            {v.billPush ? "Billed" : "No charge"}
                           </button>
                         )}
                       </td>
+                      {isVisible("date") && (
+                        <td className="px-2 py-2 text-muted-foreground whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <VisitDateCell visit={v} canEdit={canManage} onSave={saveVisitDate} />
+                        </td>
+                      )}
+                      {isVisible("service") && <td className="px-2 py-2 text-muted-foreground">{visitServiceName(v)}</td>}
                       {isVisible("address") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceAddress ?? "—"}</td>}
                       {isVisible("city") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceCity ?? "—"}</td>}
+                      {isVisible("state") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceState ?? "—"}</td>}
                       {isVisible("zip") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceZip ?? "—"}</td>}
+                      {isVisible("priority") && <td className="px-2 py-2 text-muted-foreground capitalize">{v.clientPriority ?? "—"}</td>}
                       {isVisible("trigger") && <td className="px-2 py-2 text-muted-foreground">{v.job?.inchTrigger != null ? `${v.job.inchTrigger}"` : "—"}</td>}
                       {isVisible("crew") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                         {canManage ? (
@@ -1862,6 +2237,34 @@ export function SnowDispatchBoard() {
             forecastDepthInches={activeEvent.forecastDepthInches}
             onDone={() => void refetchVisits()}
           />
+          <BulkMultiCrewDialog
+            key={multiCrewOpen ? "open" : "closed"}
+            open={multiCrewOpen}
+            onOpenChange={setMultiCrewOpen}
+            visits={visits.filter((v) => selectedVisitIds.has(v.id))}
+            allVisits={visits}
+            crews={crews}
+            resolveCrewId={effectiveCrewIdOf}
+            onDone={() => { setSelectedVisitIds(new Set()); setDriveMins(new Map()); }}
+          />
+          {messageChannel && (
+            <SnowMessageDialog
+              open
+              onClose={() => setMessageChannel(null)}
+              initialChannel={messageChannel}
+              visits={selectedStops}
+              event={activeEvent}
+              crewNameOf={crewNameOf}
+            />
+          )}
+          {noEmailOpen && (
+            <SnowNoEmailDialog
+              open
+              onClose={() => setNoEmailOpen(false)}
+              visits={selectedStops.length > 0 ? selectedStops : filteredVisits}
+              scopeLabel={selectedStops.length > 0 ? "selected" : "shown"}
+            />
+          )}
           <SnowCrewAssignDialog open={crewAssignOpen} onOpenChange={setCrewAssignOpen} visits={visits} crews={crews} />
           <SnowPrintDialog open={printOpen} onOpenChange={setPrintOpen} visits={visits} crews={crews} event={activeEvent} />
         </>

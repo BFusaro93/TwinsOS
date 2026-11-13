@@ -11,7 +11,9 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 import { contractCoversServiceDay } from "@/lib/contract-billing";
-import { hourlyStopShares, productLineTotalCents, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
+import { loadSnowCapStatuses } from "@/lib/snow-cap-loader";
+import { capOverageWarning } from "@/lib/snow-caps";
+import { hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, productLineTotalCents, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -36,6 +38,8 @@ export function isPerEventBilling(invoiceType: string): boolean {
 export function billingGroupKey(visit: CRMJobVisit): string {
   const invoiceType = visit.job?.invoiceType ?? "per_event";
   if (!isPerEventBilling(invoiceType)) return visit.id;
+  // A billable return trip is its own charge, not part of the storm's single one.
+  if ((visit.pushNumber ?? 1) > 1 && visit.billPush && invoiceType === "per_event") return visit.id;
   // stormEventId is only set by the dispatch board's storm flow — a visit
   // created directly (crew app, manual entry) leaves it null. Falling back
   // to a constant would collapse every storm-less visit of a job, across
@@ -65,6 +69,18 @@ export interface SnowContractRow {
   bill_month_in_advance?: boolean | null;
   signed_at?: string | null;
   created_at?: string | null;
+  // Snow caps (see snow-caps.ts): inches / salts the flat price covers per period.
+  snow_inch_cap?: number | string | null;
+  snow_salt_cap?: number | null;
+  snow_pushes_cap?: number | null;
+  snow_events_cap?: number | null;
+  snow_overage_per_push_cents?: number | null;
+  snow_overage_per_event_cents?: number | null;
+  covers_snow?: boolean | null;
+  snow_cap_reset?: string | null;
+  snow_overage_description?: string | null;
+  snow_overage_per_inch_cents?: number | null;
+  snow_overage_per_salt_cents?: number | null;
 }
 
 /** Missing, deleted, switched inactive, cancelled or expired — covers nothing. */
@@ -126,7 +142,7 @@ export async function loadContractsById(
     const rows = await fetchAllRows<SnowContractRow>(() =>
       supabase
         .from("crm_contracts")
-        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates, snow_outside_event_price_cents, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at")
+        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates, snow_outside_event_price_cents, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at, snow_inch_cap, snow_salt_cap, snow_cap_reset, snow_overage_description, snow_overage_per_inch_cents, snow_overage_per_salt_cents, snow_pushes_cap, snow_events_cap, snow_overage_per_push_cents, snow_overage_per_event_cents, covers_snow")
         .in("id", ids)
         .order("id", { ascending: true })
     );
@@ -147,8 +163,9 @@ export function useUninvoicedSnowVisits(filters: {
   fromDate?: string;
   toDate?: string;
 }) {
+  const orgTimeZone = useOrgTimeZone();
   return useQuery({
-    queryKey: ["snow-invoicing", "uninvoiced-visits", filters],
+    queryKey: ["snow-invoicing", "uninvoiced-visits", filters, orgTimeZone],
     queryFn: async () => {
       const supabase = createClient();
 
@@ -199,9 +216,25 @@ export function useUninvoicedSnowVisits(filters: {
       // A Monthly Flat Rate job bills only through its contract, so it reaches
       // this queue only for a storm the contract doesn't cover (outside its
       // dates, or after it ended) — priced at the contract's price per storm.
-      const visits = ((data.map(mapVisit)) as CRMJobVisit[])
+      // Caps: a covered visit beyond its contract's inch / salt cap bills as
+      // overage instead of staying inside the flat price (counted over ALL the
+      // contract's completed visits, not just the filtered ones — snow-caps.ts).
+      const capStatuses = await loadSnowCapStatuses(
+        supabase,
+        [...contractById.values()],
+        (contractId, day) => !isSnowContractEnded(contractById.get(contractId), day),
+        todayInZone(orgTimeZone)
+      );
+      const capOverageOf = (v: CRMJobVisit) =>
+        v.job?.contractId && v.job.invoiceType === "monthly_flat_rate"
+          ? capStatuses.get(v.job.contractId)?.overageByVisit.get(v.id)
+          : undefined;
+      const visits = liftStormDepths((data.map(mapVisit)) as CRMJobVisit[])
         .filter((v) => v.job?.invoiceType !== "monthly_flat_rate" || !!v.job?.contractId)
-        .filter((v) => !v.job?.contractId || contractEnded(v));
+        .filter((v) => !v.job?.contractId || contractEnded(v) || !!capOverageOf(v))
+        // Extra crews and return trips on a once-per-storm job are on the
+        // record only; the lead's first push carries the charge.
+        .filter((v) => !isUnbilledSnowVisit(v));
 
       if (visits.length === 0) return [];
 
@@ -318,7 +351,11 @@ export function useUninvoicedSnowVisits(filters: {
         const out: UninvoicedSnowVisit = invoiceByJobDate.has(key)
           ? { ...v, possibleDuplicateInvoiceNumber: invoiceByJobDate.get(key) ?? null }
           : { ...v };
-        if (v.job?.invoiceType === "monthly_flat_rate") {
+        const capOverage = capOverageOf(v);
+        if (capOverage) {
+          out.capOverage = capOverage;
+          out.billingWarning = capOverageWarning(capOverage);
+        } else if (v.job?.invoiceType === "monthly_flat_rate") {
           const pricing = flatRateOutsidePricing(v.job.contractId ? contractById.get(v.job.contractId) : undefined);
           out.contractOutsidePriceCents = pricing.priceCents;
           out.billingWarning = pricing.warning;
