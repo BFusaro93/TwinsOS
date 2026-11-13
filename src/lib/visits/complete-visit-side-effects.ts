@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { loadPrintedSubitems, splitPrintedSubitems, type PrintedSubitem } from "@/lib/invoices/printed-subitems";
 import type { Database } from "@/types/supabase";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
@@ -122,7 +123,9 @@ type VisitRow = {
 
 type JobServiceRow = {
   id: string;
+  service_id?: string | null;
   service_name: string;
+  max_visits?: number | null;
   qty: number | null;
   rate_cents: number | null;
   is_taxable: boolean | null;
@@ -142,6 +145,7 @@ type JobRow = {
   invoice_description: string | null;
   rate_cents: number | null;
   po_number: string | null;
+  invoice_terms: string | null;
   sales_rep_id: string | null;
   crm_job_services: JobServiceRow[] | null;
   clients: { invoice_frequency: string | null; default_tax_rate_bps: number | null; default_terms: string | null; is_taxable: boolean | null } | null;
@@ -160,6 +164,8 @@ type AutoInvoiceLine = {
   // flipped to 'invoiced' below, same as the manual "Create Invoice" paths.
   jobProductId?: string;
   productId?: string | null;
+  /** Set on itemized "On invoice" sub-item rows: the parent service they bill under. */
+  serviceId?: string | null;
 };
 
 export async function applyVisitCompletionSideEffects(
@@ -199,7 +205,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 1. Parent-job bookkeeping ─────────────────────────────────────────────
   const { data: jobData } = await supabase
     .from("crm_jobs")
-    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, invoice_desc, included, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
+    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, invoice_terms, sales_rep_id, crm_job_services(id, service_id, service_name, qty, rate_cents, max_visits, is_taxable, invoice_desc, included, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
     .eq("id", visit.job_id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -529,7 +535,35 @@ export async function applyVisitCompletionSideEffects(
           };
         });
 
-        const lineItems: AutoInvoiceLine[] = [...serviceLines, ...productLines];
+        // Single-visit jobs: estimate sub-items flagged "On invoice" print as their own
+        // rows under their service; their amount comes out of the service row, so the
+        // invoice total is unchanged (see lib/invoices/printed-subitems.ts).
+        const printedBySvc = services.length > 0
+          ? await loadPrintedSubitems(supabase, j.job_type, services.map((s) => s.id))
+          : new Map<string, PrintedSubitem[]>();
+        const itemizedServiceLines: AutoInvoiceLine[] = services.length > 0
+          ? serviceLines.flatMap((line, idx) => {
+              const svc = services[idx];
+              const split = svc ? splitPrintedSubitems({ qty: line.qty, rateCents: line.rate_cents, totalCents: line.total_cents }, printedBySvc.get(svc.id), j.job_type === "recurring" ? (svc.max_visits ?? 0) : 1) : null;
+              if (!split || !svc) return [line];
+              return [
+                { ...line, rate_cents: split.parent.rateCents, total_cents: split.parent.totalCents },
+                ...split.children.map((c): AutoInvoiceLine => ({
+                  name: c.name,
+                  description: c.name,
+                  qty: c.qty,
+                  rate_cents: c.rateCents,
+                  total_cents: c.totalCents,
+                  service_date: line.service_date,
+                  is_taxable: line.is_taxable,
+                  // No forced service: the invoice-line resolver files it by name, the same
+                  // whether the visit starts a draft or folds into one (that path can't pass it).
+                })),
+              ];
+            })
+          : serviceLines;
+
+        const lineItems: AutoInvoiceLine[] = [...itemizedServiceLines, ...productLines];
         const subtotal = lineItems.reduce((s, li) => s + li.total_cents, 0);
         const taxableSubtotal = lineItems.filter((li) => li.is_taxable).reduce((s, li) => s + li.total_cents, 0);
         const taxCents = Math.round((taxableSubtotal * taxRateBps) / 10000);
@@ -550,6 +584,7 @@ export async function applyVisitCompletionSideEffects(
             service_date: li.service_date,
             is_taxable: li.is_taxable,
             product_id: li.productId ?? null,
+            ...(li.serviceId ? { service_id: li.serviceId } : {}),
             sort_order: sortOffset + i,
             visit_id: i === 0 && tagVisit ? visitId : null,
           }));
@@ -701,7 +736,7 @@ export async function applyVisitCompletionSideEffects(
               .eq("id", orgId)
               .maybeSingle();
             const invoiceTerms = resolveInvoiceTerms(
-              j.clients?.default_terms,
+              j.invoice_terms || j.clients?.default_terms,
               (orgTermsRow as { default_billing_terms: string | null } | null)?.default_billing_terms,
             );
             // A batch draft collects the whole period, so it is dated the

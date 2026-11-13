@@ -64,7 +64,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn, formatCurrency } from "@/lib/utils";
 import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
-import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -284,6 +284,7 @@ function LineItemRow({
       hours: r.hours ?? null,
       men: r.men ?? null,
       service_id: r.serviceId ?? null,
+      hide_on_print: r.hideOnPrint,
     };
   }
 
@@ -327,6 +328,19 @@ function LineItemRow({
     }
   }
 
+  // Presentation only: totals, tax and the visit/product links are untouched, so
+  // no recalc. The customer-facing invoice folds this line into the visible line above.
+  async function toggleHidden() {
+    const next = !row.hideOnPrint;
+    setRow((p) => ({ ...p, hideOnPrint: next }));
+    try {
+      await upsert({ invoiceId, item: { id: row.id, hide_on_print: next } });
+    } catch (err) {
+      setRow((p) => ({ ...p, hideOnPrint: !next }));
+      toast.error(mutationErrorMessage(err, "Failed to update line"));
+    }
+  }
+
   async function handleDelete() {
     try {
       await remove({ id: row.id, invoiceId });
@@ -334,7 +348,7 @@ function LineItemRow({
   }
 
   return (
-    <tr className="group border-b text-xs hover:bg-slate-50 dark:hover:bg-muted/40">
+    <tr className={cn("group border-b text-xs hover:bg-slate-50 dark:hover:bg-muted/40", row.hideOnPrint && "bg-slate-50/60 dark:bg-muted/20 [&>td]:opacity-60")}>
       {/* Service name */}
       <td className="w-44 px-3 py-2 font-medium text-slate-700 dark:text-neutral-300 align-middle">
         {row.isOtherCharge && !row.serviceId ? (
@@ -368,13 +382,14 @@ function LineItemRow({
       </td>
       {/* Description */}
       <td className="px-3 py-2">
-        <input
+        <textarea
+          rows={Math.min(8, Math.max(1, notesToPlainText(row.description).split("\n").length))}
           value={notesToPlainText(row.description)}
-          onChange={(e) => update("description", e.target.value)}
+          onChange={(e) => update("description", e.target.value.replace(/^[-*] /gm, "• "))}
           onBlur={save}
-          placeholder="Description…"
+          placeholder="Description… (start a line with - for a bullet)"
           disabled={locked}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-700 dark:text-neutral-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full resize-y whitespace-pre-wrap rounded border border-transparent bg-transparent px-1 py-0.5 text-xs leading-snug text-slate-700 dark:text-neutral-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Service date */}
@@ -497,7 +512,7 @@ function LineItemRow({
         )}
       </td>
       {/* Discount / Delete / save indicator */}
-      <td className="w-16 px-2 py-2 align-middle">
+      <td className="w-20 px-2 py-2 align-middle">
         <div className="flex items-center justify-end gap-0.5">
           <LineItemDiscountPopover
             discountCents={row.discountCents}
@@ -509,6 +524,21 @@ function LineItemRow({
             onSave={saveDiscount}
             disabled={locked}
           />
+          <button
+            type="button"
+            onClick={toggleHidden}
+            disabled={locked}
+            aria-label={row.hideOnPrint ? "Show this line on the invoice" : "Hide this line on the invoice"}
+            title={row.hideOnPrint
+              ? "Hidden from the customer — its amount is included in the line above. Click to show it."
+              : "Hide this line from the customer's invoice. Its amount rolls into the line above; totals don't change."}
+            className={cn(
+              "text-slate-300 dark:text-neutral-500 hover:text-brand-500 dark:hover:text-brand-400 transition-opacity disabled:opacity-0",
+              row.hideOnPrint ? "opacity-100 text-brand-500 dark:text-brand-400" : "opacity-0 group-hover:opacity-100"
+            )}
+          >
+            {row.hideOnPrint ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
           {removing ? (
             <span className="text-[10px] text-slate-400 dark:text-neutral-500">…</span>
           ) : (

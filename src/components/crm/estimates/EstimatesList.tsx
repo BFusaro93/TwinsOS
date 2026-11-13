@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates";
+import { useEstimateIdsWithJobs } from "@/lib/hooks/use-crm-jobs";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 // Shared with Settings → Import / Export so both import the same columns.
@@ -118,6 +119,7 @@ export function EstimatesList({ clientId }: Props) {
   const canEdit = can("estimate_edit");
   const canSend = can("estimate_send");
   const { data: estimates, isLoading, refetch } = useEstimates(clientId);
+  const { data: estimateIdsWithJobs } = useEstimateIdsWithJobs();
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
   const { mutateAsync: deleteEstimate } = useDeleteEstimate();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -733,9 +735,16 @@ export function EstimatesList({ clientId }: Props) {
                         case "stage":
                           return (
                             <td key={col.key} className="px-3 py-2.5">
-                              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap", stageColor[e.stage])}>
-                                {stageLabel[e.stage] ?? e.stage}
-                              </span>
+                              {e.stage === "accepted" && estimateIdsWithJobs?.has(e.id) ? (
+                                // Display only: the stage stays Accepted (filters, tabs and pipeline use it).
+                                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium whitespace-nowrap text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                                  Converted
+                                </span>
+                              ) : (
+                                <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap", stageColor[e.stage])}>
+                                  {stageLabel[e.stage] ?? e.stage}
+                                </span>
+                              )}
                             </td>
                           );
                         case "client":

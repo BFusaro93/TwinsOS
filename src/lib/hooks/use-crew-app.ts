@@ -170,7 +170,7 @@ function crewVisitSelect(hidePricing: boolean): string {
   return `
     ${visitCols},
     clients(display_name, primary_phone, gate_lock_code, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
-    crm_crews(name),
+    crm_crews!crm_job_visits_crew_id_fkey(name),
     crm_jobs:crew_job(${jobCols}, ${jobEmbeds}, crm_job_services:crew_job_services(${serviceCols}, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
   `;
 }
@@ -1313,6 +1313,100 @@ export function useSkipVisit() {
     },
     onError: (err) => crewActionFailed(qc, err, "Failed to skip service — try again"),
   }));
+}
+
+/** Crew is going back to a finished snow stop: creates the next push as its own dispatched visit. */
+export function useAddCrewPush() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (visitId: string): Promise<{ id: string; pushNumber: number }> => {
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/add-push`, { method: "POST" });
+      if (!res.ok) throw await crewRequestError(res, "Failed to add another push");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+    onError: (err) => crewActionFailed(qc, err, "Failed to add another push — try again"),
+  });
+}
+
+/** The crews this crew can call in to help (every other active crew in the org). */
+export function useHelperCrews(enabled: boolean) {
+  return useQuery<{ id: string; name: string }[]>({
+    queryKey: ["crew-app-helper-crews"],
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const res = await fetch("/api/crm/crew/helper-crews");
+      if (!res.ok) throw await crewRequestError(res, "Couldn't load crews");
+      return ((await res.json()) as { crews: { id: string; name: string }[] }).crews;
+    },
+  });
+}
+
+/** Crew B needs help: adds `crewId` to each of these visits as an extra crew, straight onto its tablet. */
+export function useRequestHelp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ visitIds, crewId }: { visitIds: string[]; crewId: string }): Promise<{ crewName: string; added: number }> => {
+      let crewName = "";
+      let added = 0;
+      for (const visitId of visitIds) {
+        const res = await fetch(`/api/crm/crew/stops/${visitId}/need-help`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ crewId }),
+        });
+        // Already on this stop (another service of the same stop got them first) — not a failure.
+        if (res.status === 409) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          if (typeof body.error === "string" && body.error.includes("already on this stop")) continue;
+          throw new CrewRequestError(body.error ?? "Couldn't add that crew", 409);
+        }
+        if (!res.ok) throw await crewRequestError(res, "Couldn't call in that crew");
+        const body = (await res.json()) as { crewName?: string };
+        crewName = body.crewName ?? crewName;
+        added++;
+      }
+      return { crewName, added };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-partner-crews"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+    onError: (err) => crewActionFailed(qc, err, "Couldn't call in that crew — try again"),
+  });
+}
+
+/** Crew can't make it to a stop: hands each of these (not yet started) visits to `crewId`. */
+export function useHandOffStop() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ visitIds, crewId }: { visitIds: string[]; crewId: string }): Promise<{ crewName: string }> => {
+      let crewName = "";
+      for (const visitId of visitIds) {
+        const res = await fetch(`/api/crm/crew/stops/${visitId}/hand-off`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ crewId }),
+        });
+        if (!res.ok) throw await crewRequestError(res, "Couldn't hand off this stop");
+        crewName = ((await res.json()) as { crewName?: string }).crewName ?? crewName;
+      }
+      return { crewName };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+    onError: (err) => crewActionFailed(qc, err, "Couldn't hand off this stop — try again"),
+  });
 }
 
 export function useAcknowledgeNotes() {

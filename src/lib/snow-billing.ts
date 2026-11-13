@@ -1,6 +1,8 @@
 import { formatCurrency } from "@/lib/utils";
 import type { SnowRateTier } from "@/lib/hooks/use-snow-rate-tiers";
 import type { CRMJobVisit } from "@/types/crm-jobs";
+import { formatInZone } from "@/lib/time/zone";
+import { capPartText, type SnowCapOverage } from "@/lib/snow-caps";
 
 export const INVOICE_TYPE_LABEL: Record<string, string> = {
   per_event: "Per Event",
@@ -18,7 +20,7 @@ export const INVOICE_TYPE_LABEL: Record<string, string> = {
  *  still the upper range's own start. The open-ended top
  *  tier (maxInches: null) bills ratePerInchCents × depth instead of a flat
  *  amount. */
-export function priceWithTiers(depth: number, tiers: SnowRateTier[]): number | null {
+export function findSnowTier(depth: number, tiers: SnowRateTier[]): SnowRateTier | null {
   if (tiers.length === 0) return null;
   const sorted = [...tiers].sort((a, b) => a.minInches - b.minInches);
   // The highest tier that starts below the depth — or that starts exactly AT
@@ -32,14 +34,31 @@ export function priceWithTiers(depth: number, tiers: SnowRateTier[]): number | n
   }
   // No tier's range contains this depth (below the lowest tier's minInches,
   // or above the highest bounded tier with no open-ended tier to catch the
-  // overflow) — null, not 0, so the caller's `tiered ?? flatRateFallback`
-  // actually falls back instead of billing $0.
+  // overflow) — null, so the caller's `tiered ?? flatRateFallback` actually
+  // falls back instead of billing $0.
   if (index === -1) return null;
   const tier = sorted[index];
-  if (tier.maxInches == null) return Math.round((tier.ratePerInchCents ?? 0) * depth);
   const isLast = index === sorted.length - 1;
-  if (depth <= tier.maxInches || !isLast) return tier.rateCents ?? 0;
-  return null;
+  if (tier.maxInches != null && depth > tier.maxInches && isLast) return null;
+  return tier;
+}
+
+/** Prices a depth against a job's configured tiers (e.g. 0-3in flat $X,
+ *  3-6in flat $Y, ... 12+in $D/in, or an all-inclusive top range billed
+ *  hourly). A tier covers min < depth <= max, so a boundary depth belongs to
+ *  the LOWER range (exactly 3" on "0–3 / 3–6" is the first tier) and the first
+ *  tier also covers a depth equal to its own min (e.g. 0). A depth that falls
+ *  in a gap between ranges (a legacy "0–3 / 3.01–6" setup and 3.005") also
+ *  bills the lower range, while 3.01" there is still the upper range's own
+ *  start. The open-ended top flat tier (maxInches: null) bills
+ *  ratePerInchCents × depth. A range billed "hourly" bills `billableHours` ×
+ *  its hourly rate (rateCents) — the caller supplies the hours on site. */
+export function priceWithTiers(depth: number, tiers: SnowRateTier[], billableHours = 0): number | null {
+  const tier = findSnowTier(depth, tiers);
+  if (!tier) return null;
+  if (tier.billAs === "hourly") return Math.round(billableHours * (tier.rateCents ?? 0));
+  if (tier.maxInches == null) return Math.round((tier.ratePerInchCents ?? 0) * depth);
+  return tier.rateCents ?? 0;
 }
 
 /** Tier ranges must be contiguous: each range starts where the previous one
@@ -68,6 +87,57 @@ export function snowTierRangeProblem(tiers: { minInches: number; maxInches: numb
   return null;
 }
 
+/** A snow visit that is recorded but not billed on its own:
+ *  - an extra crew on a multi-crew stop (crewGroupSecondary) — the lead visit
+ *    carries the stop's charge. EXCEPT on Hourly jobs, where every truck bills
+ *    its own hours on site;
+ *  - push 2+ on a job billed once per storm (Per Event / Per Event Per Inch) —
+ *    the crew went back and it is on the timeline, but the storm's one charge
+ *    is carried by the first push — unless a flat Per Event push is marked
+ *    billable (billPush), e.g. a second salting, which is its own charge. On
+ *    Per Event, Per Inch a return trip is part of the event (its depth counts
+ *    toward the deepest reading — see liftStormDepths).
+ *  Per Push and Hourly jobs bill every push. Work that really is a separate
+ *  charge (salt after plowing) is its own job, or a pushed visit on a Per Push
+ *  job — not an extra crew. Unbilled visits show $0 and stay out of Snow
+ *  Invoicing. */
+export function isUnbilledSnowVisit(visit: {
+  pushNumber?: number | null;
+  billPush?: boolean | null;
+  crewGroupSecondary?: boolean | null;
+  job?: { invoiceType: string | null } | null;
+}): boolean {
+  const t = visit.job?.invoiceType ?? "per_event";
+  if (visit.crewGroupSecondary) return t !== "hourly";
+  if ((visit.pushNumber ?? 1) <= 1) return false;
+  // billPush (a second salting billed as its own charge) only applies to flat Per Event;
+  // on Per Event, Per Inch a return trip is part of the event's one charge.
+  if (t === "per_event") return !visit.billPush;
+  return t === "per_event_per_inch";
+}
+
+/** Per Event, Per Inch prices the storm once, on its deepest reading across
+ *  EVERY visit of the job on it — including return trips and extra crews that
+ *  aren't billed themselves (they are dropped from the invoicing queue). This
+ *  lifts each such visit's depth to that storm maximum so the deeper return
+ *  trip still prices the event. Other invoice types are returned unchanged. */
+export function liftStormDepths<T extends { id: string; jobId: string; stormEventId: string | null; snowDepthInches: number | null; status: string; job?: { invoiceType: string | null } | null }>(visits: T[]): T[] {
+  const maxByEvent = new Map<string, number>();
+  for (const v of visits) {
+    if (v.job?.invoiceType !== "per_event_per_inch" || !v.stormEventId) continue;
+    if (v.status === "skipped" || v.status === "cancelled") continue;
+    if (v.snowDepthInches == null || v.snowDepthInches <= 0) continue;
+    const key = `${v.jobId}::${v.stormEventId}`;
+    maxByEvent.set(key, Math.max(maxByEvent.get(key) ?? 0, v.snowDepthInches));
+  }
+  if (maxByEvent.size === 0) return visits;
+  return visits.map((v) => {
+    if (v.job?.invoiceType !== "per_event_per_inch" || !v.stormEventId) return v;
+    const max = maxByEvent.get(`${v.jobId}::${v.stormEventId}`);
+    return max != null && (v.snowDepthInches ?? 0) < max ? { ...v, snowDepthInches: max } : v;
+  });
+}
+
 /** A completed snow visit as Snow Invoicing prices it: the visit, plus what
  *  the queue resolved around it (use-snow-invoicing). */
 export type SnowBillableVisit = CRMJobVisit & {
@@ -77,6 +147,9 @@ export type SnowBillableVisit = CRMJobVisit & {
   /** Hourly job sharing ONE crew stop with another hourly job: this visit's
    *  share (0–1) of the stop's on-site time. Unset = the whole span. */
   hourlyStopShare?: number | null;
+  /** Monthly Flat Rate visit the contract covers but that is past its inch / salt
+   *  cap: bills as overage (snow-caps.ts) instead of staying in the flat price. */
+  capOverage?: SnowCapOverage;
   /** Why the visit can't be priced (shown in the queue instead of a silent $0). */
   billingWarning?: string | null;
   /** Materials the crew recorded as used on this storm visit, not yet billed. */
@@ -175,6 +248,21 @@ export function snowBillableHours(
   return Math.max(0, Math.round(hours * 100) / 100);
 }
 
+/** "7:05 AM – 8:40 AM" from the visit's clock stamps in the org's zone — the optional time
+ *  suffix on a snow invoice line (service option "Show visit times on snow invoice lines").
+ *  Null when the crew never clocked a start AND end for the visit. */
+export function visitTimeRangeText(
+  visit: Pick<CRMJobVisit, "clockedInAt" | "clockedOutAt">,
+  timeZone: string
+): string | null {
+  if (!visit.clockedInAt || !visit.clockedOutAt) return null;
+  const opts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const start = formatInZone(visit.clockedInAt, timeZone, opts);
+  const end = formatInZone(visit.clockedOutAt, timeZone, opts);
+  if (start === "—" || end === "—") return null;
+  return `${start} – ${end}`;
+}
+
 /** A per-inch depth only counts once it was actually recorded — an unrecorded
  *  depth (null) or 0 leaves the visit unpriced ($0, flagged in the queue for a
  *  depth) rather than billing the bottom range. */
@@ -195,7 +283,10 @@ export function computeGroupAmountCents(groupVisits: SnowBillableVisit[], tiersB
     if (depths.length === 0) return 0;
     const maxDepth = Math.max(...depths);
     const tiers = job?.id ? tiersByJobId?.get(job.id) : undefined;
-    const tiered = tiers?.length ? priceWithTiers(maxDepth, tiers) : null;
+    // An hourly range bills the on-site hours of every visit in the storm's billing group
+    // (the deepest reading only picks the range; see liftStormDepths).
+    const groupHours = groupVisits.reduce((sum, v) => sum + snowBillableHours(v), 0);
+    const tiered = tiers?.length ? priceWithTiers(maxDepth, tiers, groupHours) : null;
     return tiered ?? Math.round((job?.ratePerInchCents ?? 0) * maxDepth);
   }
   if (invoiceType === "per_push_per_inch") {
@@ -203,7 +294,7 @@ export function computeGroupAmountCents(groupVisits: SnowBillableVisit[], tiersB
     const depth = recordedDepth(visit);
     if (depth == null) return 0;
     const tiers = job?.id ? tiersByJobId?.get(job.id) : undefined;
-    const tiered = tiers?.length ? priceWithTiers(depth, tiers) : null;
+    const tiered = tiers?.length ? priceWithTiers(depth, tiers, snowBillableHours(visit)) : null;
     return tiered ?? Math.round((job?.ratePerInchCents ?? 0) * depth);
   }
   if (invoiceType === "hourly") {
@@ -211,6 +302,7 @@ export function computeGroupAmountCents(groupVisits: SnowBillableVisit[], tiersB
     return Math.round(snowBillableHours(visit) * (job?.rateCents ?? 0));
   }
   if (invoiceType === "monthly_flat_rate") {
+    if (visit.capOverage) return visit.capOverage.amountCents;
     // Only reaches Snow Invoicing for a storm the contract doesn't cover; it
     // bills the contract's price per storm outside its dates (0 = not set —
     // the queue shows a warning instead of billing).
@@ -243,6 +335,10 @@ export function describeAmount(visit: SnowBillableVisit, groupSize: number, tier
   const splitSuffix = groupSize > 1 ? ` (split ÷${groupSize})` : "";
   if (invoiceType === "per_event_per_inch") {
     const tiers = visit.job?.id ? tiersByJobId?.get(visit.job.id) : undefined;
+    const hourlyTier = tiers?.length && visit.snowDepthInches != null ? findSnowTier(visit.snowDepthInches, tiers) : null;
+    if (hourlyTier?.billAs === "hourly") {
+      return `event max depth ${visit.snowDepthInches}" is in the hourly range — on-site hours × ${formatCurrency(hourlyTier.rateCents ?? 0)}/hr${splitSuffix}`;
+    }
     if (tiers?.length) return `event max depth via rate tiers${splitSuffix}`;
     return `event max depth × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in${splitSuffix}`;
   }
@@ -250,6 +346,10 @@ export function describeAmount(visit: SnowBillableVisit, groupSize: number, tier
     const tiers = visit.job?.id ? tiersByJobId?.get(visit.job.id) : undefined;
     const pushLabel = (visit.pushNumber ?? 1) > 1 ? `push ${visit.pushNumber}: ` : "";
     if (visit.snowDepthInches == null) return `${pushLabel}no depth recorded`;
+    const hourlyTier = tiers?.length ? findSnowTier(visit.snowDepthInches, tiers) : null;
+    if (hourlyTier?.billAs === "hourly") {
+      return `${pushLabel}${visit.snowDepthInches}" hourly range: ${snowBillableHours(visit)} hrs × ${formatCurrency(hourlyTier.rateCents ?? 0)}/hr`;
+    }
     if (tiers?.length) return `${pushLabel}${visit.snowDepthInches}" via rate ranges`;
     return `${pushLabel}${visit.snowDepthInches}" × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in`;
   }
@@ -258,6 +358,7 @@ export function describeAmount(visit: SnowBillableVisit, groupSize: number, tier
     return `${snowBillableHours(visit)} hrs on site${shared} × ${formatCurrency(visit.job?.rateCents ?? 0)}/hr`;
   }
   if (invoiceType === "monthly_flat_rate") {
+    if (visit.capOverage) return `overage: ${visit.capOverage.parts.map(capPartText).join("; ")}`;
     return visit.contractOutsidePriceCents != null
       ? "storm outside the contract — price per storm"
       : "storm outside the contract";

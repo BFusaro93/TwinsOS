@@ -1,3 +1,4 @@
+import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signPhotoPaths, type PhotoBucket } from "@/lib/invoices/photos";
@@ -81,7 +82,9 @@ export async function GET(
       rateCents: (li.rate_cents as number) ?? 0,
       totalCents: (li.total_cents as number) ?? 0,
       discountCents: (li.discount_cents as number) ?? 0,
+      hideOnPrint: !!li.hide_on_print,
     }));
+  const visibleLineItems = rollUpHiddenLines(lineItems).map((l) => ({ name: l.name, description: l.description, qty: l.qty, rateCents: l.rateCents, totalCents: l.totalCents, discountCents: l.discountCents }));
 
   // Photos attached to this invoice. Scoped by the token-resolved invoice AND
   // org; signed at read time with a short expiry (never stored).
@@ -121,7 +124,7 @@ export async function GET(
     balanceCents: inv.balance_cents,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     clientName: (inv.clients as any)?.display_name ?? null,
-    lineItems,
+    lineItems: visibleLineItems,
     // Whether the org can take payment online at all (Stripe Connect set up and
     // charges enabled — the same test create-intent refuses on). When false the
     // page shows the invoice with a "contact us to pay" note instead of Pay.

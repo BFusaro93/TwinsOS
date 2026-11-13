@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { SentEmailDialog, type SentEmailSummary } from "./SentEmailDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -147,6 +148,7 @@ export function EmailActivityList() {
   const [filterValue, setFilterValue] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [viewing, setViewing] = useState<SentEmailSummary | null>(null);
 
   const total = emails.length;
   const deliveredCount = emails.filter((e: EmailActivity) => e.deliveredAt !== null).length;
@@ -469,7 +471,13 @@ export function EmailActivityList() {
                     {fmtDate(e.occurredAt)}
                   </TableCell>
                   <TableCell className="max-w-xs truncate font-medium text-slate-800 dark:text-neutral-100">
-                    {e.subject ?? "—"}
+                    <button
+                      type="button"
+                      className="max-w-full truncate text-left hover:underline"
+                      onClick={(ev) => { ev.stopPropagation(); setViewing({ id: e.id, subject: e.subject, sentTo: e.sentTo, occurredAt: e.occurredAt }); }}
+                    >
+                      {e.subject ?? "—"}
+                    </button>
                   </TableCell>
                   <TableCell className="text-sm text-slate-600 dark:text-neutral-400">{e.clientName}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{e.sentTo ?? "—"}</TableCell>
@@ -493,6 +501,7 @@ export function EmailActivityList() {
           </Table>
         </div>
       )}
+      <SentEmailDialog email={viewing} onClose={() => setViewing(null)} />
     </div>
   );
 }

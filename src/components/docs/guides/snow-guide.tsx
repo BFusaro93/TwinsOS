@@ -53,8 +53,10 @@ export function SnowGuide() {
           <TOCLink href="#adding-jobs">Adding jobs and setting priority</TOCLink>
           <TOCLink href="#dispatch-close-out">Dispatching, logging pushes, closing out</TOCLink>
           <TOCLink href="#board-tools">Filters, crews, route order, map, and weather</TOCLink>
+          <TOCLink href="#client-messages">Messaging clients: email, text, and templates</TOCLink>
           <TOCLink href="#worked-scenario">Worked scenario: a 6&quot; storm</TOCLink>
           <TOCLink href="#invoicing">Snow invoicing and the three rate types</TOCLink>
+          <TOCLink href="#contract-caps">Contract caps and overage (inches and salts)</TOCLink>
           <TOCLink href="#interval-billing">Interval billing (rate by inches)</TOCLink>
           <TOCLink href="#services-on-snow-jobs">Services on a snow job: one per job, and when their price counts</TOCLink>
           <TOCLink href="#why-separate">Why snow billing has its own screen</TOCLink>
@@ -181,14 +183,24 @@ export function SnowGuide() {
           out separately.
         </p>
         <p>
-          <strong>Adding a push.</strong> A <strong>Per Push</strong> job bills every push on its
-          own depth, so when a crew has to go back during a long storm, click{" "}
-          <strong>Add push</strong> next to the client&apos;s name on that job&apos;s latest row. It
-          adds the next push (marked <em>Push 2</em>, <em>Push 3</em>…) to the same storm with the
-          same crew and men, at the end of the stop order and dated today, so it shows on the
-          crew&apos;s list as its own stop. Close it out with its own depth like any other visit.
-          Only Per Push jobs get extra pushes — a Per Event job is one visit per storm, and Add Jobs
-          never adds a job that is already on the storm.
+          <strong>Adding a push.</strong> When a crew has to go back to a site during a storm (say a
+          2–4&quot; pass that isn&apos;t the final push), each return is its own visit with its own
+          clock-in/out, depth, crew and notes, and a row on the client&apos;s timeline — your record
+          of every trip. The office clicks <strong>Add push</strong> next to the client&apos;s name
+          on that job&apos;s latest row; the crew can tap <strong>Going back? Add another push</strong>{" "}
+          on a finished stop in the crew app. The new push (<em>Push 2</em>, <em>Push 3</em>…) goes
+          on the same storm with the same crew and men, dated today, and shows on the crew&apos;s
+          list as its own stop. Billing follows the job: <strong>Per Push</strong> and{" "}
+          <strong>Hourly</strong> jobs bill every push; <strong>Per Event</strong> and{" "}
+          <strong>Per Event, Per Inch</strong> jobs bill the storm once, on the first push. On a{" "}
+          <strong>Per Event, Per Inch</strong> job a return trip is part of the event: it never
+          bills separately, and a deeper reading on any trip sets the storm&apos;s price (the
+          event is priced on the deepest reading across all its visits). On a flat{" "}
+          <strong>Per Event</strong> job, Adding a push asks whether it is <em>No charge</em> (the
+          default — recorded only, $0, never in Snow Invoicing) or <em>Bill it</em> (its own
+          charge, the job&apos;s flat rate again — use this when a second crew salts again). A
+          push&apos;s <em>Billed</em> / <em>No charge</em> tag can be clicked to flip it until it
+          is invoiced. Pushes the crew adds from the crew app start as No charge.
         </p>
         <p>
           <strong>Two storms on the same day are two trips.</strong> If a job is on two storm events
@@ -213,6 +225,25 @@ export function SnowGuide() {
           <strong>Working</strong>. If a visit is added to a Complete storm any other way, the storm
           moves back to Working on its own, so it never reads as finished with work still to do.
         </p>
+        <p>
+          <strong>Add Jobs</strong> also has a <strong>Service</strong> filter (alongside the
+          search box) to narrow the list to one service. <strong>Actions &gt; Cancel Dispatch</strong>{" "}
+          puts the selected dispatched stops back to Scheduled; stops the crew has already started
+          are left alone and the message says how many. <strong>Actions &gt; Export Stops (CSV)</strong>{" "}
+          downloads the stops the board is currently showing (after filters) with date, client,
+          service, address, crew, status, depth, temperature, notes and amount. Old storms can be
+          retired from the picker: on the status pill choose <strong>Mark storm inactive</strong>,
+          and use <strong>Show inactive</strong> next to the picker to bring them back.
+        </p>
+        <p>
+          <strong>Invoice terms and times.</strong> A job&apos;s <strong>Invoice Terms</strong> (on
+          its Invoice Description tab) overrides the client&apos;s default terms for invoices made
+          from that job, including Snow Invoicing; leave it on the client&apos;s default to follow the
+          client. An invoice that bundles several snow jobs uses the override only when they all
+          agree. A service with <strong>Show visit times on snow invoice lines</strong> ticked (Settings
+          &gt; Services) adds the visit&apos;s clocked start and end, like (7:05 AM – 8:40 AM), to its
+          Snow Invoicing line.
+        </p>
       </Section>
 
       <Section id="board-tools" title="Filters, crews, route order, map, and weather">
@@ -225,11 +256,48 @@ export function SnowGuide() {
             <strong>Status tabs and filters.</strong> Tabs for All, Scheduled, Dispatched, In
             Progress, Completed, Skipped and Cancelled (each with a count), a multi-select{" "}
             <strong>crew filter</strong> that includes <strong>Unassigned</strong>, and a{" "}
-            <strong>search</strong> box that matches client, address, zip, notes and crew.
+            <strong>search</strong> box that matches client, service, address, city, state, zip,
+            notes and crew. Multi-select filters for <strong>Service</strong>,{" "}
+            <strong>Priority</strong>, <strong>City</strong> and <strong>Zip</strong> narrow the
+            list further. The checkbox in the header row (or <em>Select All Shown</em> in
+            Actions) selects every stop the filters currently show, so you can filter to a zip
+            and reassign or dispatch all of it at once. Add Jobs has the same select-all checkbox
+            plus <em>Select all</em> / <em>Unselect all</em> links and a search box that narrows the
+            list (Select all then acts on the jobs shown). For a storm that runs several days, each job in Add Jobs
+            has its own <strong>Date</strong> (it starts as the dispatch date): tick the jobs for a
+            day, pick the date and click <strong>Set date</strong>, repeat for the next day, then
+            Add to Dispatch. Authorized-day checks use each job&apos;s own date; contract-date
+            checks still use the dispatch date at the top.
+          </li>
+          <li>
+            <strong>Storms that run several days.</strong> Every stop has its own <strong>Date</strong>{" "}
+            (a column, and a <strong>Dates</strong> filter). Click a stop&apos;s date to move just
+            that stop, or tick several stops and use <strong>Move to date</strong> in the selection
+            bar (or the map&apos;s selection panel). Finished and cancelled stops don&apos;t move,
+            and a stop a crew has clocked into can&apos;t change day. The crew sees a stop on the
+            day it is scheduled for. Route order is kept per crew per day, so Optimize Routes and
+            the up/down arrows work within one day at a time.
           </li>
           <li>
             <strong>Changing crews.</strong> The Crew column is a dropdown on every row. To move
             several stops, tick them and use <strong>Assign crew…</strong> in the selection bar.
+            To put <em>more than one crew</em> on each selected stop (two trucks on a big lot), use{" "}
+            <strong>Assign crews…</strong>: tick the crews and click <strong>Set crews</strong>.
+            The first crew you tick is the lead and carries the stop&apos;s charge; each extra crew
+            gets its own row (tagged <em>Extra crew</em>) with its own clock-in, hours and
+            depth. On <strong>Hourly</strong> jobs every crew bills its own hours on site; on
+            every other billing type the lead carries the charge and the extra crew is not
+            billed. If an extra crew is doing separate billable work (salt after plowing, another
+            pass), give it its own job, or use <strong>Add push</strong> on a Per Push job. Crews can be added or removed until a crew
+            starts the stop. A crew can also ask for help itself: <strong>Need help? Call in
+            another crew</strong> on a stop in the crew app lists the other crews; the one picked
+            gets the stop on its tablet straight away (even after the first crew has clocked in),
+            tagged <em>Extra crew</em> here, with a line on the client&apos;s timeline. If a crew can&apos;t
+            make it to a stop at all, <strong>Can&apos;t make it? Hand off to another crew</strong>
+            (shown before they start the stop) moves the stop to the crew they pick — onto that
+            crew&apos;s tablet and off theirs, same visit and same billing, with a timeline line and a{" "}
+            <em>Handed off from …</em> flag on the board.
+            A stop that already has several crews has to be moved by the office.
             Setting a stop to Unassigned pins it to no crew rather than falling back to the
             job&apos;s crew. A stop shows the crew on its visit, or the job&apos;s crew if the visit
             has none — Team Assign uses the same rule.
@@ -258,8 +326,23 @@ export function SnowGuide() {
             if there isn&apos;t one), so the next storm&apos;s Add Jobs comes up in that sequence.
             Stops that weren&apos;t on this storm keep their place on the route, jobs new to the route
             go on the end, and a job moved to another crew moves to that crew&apos;s route (a job is
-            on only one route). You can also edit the order directly in Settings &gt; Services &gt;
-            Snow Routes.
+            on only one route). You can also edit the routes directly with the <strong>Master Routes</strong>
+            button next to New Storm Event (the same editor is in Settings &gt; Services &gt;
+            Snow Routes).
+          </li>
+          <li>
+            <strong>Building Master Routes.</strong> Click <em>Master Routes</em> on the Snow Jobs
+            board, pick a route (or add one, then set its name, default crew and Active switch).
+            <em> Find jobs for this route</em> searches your snow jobs by client or address, service,
+            zip code(s), and proximity (within 1–25 miles of an address you type or of one of the
+            route&apos;s stops), with <em>Not already on a route</em> ticked by default. Tick the
+            results and <em>Add to route</em>; each result shows the client&apos;s priority (high,
+            normal or low), address, zip and service. A job can be on only one route. Snow jobs added
+            since the routes were built, which are on no route yet, are listed at the top with a
+            <em> NEW</em> flag so you can slot them in. Order the stops by dragging, by typing a
+            position number, or with the arrows. <em>Group Stops</em> orders every stop by driving
+            time from the crew&apos;s shop (or the Company Address); <em>Optimize Route</em> keeps stop 1
+            and routes onward from it. The <em>Map</em> button previews the route.
           </li>
           <li>
             <strong>Skip and cancel with a reason.</strong> Skipping or cancelling asks for a
@@ -277,18 +360,82 @@ export function SnowGuide() {
             It saves on the visit only and shows the job&apos;s note until you override it.
           </li>
           <li>
-            <strong>Columns.</strong> The column chooser shows or hides Address, City, Zip, Trigger,
+            <strong>Columns.</strong> The column chooser shows or hides Date, Service, Address, City, State, Zip, Priority, Trigger,
             Crew, Depth, Temp, Notes to Crew and Amt, and remembers your choice.
           </li>
           <li>
-            <strong>Map.</strong> The <strong>Map</strong> button plots the stops currently shown,
-            numbered by route position and coloured by crew.
+            <strong>Map.</strong> The <strong>Map</strong> button opens a working map: the stops
+            currently shown, numbered by route position and coloured by crew. Three tools sit
+            above it. <em>Select</em>: click stops to pick them (the table selection follows, so
+            Dispatch, Close Out and the rest act on what you picked). <em>Route order</em>:
+            left-click a stop to move it later in its crew&apos;s route, right-click to move it
+            earlier. <em>Draw area</em>: click points on the map to outline a shape, then{" "}
+            <strong>Finish shape</strong> selects every stop inside it. With stops selected, the
+            panel shows their services, budgeted hours and total, and lets you pick a crew and
+            click <strong>Update</strong>, open <strong>Assign crews…</strong>, or{" "}
+            <strong>Dispatch</strong>. Click a crew in the panel to hide or show it, and tick{" "}
+            <em>Show only selected stops</em> (on the map, or in the table) to work on just those.
+            Route lines draws each crew&apos;s order. The board&apos;s own filters apply to the
+            map too
           </li>
           <li>
             <strong>Weather.</strong> A chip above the storm bar shows the National Weather Service
             forecast and any active alerts for the storm date (US only, within about a week). It is
             only a heads-up — depth and temperature on a visit are still entered by hand at
             close-out.
+          </li>
+        </ul>
+      </Section>
+
+      <Section id="client-messages" title="Messaging clients: email, text, and templates">
+        <p>
+          Tick the stops you want to reach, then use <strong>Email Clients…</strong> or{" "}
+          <strong>Text Clients…</strong> (in <strong>Actions</strong>, or the buttons on the selection bar).
+          You need the Send Emails / Send Texts permission to see them. A client with several stops
+          on the storm gets <strong>one</strong> message that lists their stops.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5">
+          <li>
+            <strong>Compose.</strong> Choose email, text, or both. Pick a saved template to
+            pre-fill the message, then change anything you like before sending; the template is only
+            a starting point. A text shows a live character and segment count, and a preview shows
+            exactly what one client will receive.
+          </li>
+          <li>
+            <strong>Merge tags.</strong> <em>[stormname]</em>, <em>[stormdate]</em>,{" "}
+            <em>[snowservice]</em>, <em>[snowcrew]</em>, <em>[snowstatus]</em> (scheduled, on our way,
+            in progress, complete), <em>[snowarrival]</em> (only when the stop has a scheduled time)
+            and <em>[snowaddress]</em>, plus the usual client and company tags such as{" "}
+            <em>[clientfirstname]</em>.
+          </li>
+          <li>
+            <strong>Who is skipped.</strong> The confirm step lists the count and who will be
+            left out: no email or phone on file, a bounced email address, a client who hasn&apos;t
+            opted in to texts, or a number that replied STOP. Storm messages are{" "}
+            <em>service notices</em>, so a client marked Do Not Market still receives them (and
+            there is no unsubscribe footer), but a bounced address and a text opt-out are always
+            respected.
+          </li>
+          <li>
+            <strong>Timeline.</strong> Every email and text is logged on the client&apos;s activity
+            timeline, the same as any other message sent from the system.
+          </li>
+          <li>
+            <strong>Jobs Without Emails…</strong> lists the selected stops (or everything shown, with
+            nothing selected) whose client has no email or a bounced one, with a link to fix each client.
+          </li>
+          <li>
+            <strong>Templates.</strong> In the compose dialog, type a name and choose{" "}
+            <em>Save email</em> or <em>Save text</em> to keep your wording. Templates live in{" "}
+            <strong>Documents</strong> as <em>Snow – Email</em> and <em>Snow – Text Message</em>, so you can
+            also create and edit them there (for example &quot;Service complete&quot;, &quot;Storm
+            delayed&quot;, &quot;We&apos;re on our way&quot;).
+          </li>
+          <li>
+            <strong>Automations.</strong> The same templates can be picked in an automation&apos;s
+            Email or Text step (for example on <em>visit dispatched</em> or <em>visit completed</em>)
+            for messages that should go out on their own with fixed wording. In an automation the snow
+            tags are read from the client&apos;s most recent snow stop in the last 7 days.
           </li>
         </ul>
       </Section>
@@ -440,6 +587,74 @@ export function SnowGuide() {
         </p>
       </Section>
 
+      <Section id="contract-caps" title="Contract caps and overage (inches and salts)">
+        <p>
+          A Monthly Flat Rate snow contract can include <strong>caps</strong> — an{" "}
+          <strong>inch cap</strong> (for example 60 or 80 inches), a <strong>salt cap</strong>{" "}
+          (for example 35 salt applications), an <strong>event cap</strong> (storms) and/or a{" "}
+          <strong>push cap</strong>. The flat price covers snow work up to a cap; once it is
+          used up, further work bills as <strong>overage</strong> in Snow Invoicing instead. On the
+          contract, tick <strong>This contract includes snow service</strong> (it turns on by itself when a
+          snow job is linked); that reveals the snow settings, including <strong>Snow Caps &amp; Overage</strong>:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Inch, Salt, Event and Push caps</strong> — use any, all, or none. A blank cap shows{" "}
+            <em>N/A</em> and means no limit.
+          </li>
+          <li>
+            <strong>Cap resets</strong> — <em>each contract year</em> (counted from the contract&apos;s start
+            date, so a contract starting Nov 1 resets every Nov 1) or <em>monthly</em> (each calendar month).
+          </li>
+          <li><strong>Overage description</strong> — the text on the overage invoice line (default &quot;Snow overage&quot;).</li>
+          <li>
+            <strong>Overage per inch / salt / event / push</strong> — what each one over its cap
+            bills. If a cap is set without its overage price, the overage visits stay in the queue at $0 with a
+            warning telling you to set one.
+          </li>
+          <li>
+            <strong>Linked snow jobs count toward</strong> — each Monthly Flat Rate snow job is tagged{" "}
+            <em>plowing</em> (counts toward the inch, event and push caps) or <em>salting</em> (counts toward the
+            salt cap). Set it when you create the job (<strong>Counts toward contract caps as</strong>, which
+            defaults to salting when a service is named like salt or de-icing, otherwise plowing), on the job&apos;s
+            detail, or here on the contract. Several plowing jobs on one contract (say a truck plow and a shovel
+            crew) never double-count inches or events — each storm counts once, on its deepest reading — but
+            pushes are counted per job.
+          </li>
+        </ul>
+        <p>
+          <strong>How work is counted.</strong> Only completed visits count — skipped and cancelled ones don&apos;t
+          — and only storms the contract covers (storms outside its dates follow the &quot;Storms outside the
+          contract dates&quot; setting and are never counted). <em>Inches</em> count once per storm, on its deepest
+          recorded depth across the contract&apos;s plowing visits (the same &quot;priced once on its deepest
+          reading&quot; rule as Per Event, Per Inch); a storm with no depth recorded counts 0, so enter depths.
+          Storms add up through the period in date order. <em>Events</em> count one per storm with a completed plow
+          visit, whatever its depth. <em>Pushes</em> count one per completed plow visit (an extra crew on the same
+          stop doesn&apos;t add one). <em>Salts</em> count one per completed salting visit — a second push that
+          salts again is a second application. Pushes and salts are counted per job, so one property&apos;s work
+          doesn&apos;t use up another&apos;s cap.
+        </p>
+        <p>
+          <strong>What bills.</strong> Visits inside the cap stay covered by the contract. A storm that crosses the
+          inch cap bills only the inches beyond it (an 8&quot; storm that takes the season from 76&quot; to 84&quot; of an
+          80&quot; cap bills 4&quot; × the overage price per inch), as one line on the storm&apos;s first visit; later
+          storms bill their full depth. A storm past the event cap bills the per-event price on its first visit; a
+          push or salt past its cap bills its price on its own visit. If more than one cap is passed on the same
+          stop, their charges add up on one overage line (so setting both an event cap and an inch cap can charge
+          for both). These
+          appear in Snow Invoicing with an <strong>Overage</strong> tag and the overage description, as their own
+          invoice separate from the contract&apos;s invoice. Generating twice never double-bills, and voiding an
+          overage invoice puts its visits back in the queue.
+        </p>
+        <p>
+          <strong>Seeing usage.</strong> The contract shows the period&apos;s usage (&quot;42 of 80 in used&quot;,
+          &quot;28 of 35 salts used&quot;) and, on the Snow Jobs board, a stop whose cap is already used up shows an{" "}
+          <strong>Overage</strong> chip so the crew and dispatcher know it will bill separately. Caps are counted
+          from the visits, not stored, so correcting a depth or a completed visit updates the usage immediately —
+          but a charge already invoiced is not changed afterwards.
+        </p>
+      </Section>
+
       <Section id="interval-billing" title="Interval billing (rate by inches)">
         <p>
           Many snow contracts price by bands of snowfall rather than a straight rate per inch — for
@@ -472,6 +687,19 @@ export function SnowGuide() {
             <strong>0–1.99, 1.99–3.99, 3.99–5.99, 5.99–7.99</strong>. A push recorded at 4&quot; then
             lands in 3.99–5.99 and bills the 4–5.99 price. Depths above the last range bill $0 unless
             the last range is left open-ended, so price anything deeper by hand or add a top range.
+          </li>
+          <li>
+            <strong>Hourly ranges.</strong> Each range has a <strong>Bill as</strong> choice: Flat
+            (or Per inch for an open-ended top range) or <strong>Hourly</strong>. An hourly range
+            takes an hourly rate and optional budgeted hours, and bills the hours on site (clocked
+            out minus clocked in minus breaks) × that rate — the usual setup is an all-inclusive
+            top range (for example 6&quot;+ at $90 an hour) with flat prices below it. On a{" "}
+            <strong>Per Push</strong> job each push is priced by its own depth, and an hourly range
+            bills that push&apos;s hours. On a <strong>Per Event, Per Inch</strong> job the
+            storm&apos;s deepest reading picks the range once; if it is an hourly range, the storm
+            bills the hours of its billed stops (the lead crew&apos;s first push) × the rate. Return
+            trips and extra crews stay unbilled there, so use Per Push when every trip should bill
+            its hours. Budgeted hours are for planning only and do not change what is billed.
           </li>
           <li>
             <strong>A flat price per push</strong> (the same amount whatever the depth, for example a

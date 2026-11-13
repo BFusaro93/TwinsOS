@@ -402,7 +402,14 @@ export function EstimatingGuide() {
           Manage them under <strong>Settings → Estimates → Service Bundles</strong>. In the bundle
           editor, click <strong>+ Add sub-item</strong> under any bundle item to attach a product or a
           subservice to it. Search finds your products (not maintenance parts) and your subservices; each
-          sub-item has its own quantity (default 1) and rate, and a delete icon when you hover the row.
+          sub-item has its own <strong>Visits</strong> (default 1 = charged once for the whole line; set it
+          to the bundle item&apos;s visits to charge it on every visit), quantity (default 1) and rate, and
+          a delete icon when you hover the row. Its total is Qty &times; Rate &times; Visits, and the
+          amber warning appears if Visits is neither 1 nor the item&apos;s visits. The same{" "}
+          <strong>On estimate</strong> and <strong>On invoice</strong> buttons as on an estimate line sit
+          beside the sub-item&apos;s name, and you can type its unit <strong>Cost</strong> in the row
+          (internal, never shown to the client); both come along when the bundle is applied. To rename a
+          bundle sub-item or swap its product, delete it and add it again.
           When you apply the bundle to an estimate, its sub-items come with it, including when you
           pick it from <strong>Apply bundle&hellip;</strong> on an estimate that already exists.
         </p>
@@ -423,6 +430,20 @@ export function EstimatingGuide() {
             default. On the PDF a printed sub-item shows its own amount on its row, while a hidden
             sub-item&apos;s amount is included in the line&apos;s total, and section and option subtotals
             include every priced sub-item, so they add up to the estimate total.
+          </li>
+          <li>
+            <strong>Print or fold into the service on the invoice.</strong> Beside it, the{" "}
+            <em>On invoice</em> / <em>Not on invoice</em> button decides how the sub-item appears on the
+            invoice once the estimate is converted to a job. By default (<em>Not on invoice</em>) its price
+            stays inside the service&apos;s price and the invoice shows one service line. Turn on{" "}
+            <em>On invoice</em> and, on <strong>one-time, waiting-list and recurring jobs</strong>, the invoice lists
+            the sub-item as its own row (quantity &times; rate) under the service, and that amount comes
+            out of the service row &mdash; the invoice total never changes. This applies to sub-services and
+            materials alike, and to jobs converted after the setting was made (a job keeps the choice it was
+            converted with). On a recurring job each visit&apos;s invoice lists the sub-item&apos;s per-visit share
+            (its total &divide; the line&apos;s visits). Set the sub-item&apos;s <strong>Visits</strong> to the
+            line&apos;s visits to charge it on every visit (a $10 sub-service on a 14-visit line: Visits 14,
+            shown as $10 on each visit). Package jobs keep a single service line.
           </li>
           <li>
             <strong>Names, descriptions and $0 lines.</strong> A line with a client-facing description prints just
@@ -471,9 +492,14 @@ export function EstimatingGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Sub-items are added on top of the line&apos;s own Rate.</strong> A sub-item is for the{" "}
-            <strong>whole line</strong> &mdash; it isn&apos;t multiplied by the line&apos;s visits (equipment
-            is). The line&apos;s TP, T.Cost and GM% include its sub-items, and so do the estimate totals,
+            <strong>Sub-items are added on top of the line&apos;s own Rate.</strong> A sub-item has its own{" "}
+            <strong>Visits</strong> (default 1 = charged once for the whole line; set it to the line&apos;s
+            visits to charge it on every visit), and its total is Qty &times; Rate &times; Visits. You can
+            edit Visits, Qty, Rate and Cost right in the grid; the pencil opens the full form, which also has the{" "}
+            <strong>Print on Estimate</strong> and <strong>Print on Invoice</strong> checkboxes (the same two
+            settings as the On estimate and On invoice buttons beside the name). Use 1 or the line&apos;s
+            visits: any other number (say 13 on a 14-visit line) shows an amber warning, because a sub-item
+            can&apos;t be limited to some visits &mdash; its price is spread across all of them. The line&apos;s TP, T.Cost and GM% include its sub-items, and so do the estimate totals,
             the Invoice button and the Costs breakdown on the right (sub-services under{" "}
             <em>Labor / Line Items</em>, products under <em>Product/Materials</em>, which also decides
             which overhead they get).

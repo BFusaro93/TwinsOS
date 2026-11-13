@@ -10,6 +10,7 @@ import {
 } from "@react-pdf/renderer";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 
 // ── types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ export interface InvoicePDFLineItem {
   totalCents: number;
   /** Per-line discount — the invoice Subtotal is net of it, so the printed line must be too. */
   discountCents?: number;
+  /** Hidden-on-invoice marker; rolled up (and dropped) before rendering — see lib/invoices/hidden-lines.ts. */
+  hideOnPrint?: boolean;
 }
 
 /** A photo embedded on the invoice's photo page(s). dataUri is base64 —
@@ -306,7 +309,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           <View style={S.cellService}>
             <Text style={S.serviceNameText}>{li.name ?? "Service"}</Text>
             {li.description ? (
-              <Text style={S.serviceDescText}>{li.description.replace(/<[^>]+>/g, "")}</Text>
+              <Text style={S.serviceDescText}>{notesToPlainText(li.description)}</Text>
             ) : null}
           </View>
           <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
@@ -483,7 +486,7 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
         <View key={i} style={SC.row}>
           <View style={SC.cellDesc}>
             <Text style={SC.itemName}>{li.name ?? "Service"}</Text>
-            {li.description ? <Text style={SC.itemDesc}>{li.description.replace(/<[^>]+>/g, "")}</Text> : null}
+            {li.description ? <Text style={SC.itemDesc}>{notesToPlainText(li.description)}</Text> : null}
           </View>
           <View style={SC.cellNum}><Text style={SC.cellText}>{li.qty.toLocaleString()}</Text></View>
           <View style={SC.cellNum}><Text style={SC.cellText}>{cents(li.rateCents)}</Text></View>

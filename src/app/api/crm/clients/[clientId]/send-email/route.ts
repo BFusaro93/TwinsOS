@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -255,7 +256,7 @@ export async function POST(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("client_activity").insert({
+  await insertEmailActivity(supabase, {
     org_id: effOrgId,
     client_id: clientId,
     activity_type: "email",
@@ -271,7 +272,7 @@ export async function POST(
     resend_message_id: resendId,
     occurred_at: new Date().toISOString(),
     created_by: user.id,
-  });
+  }, { html: resolvedBody });
 
   return NextResponse.json({ success: true, resendId });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
@@ -590,7 +591,7 @@ export async function POST(
   // Log activity
   if (est.client_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("client_activity").insert({
+    await insertEmailActivity(supabase, {
       org_id: effOrgId,
       client_id: est.client_id,
       activity_type: "email",
@@ -602,7 +603,7 @@ export async function POST(
       resend_message_id: sent?.id ?? null,
       occurred_at: new Date().toISOString(),
       created_by: user.id,
-    });
+    }, { html: resolvedBody, cc: ccEmails });
   }
 
   // ── Enroll client in estimate_sent automation sequences ───────────────────

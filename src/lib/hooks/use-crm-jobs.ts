@@ -154,6 +154,7 @@ export function mapJob(row: any): CRMJob {
     source: row.source ?? null,
     paymentType: row.payment_type ?? null,
     poNumber: row.po_number ?? null,
+    invoiceTerms: row.invoice_terms ?? null,
     dateSold: row.date_sold ?? null,
     whenToInvoice: row.when_to_invoice ?? null,
     invoiceSeparately: row.invoice_separately ?? false,
@@ -222,6 +223,7 @@ function mapService(row: any): CRMService {
     upsellPitch: row.upsell_pitch ?? null,
     onlyForEstimates: row.only_for_estimates ?? false,
     trackChemicals: row.track_chemicals ?? false,
+    invoiceTimeOnLines: row.invoice_time_on_lines ?? false,
     invoiceDescription: row.invoice_description ?? null,
     descriptionOnEstimate: row.description_on_estimate ?? null,
     callScriptNotes: row.call_script_notes ?? null,
@@ -622,6 +624,7 @@ function mapJobFull(row: any): CRMJob {
   return {
     ...mapJob(row),
     contractId: row.contract_id ?? null,
+    snowCapKind: row.snow_cap_kind === "salt" || row.snow_cap_kind === "inches" ? row.snow_cap_kind : null,
     schedule: row.schedule ?? null,
     scheduleDays: row.schedule_days ?? [],
     packageName: row.package_name ?? null,
@@ -636,6 +639,7 @@ function mapJobFull(row: any): CRMJob {
     source: row.source ?? null,
     paymentType: row.payment_type ?? null,
     poNumber: row.po_number ?? null,
+    invoiceTerms: row.invoice_terms ?? null,
     dateSold: row.date_sold ?? null,
     whenToInvoice: row.when_to_invoice ?? null,
     invoiceSeparately: row.invoice_separately ?? false,
@@ -682,12 +686,14 @@ function mapJobServiceFull(s: any): CRMJobService {
     budgetedHours: s.budgeted_hours ?? 0,
     budgetMethod: s.budget_method ?? 'manual',
     teamSize: s.team_size ?? 1,
+    maxVisits: s.max_visits ?? null,
     daysCount: s.days_count ?? 1,
     timeStart: s.time_start ?? null,
     timeEnd: s.time_end ?? null,
     included: s.included ?? true,
     sortOrder: s.sort_order ?? 0,
     serviceInvoiceDescription: s.crm_services?.invoice_description ?? null,
+    serviceInvoiceTimeOnLines: s.crm_services?.invoice_time_on_lines ?? false,
     minDays: s.min_days ?? null,
     treatedArea: s.treated_area != null ? Number(s.treated_area) : null,
     jobNote: s.job_note ?? null,
@@ -846,6 +852,8 @@ export function mapVisit(row: any): CRMJobVisit {
     jobServiceId: row.job_service_id ?? null,
     stormEventId: row.storm_event_id ?? null,
     pushNumber: Number(row.push_number ?? 1) || 1,
+    billPush: row.bill_push === true,
+    handedOffFromCrewId: row.handed_off_from_crew_id ?? null,
     snowDepthInches: row.snow_depth_inches ?? null,
     temperature: row.temperature ?? null,
     assetType: row.asset_type ?? null,
@@ -936,7 +944,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         .select(`
           *,
           clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
-          crm_crews(name),
+          crm_crews!crm_job_visits_crew_id_fkey(name),
           crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)
         .is('deleted_at', null)
@@ -1475,6 +1483,7 @@ export function useUpdateVisit() {
         completed_at: string | null;
         order_num: number | null;
         snow_depth_inches: number | null;
+        bill_push: boolean;
         temperature: number | null;
         asset_type: string | null;
         materials_used: { name: string; qty: number; rate_cents: number }[];
@@ -1794,6 +1803,7 @@ export function useCreateClientJob() {
           conflict_days: values.conflictDays,
           inch_trigger: values.inchTrigger ?? null,
           invoice_type: values.invoiceType || null,
+          snow_cap_kind: values.snowCapKind ?? null,
           rate_per_inch_cents: values.ratePerInchCents ?? null,
           asset_type: values.assetType || null,
           sales_rep_id: values.salesRepId || null,
@@ -2310,7 +2320,7 @@ export function useJobsList(filters?: {
             clients(display_name, primary_phone),
             crm_crews(name),
             crm_job_services(*),
-            crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id, crm_crews(name))
+            crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id, crm_crews!crm_job_visits_crew_id_fkey(name))
           `)
           .is("deleted_at", null)
           .neq("job_type", "snow")
@@ -2342,6 +2352,32 @@ export function useJobsList(filters?: {
 
 /** Jobs already created from an estimate (crm_jobs.estimate_id) — lets the
  *  estimate header offer "View Job" instead of a second "Convert to Job". */
+/** Ids of the estimates that have at least one job (the Estimates list shows "Converted" for them). */
+export function useEstimateIdsWithJobs() {
+  return useQuery({
+    queryKey: ['crm-jobs', 'estimate-ids-with-jobs'],
+    queryFn: async () => {
+      const supabase = createClient();
+      const ids = new Set<string>();
+      // PostgREST caps a plain select at 1000 rows — page through.
+      for (let from = 0; ; from += 1000) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from('crm_jobs')
+          .select('id, estimate_id')
+          .not('estimate_id', 'is', null)
+          .is('deleted_at', null)
+          .order('id')
+          .range(from, from + 999);
+        if (error) throw error;
+        for (const r of (data ?? []) as { estimate_id: string }[]) ids.add(r.estimate_id);
+        if (!data || data.length < 1000) break;
+      }
+      return ids;
+    },
+  });
+}
+
 export function useEstimateJobs(estimateId: string | null | undefined) {
   return useQuery({
     queryKey: ['crm-jobs', 'by-estimate', estimateId],
@@ -2792,11 +2828,11 @@ export function useCreateJobsFromEstimate() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: subRows, error: subErr } = await (supabase as any)
               .from("estimate_line_item_subitems")
-              .select("id, line_item_id, type, product_id, service_id, name, qty, cost_cents, sort_order")
+              .select("id, line_item_id, type, product_id, service_id, name, qty, visits, rate_cents, cost_cents, print_on_invoice, sort_order")
               .in("line_item_id", [...lineToServiceId.keys()])
               .is("deleted_at", null);
             if (subErr) throw subErr;
-            const subList = (subRows ?? []) as { id: string; line_item_id: string; type: string; product_id: string | null; service_id: string | null; name: string; qty: number; cost_cents: number | null; sort_order: number | null }[];
+            const subList = (subRows ?? []) as { id: string; line_item_id: string; type: string; product_id: string | null; service_id: string | null; name: string; qty: number; visits: number | null; rate_cents: number | null; cost_cents: number | null; print_on_invoice: boolean | null; sort_order: number | null }[];
             const copies = subList
               .map((r) => ({
                 job_service_id: lineToServiceId.get(r.line_item_id) as string,
@@ -2805,6 +2841,11 @@ export function useCreateJobsFromEstimate() {
                 service_id: r.service_id,
                 name: r.name,
                 qty: r.qty,
+                visits: r.visits ?? 1,
+                // Snapshot for the invoice: a sub-item ticked "On invoice" prints as its own
+                // row on a single-visit job's invoice (lib/invoices/printed-subitems.ts).
+                rate_cents: r.rate_cents ?? null,
+                print_on_invoice: r.print_on_invoice === true,
                 sort_order: r.sort_order ?? 0,
                 source_subitem_id: r.id,
               }));
@@ -3136,7 +3177,7 @@ export function useJobDetail(id: string) {
           *,
           clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, client_since),
           crm_crews(name),
-          crm_job_services(*, crm_services(invoice_description), crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at), crm_job_service_office_notes(note))
+          crm_job_services(*, crm_services(invoice_description), crm_job_service_subitems(id, type, name, qty, sort_order, rate_cents, print_on_invoice, deleted_at), crm_job_service_office_notes(note))
         `)
         .eq('id', id)
         .is('deleted_at', null)
@@ -3158,7 +3199,7 @@ export function useJobVisits(jobId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await fetchAllRows<any>(() => (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
+        .select('*, crm_crews!crm_job_visits_crew_id_fkey(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
         .eq('job_id', jobId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: true }));
@@ -3179,7 +3220,7 @@ export function useClientAllVisits(clientId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await fetchAllRows<any>(() => (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
+        .select('*, crm_crews!crm_job_visits_crew_id_fkey(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
         .eq('client_id', clientId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: false }));
@@ -3558,7 +3599,7 @@ export function useUpdateJobService() {
   return useMutation({
     mutationFn: async ({ id, patch }: {
       id: string;
-      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number; team_size?: number; treated_area?: number | null; job_note?: string | null; invoice_desc?: string | null; internal_note?: string | null };
+      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number; team_size?: number; max_visits?: number | null; treated_area?: number | null; job_note?: string | null; invoice_desc?: string | null; internal_note?: string | null };
     }) => {
       const supabase = createClient();
       if (typeof patch.budgeted_hours === 'number') patch = { ...patch, budgeted_hours: roundHours(patch.budgeted_hours) };
@@ -3576,6 +3617,25 @@ export function useUpdateJobService() {
       // (['crm-jobs','detail',id]).
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    },
+  });
+}
+
+/** Office toggle: print a job service's sub-item as its own invoice row (future invoices only). */
+export function useSetSubitemPrintOnInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, printOnInvoice }: { id: string; printOnInvoice: boolean }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from('crm_job_service_subitems')
+        .update({ print_on_invoice: printOnInvoice })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail'] });
     },
   });
 }

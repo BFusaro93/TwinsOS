@@ -28,6 +28,8 @@ export interface CRMService {
   showInFieldUpsells: boolean;
   upsellPitch: string | null;
   trackChemicals: boolean;
+  /** Snow: append the visit's start–end clock times to this service's invoice line. */
+  invoiceTimeOnLines?: boolean;
   invoiceDescription: string | null;
   descriptionOnEstimate: string | null;
   callScriptNotes: string | null;
@@ -87,11 +89,15 @@ export interface CRMJobService {
   budgetedHours: number;
   budgetMethod: BudgetMethod; // snapshotted from the service when this row is created
   teamSize: number;
+  /** Recurring jobs: total visits this service may ever get (null = no limit). */
+  maxVisits?: number | null;
   daysCount: number;
   timeStart: string | null;
   timeEnd: string | null;
   included: boolean;
   sortOrder: number;
+  /** From crm_services.invoice_time_on_lines (snow invoicing). */
+  serviceInvoiceTimeOnLines?: boolean;
   serviceInvoiceDescription: string | null; // from crm_services.invoice_description, for the job-level invoice-desc fallback preview
   /** Days that must elapse after this service's visit completes before the next package-sequenced service is due, if this row came from a Package. */
   minDays: number | null;
@@ -114,6 +120,10 @@ export interface CRMJobServiceSubitem {
   name: string;
   qty: number;
   sortOrder: number;
+  /** Estimate rate snapshot (office views only; the crew app never selects it). */
+  rateCents?: number | null;
+  /** Prints as its own invoice row (per-visit job types). Office-only, like rateCents. */
+  printOnInvoice?: boolean;
 }
 
 export interface CRMJob {
@@ -159,6 +169,8 @@ export interface CRMJob {
   /** Dispatcher-set "high priority" flag shown as a stand-out icon on the dispatch board. Distinct from `priority` above (route order). */
   isHighPriority: boolean;
   contractId: string | null;
+  /** Snow: which contract cap this job counts toward (null = inches). */
+  snowCapKind?: "inches" | "salt" | null;
   schedule: string | null;
   scheduleDays: string[];
   packageName: string | null;
@@ -177,6 +189,8 @@ export interface CRMJob {
   source: string | null;
   paymentType: string | null;
   poNumber: string | null;
+  /** Job-level invoice terms override (client terms format); null = use the client's default terms. */
+  invoiceTerms?: string | null;
   dateSold: string | null;
   whenToInvoice: string | null;
   invoiceSeparately: boolean;
@@ -262,6 +276,8 @@ export interface NewClientJobFormValues {
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
+  /** Monthly Flat Rate snow job: which contract cap it counts toward (null = plowing). */
+  snowCapKind?: "inches" | "salt" | null;
   ratePerInchCents: number | null;
   assetType: string | null;
   salesRepId: string | null;
@@ -326,6 +342,10 @@ export interface CRMJobVisit {
   stormEventId: string | null
   /** Snow: which push of the storm this visit is (1 = the initial dispatch). Only Per Push jobs get push 2+. */
   pushNumber: number
+  /** Snow: push 2+ on a once-per-storm job is billed as its own charge (default: recorded at no charge). */
+  billPush?: boolean
+  /** Set when a crew handed this stop off from the crew app — the crew that couldn't make it. */
+  handedOffFromCrewId?: string | null
   snowDepthInches: number | null
   temperature: number | null
   assetType: string | null

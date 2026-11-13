@@ -1,6 +1,9 @@
+import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { NextRequest, NextResponse } from "next/server";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { safeHexColor } from "@/lib/utils/safe-color";
+import { invoiceBottomButtonHtml, styleInvoiceLinkButtons } from "@/lib/invoices/invoice-link-button";
 import { buildInvoiceGridHtml } from "@/lib/invoices/invoice-grid-html";
 import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
@@ -10,6 +13,7 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { resolveDefaultInvoicePdfTemplate } from "@/lib/invoices/default-pdf-template";
 import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { billingTermsLabel } from "@/lib/constants";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
@@ -250,17 +254,7 @@ export async function POST(req: NextRequest) {
     pdfTemplate = chosenTemplate ?? null;
   }
   if (!pdfTemplate) pdfTemplate = inv.crm_invoice_pdf_templates ?? null;
-  if (!pdfTemplate) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: defaultTemplate } = await (supabase as any)
-      .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes")
-      .eq("org_id", inv.org_id)
-      .eq("is_default", true)
-      .is("deleted_at", null)
-      .maybeSingle();
-    pdfTemplate = defaultTemplate ?? null;
-  }
+  if (!pdfTemplate) pdfTemplate = await resolveDefaultInvoicePdfTemplate(supabase, inv.org_id);
   const layoutKey: InvoicePDFLayoutKey = (pdfTemplate?.layout_key as InvoicePDFLayoutKey) ?? "default";
   // Template accent / brand colour are org-editable text interpolated into a
   // style attribute: only a plain hex value is used (anything else could inject
@@ -271,7 +265,7 @@ export async function POST(req: NextRequest) {
   );
   const orgNameHtml = escapeHtml(orgName);
 
-  const lineItems: { name: string | null; description: string; qty: number; rate_cents: number; total_cents: number; discount_cents?: number | null; sort_order: number }[] =
+  const lineItems: { name: string | null; description: string; qty: number; rate_cents: number; total_cents: number; discount_cents?: number | null; sort_order: number; hide_on_print?: boolean | null }[] =
     (inv.crm_invoice_line_items ?? []).sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order);
 
   const clientDisplayName = (inv.clients?.display_name as string) ?? "";
@@ -382,11 +376,32 @@ export async function POST(req: NextRequest) {
       ? `<img src="${escapeHtml(invoiceLogoUrl)}" alt="${orgNameHtml}" style="max-height:48px" />`
       : "",
     // Was always "" while the Documents picker and preview offered it.
-    "[invoicegrid]":        buildInvoiceGridHtml(lineItems),
+    "[invoicegrid]":        buildInvoiceGridHtml(
+      rollUpHiddenLines(lineItems.map((li) => ({
+        name: li.name,
+        description: li.description ?? "",
+        qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
+        rateCents: li.rate_cents ?? 0,
+        totalCents: li.total_cents ?? 0,
+        discountCents: li.discount_cents ?? 0,
+        hideOnPrint: !!li.hide_on_print,
+      }))).map((l) => ({ name: l.name, description: l.description, qty: l.qty, total_cents: l.totalCents, discount_cents: l.discountCents })),
+    ),
   };
 
   const resolvedSubject = resolveSubjectMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
-  const resolvedBodyContent = addParagraphSpacing(resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars));
+  let resolvedBody = resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars);
+  // Where the invoice button goes is the template author's call: a body link
+  // stays where it was put (restyled as the branded button when alone in its
+  // paragraph) and the shell's bottom button is skipped. With no link in the
+  // body, the bottom button is the only way to reach the invoice.
+  let bodyHasInvoiceLink = false;
+  if (viewOnlineUrl) {
+    const styled = styleInvoiceLinkButtons(resolvedBody, viewOnlineUrl, brandColor);
+    resolvedBody = styled.html;
+    bodyHasInvoiceLink = styled.hasInvoiceLink;
+  }
+  const resolvedBodyContent = addParagraphSpacing(resolvedBody);
 
   // "Include PDF" — the template's setting, forwarded by the send dialog.
   // Defaults to true (PDF attached) to preserve prior behavior when no
@@ -406,10 +421,7 @@ export async function POST(req: NextRequest) {
     <p style="color:rgba(255,255,255,.8);margin:4px 0 0;font-size:14px">Invoice #${inv.invoice_number ?? "—"}</p>
   </div>
   <div style="padding:28px 32px;font-size:14px;line-height:1.6">${resolvedBodyContent}</div>
-  ${viewOnlineUrl ? `
-  <div style="padding:0 32px 28px;text-align:center">
-    <a href="${viewOnlineUrl}" style="display:inline-block;background:${brandColor};color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;font-weight:600">${escapeHtml(invoiceLinkLabel(cardPaymentsAvailable, "banner"))}</a>
-  </div>` : ""}
+  ${viewOnlineUrl && !bodyHasInvoiceLink ? invoiceBottomButtonHtml(viewOnlineUrl, escapeHtml(invoiceLinkLabel(cardPaymentsAvailable, "banner")), brandColor) : ""}
   <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center">
     <p style="margin:0;font-size:11px;color:#94a3b8">${orgNameHtml}</p>
   </div>
@@ -419,14 +431,15 @@ export async function POST(req: NextRequest) {
 
   // Render the invoice PDF for attachment — same pipeline as the "Print"/
   // "Download PDF" buttons (src/app/api/crm/invoices/[id]/pdf/route.ts).
-  const pdfLineItems: InvoicePDFLineItem[] = lineItems.map((li) => ({
+  const pdfLineItems: InvoicePDFLineItem[] = rollUpHiddenLines(lineItems.map((li) => ({
     name: li.name,
     description: li.description ?? "",
     qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
     rateCents: li.rate_cents ?? 0,
     totalCents: li.total_cents ?? 0,
     discountCents: li.discount_cents ?? 0,
-  }));
+    hideOnPrint: !!li.hide_on_print,
+  })));
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
   const statement = (
@@ -585,7 +598,7 @@ export async function POST(req: NextRequest) {
 
   // Log activity
   if (inv.client_id) {
-    await bookkeepingDb.from("client_activity").insert({
+    await insertEmailActivity(bookkeepingDb, {
       org_id: effOrgId,
       client_id: inv.client_id,
       activity_type: "email",
@@ -597,7 +610,7 @@ export async function POST(req: NextRequest) {
       resend_message_id: sendData?.id ?? null,
       occurred_at: new Date().toISOString(),
       created_by: user.id,
-    });
+    }, { html, cc: ccEmails });
   }
 
   return NextResponse.json({ ok: true, bouncedSkipped: bouncedEmails });

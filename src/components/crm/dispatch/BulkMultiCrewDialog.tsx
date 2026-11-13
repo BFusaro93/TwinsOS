@@ -171,8 +171,8 @@ export function BulkMultiCrewDialog({
           })}
         </div>
         <p className="text-[11px] text-muted-foreground">
-          The ticked crews become the stop\u2019s full crew list; any other crew on it is removed. The first crew you tick is the lead. Each crew gets its own stop and clocks its own hours; the invoice stays with the lead.
-          Completed, in-progress and snow visits can&apos;t take extra crews.
+          The ticked crews become the stop&apos;s full crew list; any other crew on it is removed. The first crew you tick is the lead. Each crew gets its own stop and clocks its own hours; the invoice (snow: the storm&apos;s charge) stays with the lead.
+          Completed and in-progress visits can&apos;t take extra crews.
         </p>
         <DialogFooter>
           <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>

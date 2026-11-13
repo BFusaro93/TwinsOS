@@ -77,6 +77,8 @@ export interface InvoiceLineItem {
   serviceName?: string | null;
   /** Added from the Other Charges catalog; exempt from the "every line bills a service" rule. */
   isOtherCharge: boolean;
+  /** Hidden from the customer-facing invoice; its amount rolls into the visible line above (see lib/invoices/hidden-lines.ts). */
+  hideOnPrint: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -232,6 +234,20 @@ export interface CRMContract {
   snowOutsideDates: SnowOutsideDates;
   /** bill_per_event: what a Monthly Flat Rate snow job bills per storm outside the dates (cents); null = not set. */
   snowOutsideEventPriceCents: number | null;
+  /** Snow caps: inches / salt applications the flat price covers per period; null = no cap. */
+  snowInchCap: number | null;
+  snowSaltCap: number | null;
+  snowPushesCap: number | null;
+  snowEventsCap: number | null;
+  snowOveragePerPushCents: number | null;
+  snowOveragePerEventCents: number | null;
+  /** The contract includes snow service — shows its snow settings (storms outside the dates, caps). */
+  coversSnow: boolean;
+  snowCapReset: "contract_year" | "monthly";
+  snowOverageDescription: string | null;
+  /** What each inch / salt over its cap bills (cents); null = not set. */
+  snowOveragePerInchCents: number | null;
+  snowOveragePerSaltCents: number | null;
   source: string | null;
   salesRepId: string | null;
   saleType: "new" | "renewal" | null;

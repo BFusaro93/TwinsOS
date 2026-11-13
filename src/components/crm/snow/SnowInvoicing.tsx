@@ -9,12 +9,15 @@ import {
   useGenerateSnowInvoices,
   billingGroupKey,
 } from "@/lib/hooks/use-snow-invoicing";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
 import {
   computeGroupAmountCents,
   describeAmount,
+  visitTimeRangeText,
   splitGroupAmountByVisit,
 } from "@/lib/snow-billing";
+import { capOverageLineText } from "@/lib/snow-caps";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -77,6 +80,7 @@ export function SnowInvoicing() {
   const { can, isLoading: permissionsLoading } = usePermissions();
   const canGenerate = can("snow_invoicing_generate");
   const router = useRouter();
+  const orgTimeZone = useOrgTimeZone();
   const { data: events = [] } = useStormEvents();
   const [stormEventId, setStormEventId] = useState("");
   const { data: visits = [], isLoading, refetch } = useUninvoicedSnowVisits({
@@ -182,8 +186,14 @@ export function SnowInvoicing() {
             visitId: r.visit.id,
             jobId: r.visit.jobId,
             // Two pushes on one storm would otherwise read as duplicate lines.
-            description: (r.visit.job?.services?.[0]?.serviceName ?? r.visit.job?.invoiceDescription ?? "Snow Service")
-              + ((r.visit.pushNumber ?? 1) > 1 ? ` — Push ${r.visit.pushNumber}` : ""),
+            description: r.visit.capOverage ? capOverageLineText(r.visit.capOverage) : (r.visit.job?.services?.[0]?.serviceName ?? r.visit.job?.invoiceDescription ?? "Snow Service")
+              + ((r.visit.pushNumber ?? 1) > 1 ? ` — Push ${r.visit.pushNumber}` : "")
+              // Two trucks on an hourly stop would otherwise read as duplicate lines.
+              + (r.visit.crewGroupSecondary ? ` — ${r.visit.crewName ?? "Extra crew"}` : "")
+              // Services flagged "Show visit times on snow invoice lines" append when the crew clocked them.
+              + (r.visit.job?.services?.some((sv) => sv.serviceInvoiceTimeOnLines)
+                ? (() => { const t = visitTimeRangeText(r.visit, orgTimeZone); return t ? ` (${t})` : ""; })()
+                : ""),
             amountCents: r.amountCents,
             serviceDate: r.visit.scheduledDate,
             products: r.visit.stormProducts ?? [],
@@ -348,7 +358,14 @@ export function SnowInvoicing() {
                           </span>
                         )}
                       </td>
-                      <td className="px-2 py-2 text-muted-foreground">{visit.job?.services?.[0]?.serviceName ?? "Snow Service"}</td>
+                      <td className="px-2 py-2 text-muted-foreground">
+                        {visit.job?.services?.[0]?.serviceName ?? "Snow Service"}
+                        {visit.capOverage && (
+                          <span className="ml-2 rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300" title="This stop is past the contract's cap, so it bills on its own instead of being covered by the contract price">
+                            Overage
+                          </span>
+                        )}
+                      </td>
                       <td className="px-2 py-2 text-muted-foreground">
                         {describeAmount(visit, groupSize, tiersByJobId)}
                         {visit.billingWarning && (

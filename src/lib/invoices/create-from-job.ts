@@ -1,4 +1,5 @@
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
+import { loadPrintedSubitems, splitPrintedSubitems } from "@/lib/invoices/printed-subitems";
 import {
   computeAutoInvoiceTotals,
   lineTotalCents,
@@ -218,6 +219,8 @@ export interface InvoiceFromJobLine {
   serviceDate?: string | null;
   /** crm_job_services.id this line bills — drives is_taxable. */
   jobServiceId?: string | null;
+  /** The catalog service this line bills, when known (itemized sub-item rows carry their parent's). */
+  serviceId?: string | null;
   // Present only for line items sourced from a job Product — links the
   // invoice line back to the catalog product and flips the source
   // crm_job_products row to 'invoiced' (decrementing inventory if the
@@ -271,7 +274,7 @@ export async function createInvoiceFromJob(
   }
   const { data: job, error: jobErr } = await supabase
     .from("crm_jobs")
-    .select("org_id, sales_rep_id, job_type, estimate_id, clients(default_tax_rate_bps, default_terms, is_taxable), crm_job_services(id, is_taxable, crm_services(is_taxable))")
+    .select("org_id, sales_rep_id, job_type, estimate_id, invoice_terms, clients(default_tax_rate_bps, default_terms, is_taxable), crm_job_services(id, service_id, is_taxable, crm_services(is_taxable))")
     .eq("id", jobId)
     .single();
   if (jobErr) throw jobErr;
@@ -280,8 +283,9 @@ export async function createInvoiceFromJob(
     sales_rep_id: string | null;
     job_type: string;
     estimate_id: string | null;
+    invoice_terms: string | null;
     clients: { default_tax_rate_bps: number | null; default_terms: string | null; is_taxable: boolean | null } | null;
-    crm_job_services: { id: string; is_taxable: boolean | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
+    crm_job_services: { id: string; service_id: string | null; is_taxable: boolean | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
   };
   const orgId = jobRow.org_id;
 
@@ -351,7 +355,31 @@ export async function createInvoiceFromJob(
     if (taxErr) throw taxErr;
     for (const t of (taxRows ?? []) as { id: string; is_taxable: boolean | null }[]) productTaxable.set(t.id, t.is_taxable ?? false);
   }
-  const lines = lineItems.map((li) => {
+  // Sub-items flagged "On invoice" print as their own rows under the service,
+  // their amount taken out of the service row so the total never changes.
+  const printedBySvc = await loadPrintedSubitems(
+    supabase,
+    jobRow.job_type,
+    [...new Set(lineItems.map((li) => li.jobServiceId).filter((id): id is string => !!id))]
+  );
+  const itemizedLines: InvoiceFromJobLine[] = lineItems.flatMap((li) => {
+    const split = li.jobServiceId && !li.productId ? splitPrintedSubitems(li, printedBySvc.get(li.jobServiceId)) : null;
+    if (!split) return [li];
+    return [
+      { ...li, rateCents: split.parent.rateCents, totalCents: split.parent.totalCents },
+      ...split.children.map((c) => ({
+        name: c.name,
+        description: c.name,
+        qty: c.qty,
+        rateCents: c.rateCents,
+        totalCents: c.totalCents,
+        serviceDate: li.serviceDate,
+        jobServiceId: li.jobServiceId,
+        // No forced service: the invoice-line resolver files it by name (same as the visit path).
+      })),
+    ];
+  });
+  const lines = itemizedLines.map((li) => {
     const svc = li.jobServiceId ? svcById.get(li.jobServiceId) : undefined;
     const isTaxable = svc
       ? resolveJobServiceTaxable(svc.is_taxable, svc.crm_services?.is_taxable)
@@ -371,7 +399,7 @@ export async function createInvoiceFromJob(
   // from the caller still wins.
   const { data: orgRow } = await supabase
     .from("organizations").select("default_billing_terms").eq("id", orgId).maybeSingle();
-  const terms = resolveInvoiceTerms(jobRow.clients?.default_terms, (orgRow as { default_billing_terms: string | null } | null)?.default_billing_terms);
+  const terms = resolveInvoiceTerms(jobRow.invoice_terms || jobRow.clients?.default_terms, (orgRow as { default_billing_terms: string | null } | null)?.default_billing_terms);
   const invoiceDate = input.invoiceDate || todayInZone(await getOrgTimeZone(supabase, orgId));
 
   const { data, error } = await supabase
@@ -415,6 +443,7 @@ export async function createInvoiceFromJob(
           service_date: li.serviceDate ?? null,
           product_id: li.productId ?? null,
           is_taxable: li.isTaxable,
+          ...(li.serviceId ? { service_id: li.serviceId } : {}),
           sort_order: i,
           // One line per visit — crm_invoice_line_items_visit_id_unique.
           visit_id: li.visitId ?? (tagVisit && i === 0 ? visitId : null),

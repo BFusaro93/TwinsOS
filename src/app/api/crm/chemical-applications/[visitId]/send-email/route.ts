@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
@@ -324,7 +325,7 @@ export async function POST(
   // Log activity
   if (visit.client_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("client_activity").insert({
+    await insertEmailActivity(supabase, {
       org_id: effOrgId,
       client_id: visit.client_id,
       activity_type: "email",
@@ -334,7 +335,7 @@ export async function POST(
       ref_table: "crm_job_visits",
       sent_to: clientEmail,
       occurred_at: new Date().toISOString(),
-    });
+    }, { html: resolvedBody, cc: ccEmails });
   }
 
   return NextResponse.json({ ok: true });
