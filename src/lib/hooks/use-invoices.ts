@@ -1788,6 +1788,51 @@ export function useDeleteInvoiceLineItem() {
   });
 }
 
+// ── reorder line items ────────────────────────────────────────────────────────
+
+/**
+ * Persists a new line order. `orderedIds` is every line of the invoice in the
+ * wanted order; crm_reorder_invoice_lines rewrites sort_order 0..n-1 in one
+ * statement (rejecting locked/void invoices and a stale line list), so a
+ * failure can't leave a partial order. Amounts, tax, visit tags, job-product
+ * links and accounting sync are untouched — only sort_order changes, so no
+ * totals recalculation or QuickBooks update is fired.
+ */
+export function useReorderInvoiceLines() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: LINE_ITEM_MUTATION_KEY,
+    mutationFn: async ({ invoiceId, orderedIds }: { invoiceId: string; orderedIds: string[] }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).rpc("crm_reorder_invoice_lines", {
+        p_invoice_id: invoiceId,
+        p_line_ids: orderedIds,
+      });
+      if (error) throwIfLockedInvoiceError(error);
+    },
+    onMutate: async ({ invoiceId, orderedIds }) => {
+      const key = ["crm-invoices", "detail", invoiceId];
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<{ lineItems?: InvoiceLineItem[] }>(key);
+      if (previous?.lineItems) {
+        const pos = new Map(orderedIds.map((id, i) => [id, i]));
+        qc.setQueryData(key, {
+          ...previous,
+          lineItems: previous.lineItems.map((li) => ({ ...li, sortOrder: pos.get(li.id) ?? li.sortOrder })),
+        });
+      }
+      return { previous, key };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(ctx.key, ctx.previous);
+    },
+    onSettled: (_d, _e, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] });
+    },
+  });
+}
+
 // ── update invoice financials ─────────────────────────────────────────────────
 
 export function useUpdateInvoiceFinancials() {

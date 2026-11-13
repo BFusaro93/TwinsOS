@@ -487,14 +487,44 @@ export function InvoicingGuide() {
             invoice screen still shows every line, dimmed, with a crossed-eye icon.
           </li>
           <li>
-            <strong>Order matters.</strong> Lines are ordered as they appear on the invoice, so put a
-            dump run directly under the service it belongs to before hiding it. A hidden line&apos;s
-            own discount rolls up with it, and the parent row&apos;s printed rate becomes its combined
-            total divided by quantity.
+            <strong>Order matters &mdash; and you control it.</strong> Drag a line by the grip on its
+            left (or use the up and down arrows on a phone or tablet) to put it where you want it.
+            Put a dump run directly under the service it belongs to before hiding it, because a
+            hidden amount always lands in the nearest visible line above. Reorder and the amount
+            moves with it. A hidden line&apos;s own discount rolls up with it, and the parent row&apos;s
+            printed rate becomes its combined total divided by quantity.
           </li>
           <li>
             If every line is hidden, the setting is ignored so the invoice never prints with no
             rows. A locked invoice can&apos;t be changed until it is unlocked.
+          </li>
+        </ul>
+      </Section>
+
+      <Section id="reorder-invoice-lines" title="Reordering invoice lines">
+        <p>
+          Lines print in the order you see them on the invoice screen &mdash; on the PDF, the emailed
+          invoice, the online invoice page and in your accounting sync. To change it, drag a line by
+          the <strong>grip handle</strong> on its left edge, or tap the <strong>up / down arrows</strong> on
+          narrower screens. The new order saves immediately.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            Reordering changes only the order. Amounts, tax, totals, visit links and product links are
+            untouched.
+          </li>
+          <li>
+            With <strong>hidden lines</strong>, the order decides which visible line absorbs each hidden
+            amount (the nearest one above). A note under the table reminds you when an invoice has hidden
+            lines.
+          </li>
+          <li>
+            You need permission to add or modify invoices, and a locked or void invoice can&apos;t be
+            reordered until it is unlocked. Lines you add later go to the bottom.
+          </li>
+          <li>
+            When you <strong>merge invoices</strong>, the primary invoice&apos;s lines stay first and each
+            merged invoice&apos;s lines follow it, in the order you selected them, each keeping its own order.
           </li>
         </ul>
       </Section>
