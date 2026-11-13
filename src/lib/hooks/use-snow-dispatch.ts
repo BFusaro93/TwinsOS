@@ -404,7 +404,7 @@ export function useStormEventVisits(stormEventId: string) {
           .select(`
             *,
             clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
-            crm_crews(name),
+            crm_crews!crm_job_visits_crew_id_fkey(name),
             crm_jobs(*, crm_crews(name), crm_job_services(*), client_properties(address, city, state, zip))
           `)
           .eq("storm_event_id", stormEventId)

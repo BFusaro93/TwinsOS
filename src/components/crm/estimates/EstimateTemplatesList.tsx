@@ -23,7 +23,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, ChevronDown } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { centsToDisplay } from "@/lib/estimate-calc";
 import { bundleTotalCents } from "@/lib/estimates/bundle-total";
@@ -212,25 +212,40 @@ function TemplateItemRow({
 
 // ── bundle item sub-items (indented rows under a bundle item) ──────────────
 
-function TemplateSubitemRow({ sub }: { sub: EstimateTemplateItemSubitem }) {
+function TemplateSubitemRow({ sub, parentVisits }: { sub: EstimateTemplateItemSubitem; parentVisits: number }) {
   const [qty, setQty] = useState(String(sub.qty));
+  const [visits, setVisits] = useState(String(sub.visits));
   const [rate, setRate] = useState(String(sub.rateCents / 100));
+  const [cost, setCost] = useState(String(sub.costCents / 100));
   const { mutateAsync: upsert } = useUpsertTemplateSubitem();
   const { mutateAsync: remove } = useDeleteTemplateSubitem();
 
   useEffect(() => {
     setQty(String(sub.qty));
+    setVisits(String(sub.visits));
     setRate(String(sub.rateCents / 100));
-  }, [sub.qty, sub.rateCents]);
+    setCost(String(sub.costCents / 100));
+  }, [sub.qty, sub.visits, sub.rateCents, sub.costCents]);
+
+  /** One click shows/hides the sub-item on the estimate or the invoice (same buttons as on an estimate line). */
+  async function togglePrint(field: "printOnEstimate" | "printOnInvoice") {
+    try {
+      await upsert({ templateItemId: sub.templateItemId, item: { ...sub, [field]: !sub[field] } });
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save sub-item"));
+    }
+  }
 
   async function save() {
     const nextQty = Number(qty) || 0;
     const nextRate = Math.round((Number(rate) || 0) * 100);
-    if (nextQty === sub.qty && nextRate === sub.rateCents) return;
+    const nextVisits = Math.max(1, Math.round(Number(visits)) || 1);
+    const nextCost = Math.round((Number(cost) || 0) * 100);
+    if (nextQty === sub.qty && nextRate === sub.rateCents && nextVisits === sub.visits && nextCost === sub.costCents) return;
     try {
       await upsert({
         templateItemId: sub.templateItemId,
-        item: { ...sub, qty: nextQty, rateCents: nextRate },
+        item: { ...sub, qty: nextQty, visits: nextVisits, rateCents: nextRate, costCents: nextCost },
       });
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Failed to save sub-item"));
@@ -244,8 +259,49 @@ function TemplateSubitemRow({ sub }: { sub: EstimateTemplateItemSubitem }) {
           {sub.type === "product" ? "Product" : "Subservice"}
         </span>
         {sub.name}
+        {parentVisits > 1 && sub.visits !== 1 && sub.visits !== parentVisits && (
+          <span
+            className="ml-2 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+            title={"Charged " + sub.visits + " times but the line has " + parentVisits + " visits. A sub-item can't be limited to some visits; its price is spread across all of them. Use 1 (once for the whole line) or " + parentVisits + " (every visit)."}
+          >
+            ⚠ Visits ≠ line&apos;s {parentVisits}
+          </span>
+        )}
+        <span className="ml-2 inline-flex gap-1 align-middle">
+          {([
+            ["printOnEstimate", "On estimate", "Hidden", "Printed on the estimate — click to hide", "Not printed on the estimate — click to show"],
+            ["printOnInvoice", "On invoice", "Not on invoice", "Printed on the invoice as its own row (one-time, waiting-list and recurring jobs) — click to fold it into the service price", "Folded into the service price on the invoice — click to print it as its own row (one-time, waiting-list and recurring jobs)"],
+          ] as const).map(([field, onLabel, offLabel, onTitle, offTitle]) => (
+            <button
+              key={field}
+              type="button"
+              onClick={() => void togglePrint(field)}
+              title={sub[field] ? onTitle : offTitle}
+              aria-pressed={sub[field]}
+              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                sub[field]
+                  ? "border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                  : "border-slate-200 dark:border-neutral-700 text-slate-400 dark:text-neutral-500"
+              } hover:text-brand-700 dark:hover:text-brand-400`}
+            >
+              <Printer className="h-3 w-3" />
+              {sub[field] ? onLabel : offLabel}
+            </button>
+          ))}
+        </span>
       </td>
-      <td className="px-3 py-1" />
+      <td className="px-3 py-1 text-center">
+        <input
+          type="number"
+          min={1}
+          step={1}
+          value={visits}
+          onChange={(e) => setVisits(e.target.value)}
+          onBlur={save}
+          title="Times this is charged. 1 = once for the whole line; set to the line's visits to charge every visit."
+          className="w-14 rounded border border-border bg-card px-1.5 py-0.5 text-center text-xs focus:outline-none"
+        />
+      </td>
       <td className="px-3 py-1">
         <input
           type="number"
@@ -266,9 +322,20 @@ function TemplateSubitemRow({ sub }: { sub: EstimateTemplateItemSubitem }) {
         />
       </td>
       <td className="px-3 py-1 text-right tabular-nums text-muted-foreground">
-        {centsToDisplay(Math.round(sub.qty * sub.rateCents))}
+        {centsToDisplay(Math.round(sub.qty * sub.rateCents * sub.visits))}
       </td>
-      <td className="px-3 py-1" colSpan={2} />
+      <td className="px-3 py-1 text-right">
+        <input
+          type="number"
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+          onBlur={save}
+          placeholder="Cost $"
+          title="Your unit cost for this sub-item (internal, not shown to the client). Times qty and visits on the estimate's cost and margin."
+          className="w-16 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
+        />
+      </td>
+      <td className="px-3 py-1" />
       <td className="px-3 py-1">
         <button
           onClick={() => remove(sub.id).catch(() => toast.error("Failed to delete sub-item"))}
@@ -552,7 +619,7 @@ function EditTemplateDialog({
                   <Fragment key={item.id}>
                     <TemplateItemRow item={item} templateId={template.id} discounts={activeDiscounts} />
                     {(item.subitems ?? []).map((sub) => (
-                      <TemplateSubitemRow key={sub.id} sub={sub} />
+                      <TemplateSubitemRow key={sub.id} sub={sub} parentVisits={item.visits} />
                     ))}
                     <AddTemplateSubitemRow
                       item={item}

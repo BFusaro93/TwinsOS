@@ -60,6 +60,7 @@ interface FormState {
   costDollars: number;
   confirmQty: boolean;
   invoice: boolean;
+  printOnEstimate: boolean;
   printOnInvoice: boolean;
   createInstalledProduct: boolean;
 }
@@ -77,6 +78,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
       costDollars: subitem.costCents / 100,
       confirmQty: subitem.confirmQty,
       invoice: subitem.invoice,
+      printOnEstimate: subitem.printOnEstimate,
       printOnInvoice: subitem.printOnInvoice,
       createInstalledProduct: subitem.createInstalledProduct,
     };
@@ -92,6 +94,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
     costDollars: 0,
     confirmQty: false,
     invoice: false,
+    printOnEstimate: true,
     printOnInvoice: false,
     createInstalledProduct: false,
   };
@@ -169,6 +172,7 @@ export function AddSubitemDialog({ lineItemId, parentVisits = 1, subitem, open, 
           totalCents,
           confirmQty: form.confirmQty,
           invoice: form.invoice,
+          printOnEstimate: form.printOnEstimate,
           printOnInvoice: form.printOnInvoice,
           createInstalledProduct: form.createInstalledProduct,
           sortOrder: subitem?.sortOrder ?? 0,
@@ -347,26 +351,17 @@ export function AddSubitemDialog({ lineItemId, parentVisits = 1, subitem, open, 
             </span>
           </div>
 
-          {/* Checkboxes — 2×2 grid */}
+          {/* The two flags the app acts on (also the On estimate / On invoice buttons on the line).
+              Confirm Qty / Invoice / Create Installed Product were stored but never read, so they are gone. */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2">
               <Checkbox
-                id="subitem-confirmQty"
-                checked={form.confirmQty}
-                onCheckedChange={(v) => setField("confirmQty", !!v)}
+                id="subitem-printOnEstimate"
+                checked={form.printOnEstimate}
+                onCheckedChange={(v) => setField("printOnEstimate", !!v)}
               />
-              <Label htmlFor="subitem-confirmQty" className="cursor-pointer text-sm font-normal">
-                Confirm Qty
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="subitem-invoice"
-                checked={form.invoice}
-                onCheckedChange={(v) => setField("invoice", !!v)}
-              />
-              <Label htmlFor="subitem-invoice" className="cursor-pointer text-sm font-normal">
-                Invoice
+              <Label htmlFor="subitem-printOnEstimate" className="cursor-pointer text-sm font-normal">
+                Print on Estimate
               </Label>
             </div>
             <div className="flex items-center gap-2">
@@ -377,16 +372,6 @@ export function AddSubitemDialog({ lineItemId, parentVisits = 1, subitem, open, 
               />
               <Label htmlFor="subitem-printOnInvoice" className="cursor-pointer text-sm font-normal">
                 Print on Invoice
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="subitem-createInstalledProduct"
-                checked={form.createInstalledProduct}
-                onCheckedChange={(v) => setField("createInstalledProduct", !!v)}
-              />
-              <Label htmlFor="subitem-createInstalledProduct" className="cursor-pointer text-sm font-normal">
-                Create Installed Product
               </Label>
             </div>
           </div>

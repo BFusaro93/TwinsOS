@@ -944,7 +944,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         .select(`
           *,
           clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
-          crm_crews(name),
+          crm_crews!crm_job_visits_crew_id_fkey(name),
           crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)
         .is('deleted_at', null)
@@ -2320,7 +2320,7 @@ export function useJobsList(filters?: {
             clients(display_name, primary_phone),
             crm_crews(name),
             crm_job_services(*),
-            crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id, crm_crews(name))
+            crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id, crm_crews!crm_job_visits_crew_id_fkey(name))
           `)
           .is("deleted_at", null)
           .neq("job_type", "snow")
@@ -3199,7 +3199,7 @@ export function useJobVisits(jobId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await fetchAllRows<any>(() => (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
+        .select('*, crm_crews!crm_job_visits_crew_id_fkey(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
         .eq('job_id', jobId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: true }));
@@ -3220,7 +3220,7 @@ export function useClientAllVisits(clientId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await fetchAllRows<any>(() => (supabase as any)
         .from('crm_job_visits')
-        .select('*, crm_crews(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
+        .select('*, crm_crews!crm_job_visits_crew_id_fkey(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
         .eq('client_id', clientId)
         .is('deleted_at', null)
         .order('scheduled_date', { ascending: false }));

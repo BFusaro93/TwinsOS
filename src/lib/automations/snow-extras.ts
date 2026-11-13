@@ -26,7 +26,7 @@ export async function buildSnowExtras(
     .from("crm_job_visits")
     .select(`
       status, start_time, scheduled_date,
-      crm_crews(name),
+      crm_crews!crm_job_visits_crew_id_fkey(name),
       crm_storm_events(name, event_date),
       clients(service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
       crm_jobs(service_address, service_city, service_state, service_zip, crm_crews(name), crm_job_services(service_name), client_properties(address, city, state, zip))

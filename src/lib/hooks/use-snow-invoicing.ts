@@ -181,7 +181,7 @@ export function useUninvoicedSnowVisits(filters: {
           .select(`
             *,
             clients(display_name, primary_phone),
-            crm_crews(name),
+            crm_crews!crm_job_visits_crew_id_fkey(name),
             crm_jobs!inner(*, crm_crews(name), crm_job_services(*, crm_services(invoice_time_on_lines)))
           `)
           .eq("status", "completed")
