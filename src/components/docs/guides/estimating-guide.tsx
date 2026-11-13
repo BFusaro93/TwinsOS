@@ -408,7 +408,8 @@ export function EstimatingGuide() {
           amber warning appears if Visits is neither 1 nor the item&apos;s visits. The same{" "}
           <strong>On estimate</strong> and <strong>On invoice</strong> buttons as on an estimate line sit
           beside the sub-item&apos;s name, and you can type its unit <strong>Cost</strong> in the row
-          (internal, never shown to the client); both come along when the bundle is applied.
+          (internal, never shown to the client); both come along when the bundle is applied. To rename a
+          bundle sub-item or swap its product, delete it and add it again.
           When you apply the bundle to an estimate, its sub-items come with it, including when you
           pick it from <strong>Apply bundle&hellip;</strong> on an estimate that already exists.
         </p>
@@ -494,7 +495,9 @@ export function EstimatingGuide() {
             <strong>Sub-items are added on top of the line&apos;s own Rate.</strong> A sub-item has its own{" "}
             <strong>Visits</strong> (default 1 = charged once for the whole line; set it to the line&apos;s
             visits to charge it on every visit), and its total is Qty &times; Rate &times; Visits. You can
-            edit Visits, Qty, Rate and Cost right in the grid; the pencil opens the full form. Use 1 or the line&apos;s
+            edit Visits, Qty, Rate and Cost right in the grid; the pencil opens the full form, which also has the{" "}
+            <strong>Print on Estimate</strong> and <strong>Print on Invoice</strong> checkboxes (the same two
+            settings as the On estimate and On invoice buttons beside the name). Use 1 or the line&apos;s
             visits: any other number (say 13 on a 14-visit line) shows an amber warning, because a sub-item
             can&apos;t be limited to some visits &mdash; its price is spread across all of them. The line&apos;s TP, T.Cost and GM% include its sub-items, and so do the estimate totals,
             the Invoice button and the Costs breakdown on the right (sub-services under{" "}
