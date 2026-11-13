@@ -2121,7 +2121,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Can I change the order of the lines on an invoice?",
-        a: "Yes. On an unlocked invoice, drag a line by the grip handle on its left (on a phone or tablet, use the up and down arrows). The order saves immediately and is used everywhere the invoice shows: the PDF, the emailed invoice, the online invoice page and accounting sync. Reordering never changes amounts, tax or totals. If some lines are hidden, the order decides where their amounts land, because a hidden line rolls into the nearest visible line above it, so move a line to change which row absorbs it. You need permission to modify invoices; a locked or void invoice can't be reordered until unlocked, and new lines are added at the bottom.",
+        a: "Yes. On an unlocked invoice, drag a line by the grip handle on its left (on a phone or tablet, use the up and down arrows). The order saves immediately and is used everywhere the invoice shows: the PDF, the emailed invoice, the online invoice page and accounting sync. Reordering never changes amounts, tax or totals. If some lines are hidden, the order decides where their amounts land, because a hidden line rolls into the nearest visible line above it, so move a line to change which row absorbs it. You need permission to modify invoices; a locked or void invoice can't be reordered until unlocked, and new lines are added at the bottom. When invoices are merged, the primary invoice's lines stay first and each merged invoice's lines follow in the order selected.",
       },
       {
         q: "How do I show an estimate's sub-services or materials as their own rows on the invoice?",
@@ -2545,7 +2545,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I bill several properties together on one invoice for a parent account?",
-        a: "Sub-accounts are separate clients, so their invoices can't be merged the usual way. On the Invoices list, tick the invoices from the sub-accounts and choose Actions > Merge / Consolidate Invoices, then Consolidate to Parent. It creates one new draft invoice on the parent account with each line tagged with its sub-account name in brackets, each line keeps the tax it was already charged, and the original invoices are voided and linked to the new one. It is blocked for locked invoices, invoices synced to QuickBooks, invoices with a bank payment still processing or an open dispute, and invoices where a sub-account has already paid something. A payment the parent itself made, such as one check for several properties, moves onto the new invoice.",
+        a: "Sub-accounts are separate clients, so their invoices can't be merged the usual way. On the Invoices list, tick the invoices from the sub-accounts and choose Actions > Merge / Consolidate Invoices, then Consolidate to Parent. It creates one new draft invoice on the parent account with each line tagged with its sub-account name in brackets (invoices stacked oldest first, each keeping its own line order), each line keeps the tax it was already charged, and the original invoices are voided and linked to the new one. It is blocked for locked invoices, invoices synced to QuickBooks, invoices with a bank payment still processing or an open dispute, and invoices where a sub-account has already paid something. A payment the parent itself made, such as one check for several properties, moves onto the new invoice.",
       },
       {
         q: "Collect Payment showed the old amount after I changed the invoice. Why?",
