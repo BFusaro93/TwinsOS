@@ -2,11 +2,29 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
 import {
   useInvoice,
   useUpsertInvoiceLineItem,
   useDeleteInvoiceLineItem,
+  useReorderInvoiceLines,
   useUpdateInvoiceStatus,
   useUpdateInvoiceFinancials,
   useUpdateInvoiceHeader,
@@ -64,7 +82,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn, formatCurrency } from "@/lib/utils";
 import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
-import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, ChevronUp, GripVertical, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -220,11 +238,21 @@ function rescaleLineDiscountCents(
   return Math.min(line.discountCents, totalCents);
 }
 
+/** New lines go last: one past the highest existing order (robust to gaps/ties on merged invoices). */
+function nextLineSortOrder(lines: InvoiceLineItem[]): number {
+  return lines.reduce((m, l) => Math.max(m, l.sortOrder ?? 0), -1) + 1;
+}
+
 function LineItemRow({
-  item, invoiceId, taxRateBps, discounts, locked = false,
+  item, invoiceId, taxRateBps, discounts, locked = false, index, count, onMove,
 }: {
   item: InvoiceLineItem; invoiceId: string; taxRateBps: number; discounts: CRMDiscount[]; locked?: boolean;
+  /** Position in the displayed order, for the up/down buttons. */
+  index: number; count: number;
+  /** Move this line one place up (-1) or down (1). */
+  onMove: (id: string, direction: -1 | 1) => void;
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: locked });
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
   const [rateStr, setRateStr] = useState(() => (item.rateCents / 100).toFixed(2));
@@ -348,7 +376,52 @@ function LineItemRow({
   }
 
   return (
-    <tr className={cn("group border-b text-xs hover:bg-slate-50 dark:hover:bg-muted/40", row.hideOnPrint && "bg-slate-50/60 dark:bg-muted/20 [&>td]:opacity-60")}>
+    <tr
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "group border-b text-xs hover:bg-slate-50 dark:hover:bg-muted/40",
+        row.hideOnPrint && "bg-slate-50/60 dark:bg-muted/20 [&>td]:opacity-60",
+        isDragging && "relative z-10 bg-card shadow-md [&>td]:opacity-90"
+      )}
+    >
+      {/* Reorder: drag handle on desktop (lg+), up/down buttons on narrow / touch screens */}
+      <td className="w-8 px-1 py-2 align-middle">
+        {!locked && count > 1 && (
+          <>
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              aria-label="Drag to reorder this line"
+              title="Drag to reorder (this line prints in this position)"
+              className="hidden cursor-grab touch-none text-slate-300 dark:text-neutral-500 hover:text-muted-foreground active:cursor-grabbing lg:block"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+            <div className="flex flex-col lg:hidden">
+              <button
+                type="button"
+                aria-label="Move line up"
+                disabled={index === 0}
+                onClick={() => onMove(item.id, -1)}
+                className="flex h-6 w-7 items-center justify-center text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-30"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Move line down"
+                disabled={index === count - 1}
+                onClick={() => onMove(item.id, 1)}
+                className="flex h-6 w-7 items-center justify-center text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-30"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </div>
+          </>
+        )}
+      </td>
       {/* Service name */}
       <td className="w-44 px-3 py-2 font-medium text-slate-700 dark:text-neutral-300 align-middle">
         {row.isOtherCharge && !row.serviceId ? (
@@ -746,6 +819,11 @@ export function InvoiceDetail({
 }) {
   const { data: invoice, isLoading, error: invoiceError } = useInvoice(invoiceId);
   const { mutateAsync: upsertItem } = useUpsertInvoiceLineItem();
+  const { mutateAsync: reorderLines } = useReorderInvoiceLines();
+  const lineSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
   const { mutateAsync: updateFinancials } = useUpdateInvoiceFinancials();
   const { mutateAsync: updateHeader } = useUpdateInvoiceHeader();
@@ -912,6 +990,30 @@ export function InvoiceDetail({
     setAppliedDiscountId(null);
   }
 
+  /** Persist the displayed lines in a new order (one RPC rewrites every sort_order). */
+  async function persistLineOrder(next: InvoiceLineItem[]) {
+    if (readOnly) return;
+    try {
+      await reorderLines({ invoiceId: invoice!.id, orderedIds: next.map((l) => l.id) });
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to reorder lines")); }
+  }
+
+  function handleLineDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const from = lineItems.findIndex((l) => l.id === active.id);
+    const to = lineItems.findIndex((l) => l.id === over.id);
+    if (from === -1 || to === -1) return;
+    void persistLineOrder(arrayMove(lineItems, from, to));
+  }
+
+  function moveLine(id: string, direction: -1 | 1) {
+    const from = lineItems.findIndex((l) => l.id === id);
+    const to = from + direction;
+    if (from === -1 || to < 0 || to >= lineItems.length) return;
+    void persistLineOrder(arrayMove(lineItems, from, to));
+  }
+
   async function addLineItem(serviceId: string, name: string, description = "", rateCents = 0, isTaxable = false) {
     if (addingLineItemRef.current) return;
     addingLineItemRef.current = true;
@@ -926,7 +1028,7 @@ export function InvoiceDetail({
           rate_cents: rateCents,
           total_cents: rateCents,
           is_taxable: isTaxable,
-          sort_order: lineItems.length,
+          sort_order: nextLineSortOrder(lineItems),
         },
       });
     } catch (err) { toast.error(mutationErrorMessage(err, "Failed to add item")); }
@@ -954,7 +1056,7 @@ export function InvoiceDetail({
           total_cents: amountCents,
           is_taxable: c.isTaxable,
           is_other_charge: true,
-          sort_order: lineItems.length,
+          sort_order: nextLineSortOrder(lineItems),
         },
       });
     } catch (err) { toast.error(mutationErrorMessage(err, "Failed to add charge")); }
@@ -1665,6 +1767,7 @@ export function InvoiceDetail({
             <table className="w-full text-xs">
               <thead className="bg-brand-500 text-white">
                 <tr>
+                  <th className="w-8 px-1 py-2.5"><span className="sr-only">Reorder</span></th>
                   <th className="w-36 px-3 py-2.5 text-left font-semibold">Service</th>
                   <th className="px-3 py-2.5 text-left font-semibold">Description</th>
                   <th className="w-28 px-2 py-2.5 text-left font-semibold">Date</th>
@@ -1677,19 +1780,33 @@ export function InvoiceDetail({
                   <th className="w-10 px-2 py-2.5" />
                 </tr>
               </thead>
+              <DndContext sensors={lineSensors} collisionDetection={closestCenter} onDragEnd={handleLineDragEnd}>
+              <SortableContext items={lineItems.map((l) => l.id)} strategy={verticalListSortingStrategy}>
               <tbody>
-                {lineItems.map((li) => (
-                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} locked={readOnly} />
+                {lineItems.map((li, i) => (
+                  <LineItemRow
+                    key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts}
+                    locked={readOnly} index={i} count={lineItems.length} onMove={moveLine}
+                  />
                 ))}
                 {lineItems.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-400 dark:text-neutral-500 text-xs">
+                    <td colSpan={11} className="py-8 text-center text-slate-400 dark:text-neutral-500 text-xs">
                       No line items yet — add one below
                     </td>
                   </tr>
                 )}
               </tbody>
+              </SortableContext>
+              </DndContext>
             </table>
+
+            {lineItems.some((l) => l.hideOnPrint) && (
+              <p className="border-t px-4 py-2 text-[11px] text-slate-500 dark:text-neutral-400">
+                Hidden lines (crossed-eye) roll into the nearest visible line <strong>above</strong> them on the customer&apos;s
+                invoice. Reorder lines to change which line absorbs a hidden amount; totals don&apos;t change.
+              </p>
+            )}
 
             {/* Add item + totals */}
             <div className="border-t p-4 flex items-start justify-between gap-4 bg-slate-50 dark:bg-muted/40">
