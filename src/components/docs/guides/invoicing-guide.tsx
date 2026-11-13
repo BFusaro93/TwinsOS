@@ -490,6 +490,10 @@ export function InvoicingGuide() {
             You need permission to add or modify invoices, and a locked or void invoice can&apos;t be
             reordered until it is unlocked. Lines you add later go to the bottom.
           </li>
+          <li>
+            When you <strong>merge invoices</strong>, the primary invoice&apos;s lines stay first and each
+            merged invoice&apos;s lines follow it, in the order you selected them, each keeping its own order.
+          </li>
         </ul>
       </Section>
 
