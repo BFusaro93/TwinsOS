@@ -8,6 +8,11 @@ export interface SnowCapContractColumns {
   end_date: string | null;
   snow_inch_cap?: number | string | null;
   snow_salt_cap?: number | null;
+  snow_pushes_cap?: number | null;
+  snow_events_cap?: number | null;
+  snow_overage_per_push_cents?: number | null;
+  snow_overage_per_event_cents?: number | null;
+  covers_snow?: boolean | null;
   snow_cap_reset?: string | null;
   snow_overage_description?: string | null;
   snow_overage_per_inch_cents?: number | null;
@@ -20,6 +25,10 @@ export function toSnowCapContract(row: SnowCapContractColumns): SnowCapContract 
     startDate: row.start_date,
     inchCap: row.snow_inch_cap != null ? Number(row.snow_inch_cap) : null,
     saltCap: row.snow_salt_cap ?? null,
+    pushesCap: row.snow_pushes_cap ?? null,
+    eventsCap: row.snow_events_cap ?? null,
+    overagePerPushCents: row.snow_overage_per_push_cents ?? null,
+    overagePerEventCents: row.snow_overage_per_event_cents ?? null,
     resetPeriod: (row.snow_cap_reset === "monthly" ? "monthly" : "contract_year") as SnowCapReset,
     overageDescription: row.snow_overage_description ?? null,
     overagePerInchCents: row.snow_overage_per_inch_cents ?? null,
@@ -42,7 +51,7 @@ export async function loadSnowCapStatuses(
   today: string
 ): Promise<Map<string, SnowCapStatus>> {
   const out = new Map<string, SnowCapStatus>();
-  const capped = contracts.filter((c) => hasSnowCap(toSnowCapContract(c)));
+  const capped = contracts.filter((c) => c.covers_snow !== false && hasSnowCap(toSnowCapContract(c)));
   if (capped.length === 0) return out;
 
   type Row = {

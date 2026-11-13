@@ -237,6 +237,12 @@ export interface CRMContract {
   /** Snow caps: inches / salt applications the flat price covers per period; null = no cap. */
   snowInchCap: number | null;
   snowSaltCap: number | null;
+  snowPushesCap: number | null;
+  snowEventsCap: number | null;
+  snowOveragePerPushCents: number | null;
+  snowOveragePerEventCents: number | null;
+  /** The contract includes snow service — shows its snow settings (storms outside the dates, caps). */
+  coversSnow: boolean;
   snowCapReset: "contract_year" | "monthly";
   snowOverageDescription: string | null;
   /** What each inch / salt over its cap bills (cents); null = not set. */

@@ -1,7 +1,7 @@
 import { formatCurrency } from "@/lib/utils";
 import type { SnowRateTier } from "@/lib/hooks/use-snow-rate-tiers";
 import type { CRMJobVisit } from "@/types/crm-jobs";
-import type { SnowCapOverage } from "@/lib/snow-caps";
+import { capPartText, type SnowCapOverage } from "@/lib/snow-caps";
 
 export const INVOICE_TYPE_LABEL: Record<string, string> = {
   per_event: "Per Event",
@@ -314,13 +314,7 @@ export function describeAmount(visit: SnowBillableVisit, groupSize: number, tier
     return `${snowBillableHours(visit)} hrs on site${shared} × ${formatCurrency(visit.job?.rateCents ?? 0)}/hr`;
   }
   if (invoiceType === "monthly_flat_rate") {
-    if (visit.capOverage) {
-      const o = visit.capOverage;
-      const unit = o.unitPriceCents != null ? ` × ${formatCurrency(o.unitPriceCents)}` : "";
-      return o.kind === "inches"
-        ? `overage: ${o.qty}" over the ${o.cap}" cap${unit}${o.unitPriceCents != null ? "/in" : ""}`
-        : `overage: salt ${o.ordinal ?? ""} over the cap of ${o.cap}${unit}`.replace("salt  over", "salt over");
-    }
+    if (visit.capOverage) return `overage: ${visit.capOverage.parts.map(capPartText).join("; ")}`;
     return visit.contractOutsidePriceCents != null
       ? "storm outside the contract — price per storm"
       : "storm outside the contract";

@@ -46,6 +46,11 @@ function mapContract(row: any): CRMContract {
     snowOutsideEventPriceCents: row.snow_outside_event_price_cents ?? null,
     snowInchCap: row.snow_inch_cap != null ? Number(row.snow_inch_cap) : null,
     snowSaltCap: row.snow_salt_cap ?? null,
+    snowPushesCap: row.snow_pushes_cap ?? null,
+    snowEventsCap: row.snow_events_cap ?? null,
+    snowOveragePerPushCents: row.snow_overage_per_push_cents ?? null,
+    snowOveragePerEventCents: row.snow_overage_per_event_cents ?? null,
+    coversSnow: row.covers_snow ?? false,
     snowCapReset: row.snow_cap_reset === "monthly" ? "monthly" : "contract_year",
     snowOverageDescription: row.snow_overage_description ?? null,
     snowOveragePerInchCents: row.snow_overage_per_inch_cents ?? null,
@@ -150,6 +155,8 @@ export function useCreateContract() {
       autoGenerate?: boolean;
       isActive?: boolean;
       includeSubProperties?: boolean;
+      /** Snow columns (covers_snow, caps, …) set at creation. */
+      snowFields?: Record<string, unknown>;
       source?: string;
       salesRepId?: string;
       saleType?: "new" | "renewal" | null;
@@ -177,6 +184,7 @@ export function useCreateContract() {
           auto_generate: values.autoGenerate ?? true,
           is_active: values.isActive ?? true,
           include_sub_properties: values.includeSubProperties ?? true,
+          ...(values.snowFields ?? {}),
           source: values.source ?? null,
           sales_rep_id: values.salesRepId ?? null,
           sale_type: values.saleType ?? null,
@@ -390,11 +398,16 @@ const CONTRACT_FINANCIAL_FIELDS = [
   // Whether storms outside the contract dates are billed per event or
   // included changes what the client pays for a snow season — and so does
   // the per-storm price.
+  "covers_snow",
   "snow_outside_dates",
   "snow_outside_event_price_cents",
   // Caps and overage prices change what a snow season costs the client.
   "snow_inch_cap",
   "snow_salt_cap",
+  "snow_pushes_cap",
+  "snow_events_cap",
+  "snow_overage_per_push_cents",
+  "snow_overage_per_event_cents",
   "snow_cap_reset",
   "snow_overage_description",
   "snow_overage_per_inch_cents",
