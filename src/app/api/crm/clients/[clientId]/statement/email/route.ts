@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { isOrgReadOnly } from "@/lib/org-writable";
 import { Resend } from "resend";
@@ -259,7 +260,7 @@ export async function POST(
   // read-only policies, so record it with the service client there.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const activityDb = ((await isOrgReadOnly(client.org_id as string)) ? createServiceClient() : supabase) as any;
-  await activityDb.from("client_activity").insert({
+  await insertEmailActivity(activityDb, {
     org_id: client.org_id,
     client_id: clientId,
     activity_type: "email",
@@ -271,7 +272,7 @@ export async function POST(
     resend_message_id: sendData?.id ?? null,
     occurred_at: new Date().toISOString(),
     created_by: user.id,
-  });
+  }, { html });
 
   return NextResponse.json({ ok: true, bouncedSkipped: bouncedEmails });
 }

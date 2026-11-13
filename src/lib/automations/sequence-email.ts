@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { escapeHtml } from "@/lib/utils/escape-html";
@@ -384,7 +385,7 @@ export async function sendResolvedSequenceEmail(
   const toEmailsJoined = params.toEmails.join(", ");
 
   if (params.clientId) {
-    const { error: actErr } = await supabase.from("client_activity").insert({
+    const { error: actErr } = await insertEmailActivity(supabase, {
       org_id: params.orgId,
       client_id: params.clientId,
       activity_type: "email",
@@ -393,7 +394,7 @@ export async function sendResolvedSequenceEmail(
       sent_to: toEmailsJoined,
       resend_message_id: sent?.id ?? null,
       occurred_at: new Date().toISOString(),
-    });
+    }, { html });
     // The email is already out — a failed timeline row must not fail the step.
     if (actErr) console.error("[sequence-email] client_activity insert failed:", actErr.message);
   }

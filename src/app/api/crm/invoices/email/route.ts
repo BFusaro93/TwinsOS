@@ -1,4 +1,5 @@
 import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { NextRequest, NextResponse } from "next/server";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { safeHexColor } from "@/lib/utils/safe-color";
@@ -597,7 +598,7 @@ export async function POST(req: NextRequest) {
 
   // Log activity
   if (inv.client_id) {
-    await bookkeepingDb.from("client_activity").insert({
+    await insertEmailActivity(bookkeepingDb, {
       org_id: effOrgId,
       client_id: inv.client_id,
       activity_type: "email",
@@ -609,7 +610,7 @@ export async function POST(req: NextRequest) {
       resend_message_id: sendData?.id ?? null,
       occurred_at: new Date().toISOString(),
       created_by: user.id,
-    });
+    }, { html, cc: ccEmails });
   }
 
   return NextResponse.json({ ok: true, bouncedSkipped: bouncedEmails });
