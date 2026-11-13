@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,6 +25,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DispatchWeather } from "@/components/crm/dispatch/DispatchWeather";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { SnowWorkMap, type SnowMapStop } from "@/components/crm/snow/SnowWorkMap";
+import { SnowMessageDialog, type SnowMessageChannel } from "@/components/crm/snow/SnowMessageDialog";
+import { SnowNoEmailDialog } from "@/components/crm/snow/SnowNoEmailDialog";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -1167,6 +1169,8 @@ export function SnowDispatchBoard() {
   usePersistedColumns("snow_dispatch_v2", SNOW_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key));
   const isVisible = (k: string) => visibleKeys.includes(k);
   const [multiCrewOpen, setMultiCrewOpen] = useState(false);
+  const [messageChannel, setMessageChannel] = useState<SnowMessageChannel | null>(null);
+  const [noEmailOpen, setNoEmailOpen] = useState(false);
   // Map: narrow the table to the stops picked on it.
   const [tableOnlySelected, setTableOnlySelected] = useState(false);
   const [serviceFilters, setServiceFilters] = useState<string[]>([]);
@@ -1273,6 +1277,14 @@ export function SnowDispatchBoard() {
   );
 
   const crewNameById = useMemo(() => new Map(crews.map((c) => [c.id, c.name])), [crews]);
+  // Client messaging works on the selected stops; "Jobs without emails" falls back to everything shown.
+  const selectedStops = useMemo(() => visits.filter((v) => selectedVisitIds.has(v.id)), [visits, selectedVisitIds]);
+  const crewNameOf = useCallback(
+    (v: CRMJobVisit) => (effectiveCrewIdOf(v) ? crewNameById.get(effectiveCrewIdOf(v)!) : null) ?? v.crewName ?? null,
+    [crewNameById],
+  );
+  const canEmailClients = can("email_activity_send");
+  const canTextClients = can("sms_send");
 
   // Each job's latest push on this storm — "Add push" hangs off that row only.
   const latestPushVisitIdByJob = useMemo(() => {
@@ -1727,6 +1739,14 @@ export function SnowDispatchBoard() {
                   <DropdownMenuSeparator />
                 </>
               )}
+              {canEmailClients && (
+                <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setMessageChannel("email")}>Email Clients…</DropdownMenuItem>
+              )}
+              {canTextClients && (
+                <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setMessageChannel("sms")}>Text Clients…</DropdownMenuItem>
+              )}
+              <DropdownMenuItem disabled={filteredVisits.length === 0} onSelect={() => setNoEmailOpen(true)}>Jobs Without Emails…</DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setStatsOpen((o) => !o)}>{statsOpen ? "Hide Crew Stats" : "Show Crew Stats"}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPrintOpen(true)}>Print Route Sheets…</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setServiceFilters([]); setPriorityFilters([]); setCityFilters([]); setZipFilters([]); setSelectedVisitIds(new Set()); }}>
@@ -1861,6 +1881,12 @@ export function SnowDispatchBoard() {
                 Close Out…
               </Button>
             </>
+          )}
+          {canEmailClients && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMessageChannel("email")}>Email clients…</Button>
+          )}
+          {canTextClients && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMessageChannel("sms")}>Text clients…</Button>
           )}
           <button className="ml-auto text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => setSelectedVisitIds(new Set())}>Clear</button>
         </div>
@@ -2078,6 +2104,24 @@ export function SnowDispatchBoard() {
             resolveCrewId={effectiveCrewIdOf}
             onDone={() => { setSelectedVisitIds(new Set()); setDriveMins(new Map()); }}
           />
+          {messageChannel && (
+            <SnowMessageDialog
+              open
+              onClose={() => setMessageChannel(null)}
+              initialChannel={messageChannel}
+              visits={selectedStops}
+              event={activeEvent}
+              crewNameOf={crewNameOf}
+            />
+          )}
+          {noEmailOpen && (
+            <SnowNoEmailDialog
+              open
+              onClose={() => setNoEmailOpen(false)}
+              visits={selectedStops.length > 0 ? selectedStops : filteredVisits}
+              scopeLabel={selectedStops.length > 0 ? "selected" : "shown"}
+            />
+          )}
           <SnowCrewAssignDialog open={crewAssignOpen} onOpenChange={setCrewAssignOpen} visits={visits} crews={crews} />
           <SnowPrintDialog open={printOpen} onOpenChange={setPrintOpen} visits={visits} crews={crews} event={activeEvent} />
         </>
