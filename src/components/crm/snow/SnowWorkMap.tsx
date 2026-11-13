@@ -56,6 +56,7 @@ export function SnowWorkMap({
   reordering,
   onToggle,
   onSelectMany,
+  onSelectOnly,
   onClearSelection,
   onMoveStop,
   onAssignCrew,
@@ -72,7 +73,10 @@ export function SnowWorkMap({
   tableOnlySelected: boolean;
   reordering: boolean;
   onToggle: (visitId: string) => void;
+  /** Add these stops to the current selection. */
   onSelectMany: (visitIds: string[]) => void;
+  /** Make exactly these stops the selection. */
+  onSelectOnly: (visitIds: string[]) => void;
   onClearSelection: () => void;
   onMoveStop: (visitId: string, dir: -1 | 1) => void;
   onAssignCrew: (visitIds: string[], crewId: string | null) => Promise<void>;
@@ -94,11 +98,15 @@ export function SnowWorkMap({
   const [busy, setBusy] = useState(false);
   const [drawPoints, setDrawPoints] = useState<google.maps.LatLngLiteral[]>([]);
   const [shapeClosed, setShapeClosed] = useState(false);
+  /** How many stops the last finished shape enclosed (null = no finished shape). */
+  const [insideCount, setInsideCount] = useState<number | null>(null);
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
   const linesRef = useRef<google.maps.Polyline[]>([]);
   const shapeRef = useRef<google.maps.Polygon | null>(null);
+  const outlineRef = useRef<google.maps.Polyline | null>(null);
+  const vertexRef = useRef<google.maps.Marker[]>([]);
   const lastFitSig = useRef("");
 
   // Marker listeners are created once per rebuild; they read the latest handlers from here.
@@ -235,14 +243,29 @@ export function SnowWorkMap({
     if (!ready || !map) return;
     shapeRef.current?.setMap(null);
     shapeRef.current = null;
+    outlineRef.current?.setMap(null);
+    outlineRef.current = null;
+    vertexRef.current.forEach((m) => m.setMap(null));
+    vertexRef.current = [];
     if (drawPoints.length === 0) return;
-    const style = { strokeColor: "#ea580c", strokeWeight: 2, fillColor: "#ea580c", fillOpacity: 0.15, clickable: false };
-    shapeRef.current = shapeClosed || drawPoints.length >= 3
-      ? new google.maps.Polygon({ map, paths: drawPoints, ...style })
-      : new google.maps.Polygon({ map, paths: drawPoints, ...style, fillOpacity: 0 });
+    const style = { strokeColor: "#ea580c", strokeWeight: 2, clickable: false };
+    // A dot for every click, so the first click is visibly a point (not a line).
+    vertexRef.current = drawPoints.map((position) => new google.maps.Marker({
+      map,
+      position,
+      clickable: false,
+      zIndex: 5,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: "#ea580c", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 },
+    }));
+    if (drawPoints.length >= 3) {
+      shapeRef.current = new google.maps.Polygon({ map, paths: drawPoints, ...style, fillColor: "#ea580c", fillOpacity: 0.15 });
+    } else if (drawPoints.length === 2) {
+      outlineRef.current = new google.maps.Polyline({ map, path: drawPoints, ...style });
+    }
   }, [ready, drawPoints, shapeClosed]);
 
-  function finishShape() {
+  /** Select the stops inside the shape: replacing the current selection (the default), or adding to it. */
+  function finishShape(mode: "replace" | "add" = "replace") {
     if (drawPoints.length < 3) return;
     const poly = shapeRef.current;
     if (!poly) return;
@@ -253,13 +276,15 @@ export function SnowWorkMap({
       })
       .map((s) => s.visitId);
     setShapeClosed(true);
+    setInsideCount(ids.length);
     setMode("select");
-    onSelectMany(ids);
+    if (mode === "replace") onSelectOnly(ids); else onSelectMany(ids);
   }
 
   function clearShape() {
     setDrawPoints([]);
     setShapeClosed(false);
+    setInsideCount(null);
   }
 
   function toggleCrew(key: string) {
@@ -286,7 +311,13 @@ export function SnowWorkMap({
   const modeBtn = (m: Mode, label: string, icon: React.ReactNode) => (
     <button
       type="button"
-      onClick={() => { setMode(m); if (m !== "draw") setDrawPoints((p) => (shapeClosed ? p : [])); }}
+      onClick={() => {
+        // Draw area always starts a fresh shape — points from an earlier one used to carry over, so the
+        // first click drew a line back to the old shape. Leaving it unfinished drops the half-drawn outline.
+        if (m === "draw") clearShape();
+        else if (!shapeClosed) setDrawPoints([]);
+        setMode(m);
+      }}
       className={cn(
         "flex flex-1 items-center justify-center gap-1 rounded border px-2 py-1.5 text-[11px]",
         mode === m ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400" : "text-muted-foreground hover:bg-muted"
@@ -316,18 +347,27 @@ export function SnowWorkMap({
         <p className="text-[11px] text-muted-foreground">
           {mode === "select" && "Click stops to select or unselect them. Selecting here selects them in the table too."}
           {mode === "order" && "Left-click a stop to move it later in its crew's route; right-click to move it earlier."}
-          {mode === "draw" && "Click the map to outline an area, then Finish shape to select every stop inside it."}
+          {mode === "draw" && "Click the map to outline an area, then Select inside to pick every stop in it (Add to selection keeps your current picks)."}
         </p>
 
         {mode === "draw" && (
           <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" className="h-7 text-xs" disabled={drawPoints.length < 3} onClick={finishShape}>Finish shape</Button>
+            <Button size="sm" className="h-7 text-xs" disabled={drawPoints.length < 3} onClick={() => finishShape("replace")}>Select inside</Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={drawPoints.length < 3} onClick={() => finishShape("add")}>Add to selection</Button>
             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={drawPoints.length === 0} onClick={() => setDrawPoints((p) => p.slice(0, -1))}>Undo point</Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={drawPoints.length === 0} onClick={clearShape}>Clear</Button>
           </div>
         )}
+        {mode === "draw" && (
+          <p className="text-[11px] text-muted-foreground">
+            {drawPoints.length === 0 ? "Click the map to place the first point." : `${drawPoints.length} point${drawPoints.length > 1 ? "s" : ""} placed${drawPoints.length < 3 ? " — place at least 3" : " — Select inside picks the stops in the shape"}.`}
+          </p>
+        )}
         {mode !== "draw" && drawPoints.length > 0 && (
-          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearShape}><X className="mr-1 h-3 w-3" />Clear shape</Button>
+          <div className="flex items-center gap-2">
+            {insideCount != null && <span className="text-[11px] text-muted-foreground">{insideCount} stop{insideCount === 1 ? "" : "s"} inside</span>}
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearShape}><X className="mr-1 h-3 w-3" />Clear shape</Button>
+          </div>
         )}
 
         <div className="space-y-1.5 border-t pt-2">

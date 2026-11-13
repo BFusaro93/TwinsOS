@@ -177,9 +177,9 @@ export function SnowGuide() {
           <strong>Snowfall depth is not pulled from a weather feed — it&apos;s recorded manually,
           per visit, when the crew&apos;s work is closed out.</strong> Select one or more completed
           visits and click <strong>Close Out…</strong> to enter the actual depth (in), temperature,
-          asset type used, any material (e.g. salt) with quantity and unit cost, and — for
-          hourly-billed jobs — hours on site (the time the crew was at the property, not
-          multiplied by crew size). Each visit is its own row with its own depth reading, closed
+          and — for hourly-billed jobs — hours on site (the time the crew was at the property, not
+          multiplied by crew size). Salt and other materials aren&apos;t entered here: the crew
+          records what they used on each stop (see Salt and materials, per storm). Each visit is its own row with its own depth reading, closed
           out separately.
         </p>
         <p>
@@ -257,9 +257,15 @@ export function SnowGuide() {
             Progress, Completed, Skipped and Cancelled (each with a count), a multi-select{" "}
             <strong>crew filter</strong> that includes <strong>Unassigned</strong>, and a{" "}
             <strong>search</strong> box that matches client, service, address, city, state, zip,
-            notes and crew. Multi-select filters for <strong>Service</strong>,{" "}
-            <strong>Priority</strong>, <strong>City</strong> and <strong>Zip</strong> narrow the
-            list further. The checkbox in the header row (or <em>Select All Shown</em> in
+            notes and crew, plus a <strong>Priority</strong> filter. Above the dark bar, like the
+            Dispatch Board, is a <strong>Select a Filter</strong> row: click <strong>Client</strong> (with a search box),{" "}
+            <strong>Date</strong>, <strong>Service</strong>, <strong>City</strong> or{" "}
+            <strong>Zip</strong> and tick the values you want (the pill shows how many are picked).
+            The dark bar also has a <strong>Tags</strong> filter that shows stops whose client has
+            any of the tags you tick. The buttons at the right of that
+            row are <strong>Stats</strong>, <strong>Map</strong>, <strong>Optimize</strong> (with
+            Nearest / Furthest first), <strong>Export</strong> and <strong>Print</strong>. The{" "}
+            <strong>Legend</strong> button at the right of the dark bar explains every icon and tag. The checkbox in the header row (or <em>Select All Shown</em> in
             Actions) selects every stop the filters currently show, so you can filter to a zip
             and reassign or dispatch all of it at once. Add Jobs has the same select-all checkbox
             plus <em>Select all</em> / <em>Unselect all</em> links and a search box that narrows the
@@ -370,7 +376,7 @@ export function SnowGuide() {
             Dispatch, Close Out and the rest act on what you picked). <em>Route order</em>:
             left-click a stop to move it later in its crew&apos;s route, right-click to move it
             earlier. <em>Draw area</em>: click points on the map to outline a shape, then{" "}
-            <strong>Finish shape</strong> selects every stop inside it. With stops selected, the
+            <strong>Select inside</strong> picks exactly the stops in the shape (replacing your current selection); <strong>Add to selection</strong> keeps your current picks too. With stops selected, the
             panel shows their services, budgeted hours and total, and lets you pick a crew and
             click <strong>Update</strong>, open <strong>Assign crews…</strong>, or{" "}
             <strong>Dispatch</strong>. Click a crew in the panel to hide or show it, and tick{" "}

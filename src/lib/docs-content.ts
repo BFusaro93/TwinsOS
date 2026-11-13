@@ -957,7 +957,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Board tools: columns, filters, select all, map",
             detail:
-              "Columns: Date, Service, Address, City, State, Zip, Priority, Trigger, Crew, Depth, Temp, Notes to Crew and Amt (the column chooser remembers your choice). Filters: crew, status, Dates, Services, Priorities, Cities and Zips, plus search. The header checkbox (or Actions > Select All Shown) selects every stop currently shown, so you can filter to an area and act on all of it. The Map button opens a working map with three tools: Select (click stops), Route order (left-click a stop to move it later in its crew's route, right-click to move it earlier) and Draw area (click points to outline an area, then Finish shape selects every stop inside). With stops selected, its panel shows their services, budgeted hours and total and lets you assign a crew, open Assign crews, move them to a date or dispatch them. Crews can be hidden or shown, and 'Show only selected stops' narrows the map or the table.",
+              "Columns: Date, Service, Address, City, State, Zip, Priority, Trigger, Crew, Depth, Temp, Notes to Crew and Amt (the column chooser remembers your choice). Filters: status tabs, crew and priority in the dark bar, and a Tags filter (stops whose client has any ticked tag), and a Select a Filter row above it (click Client, Date, Service, City or Zip and tick values), plus search. The Select a Filter row also holds Stats, Map, Optimize, Export and Print, and the Legend button explains every icon and tag. The header checkbox (or Actions > Select All Shown) selects every stop currently shown, so you can filter to an area and act on all of it. The Map button opens a working map with three tools: Select (click stops), Route order (left-click a stop to move it later in its crew's route, right-click to move it earlier) and Draw area (click points to outline an area, then Select inside picks exactly the stops in the shape (replacing your current selection; Add to selection keeps your current picks too)). With stops selected, its panel shows their services, budgeted hours and total and lets you assign a crew, open Assign crews, move them to a date or dispatch them. Crews can be hidden or shown, and 'Show only selected stops' narrows the map or the table.",
           },
           {
             step: "Master Routes",
@@ -2234,7 +2234,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I select every snow stop in an area?",
-        a: "Open the Map on the Snow Jobs board, choose Draw area, click points around the area and click Finish shape: every stop inside is selected (and selected in the table). Then assign a crew, move a date or dispatch from the map panel. Or filter the table by zip or city and tick the header checkbox to select all shown.",
+        a: "Open the Map on the Snow Jobs board, choose Draw area, click points around the area and click Select inside: exactly the stops in the shape become the selection (in the table too); Add to selection keeps your current picks as well. Then assign a crew, move a date or dispatch from the map panel. Or filter the table by zip or city and tick the header checkbox to select all shown.",
       },
       {
         q: "How do snow contract caps and overage work?",
