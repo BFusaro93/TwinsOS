@@ -147,6 +147,9 @@ export type SnowBillableVisit = CRMJobVisit & {
   /** Hourly job sharing ONE crew stop with another hourly job: this visit's
    *  share (0–1) of the stop's on-site time. Unset = the whole span. */
   hourlyStopShare?: number | null;
+  /** Per Event Per Inch: on-site hours worked by this storm's unbilled visits (return
+   *  trips, extra crews) — added to an hourly depth range's billable hours. */
+  stormExtraHours?: number | null;
   /** Monthly Flat Rate visit the contract covers but that is past its inch / salt
    *  cap: bills as overage (snow-caps.ts) instead of staying in the flat price. */
   capOverage?: SnowCapOverage;
@@ -285,7 +288,7 @@ export function computeGroupAmountCents(groupVisits: SnowBillableVisit[], tiersB
     const tiers = job?.id ? tiersByJobId?.get(job.id) : undefined;
     // An hourly range bills the on-site hours of every visit in the storm's billing group
     // (the deepest reading only picks the range; see liftStormDepths).
-    const groupHours = groupVisits.reduce((sum, v) => sum + snowBillableHours(v), 0);
+    const groupHours = groupVisits.reduce((sum, v) => sum + snowBillableHours(v) + (v.stormExtraHours ?? 0), 0);
     const tiered = tiers?.length ? priceWithTiers(maxDepth, tiers, groupHours) : null;
     return tiered ?? Math.round((job?.ratePerInchCents ?? 0) * maxDepth);
   }

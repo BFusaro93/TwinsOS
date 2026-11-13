@@ -685,12 +685,25 @@ export async function applyVisitCompletionSideEffects(
           // wrong rep and printed the wrong PO.
           const salesRepId: string | null = j.sales_rep_id ?? null;
           const poNumber: string | null = j.po_number?.trim() || null;
-          // Narrows a crm_invoices query to drafts of this visit's rep + PO.
+          const { data: orgTermsRow } = await supabase
+            .from("organizations")
+            .select("default_billing_terms")
+            .eq("id", orgId)
+            .maybeSingle();
+          const invoiceTerms = resolveInvoiceTerms(
+            j.invoice_terms || j.clients?.default_terms,
+            (orgTermsRow as { default_billing_terms: string | null } | null)?.default_billing_terms,
+          );
+          // Narrows a crm_invoices query to drafts of this visit's rep + PO + terms.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const sameRepAndPo = (q: any) => {
             const byRep = salesRepId ? q.eq("sales_rep_id", salesRepId) : q.is("sales_rep_id", null);
             // (Blank POs are written as null by this path, never "".)
-            return poNumber ? byRep.eq("po_number", poNumber) : byRep.is("po_number", null);
+            const byPo = poNumber ? byRep.eq("po_number", poNumber) : byRep.is("po_number", null);
+            // Terms too: the header carries ONE terms value (and the due date derived from
+            // it), so a job on different terms gets its own draft instead of silently
+            // inheriting the first job's.
+            return byPo.eq("terms", invoiceTerms);
           };
 
           let existingInvoice: { id: string } | null = null;
@@ -767,15 +780,6 @@ export async function applyVisitCompletionSideEffects(
 
           const appended = existingInvoice ? await appendToDraft(existingInvoice.id) : false;
           if (!appended) {
-            const { data: orgTermsRow } = await supabase
-              .from("organizations")
-              .select("default_billing_terms")
-              .eq("id", orgId)
-              .maybeSingle();
-            const invoiceTerms = resolveInvoiceTerms(
-              j.invoice_terms || j.clients?.default_terms,
-              (orgTermsRow as { default_billing_terms: string | null } | null)?.default_billing_terms,
-            );
             // A batch draft collects the whole period, so it is dated the
             // period's last day (the service day for daily, Sunday of the
             // Mon–Sun week, or the month's last day) and its terms run from
@@ -786,7 +790,7 @@ export async function applyVisitCompletionSideEffects(
             // line keeps the visit's service_date.
             const newInvoiceDate = period ? period.end : today;
             // Batched clients: crm_invoices_auto_period_draft_unique allows ONE open auto draft
-            // per client + period + tax rate + sales rep + PO, so two completions that both found "no draft yet" cannot
+            // per client + period + tax rate + sales rep + PO + terms, so two completions that both found "no draft yet" cannot
             // both create one. The header starts at zero and every visit's lines (this one included)
             // are added through increment_invoice_totals, which row-locks the invoice and re-derives
             // tax from ALL its lines — so the totals are right whichever visit's lines land first.

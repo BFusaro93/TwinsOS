@@ -235,9 +235,9 @@ export function InvoicingGuide() {
             <strong>Daily</strong> gets one draft per service day (every visit that day on one
             invoice), <strong>Weekly</strong> one per Monday&ndash;Sunday week, and{" "}
             <strong>Monthly</strong> one per calendar month. <strong>Upon Completion</strong> bills each
-            visit on its own invoice. Visits whose jobs have a different sales rep or PO number go on
-            separate drafts in the same period, so each invoice credits the right rep&apos;s commission
-            and prints the right PO. Once a draft is sent, printed or locked, the next visit of that
+            visit on its own invoice. Visits whose jobs have a different sales rep, PO number or payment
+            terms go on separate drafts in the same period, so each invoice credits the right rep&apos;s
+            commission, prints the right PO and carries the right due date. Once a draft is sent, printed or locked, the next visit of that
             period starts a new draft.
           </li>
           <li>
