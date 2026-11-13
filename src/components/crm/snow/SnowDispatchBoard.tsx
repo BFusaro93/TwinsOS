@@ -56,6 +56,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -63,6 +66,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import { buildSnowStopsCsv, downloadCsv, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
+import { useOrgTags } from "@/lib/hooks/use-clients";
 import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDialog";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -74,7 +78,7 @@ import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
   Calendar, Smartphone, CalendarCheck, CheckCircle2, XCircle, CornerDownRight,
-  ListChecks, ThermometerSnowflake, Ruler, HelpCircle, MapPin, ArrowUp, ArrowDown, Route as RouteIcon, Search,
+  ListChecks, ThermometerSnowflake, Ruler, HelpCircle, MapPin, ArrowUp, ArrowDown, Route as RouteIcon, Search, Tag, Mail, MessageSquare, Download, BarChart3, SkipForward, Undo2, Eraser,
 } from "lucide-react";
 import type { CRMJobVisit, VisitStatus, StormEventStatus } from "@/types/crm-jobs";
 
@@ -89,6 +93,9 @@ function dayAbbrForDate(dateStr: string): string {
 
 // clients.priority is 'high' | 'normal' | 'low' — lower rank number sorts first (higher priority)
 const PRIORITY_RANK: Record<string, number> = { high: 1, normal: 2, low: 3 };
+
+/** Icon spacing/colour used on every Actions-menu item (same as the Dispatch Board's menu). */
+const MENU_ICON = "mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500";
 
 const SNOW_FILTER_TABS: { value: string; label: string }[] = [
   { value: "all", label: "All" },
@@ -993,10 +1000,6 @@ function CloseOutDialog({
   const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
   const [depth, setDepth] = useState("");
   const [temp, setTemp] = useState("");
-  const [assetType, setAssetType] = useState("");
-  const [materialName, setMaterialName] = useState("");
-  const [materialQty, setMaterialQty] = useState("");
-  const [materialUnitCost, setMaterialUnitCost] = useState("");
   const [actualHours, setActualHours] = useState("");
   // Hourly-billed snow jobs invoice actualHours × rate — this close-out flow
   // was the only path for these visits and never captured hours at all, so
@@ -1019,16 +1022,8 @@ function CloseOutDialog({
         onOpenChange(false);
         return;
       }
-      const totalQty = materialQty ? parseFloat(materialQty) : 1;
-      const unitCostCents = materialUnitCost ? Math.round(parseFloat(materialUnitCost) * 100) : 0;
       const totalHours = actualHours ? parseFloat(actualHours) : null;
-      // The qty/hours fields are entered once for the whole batch (e.g. "10
-      // bags of salt" / "2.5 hrs" for this close-out), not per stop — split
-      // evenly across the visits being closed so a multi-stop close-out doesn't
-      // multiply material cost and actual hours by the visit count in Job
-      // Costing/COGS and hourly-billed invoicing (both key off per-visit
-      // values). A single-visit close-out is unaffected (divide by 1).
-      const qty = totalQty / pending.length;
+      // Hours are entered once for the whole batch (e.g. "2.5 hrs" for this close-out), not per stop.
       // Hours only matter to hourly-billed jobs: splitting them across every visit
       // in a mixed batch under-billed the hourly clients (6h over 5 visits = 1.2h
       // each, with 3 non-hourly visits soaking up half of it).
@@ -1054,10 +1049,6 @@ function CloseOutDialog({
               completed_at: new Date().toISOString(),
               snow_depth_inches: depth ? Math.max(0, parseFloat(depth)) : null,
               temperature: temp ? parseFloat(temp) : null,
-              asset_type: assetType || null,
-              materials_used: materialName
-                ? [{ name: materialName, qty, rate_cents: unitCostCents }]
-                : [],
               // Hours entered here are hours ON SITE (what an hourly snow job bills,
               // once). actual_hours is man-hours for job costing — the crew-app
               // clock-out stores Σ every member's punches — so it's stored × the
@@ -1067,26 +1058,6 @@ function CloseOutDialog({
                 : {}),
             },
           });
-          // materials_used on crm_job_visits is display-only — it never feeds
-          // Job Costing/COGS, which read crm_jobs.actual_material_cost_cents,
-          // maintained only via the crm_job_materials table. Without this, every
-          // snow storm's salt/material cost silently showed as $0 in those
-          // reports no matter what was logged here.
-          if (materialName && qty > 0) {
-            await fetch(`/api/crm/jobs/${v.jobId}/materials`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                description: materialName,
-                qty,
-                unitCostCents,
-                visitId: v.id,
-              }),
-            }).catch(() => {
-              // Non-fatal — the visit itself is already closed out; a failed
-              // material-cost record shouldn't block the whole close-out.
-            });
-          }
         }
       }));
       toast.success(`Closed out ${pending.length} visit${pending.length > 1 ? "s" : ""}`);
@@ -1120,24 +1091,6 @@ function CloseOutDialog({
               <Input type="number" step="0.25" value={actualHours} onChange={(e) => setActualHours(e.target.value)} placeholder="e.g. 2.5" className="h-9 text-sm" />
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label>Asset Type</Label>
-            <Input value={assetType} onChange={(e) => setAssetType(e.target.value)} placeholder="e.g. Skid Steer" className="h-9 text-sm" />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-1.5">
-              <Label>Material Used</Label>
-              <Input value={materialName} onChange={(e) => setMaterialName(e.target.value)} placeholder="e.g. Snow Salt" className="h-9 text-sm" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Qty</Label>
-              <Input type="number" value={materialQty} onChange={(e) => setMaterialQty(e.target.value)} className="h-9 text-sm" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Unit Cost ($)</Label>
-              <Input type="number" step="0.01" value={materialUnitCost} onChange={(e) => setMaterialUnitCost(e.target.value)} className="h-9 text-sm" />
-            </div>
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -1216,6 +1169,112 @@ function visitServiceName(v: CRMJobVisit): string {
   return v.job?.services?.[0]?.serviceName || v.job?.invoiceDescription || "Snow Service";
 }
 
+/** A "Select a Filter" pill for the white strip above the dark bar (same look as the Dispatch Board's):
+ *  click it for a multi-select checklist; it shows how many values are picked. */
+function FilterPill({ label, options, selected, onChange, format, searchable }: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  format?: (value: string) => string;
+  /** Adds a search box (for long lists, e.g. every client on the storm). */
+  searchable?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const shownOptions = query.trim() ? options.filter((o) => (format ? format(o) : o).toLowerCase().includes(query.trim().toLowerCase())) : options;
+  const toggleValue = (o: string) => onChange(selected.includes(o) ? selected.filter((x) => x !== o) : [...selected, o]);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            "rounded px-2 py-0.5 max-lg:py-2 text-xs transition-colors whitespace-nowrap",
+            selected.length > 0
+              ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
+              : "hover:bg-muted text-slate-600 dark:text-neutral-400"
+          )}
+        >
+          {label}
+          {selected.length > 0 && <span className="ml-1 text-brand-500 dark:text-brand-400">· {selected.length}</span>}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 max-h-[min(24rem,var(--radix-popover-content-available-height,24rem))] overflow-y-auto overscroll-contain p-1" align="start">
+        <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{label}</p>
+        {searchable && (
+          <div className="px-1 pb-1">
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${label.toLowerCase()}s…`} className="h-7 text-xs" aria-label={`Search ${label.toLowerCase()}s`} />
+          </div>
+        )}
+        {options.length === 0 && <p className="px-2 py-2 text-xs italic text-slate-400 dark:text-neutral-500">Nothing to filter yet</p>}
+        {options.length > 0 && shownOptions.length === 0 && <p className="px-2 py-2 text-xs italic text-slate-400 dark:text-neutral-500">No match</p>}
+        {shownOptions.map((o) => (
+          <FilterOptionRow
+            key={o}
+            checked={selected.includes(o)}
+            onToggle={() => toggleValue(o)}
+            className={selected.includes(o) ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : undefined}
+          >
+            {format ? format(o) : o}
+          </FilterOptionRow>
+        ))}
+        {selected.length > 0 && (
+          <div className="mt-1 border-t pt-1">
+            <button className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 hover:bg-muted dark:text-neutral-500" onClick={() => onChange([])}>
+              Clear filter
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Every icon and badge on the snow board, for the Legend button (same idea as the Dispatch Board's). */
+function SnowLegendDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const statusRows: { icon: React.ReactNode; label: string }[] = [
+    { icon: <StatusIcon status="scheduled" />, label: "Scheduled" },
+    { icon: <StatusIcon status="dispatched" />, label: "Dispatched — sent to the crew's tablet" },
+    { icon: <StatusIcon status="in_progress" />, label: "In progress — crew is on site" },
+    { icon: <StatusIcon status="completed" />, label: "Completed" },
+    { icon: <StatusIcon status="skipped" />, label: "Skipped — called off, not billed" },
+    { icon: <StatusIcon status="cancelled" />, label: "Cancelled" },
+  ];
+  const tag = (text: string, cls: string) => <span className={cn("rounded border px-1.5 py-0 text-[9px]", cls)}>{text}</span>;
+  const badgeRows: { icon: React.ReactNode; label: string }[] = [
+    { icon: tag("Push 2", "bg-muted border-transparent"), label: "A return trip to the same site on this storm (Push 2, 3…)" },
+    { icon: tag("No charge", "text-muted-foreground"), label: "A return trip on a flat Per Event job that isn't billed (click to bill it)" },
+    { icon: tag("Billed", "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"), label: "A return trip billed as its own charge" },
+    { icon: tag("Lead", ""), label: "Stop with more than one crew — this crew bills the stop" },
+    { icon: tag("Extra crew", ""), label: "Another crew on the stop — its own hours; billed only on Hourly jobs" },
+    { icon: tag("Handed off from …", "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400"), label: "The crew app handed this stop off from a crew that couldn't make it" },
+    { icon: tag("Overage", "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400"), label: "The contract's cap is used up — this stop bills as overage" },
+  ];
+  const section = (title: string, rows: { icon: React.ReactNode; label: string }[]) => (
+    <div>
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{title}</p>
+      <ul className="space-y-1.5">
+        {rows.map((r) => (
+          <li key={r.label} className="flex items-center gap-2.5 text-xs">
+            <span className="flex w-24 shrink-0 items-center justify-center">{r.icon}</span>
+            <span>{r.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Snow Board Legend</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          {section("Status (St column)", statusRows)}
+          {section("Tags next to the client", badgeRows)}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** A multi-select checklist filter chip for the board's dark action bar. */
 function ValueFilter({ label, options, selected, onChange }: {
   label: string;
@@ -1275,12 +1334,16 @@ export function SnowDispatchBoard() {
   const [cityFilters, setCityFilters] = useState<string[]>([]);
   const [zipFilters, setZipFilters] = useState<string[]>([]);
   const [dateFilters, setDateFilters] = useState<string[]>([]);
+  const [clientFilters, setClientFilters] = useState<string[]>([]);
+  const [tagFilters, setTagFilters] = useState<string[]>([]);
+  const orgTags = useOrgTags();
   const [moveDate, setMoveDate] = useState("");
   const { mutateAsync: updateVisitStatus } = useUpdateVisitStatus();
   const [statusFilter, setStatusFilter] = useState("all");
   const [routeStrategy, setRouteStrategy] = useState<"furthest_first" | "nearest_first">("nearest_first");
   const [optimizing, setOptimizing] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
   const [routesOpen, setRoutesOpen] = useState(false);
   const { data: orgSettings } = useOrgSettings();
   // Minutes to ARRIVE at each stop (from the previous stop, or the shop for a crew's first stop).
@@ -1436,6 +1499,9 @@ export function SnowDispatchBoard() {
       if (cityFilters.length > 0 && !cityFilters.includes(v.job?.serviceCity ?? "—")) return false;
       if (zipFilters.length > 0 && !zipFilters.includes(v.job?.serviceZip ?? "—")) return false;
       if (dateFilters.length > 0 && !dateFilters.includes(v.scheduledDate ?? "—")) return false;
+      if (clientFilters.length > 0 && !clientFilters.includes(v.clientId)) return false;
+      // Client tags, "is any of" — same rule as the Dispatch Board's Tags filter.
+      if (tagFilters.length > 0 && !tagFilters.some((t) => (v.clientTags ?? []).includes(t))) return false;
       if (q) {
         const hay = [
           v.clientName, visitServiceName(v), v.job?.serviceAddress, v.job?.serviceCity, v.job?.serviceState, v.job?.serviceZip, v.job?.notesToCrew,
@@ -1445,11 +1511,21 @@ export function SnowDispatchBoard() {
       }
       return true;
     });
-  }, [visits, search, crewFilters, statusFilter, tableOnlySelected, selectedVisitIds, serviceFilters, priorityFilters, cityFilters, zipFilters, dateFilters, crewNameById]);
+  }, [visits, search, crewFilters, statusFilter, tableOnlySelected, selectedVisitIds, serviceFilters, priorityFilters, cityFilters, zipFilters, dateFilters, clientFilters, tagFilters, crewNameById]);
 
   // Options for the value filters come from the stops on this storm.
   const serviceOptions = useMemo(() => [...new Set(visits.map(visitServiceName))].sort(), [visits]);
   const cityOptions = useMemo(() => [...new Set(visits.map((v) => v.job?.serviceCity ?? "—"))].sort(), [visits]);
+  // One entry per client on this storm. Two different clients can share a display name, so those get their
+  // service address appended to tell them apart in the picker.
+  const clientNameById = useMemo(() => {
+    const info = new Map<string, { name: string; address: string }>();
+    for (const v of visits) if (!info.has(v.clientId)) info.set(v.clientId, { name: v.clientName ?? "Unknown client", address: v.job?.serviceAddress ?? "" });
+    const perName = new Map<string, number>();
+    for (const { name } of info.values()) perName.set(name, (perName.get(name) ?? 0) + 1);
+    return new Map([...info].map(([id, { name, address }]) => [id, (perName.get(name) ?? 0) > 1 && address ? `${name} — ${address}` : name]));
+  }, [visits]);
+  const clientOptions = useMemo(() => [...clientNameById.keys()].sort((a, b) => (clientNameById.get(a) ?? "").localeCompare(clientNameById.get(b) ?? "")), [clientNameById]);
   const dateOptions = useMemo(() => [...new Set(visits.map((v) => v.scheduledDate ?? "—"))].sort(), [visits]);
   const zipOptions = useMemo(() => [...new Set(visits.map((v) => v.job?.serviceZip ?? "—"))].sort(), [visits]);
 
@@ -1836,9 +1912,6 @@ export function SnowDispatchBoard() {
               <Users className="h-3.5 w-3.5" />Team Assign
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setPrintOpen(true)} disabled={!activeEvent}>
-            <Printer className="h-3.5 w-3.5" />Print
-          </Button>
           {canManage && (
             // A Complete storm takes no new stops: set it back to Working first.
             <Button
@@ -1853,6 +1926,65 @@ export function SnowDispatchBoard() {
           )}
         </div>
       </div>
+
+      {/* Select a Filter strip — ABOVE the dark bar, like the Dispatch Board: value filters on the left,
+          Stats / Map / Optimize / Export / Print on the right. */}
+      {activeEvent && (
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-card px-4 py-2 shrink-0">
+          <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">Select a Filter:</span>
+          <div className="flex flex-wrap items-center gap-1">
+            <FilterPill label="Client" options={clientOptions} selected={clientFilters} onChange={setClientFilters} format={(id) => clientNameById.get(id) ?? id} searchable />
+            <FilterPill label="Date" options={dateOptions} selected={dateFilters} onChange={setDateFilters} format={(d) => (d === "—" ? d : `${shortDateLabel(d)}  ${d}`)} />
+            <FilterPill label="Service" options={serviceOptions} selected={serviceFilters} onChange={setServiceFilters} />
+            <FilterPill label="City" options={cityOptions} selected={cityFilters} onChange={setCityFilters} />
+            <FilterPill label="Zip" options={zipOptions} selected={zipFilters} onChange={setZipFilters} />
+          </div>
+          <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
+            <Button
+              size="sm" variant="outline"
+              className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", statsOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
+              onClick={() => setStatsOpen((o) => !o)}
+              title="Show crew stats"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />Stats
+            </Button>
+            <Button
+              size="sm" variant="outline"
+              className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", mapOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
+              onClick={() => setMapOpen((o) => !o)}
+              title="Show the stops on a map"
+            >
+              <MapPin className="h-3.5 w-3.5" />Map
+            </Button>
+            {canManage && (
+              <>
+                <Select value={routeStrategy} onValueChange={(v) => setRouteStrategy(v as typeof routeStrategy)}>
+                  <SelectTrigger className="h-7 max-lg:h-10 w-32 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nearest_first">Nearest first</SelectItem>
+                    <SelectItem value="furthest_first">Furthest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm" variant="outline"
+                  className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs"
+                  onClick={() => void optimizeRoutes()}
+                  disabled={optimizing || visits.length < 2}
+                  title="Order each crew's stops by driving time (selected stops only, if any are selected)"
+                >
+                  <RouteIcon className="h-3.5 w-3.5" />{optimizing ? "Optimizing…" : "Optimize"}
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={exportStops} disabled={filteredVisits.length === 0}>
+              <Download className="h-3.5 w-3.5" />Export
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={() => setPrintOpen(true)}>
+              <Printer className="h-3.5 w-3.5" />Print
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Dark action bar — same layout as the Dispatch Board: status tabs, crew filter, actions, search, columns */}
       {activeEvent && (
@@ -1910,65 +2042,112 @@ export function SnowDispatchBoard() {
             </PopoverContent>
           </Popover>
 
-          <ValueFilter label="Dates" options={dateOptions} selected={dateFilters} onChange={setDateFilters} />
-          <ValueFilter label="Services" options={serviceOptions} selected={serviceFilters} onChange={setServiceFilters} />
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+                <Tag className="h-3 w-3" />
+                {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
+                <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 max-h-72 overflow-y-auto p-1" align="start">
+              <FilterOptionRow checked={tagFilters.length === 0} onToggle={() => setTagFilters([])}>All Tags</FilterOptionRow>
+              {orgTags.length === 0 && <p className="px-2 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">No client tags yet</p>}
+              {orgTags.map((tag) => (
+                <FilterOptionRow
+                  key={tag}
+                  checked={tagFilters.includes(tag)}
+                  onToggle={() => setTagFilters((prev) => (prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]))}
+                >
+                  <span className="truncate">{tag}</span>
+                </FilterOptionRow>
+              ))}
+            </PopoverContent>
+          </Popover>
+
           <ValueFilter label="Priorities" options={["high", "normal", "low", "none"]} selected={priorityFilters} onChange={setPriorityFilters} />
-          <ValueFilter label="Cities" options={cityOptions} selected={cityFilters} onChange={setCityFilters} />
-          <ValueFilter label="Zips" options={zipOptions} selected={zipFilters} onChange={setZipFilters} />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button
+                className={cn(
+                  "h-7 max-lg:h-9 flex items-center gap-1.5 rounded border px-2.5 text-[10px] transition-colors",
+                  selectedVisitIds.size > 0
+                    ? "bg-brand-600 border-brand-500 text-white hover:bg-brand-700 font-medium"
+                    : "bg-[#5a5a5a] border-[#6a6a6a] text-slate-200 hover:text-white"
+                )}
+              >
                 <ListChecks className="h-3 w-3" />
                 Actions{selectedVisitIds.size > 0 ? ` (${selectedVisitIds.size})` : ""}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem onSelect={toggleSelectAllShown} disabled={filteredVisits.length === 0}>
-                {allShownSelected ? "Unselect All Shown" : "Select All Shown"}
+              <DropdownMenuItem className="text-xs" onSelect={toggleSelectAllShown} disabled={filteredVisits.length === 0}>
+                <ListChecks className={MENU_ICON} />{allShownSelected ? "Unselect All Shown" : "Select All Shown"}
               </DropdownMenuItem>
               {canManage && (
                 <>
-                  <DropdownMenuItem onSelect={() => void dispatchVisits(selectedVisitIds.size > 0 ? [...selectedVisitIds] : null)}>
-                    {selectedVisitIds.size > 0 ? "Dispatch Selected" : "Dispatch All Assigned"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => void cancelDispatch([...selectedVisitIds])}>
-                    Cancel Dispatch
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setCloseOutIds(new Set(selectedVisitIds))}>
-                    Close Out Selected…
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setOutcomeDialog({ ids: [...selectedVisitIds], status: "skipped" })}>
-                    Skip Selected…
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setOutcomeDialog({ ids: [...selectedVisitIds], status: "cancelled" })}>
-                    Cancel Selected…
-                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => setCrewAssignOpen(true)}>Team Assign…</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void optimizeRoutes()} disabled={optimizing || visits.length < 2}>
-                    {selectedVisitIds.size > 0 ? "Optimize Selected Routes" : "Optimize Routes"}
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="text-xs">
+                      <CheckCircle2 className={MENU_ICON} />Change Status
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuItem className="text-xs" onSelect={() => void dispatchVisits(selectedVisitIds.size > 0 ? [...selectedVisitIds] : null)}>
+                        <Smartphone className={MENU_ICON} />{selectedVisitIds.size > 0 ? "Dispatch Selected" : "Dispatch All Assigned"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-xs" disabled={selectedVisitIds.size === 0} onSelect={() => void cancelDispatch([...selectedVisitIds])}>
+                        <Undo2 className={MENU_ICON} />Cancel Dispatch
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-xs" disabled={selectedVisitIds.size === 0} onSelect={() => setCloseOutIds(new Set(selectedVisitIds))}>
+                        <CheckCircle2 className={MENU_ICON} />Close Out Selected…
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-xs" disabled={selectedVisitIds.size === 0} onSelect={() => setOutcomeDialog({ ids: [...selectedVisitIds], status: "skipped" })}>
+                        <SkipForward className={MENU_ICON} />Skip Selected…
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-xs" disabled={selectedVisitIds.size === 0} onSelect={() => setOutcomeDialog({ ids: [...selectedVisitIds], status: "cancelled" })}>
+                        <XCircle className={MENU_ICON} />Cancel Selected…
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuItem className="text-xs" onSelect={() => setCrewAssignOpen(true)}>
+                    <Users className={MENU_ICON} />Team Assign…
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void saveOrderToMasterRoutes()} disabled={savingOrder || visits.length === 0}>
-                    Save Order to Master Routes
+                  <DropdownMenuItem className="text-xs" onSelect={() => void optimizeRoutes()} disabled={optimizing || visits.length < 2}>
+                    <RouteIcon className={MENU_ICON} />{selectedVisitIds.size > 0 ? "Optimize Selected Routes" : "Optimize Routes"}
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-xs" onSelect={() => void saveOrderToMasterRoutes()} disabled={savingOrder || visits.length === 0}>
+                    <RouteIcon className={MENU_ICON} />Save Order to Master Routes
+                  </DropdownMenuItem>
                 </>
               )}
+              <DropdownMenuSeparator />
               {canEmailClients && (
-                <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setMessageChannel("email")}>Email Clients…</DropdownMenuItem>
+                <DropdownMenuItem className="text-xs" disabled={selectedVisitIds.size === 0} onSelect={() => setMessageChannel("email")}>
+                  <Mail className={MENU_ICON} />Email Clients…
+                </DropdownMenuItem>
               )}
               {canTextClients && (
-                <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setMessageChannel("sms")}>Text Clients…</DropdownMenuItem>
+                <DropdownMenuItem className="text-xs" disabled={selectedVisitIds.size === 0} onSelect={() => setMessageChannel("sms")}>
+                  <MessageSquare className={MENU_ICON} />Text Clients…
+                </DropdownMenuItem>
               )}
-              <DropdownMenuItem disabled={filteredVisits.length === 0} onSelect={() => setNoEmailOpen(true)}>Jobs Without Emails…</DropdownMenuItem>
+              <DropdownMenuItem className="text-xs" disabled={filteredVisits.length === 0} onSelect={() => setNoEmailOpen(true)}>
+                <Mail className={MENU_ICON} />Jobs Without Emails…
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setStatsOpen((o) => !o)}>{statsOpen ? "Hide Crew Stats" : "Show Crew Stats"}</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setPrintOpen(true)}>Print Route Sheets…</DropdownMenuItem>
-              <DropdownMenuItem disabled={filteredVisits.length === 0} onSelect={exportStops}>Export Stops (CSV)</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setServiceFilters([]); setPriorityFilters([]); setCityFilters([]); setZipFilters([]); setDateFilters([]); setSelectedVisitIds(new Set()); }}>
-                Clear Filters &amp; Selection
+              <DropdownMenuItem className="text-xs" onSelect={() => setStatsOpen((o) => !o)}>
+                <BarChart3 className={MENU_ICON} />{statsOpen ? "Hide Crew Stats" : "Show Crew Stats"}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-xs" onSelect={() => setPrintOpen(true)}>
+                <Printer className={MENU_ICON} />Print Route Sheets…
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-xs" disabled={filteredVisits.length === 0} onSelect={exportStops}>
+                <Download className={MENU_ICON} />Export Stops (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-xs" onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setServiceFilters([]); setPriorityFilters([]); setCityFilters([]); setZipFilters([]); setDateFilters([]); setClientFilters([]); setTagFilters([]); setSelectedVisitIds(new Set()); }}>
+                <Eraser className={MENU_ICON} />Clear Filters &amp; Selection
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1984,32 +2163,12 @@ export function SnowDispatchBoard() {
 
           <div className="ml-auto flex items-center gap-2">
             <button
-              onClick={() => setMapOpen((o) => !o)}
-              className={cn(
-                "h-7 max-lg:h-9 flex items-center gap-1.5 rounded border px-2.5 text-[10px] transition-colors",
-                mapOpen ? "bg-card text-slate-800 dark:text-neutral-100 border-card" : "bg-[#5a5a5a] border-[#6a6a6a] text-slate-200 hover:text-white"
-              )}
+              onClick={() => setLegendOpen(true)}
+              title="Show Legend"
+              className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded border border-[#6a6a6a] bg-[#5a5a5a] px-2.5 text-[10px] text-slate-200 transition-colors hover:text-white"
             >
-              <MapPin className="h-3 w-3" />Map
+              <HelpCircle className="h-3 w-3" />Legend
             </button>
-            {canManage && (
-              <>
-                <Select value={routeStrategy} onValueChange={(v) => setRouteStrategy(v as typeof routeStrategy)}>
-                  <SelectTrigger className="h-7 max-lg:h-9 w-32 text-[10px] bg-[#5a5a5a] border-[#6a6a6a] text-slate-200"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nearest_first">Nearest first</SelectItem>
-                    <SelectItem value="furthest_first">Furthest first</SelectItem>
-                  </SelectContent>
-                </Select>
-                <button
-                  onClick={() => void optimizeRoutes()}
-                  disabled={optimizing || visits.length < 2}
-                  className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors disabled:opacity-50"
-                >
-                  <RouteIcon className="h-3 w-3" />{optimizing ? "Optimizing…" : "Optimize"}
-                </button>
-              </>
-            )}
             <ColumnChooser columns={SNOW_COLUMNS} visibleKeys={visibleKeys} onVisibleKeysChange={setVisibleKeys} />
           </div>
         </div>
@@ -2064,6 +2223,7 @@ export function SnowDispatchBoard() {
               reordering={reordering}
               onToggle={toggleSelect}
               onSelectMany={(ids) => setSelectedVisitIds((prev) => new Set([...prev, ...ids]))}
+              onSelectOnly={(ids) => setSelectedVisitIds(new Set(ids))}
               onClearSelection={() => { setSelectedVisitIds(new Set()); setTableOnlySelected(false); }}
               onMoveStop={(id, dir) => { const v = visits.find((x) => x.id === id); if (v) void moveStop(v, dir); }}
               onAssignCrew={changeCrew}
@@ -2329,6 +2489,7 @@ export function SnowDispatchBoard() {
             forecastDepthInches={activeEvent.forecastDepthInches}
             onDone={() => void refetchVisits()}
           />
+          <SnowLegendDialog open={legendOpen} onOpenChange={setLegendOpen} />
           <BulkMultiCrewDialog
             key={multiCrewOpen ? "open" : "closed"}
             open={multiCrewOpen}
