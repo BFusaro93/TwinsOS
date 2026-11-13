@@ -21,6 +21,7 @@ import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-d
 import { renderBlocksToPlainText } from "@/lib/utils/document-template-renderer";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { SMS_EVENT_MERGE_TAGS } from "@/types/crm-proposals";
+import { SNOW_TAGS } from "@/types/crm-documents";
 import { useSmsReadiness, SMS_NOT_READY_MESSAGE } from "@/lib/hooks/use-sms-readiness";
 import { toast } from "sonner";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
@@ -48,7 +49,7 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
   const [saving, setSaving] = useState(false);
 
   const { data: allDocTemplates = [] } = useDocumentTemplates();
-  const smsTemplates = allDocTemplates.filter((t) => t.docType === "text_message" && t.status === "active");
+  const smsTemplates = allDocTemplates.filter((t) => (t.docType === "text_message" || t.docType === "snow_text") && t.status === "active");
   const { data: smsReady } = useSmsReadiness(open);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
@@ -123,7 +124,7 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
               onChange={(e) => setMessage(e.target.value)}
             />
             <div className="flex flex-wrap gap-1.5">
-              {SMS_EVENT_MERGE_TAGS.map((mt) => (
+              {[...SMS_EVENT_MERGE_TAGS, ...SNOW_TAGS.map((t) => ({ tag: t.tag, label: `Snow: ${t.label}` }))].map((mt) => (
                 <button
                   key={mt.tag}
                   type="button"

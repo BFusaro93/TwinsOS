@@ -1,5 +1,5 @@
 import type { DisplaySettings } from "@/lib/estimate-display-settings";
-export type DocType = "client" | "estimate" | "invoice_email" | "marketing" | "chemical" | "chemical_recommendation" | "chemical_upsell" | "text_message";
+export type DocType = "client" | "estimate" | "invoice_email" | "marketing" | "chemical" | "chemical_recommendation" | "chemical_upsell" | "text_message" | "snow_email" | "snow_text";
 export type DocStatus = "active" | "inactive";
 export type BlockType =
   | "header"
@@ -183,6 +183,21 @@ const CHEMICAL_TAGS: MergeTag[] = [
   { tag: "[chemicalnotice]",    label: "Full Notice of Treatment (leave-behind)",   group: "Chemical" },
 ];
 
+// ── Snow tags ─────────────────────────────────────────────────────────────────
+// Filled from the client's snow stop (storm event + visit) — by the snow board's
+// compose dialog per recipient, and by automations from the client's most recent
+// snow visit (src/lib/automations/snow-extras.ts). Elsewhere they resolve blank.
+
+export const SNOW_TAGS: MergeTag[] = [
+  { tag: "[stormname]",     label: "Storm Name",                          group: "Snow" },
+  { tag: "[stormdate]",     label: "Storm Date",                          group: "Snow" },
+  { tag: "[snowservice]",   label: "Snow Service (e.g. Plow, Walks)",     group: "Snow" },
+  { tag: "[snowcrew]",      label: "Crew Name",                           group: "Snow" },
+  { tag: "[snowstatus]",    label: "Status wording (e.g. on our way)",    group: "Snow" },
+  { tag: "[snowarrival]",   label: "Arrival time (if scheduled)",         group: "Snow" },
+  { tag: "[snowaddress]",   label: "Service Address of the stop",         group: "Snow" },
+];
+
 // ── Shared base (all doc types) ───────────────────────────────────────────────
 
 const COMMON = [...CLIENT_TAGS, ...BILLING_TAGS, ...PROPERTY_TAGS, ...COMPANY_TAGS, ...SYSTEM_TAGS];
@@ -199,6 +214,8 @@ export const MERGE_TAGS_BY_TYPE: Record<DocType, MergeTag[]> = {
   chemical_recommendation: [...COMMON, ...CHEMICAL_TAGS],
   chemical_upsell:         [...COMMON, ...CHEMICAL_TAGS],
   text_message:  COMMON,
+  snow_email:    [...COMMON, ...SNOW_TAGS],
+  snow_text:     [...COMMON, ...SNOW_TAGS],
 };
 
 /**
@@ -221,10 +238,12 @@ export const DOC_TYPE_LABELS: Record<DocType, string> = {
   chemical_recommendation: "Chemical – Recommendation",
   chemical_upsell:         "Chemical – Upsale",
   text_message:  "Text Message",
+  snow_email:    "Snow – Email",
+  snow_text:     "Snow – Text Message",
 };
 
 /** Doc types sent as SMS — no subject line, no rich formatting/blocks beyond plain text. */
-export const PLAIN_TEXT_DOC_TYPES: DocType[] = ["text_message"];
+export const PLAIN_TEXT_DOC_TYPES: DocType[] = ["text_message", "snow_text"];
 
 export const BLOCK_TYPE_LABELS: Record<BlockType, string> = {
   header:     "Header",

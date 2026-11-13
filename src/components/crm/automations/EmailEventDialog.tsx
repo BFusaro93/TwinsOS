@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
+import { SNOW_TAGS } from "@/types/crm-documents";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { blocksUseEstimateTags } from "@/lib/estimates/estimate-tags";
@@ -68,6 +69,8 @@ const MERGE_TAGS = [
   { tag: "[nextservicename]", label: "Next scheduled service" },
   { tag: "[nextservicedate]", label: "Next service date" },
   { tag: "[chemicalnotice]", label: "Notice of Treatment (last completed visit's chemical record)" },
+  // Snow: read from the client's most recent snow-board stop (last 7 days).
+  ...SNOW_TAGS.map(({ tag, label }) => ({ tag, label: `Snow: ${label}` })),
 ];
 
 export function EmailEventDialog({ open, onOpenChange, event }: Props) {

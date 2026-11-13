@@ -1,3 +1,4 @@
+import { buildSnowExtras } from "@/lib/automations/snow-extras";
 import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
@@ -263,6 +264,7 @@ export async function resolveEmailStepContent(
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
   // Invoice tags (invoice-triggered enrollments) and last/next service tags.
+  Object.assign(extras, await buildSnowExtras(supabase, { orgId: params.orgId, clientId: params.clientId }));
   Object.assign(
     extras,
     await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: true }),
