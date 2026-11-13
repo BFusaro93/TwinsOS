@@ -555,7 +555,8 @@ export async function applyVisitCompletionSideEffects(
                   total_cents: c.totalCents,
                   service_date: line.service_date,
                   is_taxable: line.is_taxable,
-                  serviceId: svc.service_id ?? null,
+                  // No forced service: the invoice-line resolver files it by name, the same
+                  // whether the visit starts a draft or folds into one (that path can't pass it).
                 })),
               ];
             })

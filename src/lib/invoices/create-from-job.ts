@@ -364,7 +364,6 @@ export async function createInvoiceFromJob(
   const itemizedLines: InvoiceFromJobLine[] = lineItems.flatMap((li) => {
     const split = li.jobServiceId && !li.productId ? splitPrintedSubitems(li, printedBySvc.get(li.jobServiceId)) : null;
     if (!split) return [li];
-    const svcId = svcById.get(li.jobServiceId as string)?.service_id ?? null;
     return [
       { ...li, rateCents: split.parent.rateCents, totalCents: split.parent.totalCents },
       ...split.children.map((c) => ({
@@ -375,7 +374,7 @@ export async function createInvoiceFromJob(
         totalCents: c.totalCents,
         serviceDate: li.serviceDate,
         jobServiceId: li.jobServiceId,
-        serviceId: svcId,
+        // No forced service: the invoice-line resolver files it by name (same as the visit path).
       })),
     ];
   });
