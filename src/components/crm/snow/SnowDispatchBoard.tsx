@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DispatchWeather } from "@/components/crm/dispatch/DispatchWeather";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { SnowWorkMap, type SnowMapStop } from "@/components/crm/snow/SnowWorkMap";
+import { MasterRoutesDialog } from "@/components/crm/snow/MasterRoutesDialog";
 import { SnowMessageDialog, type SnowMessageChannel } from "@/components/crm/snow/SnowMessageDialog";
 import { SnowNoEmailDialog } from "@/components/crm/snow/SnowNoEmailDialog";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -1182,6 +1183,7 @@ export function SnowDispatchBoard() {
   const [routeStrategy, setRouteStrategy] = useState<"furthest_first" | "nearest_first">("nearest_first");
   const [optimizing, setOptimizing] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [routesOpen, setRoutesOpen] = useState(false);
   const { data: orgSettings } = useOrgSettings();
   // Minutes to ARRIVE at each stop (from the previous stop, or the shop for a crew's first stop).
   const [driveMins, setDriveMins] = useState<Map<string, { mins: number; fromShop: boolean }>>(new Map());
@@ -1582,6 +1584,10 @@ export function SnowDispatchBoard() {
             <Plus className="h-3.5 w-3.5" />New Storm Event
           </Button>
         )}
+        <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-xs gap-1.5" onClick={() => setRoutesOpen(true)}>
+          <RouteIcon className="h-3.5 w-3.5" />Master Routes
+        </Button>
+        <MasterRoutesDialog open={routesOpen} onOpenChange={setRoutesOpen} />
 
         {activeEvent && (
           <>

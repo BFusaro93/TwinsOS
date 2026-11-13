@@ -293,8 +293,23 @@ export function SnowGuide() {
             if there isn&apos;t one), so the next storm&apos;s Add Jobs comes up in that sequence.
             Stops that weren&apos;t on this storm keep their place on the route, jobs new to the route
             go on the end, and a job moved to another crew moves to that crew&apos;s route (a job is
-            on only one route). You can also edit the order directly in Settings &gt; Services &gt;
-            Snow Routes.
+            on only one route). You can also edit the routes directly with the <strong>Master Routes</strong>
+            button next to New Storm Event (the same editor is in Settings &gt; Services &gt;
+            Snow Routes).
+          </li>
+          <li>
+            <strong>Building Master Routes.</strong> Click <em>Master Routes</em> on the Snow Jobs
+            board, pick a route (or add one, then set its name, default crew and Active switch).
+            <em> Find jobs for this route</em> searches your snow jobs by client or address, service,
+            zip code(s), and proximity (within 1–25 miles of an address you type or of one of the
+            route&apos;s stops), with <em>Not already on a route</em> ticked by default. Tick the
+            results and <em>Add to route</em>; each result shows the client&apos;s priority (high,
+            normal or low), address, zip and service. A job can be on only one route. Snow jobs added
+            since the routes were built, which are on no route yet, are listed at the top with a
+            <em> NEW</em> flag so you can slot them in. Order the stops by dragging, by typing a
+            position number, or with the arrows. <em>Group Stops</em> orders every stop by driving
+            time from the crew&apos;s shop (or the Company Address); <em>Optimize Route</em> keeps stop 1
+            and routes onward from it. The <em>Map</em> button previews the route.
           </li>
           <li>
             <strong>Skip and cancel with a reason.</strong> Skipping or cancelling asks for a
