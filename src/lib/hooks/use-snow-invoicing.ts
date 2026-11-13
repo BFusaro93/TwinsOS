@@ -11,7 +11,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 import { contractCoversServiceDay } from "@/lib/contract-billing";
-import { hourlyStopShares, productLineTotalCents, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
+import { hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, productLineTotalCents, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -36,6 +36,8 @@ export function isPerEventBilling(invoiceType: string): boolean {
 export function billingGroupKey(visit: CRMJobVisit): string {
   const invoiceType = visit.job?.invoiceType ?? "per_event";
   if (!isPerEventBilling(invoiceType)) return visit.id;
+  // A billable return trip is its own charge, not part of the storm's single one.
+  if ((visit.pushNumber ?? 1) > 1 && visit.billPush && invoiceType === "per_event") return visit.id;
   // stormEventId is only set by the dispatch board's storm flow — a visit
   // created directly (crew app, manual entry) leaves it null. Falling back
   // to a constant would collapse every storm-less visit of a job, across
@@ -199,9 +201,12 @@ export function useUninvoicedSnowVisits(filters: {
       // A Monthly Flat Rate job bills only through its contract, so it reaches
       // this queue only for a storm the contract doesn't cover (outside its
       // dates, or after it ended) — priced at the contract's price per storm.
-      const visits = ((data.map(mapVisit)) as CRMJobVisit[])
+      const visits = liftStormDepths((data.map(mapVisit)) as CRMJobVisit[])
         .filter((v) => v.job?.invoiceType !== "monthly_flat_rate" || !!v.job?.contractId)
-        .filter((v) => !v.job?.contractId || contractEnded(v));
+        .filter((v) => !v.job?.contractId || contractEnded(v))
+        // Extra crews and return trips on a once-per-storm job are on the
+        // record only; the lead's first push carries the charge.
+        .filter((v) => !isUnbilledSnowVisit(v));
 
       if (visits.length === 0) return [];
 

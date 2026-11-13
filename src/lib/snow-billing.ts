@@ -68,6 +68,57 @@ export function snowTierRangeProblem(tiers: { minInches: number; maxInches: numb
   return null;
 }
 
+/** A snow visit that is recorded but not billed on its own:
+ *  - an extra crew on a multi-crew stop (crewGroupSecondary) — the lead visit
+ *    carries the stop's charge. EXCEPT on Hourly jobs, where every truck bills
+ *    its own hours on site;
+ *  - push 2+ on a job billed once per storm (Per Event / Per Event Per Inch) —
+ *    the crew went back and it is on the timeline, but the storm's one charge
+ *    is carried by the first push — unless a flat Per Event push is marked
+ *    billable (billPush), e.g. a second salting, which is its own charge. On
+ *    Per Event, Per Inch a return trip is part of the event (its depth counts
+ *    toward the deepest reading — see liftStormDepths).
+ *  Per Push and Hourly jobs bill every push. Work that really is a separate
+ *  charge (salt after plowing) is its own job, or a pushed visit on a Per Push
+ *  job — not an extra crew. Unbilled visits show $0 and stay out of Snow
+ *  Invoicing. */
+export function isUnbilledSnowVisit(visit: {
+  pushNumber?: number | null;
+  billPush?: boolean | null;
+  crewGroupSecondary?: boolean | null;
+  job?: { invoiceType: string | null } | null;
+}): boolean {
+  const t = visit.job?.invoiceType ?? "per_event";
+  if (visit.crewGroupSecondary) return t !== "hourly";
+  if ((visit.pushNumber ?? 1) <= 1) return false;
+  // billPush (a second salting billed as its own charge) only applies to flat Per Event;
+  // on Per Event, Per Inch a return trip is part of the event's one charge.
+  if (t === "per_event") return !visit.billPush;
+  return t === "per_event_per_inch";
+}
+
+/** Per Event, Per Inch prices the storm once, on its deepest reading across
+ *  EVERY visit of the job on it — including return trips and extra crews that
+ *  aren't billed themselves (they are dropped from the invoicing queue). This
+ *  lifts each such visit's depth to that storm maximum so the deeper return
+ *  trip still prices the event. Other invoice types are returned unchanged. */
+export function liftStormDepths<T extends { id: string; jobId: string; stormEventId: string | null; snowDepthInches: number | null; status: string; job?: { invoiceType: string | null } | null }>(visits: T[]): T[] {
+  const maxByEvent = new Map<string, number>();
+  for (const v of visits) {
+    if (v.job?.invoiceType !== "per_event_per_inch" || !v.stormEventId) continue;
+    if (v.status === "skipped" || v.status === "cancelled") continue;
+    if (v.snowDepthInches == null || v.snowDepthInches <= 0) continue;
+    const key = `${v.jobId}::${v.stormEventId}`;
+    maxByEvent.set(key, Math.max(maxByEvent.get(key) ?? 0, v.snowDepthInches));
+  }
+  if (maxByEvent.size === 0) return visits;
+  return visits.map((v) => {
+    if (v.job?.invoiceType !== "per_event_per_inch" || !v.stormEventId) return v;
+    const max = maxByEvent.get(`${v.jobId}::${v.stormEventId}`);
+    return max != null && (v.snowDepthInches ?? 0) < max ? { ...v, snowDepthInches: max } : v;
+  });
+}
+
 /** A completed snow visit as Snow Invoicing prices it: the visit, plus what
  *  the queue resolved around it (use-snow-invoicing). */
 export type SnowBillableVisit = CRMJobVisit & {

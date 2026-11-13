@@ -181,14 +181,24 @@ export function SnowGuide() {
           out separately.
         </p>
         <p>
-          <strong>Adding a push.</strong> A <strong>Per Push</strong> job bills every push on its
-          own depth, so when a crew has to go back during a long storm, click{" "}
-          <strong>Add push</strong> next to the client&apos;s name on that job&apos;s latest row. It
-          adds the next push (marked <em>Push 2</em>, <em>Push 3</em>…) to the same storm with the
-          same crew and men, at the end of the stop order and dated today, so it shows on the
-          crew&apos;s list as its own stop. Close it out with its own depth like any other visit.
-          Only Per Push jobs get extra pushes — a Per Event job is one visit per storm, and Add Jobs
-          never adds a job that is already on the storm.
+          <strong>Adding a push.</strong> When a crew has to go back to a site during a storm (say a
+          2–4&quot; pass that isn&apos;t the final push), each return is its own visit with its own
+          clock-in/out, depth, crew and notes, and a row on the client&apos;s timeline — your record
+          of every trip. The office clicks <strong>Add push</strong> next to the client&apos;s name
+          on that job&apos;s latest row; the crew can tap <strong>Going back? Add another push</strong>{" "}
+          on a finished stop in the crew app. The new push (<em>Push 2</em>, <em>Push 3</em>…) goes
+          on the same storm with the same crew and men, dated today, and shows on the crew&apos;s
+          list as its own stop. Billing follows the job: <strong>Per Push</strong> and{" "}
+          <strong>Hourly</strong> jobs bill every push; <strong>Per Event</strong> and{" "}
+          <strong>Per Event, Per Inch</strong> jobs bill the storm once, on the first push. On a{" "}
+          <strong>Per Event, Per Inch</strong> job a return trip is part of the event: it never
+          bills separately, and a deeper reading on any trip sets the storm&apos;s price (the
+          event is priced on the deepest reading across all its visits). On a flat{" "}
+          <strong>Per Event</strong> job, Adding a push asks whether it is <em>No charge</em> (the
+          default — recorded only, $0, never in Snow Invoicing) or <em>Bill it</em> (its own
+          charge, the job&apos;s flat rate again — use this when a second crew salts again). A
+          push&apos;s <em>Billed</em> / <em>No charge</em> tag can be clicked to flip it until it
+          is invoiced. Pushes the crew adds from the crew app start as No charge.
         </p>
         <p>
           <strong>Two storms on the same day are two trips.</strong> If a job is on two storm events
@@ -225,11 +235,35 @@ export function SnowGuide() {
             <strong>Status tabs and filters.</strong> Tabs for All, Scheduled, Dispatched, In
             Progress, Completed, Skipped and Cancelled (each with a count), a multi-select{" "}
             <strong>crew filter</strong> that includes <strong>Unassigned</strong>, and a{" "}
-            <strong>search</strong> box that matches client, address, zip, notes and crew.
+            <strong>search</strong> box that matches client, service, address, city, state, zip,
+            notes and crew. Multi-select filters for <strong>Service</strong>,{" "}
+            <strong>Priority</strong>, <strong>City</strong> and <strong>Zip</strong> narrow the
+            list further. The checkbox in the header row (or <em>Select All Shown</em> in
+            Actions) selects every stop the filters currently show, so you can filter to a zip
+            and reassign or dispatch all of it at once. Add Jobs has the same select-all checkbox
+            plus <em>Select all</em> / <em>Unselect all</em> links and a search box that narrows the
+            list (Select all then acts on the jobs shown).
           </li>
           <li>
             <strong>Changing crews.</strong> The Crew column is a dropdown on every row. To move
             several stops, tick them and use <strong>Assign crew…</strong> in the selection bar.
+            To put <em>more than one crew</em> on each selected stop (two trucks on a big lot), use{" "}
+            <strong>Assign crews…</strong>: tick the crews and click <strong>Set crews</strong>.
+            The first crew you tick is the lead and carries the stop&apos;s charge; each extra crew
+            gets its own row (tagged <em>Extra crew</em>) with its own clock-in, hours and
+            depth. On <strong>Hourly</strong> jobs every crew bills its own hours on site; on
+            every other billing type the lead carries the charge and the extra crew is not
+            billed. If an extra crew is doing separate billable work (salt after plowing, another
+            pass), give it its own job, or use <strong>Add push</strong> on a Per Push job. Crews can be added or removed until a crew
+            starts the stop. A crew can also ask for help itself: <strong>Need help? Call in
+            another crew</strong> on a stop in the crew app lists the other crews; the one picked
+            gets the stop on its tablet straight away (even after the first crew has clocked in),
+            tagged <em>Extra crew</em> here, with a line on the client&apos;s timeline. If a crew can&apos;t
+            make it to a stop at all, <strong>Can&apos;t make it? Hand off to another crew</strong>
+            (shown before they start the stop) moves the stop to the crew they pick — onto that
+            crew&apos;s tablet and off theirs, same visit and same billing, with a timeline line and a{" "}
+            <em>Handed off from …</em> flag on the board.
+            A stop that already has several crews has to be moved by the office.
             Setting a stop to Unassigned pins it to no crew rather than falling back to the
             job&apos;s crew. A stop shows the crew on its visit, or the job&apos;s crew if the visit
             has none — Team Assign uses the same rule.
@@ -277,12 +311,23 @@ export function SnowGuide() {
             It saves on the visit only and shows the job&apos;s note until you override it.
           </li>
           <li>
-            <strong>Columns.</strong> The column chooser shows or hides Address, City, Zip, Trigger,
+            <strong>Columns.</strong> The column chooser shows or hides Service, Address, City, State, Zip, Priority, Trigger,
             Crew, Depth, Temp, Notes to Crew and Amt, and remembers your choice.
           </li>
           <li>
-            <strong>Map.</strong> The <strong>Map</strong> button plots the stops currently shown,
-            numbered by route position and coloured by crew.
+            <strong>Map.</strong> The <strong>Map</strong> button opens a working map: the stops
+            currently shown, numbered by route position and coloured by crew. Three tools sit
+            above it. <em>Select</em>: click stops to pick them (the table selection follows, so
+            Dispatch, Close Out and the rest act on what you picked). <em>Route order</em>:
+            left-click a stop to move it later in its crew&apos;s route, right-click to move it
+            earlier. <em>Draw area</em>: click points on the map to outline a shape, then{" "}
+            <strong>Finish shape</strong> selects every stop inside it. With stops selected, the
+            panel shows their services, budgeted hours and total, and lets you pick a crew and
+            click <strong>Update</strong>, open <strong>Assign crews…</strong>, or{" "}
+            <strong>Dispatch</strong>. Click a crew in the panel to hide or show it, and tick{" "}
+            <em>Show only selected stops</em> (on the map, or in the table) to work on just those.
+            Route lines draws each crew&apos;s order. The board&apos;s own filters apply to the
+            map too
           </li>
           <li>
             <strong>Weather.</strong> A chip above the storm bar shows the National Weather Service

@@ -846,6 +846,8 @@ export function mapVisit(row: any): CRMJobVisit {
     jobServiceId: row.job_service_id ?? null,
     stormEventId: row.storm_event_id ?? null,
     pushNumber: Number(row.push_number ?? 1) || 1,
+    billPush: row.bill_push === true,
+    handedOffFromCrewId: row.handed_off_from_crew_id ?? null,
     snowDepthInches: row.snow_depth_inches ?? null,
     temperature: row.temperature ?? null,
     assetType: row.asset_type ?? null,
@@ -1475,6 +1477,7 @@ export function useUpdateVisit() {
         completed_at: string | null;
         order_num: number | null;
         snow_depth_inches: number | null;
+        bill_push: boolean;
         temperature: number | null;
         asset_type: string | null;
         materials_used: { name: string; qty: number; rate_cents: number }[];

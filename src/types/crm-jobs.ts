@@ -326,6 +326,10 @@ export interface CRMJobVisit {
   stormEventId: string | null
   /** Snow: which push of the storm this visit is (1 = the initial dispatch). Only Per Push jobs get push 2+. */
   pushNumber: number
+  /** Snow: push 2+ on a once-per-storm job is billed as its own charge (default: recorded at no charge). */
+  billPush?: boolean
+  /** Set when a crew handed this stop off from the crew app — the crew that couldn't make it. */
+  handedOffFromCrewId?: string | null
   snowDepthInches: number | null
   temperature: number | null
   assetType: string | null

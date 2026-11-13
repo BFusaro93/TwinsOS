@@ -183,7 +183,9 @@ export function SnowInvoicing() {
             jobId: r.visit.jobId,
             // Two pushes on one storm would otherwise read as duplicate lines.
             description: (r.visit.job?.services?.[0]?.serviceName ?? r.visit.job?.invoiceDescription ?? "Snow Service")
-              + ((r.visit.pushNumber ?? 1) > 1 ? ` — Push ${r.visit.pushNumber}` : ""),
+              + ((r.visit.pushNumber ?? 1) > 1 ? ` — Push ${r.visit.pushNumber}` : "")
+              // Two trucks on an hourly stop would otherwise read as duplicate lines.
+              + (r.visit.crewGroupSecondary ? ` — ${r.visit.crewName ?? "Extra crew"}` : ""),
             amountCents: r.amountCents,
             serviceDate: r.visit.scheduledDate,
             products: r.visit.stormProducts ?? [],
