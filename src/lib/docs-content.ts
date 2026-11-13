@@ -1147,6 +1147,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "CRM > Communication > Automations. Each automation contains one or more Sequences; a sequence has Triggers (with optional Trigger Conditions), Stop Conditions, and an ordered list of Events that run once triggered.",
           },
           {
+            step: "Viewing a sent email",
+            detail:
+              "CRM > Communication > Message Activity (Email tab) lists every email the app sent. Click a row (or an email on a client's Activity timeline) to open a read-only copy of what was delivered: recipients, subject and the full message. Only emails sent after this feature shipped have their content saved; older rows show the summary only.",
+          },
+          {
             step: "Custom field conditions",
             detail:
               "Trigger conditions, stop conditions, and If Branches can check a client custom field: pick the field, then compare it (text: equals, not equals, contains, does not contain, is set, is not set; number: also greater/less than). The condition reads the client's saved value at trigger time and at each stop/If check. A client with no value only matches 'is not set'. If the field is later deleted, the condition is never met and the editor shows 'Field deleted'.",
@@ -2197,7 +2202,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I bill a snow depth range hourly?",
-        a: "On the job's depth ranges, set a range's Bill as to Hourly and enter the hourly rate (and optional budgeted hours, which are planning only). It bills the hours on site (clock out minus clock in minus breaks) × the rate; the usual setup is an all-inclusive top range such as 6 inches and up. On a Per Push job each push is priced by its own depth and bills its own hours. On a Per Event, Per Inch job the storm's deepest reading picks the range once, and an hourly range bills the hours of the storm's billed stops (return trips and extra crews stay unbilled there), so use Per Push when every trip should bill its hours.",
+        a: "On the job's depth ranges, set a range's Bill as to Hourly and enter the hourly rate (and optional budgeted hours, which are planning only). It bills the hours on site (clock out minus clock in minus breaks) × the rate; the usual setup is an all-inclusive top range such as 6 inches and up. On a Per Push job each push is priced by its own depth and bills its own hours. On a Per Event, Per Inch job the storm's deepest reading picks the range once, and an hourly range bills the on-site hours of every visit on the storm — the first push, return trips and extra crews all count toward the one charge, which is still a single line on the invoice. Use Per Push when you want each trip as its own line.",
       },
       {
         q: "How do I undo Dispatch, export the snow board, or hide old storms?",
@@ -2965,7 +2970,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Why did a client get two invoices for the same week or month?",
-        a: "Weekly and monthly batch invoices are split by sales rep and PO number. If a client has jobs under two reps or two PO numbers, each gets its own invoice for the period, so commission and the PO on the invoice stay correct.",
+        a: "Weekly and monthly batch invoices are split by sales rep, PO number and payment terms. If a client has jobs under two reps, two PO numbers or two different terms (say Net 30 and Due on Receipt), each gets its own invoice for the period, so commission, the PO and the due date on the invoice stay correct.",
       },
       {
         q: "What does the 'Daily' invoice frequency do?",
@@ -3002,6 +3007,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "A job is sold for 30 visits. Do skipped visits count?",
         a: "No. Only scheduled, dispatched, in-progress and completed visits count toward a visit cap. Skipped, cancelled and deleted visits are made up at the end.",
+      },
+      {
+        q: "How do I limit a recurring service to a set number of visits?",
+        a: "In Add Job, a recurring job shows a Visits box under each service: enter the total visits for that service, or leave it blank to repeat on the schedule until the End Date. To change it later, open the job and Edit the service line (Visits). It must be a whole number of 1 or more. Skipped and cancelled visits are made up, so the cap counts real visits only.",
       },
       {
         q: "Why can't I set a client back to Lead?",

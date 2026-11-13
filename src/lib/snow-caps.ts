@@ -163,7 +163,12 @@ export function computeSnowCapStatus(c: SnowCapContract, visits: SnowCapVisit[],
     const depth = v.snowDepthInches != null && v.snowDepthInches > 0 ? v.snowDepthInches : 0;
     const existing = storms.get(key);
     if (!existing) storms.set(key, { period: capPeriodKey(c, v.scheduledDate), date: v.scheduledDate, depth, lead: v });
-    else existing.depth = Math.max(existing.depth, depth);
+    else {
+      existing.depth = Math.max(existing.depth, depth);
+      // An extra-crew (secondary) visit is never invoiced on its own, so the storm's
+      // overage must land on a primary visit even if the secondary sorts first.
+      if (existing.lead.crewGroupSecondary && !v.crewGroupSecondary) existing.lead = v;
+    }
   }
   const inchRunning = new Map<string, number>();
   const eventRunning = new Map<string, number>();
