@@ -347,7 +347,7 @@ function SubitemRows({ lineItemId, onAddClick, readOnly = false, parentVisits = 
                 className="text-[11px] text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline">
                 + Add Product / Service
               </button>
-              <span className="ml-2 text-[10px] text-muted-foreground">Sub-item Visits: 1 charges it once for the whole line; set it to the line's visits to charge it on every visit.</span>
+              <span className="ml-2 text-[10px] text-muted-foreground">Sub-item Visits: 1 charges it once for the whole line; set it to the line&apos;s visits to charge it on every visit.</span>
             </>
           )}
         </td>
