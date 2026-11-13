@@ -145,6 +145,9 @@ function mapEstimate(row: any): Estimate {
     depositFailedMethod: (row.deposit_failed_method as Estimate['depositFailedMethod']) ?? null,
     depositFailedReason: (row.deposit_failed_reason as string | null) ?? null,
     depositFailedAt: (row.deposit_failed_at as string | null) ?? null,
+    depositWaivedAt: (row.deposit_waived_at as string | null) ?? null,
+    depositWaivedByName: (row.deposit_waived_by_name as string | null) ?? null,
+    depositWaivedReason: (row.deposit_waived_reason as string | null) ?? null,
     tiersEnabled: row.tiers_enabled ?? false,
     tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
     displaySettings: toDisplaySettings(row.display_settings),
@@ -238,6 +241,12 @@ export function useEstimate(id: string) {
         .order("sort_order", { foreignTable: "estimate_direct_costs" })
         .single();
       if (error) throw error;
+      // deposit_waived_by is an auth user id — resolve the name for the
+      // "Deposit waived by …" badge (rare, so only when there is one).
+      if (data?.deposit_waived_by) {
+        const { data: waiver } = await supabase.from("profiles").select("name").eq("id", data.deposit_waived_by).maybeSingle();
+        data.deposit_waived_by_name = (waiver as { name?: string | null } | null)?.name ?? null;
+      }
       return mapEstimate(data);
     },
     enabled: !!id,
@@ -1121,6 +1130,29 @@ export function useEstimateReservedDeposits(estimateId: string | undefined) {
         paymentDate: r.payment_date as string,
         method: r.method as string,
       }));
+    },
+  });
+}
+
+/** Waives (or un-waives) an accepted estimate's unpaid deposit
+ *  (crm_set_estimate_deposit_waiver). A waived deposit is never shown to the
+ *  client as due, and the proposal link won't take it. */
+export function useSetEstimateDepositWaiver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ estimateId, waived, reason }: { estimateId: string; waived: boolean; reason?: string | null }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("crm_set_estimate_deposit_waiver", {
+        p_estimate_id: estimateId,
+        p_waived: waived,
+        p_reason: reason ?? null,
+      });
+      if (error) throw new Error(error.message ?? "Couldn't update the deposit");
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }

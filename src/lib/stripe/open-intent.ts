@@ -77,10 +77,19 @@ export interface OpenIntentRequest {
  * other one that could still be submitted. Never throws: a lookup failure
  * queues the intent for the background cancel and falls through to "create a
  * new one".
+ *
+ * `supersededIds` lists every intent this call canceled (or found dead). The
+ * caller puts them in the new intent's idempotency key: without that, a client
+ * switching card -> bank -> card inside chargeIdempotencyKey's 10-second
+ * window got the first card intent back from Stripe's idempotency cache —
+ * already canceled by the switch to bank, so the form could never be paid.
  */
-export async function reuseOrCancelOpenIntent(req: OpenIntentRequest): Promise<Stripe.PaymentIntent | null> {
+export async function reuseOrCancelOpenIntent(
+  req: OpenIntentRequest
+): Promise<{ reusable: Stripe.PaymentIntent | null; supersededIds: string[] }> {
   const { stripe, connectedAccountId, db, orgId, invoiceIds, amountCents, paymentMethod, metadata } = req;
-  if (invoiceIds.length === 0) return null;
+  const supersededIds: string[] = [];
+  if (invoiceIds.length === 0) return { reusable: null, supersededIds };
 
   const { data: rows, error } = await db
     .from("crm_open_payment_intents")
@@ -89,7 +98,7 @@ export async function reuseOrCancelOpenIntent(req: OpenIntentRequest): Promise<S
     .in("invoice_id", invoiceIds);
   if (error) {
     log.error("failed to read open payment intents", { error, invoiceIds });
-    return null;
+    return { reusable: null, supersededIds };
   }
   const intentIds = [...new Set(((rows ?? []) as { payment_intent_id: string }[]).map((r) => r.payment_intent_id))];
 
@@ -102,12 +111,14 @@ export async function reuseOrCancelOpenIntent(req: OpenIntentRequest): Promise<S
       log.error("failed to read an open payment intent; queued for cancellation", { error: err, paymentIntentId: intentId });
       await queueCancellation(db, orgId, intentId, "unreadable when a new payment was started");
       await forgetIntent(db, orgId, intentId);
+      supersededIds.push(intentId);
       continue;
     }
     if (!isOpenForm(pi)) {
       // Submitted (processing / held / succeeded) or dead: not ours to touch here.
       // An in-flight one was already refused by refuseIfChargeInFlight.
       if (pi.status === "canceled" || pi.status === "succeeded") await forgetIntent(db, orgId, intentId);
+      if (pi.status === "canceled") supersededIds.push(intentId);
       continue;
     }
 
@@ -130,6 +141,7 @@ export async function reuseOrCancelOpenIntent(req: OpenIntentRequest): Promise<S
 
     // A form for a different amount / method / selection: cancel it so it can
     // never be submitted alongside the one about to be created.
+    supersededIds.push(intentId);
     try {
       await stripe.paymentIntents.cancel(intentId, {}, { stripeAccount: connectedAccountId });
     } catch (err) {
@@ -138,7 +150,7 @@ export async function reuseOrCancelOpenIntent(req: OpenIntentRequest): Promise<S
     }
     await forgetIntent(db, orgId, intentId);
   }
-  return reusable;
+  return { reusable, supersededIds: supersededIds.sort() };
 }
 
 /** Records the intent a pay form is now open on, for each invoice it covers.

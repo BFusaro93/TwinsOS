@@ -5,7 +5,8 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { getCrewBreaksUnpaid, isBreakUnpaid } from "@/lib/crew/break-policy";
 import { memberVisitPauseMinutes } from "@/lib/crew/visit-pause";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { isoInZone, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
+import { shiftYmd } from "@/lib/time/zone";
+import { payrollPunchDate } from "@/lib/payroll/punch-date";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
@@ -36,6 +37,13 @@ export interface PayrollRow {
   /** The hours payroll starts from: override, else shift, else job hours when there is no shift. */
   baseHours: number;
   totalHours: number;
+  /**
+   * totalHours split by the org's overtime rule (lib/payroll/overtime.ts). Set by
+   * applyOvertime — the Payroll tab's route applies it; computePayroll alone
+   * leaves everything regular.
+   */
+  regularHours: number;
+  overtimeHours: number;
   adjusted: boolean;
   /** No Start Day was tapped for this person — hours fall back to job punches. */
   noShift: boolean;
@@ -89,6 +97,8 @@ interface ShiftRow {
   ended_at: string | null;
   break_minutes: number | null;
   source: string;
+  /** "Crew pauses are unpaid" as it stood when the day ended (null = not ended yet). */
+  breaks_unpaid: boolean | null;
 }
 
 /**
@@ -124,7 +134,7 @@ export async function computePayroll(
   const shifts = await fetchAllRows<ShiftRow>(() =>
     supabase
       .from("crm_crew_day_shifts")
-      .select("crew_member_id, work_date, started_at, ended_at, break_minutes, source")
+      .select("crew_member_id, work_date, started_at, ended_at, break_minutes, source, breaks_unpaid")
       .eq("org_id", orgId)
       .is("deleted_at", null)
       // One day of lead-in: a shift that started the evening before `from`
@@ -170,27 +180,10 @@ export async function computePayroll(
 
   // A punch belongs to the shift it happened inside, even when that shift
   // crossed midnight (11pm start, 1am punch is still the previous work_date).
-  // Otherwise the punch's own local date is its day.
-  const OPEN_SHIFT_GRACE_MS = 6 * 3_600_000;
-  const punchDate = (memberId: string, clockedInAt: string): string => {
-    const localDate = isoInZone(new Date(clockedInAt), tz);
-    const prev = shiftByKey.get(`${memberId}|${shiftYmd(localDate, -1)}`);
-    if (!prev) return localDate;
-    const at = new Date(clockedInAt).getTime();
-    const startMs = new Date(prev.started_at).getTime();
-    let endMs: number;
-    if (prev.ended_at) {
-      endMs = new Date(prev.ended_at).getTime();
-    } else {
-      // Open shift: it can't claim a full day of punches. Cap at the member's
-      // next shift start, else a few hours past its work-date midnight.
-      const midnight = zoneWallClockToInstant(shiftYmd(prev.work_date, 1), "00:00", tz);
-      endMs = (midnight ? midnight.getTime() : startMs) + OPEN_SHIFT_GRACE_MS;
-      const next = shiftByKey.get(`${memberId}|${localDate}`);
-      if (next) endMs = Math.min(endMs, new Date(next.started_at).getTime());
-    }
-    return at >= startMs && at <= endMs ? prev.work_date : localDate;
-  };
+  // Otherwise the punch's own local date is its day. (The payroll lock dates
+  // punches by the same rule — see payrollPunchDate.)
+  const shiftFor = (memberId: string, workDate: string) => shiftByKey.get(`${memberId}|${workDate}`);
+  const punchDate = (memberId: string, clockedInAt: string): string => payrollPunchDate(shiftFor, memberId, clockedInAt, tz);
 
   // Per member-day: job hours, off-clock minutes recorded on jobs, open punches.
   const jobs = new Map<string, { jobHours: number; offClockMinutes: number; open: number; lunch: number; breaks: number; pause: number }>();
@@ -206,8 +199,11 @@ export async function computePayroll(
       // This member's share of the stop's pause, capped at their time on the
       // job (see memberVisitPauseMinutes) — a member who wasn't there for the
       // pause used to lose the whole of it, and so did their day shift.
-      // Whole minutes: it is shown as the day's break.
-      const visitPause = isBreakUnpaid(p.crm_job_visits?.break_paid, orgBreaksUnpaid)
+      // Whole minutes: it is shown as the day's break. Paid or not: the
+      // visit's own override, else the org setting as it stood when this day
+      // ended (snapshotted on the shift), else today's org setting.
+      const dayBreaksUnpaid = shiftByKey.get(k)?.breaks_unpaid ?? orgBreaksUnpaid;
+      const visitPause = isBreakUnpaid(p.crm_job_visits?.break_paid, dayBreaksUnpaid)
         ? Math.round(memberVisitPauseMinutes({
             pauseMinutes: p.crm_job_visits?.break_minutes,
             punchIn: p.clocked_in_at,
@@ -280,6 +276,8 @@ export async function computePayroll(
       note: adj?.note ?? null,
       baseHours: r2(base),
       totalHours: r2(base + extra),
+      regularHours: r2(base + extra),
+      overtimeHours: 0,
       adjusted: !!adj && (override != null || extra > 0 || !!adj.note || !!adj.start_override || !!adj.end_override || adj.break_override != null),
       noShift,
       autoStart: !adj?.start_override && shift?.source === "auto_first_job",

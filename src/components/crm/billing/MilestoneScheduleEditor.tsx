@@ -243,6 +243,7 @@ export function MilestoneScheduleEditor({
   showTargetDate = false,
   readOnly = false,
   basisLabel = "estimate",
+  invoiceBlockedReason = null,
 }: {
   estimateId?: string | null;
   projectId?: string | null;
@@ -253,6 +254,9 @@ export function MilestoneScheduleEditor({
   readOnly?: boolean;
   /** What the over/under-allocation warning compares against, in words. */
   basisLabel?: string;
+  /** Set when nothing may be invoiced from this schedule right now (a canceled project — the
+   *  database refuses too); hides the Invoice buttons and shows this note instead. */
+  invoiceBlockedReason?: string | null;
 }) {
   // Exactly one of these is enabled — the disabled hook never fetches.
   const estimateQuery = useEstimateMilestones(projectId ? "" : (estimateId ?? ""));
@@ -390,9 +394,12 @@ export function MilestoneScheduleEditor({
           salesRepId={salesRepId}
           showTargetDate={showTargetDate}
           readOnly={rowReadOnly(m)}
-          canInvoice={canInvoice}
+          canInvoice={canInvoice && !invoiceBlockedReason}
         />
       ))}
+      {invoiceBlockedReason && milestones.some((m) => m.status !== "invoiced") && (
+        <p className="text-xs text-amber-700 dark:text-amber-400">{invoiceBlockedReason}</p>
+      )}
       {milestones.length === 0 && (
         <p className="rounded-lg border border-dashed border-border bg-slate-50 dark:bg-muted/40 py-4 text-center text-xs text-slate-400 dark:text-neutral-500">
           No milestones yet — add one below (e.g. Deposit, Rough-in, Completion).

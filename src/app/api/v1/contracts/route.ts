@@ -5,6 +5,8 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { CONTRACT_SELECT, shapeContract } from "./shape";
 import { createContractSchema, signedAtToInstant, type CreateContractItem } from "./validation";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
+import { currentPeriodBillingDate } from "@/lib/contract-billing";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
 import { withIdempotency } from "@/lib/api/idempotency";
 
@@ -62,7 +64,6 @@ export async function POST(request: Request) {
           endDate: body.endDate,
           monthlyAmountCents: body.monthlyAmountCents,
           billingFrequency: body.billingFrequency,
-          autoRenew: body.autoRenew,
           notes: body.notes,
           status: body.status,
           signedAt: body.signedAt,
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
           monthlyAmounts: body.monthlyAmounts,
           invoiceLineItems: body.invoiceLineItems,
           defaultService: body.defaultService,
+          lastBilledDate: body.lastBilledDate,
         },
       ];
     }
@@ -131,7 +133,23 @@ export async function POST(request: Request) {
     }
 
     const orgTimeZone = await getOrgTimeZone(db, auth.orgId);
-    const rows = items.map((c) => ({
+    const orgToday = todayInZone(orgTimeZone);
+    const orgTodayDate = todayInZoneAsLocalMidnight(orgTimeZone);
+    const rows = items.map((c) => {
+      const status = c.status ?? "draft";
+      const billingFrequency = c.billingFrequency ?? "monthly";
+      // A contract recorded as already signed/active was billing elsewhere: unless the caller
+      // says when it last billed, mark the cycle in progress billed (counted from today when
+      // there is no start date) so the first run doesn't invoice it a second time — the same
+      // rule as the Settings import.
+      const lastBilledDate = c.lastBilledDate
+        ?? (status === "signed" || status === "active"
+          ? currentPeriodBillingDate(
+              { billing_frequency: billingFrequency, billing_day_of_month: c.billingDayOfMonth ?? 1, bill_month_in_advance: c.billMonthInAdvance ?? false, start_date: c.startDate ?? null, created_at: orgToday },
+              orgTodayDate,
+            )
+          : null);
+      return {
       org_id: auth.orgId,
       client_id: c.clientId,
       title: c.title,
@@ -143,12 +161,15 @@ export async function POST(request: Request) {
       // an agent recording a historical contract silently started charging a
       // real client on the next billing day. A caller who genuinely wants
       // billing to start passes status explicitly.
-      status: c.status ?? "draft",
+      status,
       start_date: c.startDate ?? null,
       end_date: c.endDate ?? null,
       monthly_amount_cents: c.monthlyAmountCents ?? 0,
-      billing_frequency: c.billingFrequency ?? "monthly",
-      auto_renew: c.autoRenew ?? false,
+      billing_frequency: billingFrequency,
+      last_billed_date: lastBilledDate,
+      // Already billing: its last billed date pins a quarterly/annual cycle grid to the months
+      // it was billed in (contract-billing.ts monthGrid), as the import does.
+      billing_anchor_date: lastBilledDate && (billingFrequency === "quarterly" || billingFrequency === "annual") ? lastBilledDate : null,
       notes: c.notes ?? null,
       // A bare date / offset-less time is the org's own calendar, not UTC.
     signed_at: c.signedAt ? signedAtToInstant(c.signedAt, orgTimeZone) : null,
@@ -172,7 +193,8 @@ export async function POST(request: Request) {
       monthly_amounts: c.monthlyAmounts ?? {},
       invoice_line_items: c.invoiceLineItems ?? [],
       default_service: c.defaultService ?? null,
-    }));
+      };
+    });
 
     const { data, error } = await db.from("crm_contracts").insert(rows).select(CONTRACT_SELECT);
     if (error || !data) return jsonServerError("POST /api/v1/contracts", error);

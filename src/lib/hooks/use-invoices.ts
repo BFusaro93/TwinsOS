@@ -1070,6 +1070,26 @@ export function useVoidInvoice() {
   });
 }
 
+// ── revoke pay link ───────────────────────────────────────────────────────────
+
+/** Cuts off every "View & Pay Online" link already sent for an invoice
+ *  (POST /api/crm/invoices/[id]/revoke-pay-links). The next email or PDF
+ *  creates a fresh link. Resolves to how many live links were revoked. */
+export function useRevokeInvoicePayLinks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }): Promise<number> => {
+      const res = await fetch(`/api/crm/invoices/${id}/revoke-pay-links`, { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; revoked?: number };
+      if (!res.ok) throw new Error(body.error ?? "Couldn't revoke the pay link");
+      return body.revoked ?? 0;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["audit-log", "invoice", vars.id] });
+    },
+  });
+}
+
 // ── duplicate a void invoice ──────────────────────────────────────────────────
 
 export interface DuplicateVoidInvoiceResult {

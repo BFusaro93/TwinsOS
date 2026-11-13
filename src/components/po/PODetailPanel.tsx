@@ -46,7 +46,7 @@ import { useComments } from "@/lib/hooks/use-comments";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { Download } from "lucide-react";
 import type { PurchaseOrder, LineItem, POStatus } from "@/types";
-import { computeSalesTax } from "@/lib/utils/po-tax";
+import { computeSalesTax, effectiveDiscount } from "@/lib/utils/po-tax";
 
 interface PODetailPanelProps {
   po: PurchaseOrder;
@@ -121,7 +121,8 @@ function DetailsTab({
       discountCost: po.discountCost,
       discountReducesTax: po.discountReducesTax,
     });
-    const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
+    // A discount can zero the lines out but never push the total negative.
+    const grandTotal = subtotal - effectiveDiscount(po.discountCost, subtotal) + salesTax + po.shippingCost;
     return { subtotal, salesTax, grandTotal };
   }
 
@@ -134,7 +135,7 @@ function DetailsTab({
   const subtotalForSubmit = Math.round(lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
   const taxableSubtotalForSubmit = Math.round(lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
   const grandTotalForSubmit =
-    subtotalForSubmit - po.discountCost + computeSalesTax({
+    subtotalForSubmit - effectiveDiscount(po.discountCost, subtotalForSubmit) + computeSalesTax({
       taxableSubtotal: taxableSubtotalForSubmit,
       subtotal: subtotalForSubmit,
       taxRatePercent: po.taxRatePercent,
@@ -162,6 +163,20 @@ function DetailsTab({
   const [vendorSheetOpen, setVendorSheetOpen] = useState(false);
   const [overlayPOId, setOverlayPOId] = useState<string | null>(null);
   const [incompleteReceiptWarningOpen, setIncompleteReceiptWarningOpen] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+
+  // A PO can be canceled only until something is received against it; after
+  // that, Mark Complete closes it short (the database enforces the same).
+  const anyReceived = poReceipts.some((r) => r.lines.some((l) => l.quantityReceived > 0));
+  const canCancel = ["requested", "pending", "approved", "ordered", "rejected"].includes(status) && !anyReceived;
+
+  function handleCancelPO() {
+    syncStatus(
+      { id: po.id, status: "canceled" },
+      { onSuccess: () => onStatusChange("canceled") }
+    );
+    setCancelConfirmOpen(false);
+  }
 
   const allLineItemsReceived = lineItems.every(
     (li) => (receivedQtyByLineItemId?.get(li.id) ?? 0) >= li.quantity
@@ -188,7 +203,8 @@ function DetailsTab({
     discountCost: po.discountCost,
     discountReducesTax: po.discountReducesTax,
   });
-  const grandTotal = subtotal - po.discountCost + salesTax + po.shippingCost;
+  const discount = effectiveDiscount(po.discountCost, subtotal);
+  const grandTotal = subtotal - discount + salesTax + po.shippingCost;
   const taxLabel = po.taxRatePercent > 0 ? `Sales Tax (${po.taxRatePercent}%)` : "Sales Tax";
   const isError = status === "rejected" || status === "canceled";
 
@@ -213,7 +229,7 @@ function DetailsTab({
                 submitForApproval(
                   { entityId: po.id, entityType: "purchase_order", grandTotalCents: grandTotalForSubmit },
                   // The hook updates the DB status — only update local state here
-                  { onSuccess: () => onStatusChange("pending") }
+                  { onSuccess: (res) => onStatusChange(res.autoApproved ? "approved" : "pending") }
                 );
               }}
             >
@@ -246,6 +262,16 @@ function DetailsTab({
           </>)}
           {(status === "rejected" || status === "canceled" || status === "pending") && (
             <Button size="sm" variant="outline" onClick={() => handleStatusChange("requested")}>Reset to Requested</Button>
+          )}
+          {canCancel && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+              onClick={() => setCancelConfirmOpen(true)}
+            >
+              Cancel PO
+            </Button>
           )}
         </div>
         )}
@@ -326,10 +352,10 @@ function DetailsTab({
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
-        {po.discountCost > 0 && (
+        {discount > 0 && (
           <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
             <span>Discount</span>
-            <span>-{formatCurrency(po.discountCost)}</span>
+            <span>-{formatCurrency(discount)}</span>
           </div>
         )}
         <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
@@ -383,14 +409,38 @@ function DetailsTab({
         onOpenChange={setVendorSheetOpen}
       />
 
+      <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel {po.poNumber}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Nothing has been received on this PO yet. Canceling stops it from being ordered or
+              received. If it was made from a requisition and no other PO from that requisition is
+              still open, the requisition goes back to Approved so a new PO can be made from it.
+              You can use Reset to Requested later to reopen it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep PO</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              onClick={handleCancelPO}
+            >
+              Cancel PO
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={incompleteReceiptWarningOpen} onOpenChange={setIncompleteReceiptWarningOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Not all line items have been received</AlertDialogTitle>
             <AlertDialogDescription>
               At least one line item on <strong>{po.poNumber}</strong> has not been fully received
-              through Send to Receiving. Marking this PO complete without receiving it will not
-              update parts/inventory. Are you sure you want to mark it complete anyway?
+              through Send to Receiving. Marking it complete closes the PO short: the rest will not
+              be received and parts/inventory will not be updated for it. Are you sure you want to
+              mark it complete anyway?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

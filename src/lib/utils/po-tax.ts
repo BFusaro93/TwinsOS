@@ -33,7 +33,7 @@ export function computeSalesTax({
   discountReducesTax: boolean;
 }): number {
   const base = discountReducesTax
-    ? Math.max(0, taxableSubtotal - taxableDiscountShare({ taxableSubtotal, subtotal, discountCost }))
+    ? Math.max(0, taxableSubtotal - taxableDiscountShare({ taxableSubtotal, subtotal, discountCost: effectiveDiscount(discountCost, subtotal) }))
     : taxableSubtotal;
   return Math.round((base * taxRatePercent) / 100);
 }
@@ -51,4 +51,12 @@ export function taxableDiscountShare({
 }): number {
   if (!discountCost || subtotal <= 0 || taxableSubtotal <= 0) return 0;
   return Math.round((discountCost * taxableSubtotal) / subtotal);
+}
+
+/** The discount that actually applies: a discount can take the order down to
+ *  zero, never below it (and a negative value is ignored). Mirrors the clamp in
+ *  procurement_totals() (20270103000210). Use it wherever a grand total is
+ *  worked out as subtotal - discount + tax + shipping. */
+export function effectiveDiscount(discountCost: number, subtotal: number): number {
+  return Math.min(Math.max(discountCost || 0, 0), Math.max(subtotal, 0));
 }

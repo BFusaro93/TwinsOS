@@ -52,6 +52,9 @@ export async function loadAutomationClient(
     .from("clients")
     .select(CLIENT_COLUMNS)
     .eq("id", params.clientId)
+    // Callers run on the service client, so RLS doesn't scope this: only the
+    // enrollment's own org's client may be mailed/texted or fill staff alerts.
+    .eq("org_id", params.orgId)
     // A soft-deleted client (e.g. removed at their request) must not keep
     // receiving a sequence's later steps.
     .is("deleted_at", null)

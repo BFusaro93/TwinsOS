@@ -8,7 +8,7 @@ import { logger } from "@/lib/logger";
 import { SHARED_TWILIO_ORG_ID } from "@/lib/sms/send";
 import { classifySmsKeyword, containedOptOutNote, normalizeSmsText } from "@/lib/sms/keywords";
 import { attachMediaToTicket, copyInboundMedia, parseInboundMedia, type SmsMediaItem } from "@/lib/sms/media";
-import type { SmsOptOutSource } from "@/lib/sms/opt-outs";
+import { setContactSmsConsentByNumber, type SmsOptOutSource } from "@/lib/sms/opt-outs";
 
 const log = logger.child("twilio inbound webhook");
 
@@ -279,6 +279,9 @@ export async function POST(request: Request) {
     // whole client in.
     const liftErr = await liftNumberOptOut(supabase, orgId, digits);
     if (liftErr) log.error("failed to lift number opt-out on START", { orgId, error: liftErr });
+    // A contact whose main phone this is opts themselves back in.
+    const contactErr = await setContactSmsConsentByNumber(supabase, { orgId, last10: digits, optIn: true, source: "keyword" });
+    if (contactErr) log.error("failed to apply START to contacts", { orgId, error: contactErr });
     const primaryIds = orgMatches.filter((c) => c.match_kind === "primary").map((c) => c.id);
     if (primaryIds.length > 0) {
       const { error: optInErr } = await supabase
@@ -412,6 +415,11 @@ async function applyOptOut(
       });
       // 23505 = this number already has a live opt-out in the org.
       if (error && error.code !== "23505") return error.message;
+      // Any contact with this number loses its own text consent too.
+      const contactErr = await setContactSmsConsentByNumber(supabase, {
+        orgId, last10: digits, optIn: false, source: optOut.source,
+      });
+      if (contactErr) return contactErr;
     }
   }
   const primaryIds = matches.filter((m) => m.match_kind === "primary").map((m) => m.id);

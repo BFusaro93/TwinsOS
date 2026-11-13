@@ -5,7 +5,7 @@ import { renderInvoicePDF } from "@/lib/invoices/pdf-data";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -36,7 +36,11 @@ export async function GET(
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const result = await renderInvoicePDF(supabase, id, orgId, user.id);
+    // ?print=1 — the invoice detail's Print button, which marks a draft
+    // "printed": the paper copy gets the online link. A plain download of a
+    // draft does not mint one.
+    const forPrint = req.nextUrl.searchParams.get("print") === "1";
+    const result = await renderInvoicePDF(supabase, id, orgId, user.id, { forPrint });
     if (!result) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
     return new NextResponse(result.buffer as unknown as BodyInit, {

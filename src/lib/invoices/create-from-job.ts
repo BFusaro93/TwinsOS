@@ -7,7 +7,7 @@ import {
   resolveJobServiceTaxable,
 } from "@/lib/invoices/auto-invoice-tax";
 import { stripHtml } from "@/lib/utils/strip-html";
-import { contractCoversServiceDay, type CoverageContractRow } from "@/lib/contract-billing";
+import { contractCoverage, type CoverageContractRow } from "@/lib/contract-billing";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
@@ -141,10 +141,11 @@ export function isInvoiceBlockedError(err: unknown): err is InvoiceBlockedError 
 
 const SNOW_BLOCK_MESSAGE = "Snow jobs are billed from Snow Invoicing (per storm), not from the job or a visit.";
 const PROJECT_BLOCK_MESSAGE = "Project jobs are billed through the project's milestone schedule, not per job or visit.";
-const CONTRACT_BLOCK_MESSAGE = "The client's contract covers this work and bills it on the contract's own cycle. Invoicing it here would bill the client twice.";
+const CONTRACT_BLOCK_MESSAGE = "The client's contract covers this work and bills it on the contract's own cycle. Invoicing it here would bill the client twice. (Materials on the job bill automatically when each visit is completed.)";
+const PENDING_CONTRACT_BLOCK_MESSAGE = "This job is linked to a contract that hasn't been signed yet, so its visits are held. Once the contract is signed they're covered by it; if it's cancelled unsigned, they bill per visit automatically.";
 
 const COVERAGE_CONTRACT_COLUMNS =
-  "status, is_active, deleted_at, start_date, end_date, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at";
+  "status, is_active, deleted_at, start_date, end_date, last_billed_date, billing_anchor_date, reactivated_at, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at";
 
 /** The day a visit is billed for: its scheduled day, or today when it was
  *  done ahead of schedule — the visit auto-invoice's rule. */
@@ -180,7 +181,8 @@ export async function invoiceBlockReason(
     .maybeSingle();
   if (cErr) throw cErr;
   if (!contract) return null;
-  const today = todayInZone(await getOrgTimeZone(supabase, j.org_id));
+  const timeZone = await getOrgTimeZone(supabase, j.org_id);
+  const today = todayInZone(timeZone);
   let scheduled: string | null = j.last_service_date ?? j.scheduled_date;
   if (visitId) {
     const { data: v, error: vErr } = await supabase
@@ -188,9 +190,8 @@ export async function invoiceBlockReason(
     if (vErr) throw vErr;
     scheduled = (v as { scheduled_date: string | null } | null)?.scheduled_date ?? null;
   }
-  return contractCoversServiceDay(contract as CoverageContractRow, billedServiceDay(scheduled, today))
-    ? CONTRACT_BLOCK_MESSAGE
-    : null;
+  const coverage = contractCoverage({ ...(contract as CoverageContractRow), time_zone: timeZone }, billedServiceDay(scheduled, today));
+  return coverage === "covered" ? CONTRACT_BLOCK_MESSAGE : coverage === "pending" ? PENDING_CONTRACT_BLOCK_MESSAGE : null;
 }
 
 /**

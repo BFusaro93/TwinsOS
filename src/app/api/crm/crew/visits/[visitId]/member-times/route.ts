@@ -7,6 +7,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { formatInZone } from "@/lib/time/zone";
 
 /**
  * Per-crew-member punches for a visit (crm_crew_member_times). Written by the
@@ -18,6 +21,13 @@ import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
  *   - crew callers must own the visit (its EFFECTIVE crew — see
  *     assertCallerOwnsVisit); staff are gated by crm_job_visits RLS, which
  *     only returns the visit to office roles in the same org;
+ *   - staff WRITES (POST / DELETE / PATCH) also need Dispatch Board
+ *     (sched_dispatch_board) or Payroll (payroll_report), or to run the
+ *     visit's crew themselves (a non-crew login linked to the crew) — the
+ *     same rule the crm_crew_member_times write policy enforces. Reads (GET)
+ *     stay open to office roles;
+ *   - a punch may not overlap another punch of the same crew member on a
+ *     different stop (the database refuses the same for office writes);
  *   - crewMemberId must be on the visit's effective crew (default roster, or a
  *     same-day crm_crew_daily_members reassignment onto it), or already have a
  *     punch on this visit (so a correction survives a later roster change — or
@@ -56,6 +66,13 @@ interface VisitRow {
 
 type Supabase = Awaited<ReturnType<typeof getRouteAuth>>["supabase"];
 
+
+/** 409 for the database's payroll-lock and punch-overlap refusals, 403 for RLS, else 500. */
+function writeConflictStatus(error: { message: string; code?: string }): number {
+  if (isPayrollLockedError(error.message) || error.code === "23P01") return 409;
+  if (error.code === "42501") return 403;
+  return 500;
+}
 
 const INVOICED_PUNCH_MESSAGE =
   "This visit's invoice has already been sent, so crew punches can't be changed. Ask the office to correct the time.";
@@ -213,6 +230,74 @@ function validatePunch(
   return null;
 }
 
+/** Keys that let office staff change crew punches (admins pass inside the RPC). */
+const PUNCH_EDIT_KEYS = ["sched_dispatch_board", "payroll_report"];
+
+/**
+ * Office callers may write punches with Dispatch Board or Payroll, or when
+ * they run the visit's crew themselves. Crew logins were already proven to own
+ * the visit in authorizeVisit. Returns a 403 response or null.
+ */
+async function rejectOfficeWithoutPunchPermission(
+  supabase: Supabase,
+  userId: string,
+  visit: VisitRow,
+  isCrew: boolean
+): Promise<NextResponse | null> {
+  if (isCrew) return null;
+  if (await hasAnySettingsPermission(supabase, PUNCH_EDIT_KEYS)) return null;
+  if (await assertCallerOwnsVisit(supabase, userId, visit.org_id, visit)) return null;
+  return NextResponse.json(
+    { error: "Changing crew punches needs the Dispatch Board or Payroll permission" },
+    { status: 403 }
+  );
+}
+
+/**
+ * A punch that overlaps another of the same member's punches on a different
+ * stop would pay that time twice. Half-open intervals: a punch that starts
+ * exactly when the other ends is fine; an open punch runs to "now and on".
+ * Read with the service client (the member was already authorized). Returns
+ * a sentence describing the clash, or null.
+ */
+async function overlappingPunchProblem(
+  orgId: string,
+  visitId: string,
+  crewMemberId: string,
+  clockedInAt: string,
+  clockedOutAt: string | null
+): Promise<string | null> {
+  const inMs = Date.parse(clockedInAt);
+  const outMs = clockedOutAt ? Date.parse(clockedOutAt) : Number.POSITIVE_INFINITY;
+  if (!(outMs > inMs)) return null; // zero-length never overlaps
+  // Closed punches are at most a day long (validatePunch), so a closed punch that
+  // started more than 25h before this one can't reach it; open ones always can.
+  const since = new Date(inMs - 25 * 3_600_000).toISOString();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createServiceClient() as any;
+  const { data, error } = await admin
+    .from("crm_crew_member_times")
+    .select("clocked_in_at, clocked_out_at")
+    .eq("org_id", orgId)
+    .eq("crew_member_id", crewMemberId)
+    .neq("visit_id", visitId)
+    .is("deleted_at", null)
+    .not("clocked_in_at", "is", null)
+    .or(`clocked_out_at.is.null,clocked_in_at.gte."${since}"`);
+  if (error) return null; // the database's own check still applies to office writes
+  const clash = ((data ?? []) as { clocked_in_at: string; clocked_out_at: string | null }[]).find((p) => {
+    const oIn = Date.parse(p.clocked_in_at);
+    const oOut = p.clocked_out_at ? Date.parse(p.clocked_out_at) : Number.POSITIVE_INFINITY;
+    return oOut > oIn && oIn < outMs && inMs < oOut;
+  });
+  if (!clash) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tz = await getOrgTimeZone(createServiceClient() as any, orgId);
+  const from = formatInZone(clash.clocked_in_at, tz, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const to = clash.clocked_out_at ? formatInZone(clash.clocked_out_at, tz, { hour: "numeric", minute: "2-digit" }) : "still clocked in";
+  return `This punch overlaps the same crew member's punch on another stop (${from} – ${to}). Correct or remove that punch first.`;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ visitId: string }> }
@@ -227,6 +312,8 @@ export async function POST(
   const auth = await authorizeVisit(supabase, user.id, visitId);
   if ("response" in auth) return auth.response;
   const { visit, isCrew } = auth;
+  const denied = await rejectOfficeWithoutPunchPermission(supabase, user.id, visit, isCrew);
+  if (denied) return denied;
   // Crew edits write with the service role (no read-only-when-canceled RLS).
   const readOnly = await assertOrgWritable(createServiceClient(), visit.org_id);
   if (readOnly) return readOnly;
@@ -246,6 +333,11 @@ export async function POST(
 
   if (!(await memberBelongsToVisit(supabase, visit, crewMemberId))) {
     return NextResponse.json({ error: "That crew member isn't on this visit's crew" }, { status: 403 });
+  }
+
+  if (clockedInAt) {
+    const overlap = await overlappingPunchProblem(visit.org_id, visit.id, crewMemberId, clockedInAt, clockedOutAt);
+    if (overlap) return NextResponse.json({ error: overlap, code: "punch_overlap" }, { status: 409 });
   }
 
   // Crew logins can't write punches directly (RLS) — after the checks above
@@ -299,8 +391,8 @@ export async function POST(
     .select()
     .single();
 
-  // Inside the payroll lock period: the database's own sentence, as a 409.
-  if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
+  // Inside the payroll lock period, or an overlap the database caught: its own sentence, as a 409.
+  if (error) return NextResponse.json({ error: error.message }, { status: writeConflictStatus(error) });
   // Keep an already-closed stop's stored labor cost in step with the edit.
   // Visit hours / labor via the service role: a crew login can't write actual_hours itself.
   await recomputeStopLabor(supabase, visit.id, createVisitWriter(user.id));
@@ -320,6 +412,8 @@ export async function DELETE(
 
   const auth = await authorizeVisit(supabase, user.id, visitId);
   if ("response" in auth) return auth.response;
+  const denied = await rejectOfficeWithoutPunchPermission(supabase, user.id, auth.visit, auth.isCrew);
+  if (denied) return denied;
   const readOnly = await assertOrgWritable(createServiceClient(), auth.visit.org_id);
   if (readOnly) return readOnly;
   if (auth.isCrew && (await visitIsInvoiced(supabase, auth.visit.id))) {
@@ -338,7 +432,7 @@ export async function DELETE(
     .is("deleted_at", null);
 
   // Inside the payroll lock period: the database's own sentence, as a 409.
-  if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
+  if (error) return NextResponse.json({ error: error.message }, { status: writeConflictStatus(error) });
   await recomputeStopLabor(supabase, auth.visit.id, createVisitWriter(user.id));
   return NextResponse.json({ ok: true });
 }
@@ -359,6 +453,8 @@ export async function PATCH(
   const { visitId } = await params;
   const auth = await authorizeVisit(supabase, user.id, visitId);
   if ("response" in auth) return auth.response;
+  const denied = await rejectOfficeWithoutPunchPermission(supabase, user.id, auth.visit, auth.isCrew);
+  if (denied) return denied;
   const readOnly = await assertOrgWritable(createServiceClient(), auth.visit.org_id);
   if (readOnly) return readOnly;
 

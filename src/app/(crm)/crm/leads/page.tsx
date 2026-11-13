@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 
 // Shared with Settings → Import / Export so both import the same columns.
-import { LEAD_REQUIRED_COLUMNS, LEAD_TEMPLATE_COLUMNS, leadToCsvRow } from "@/lib/crm/import-export-columns";
+import { IMPORT_AUTOMATIONS_OPTION, LEAD_REQUIRED_COLUMNS, LEAD_TEMPLATE_COLUMNS, leadToCsvRow } from "@/lib/crm/import-export-columns";
 
 export default function LeadsPage() {
   const { can, isLoading: permissionsLoading } = usePermissions();
@@ -95,8 +95,9 @@ export default function LeadsPage() {
                   setExporting(false);
                 }
               }}
-              onImport={async (rows) => {
-                const result = await bulkImportLeads(rows);
+              importOption={IMPORT_AUTOMATIONS_OPTION}
+              onImport={async (rows, { optionChecked }) => {
+                const result = await bulkImportLeads({ rows, runAutomations: optionChecked });
                 const parts = [`${result.created} new lead${result.created !== 1 ? "s" : ""} created`];
                 if (result.matched > 0) parts.push(`${result.matched} matched to existing client${result.matched !== 1 ? "s" : ""}`);
                 if (result.failed.length > 0) parts.push(`${result.failed.length} row${result.failed.length !== 1 ? "s" : ""} not imported`);

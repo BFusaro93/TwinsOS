@@ -29,6 +29,7 @@ import { orgEmailFrom, mapSendError, buildClientMergeVars } from "@/lib/email/se
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { logger } from "@/lib/logger";
 import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
+import { fetchBillingContactCcEmails, mergeCcRecipients } from "@/lib/email/billing-contact-cc";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { isOrgReadOnly } from "@/lib/org-writable";
 
@@ -77,6 +78,9 @@ export async function POST(req: NextRequest) {
     invoiceId: string;
     to?: string[];
     ccEmails?: string[];
+    /** CC the client's Billing contacts that are OK to email (default true). The
+     *  single-invoice dialog lists them in CC itself and sends false. */
+    ccBillingContacts?: boolean;
     subject?: string;
     bodyHtml?: string;
     templateId?: string;
@@ -220,7 +224,18 @@ export async function POST(req: NextRequest) {
   // typo'd billing email or a bad CC no longer blocks the invoice reaching the
   // client's good addresses, and a typed corrected address isn't on the list.
   const { deliverable: toEmails, bounced: bouncedTo } = await partitionBouncedRecipients(inv.org_id, requestedEmails);
-  const { deliverable: ccEmails, bounced: bouncedCc } = await partitionBouncedRecipients(inv.org_id, body.ccEmails ?? []);
+  // Billing contacts (type "Billing", OK to email) are copied on every invoice
+  // email, once each and never when they're already a To address.
+  let billingContactCc: string[] = [];
+  if (body.ccBillingContacts !== false && inv.client_id) {
+    try {
+      billingContactCc = await fetchBillingContactCcEmails(createServiceClient(), { orgId: inv.org_id, clientId: inv.client_id });
+    } catch (err) {
+      log.warn("billing contacts lookup failed; sending without them", { invoiceId, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  const requestedCc = mergeCcRecipients(requestedEmails, body.ccEmails ?? [], billingContactCc);
+  const { deliverable: ccEmails, bounced: bouncedCc } = await partitionBouncedRecipients(inv.org_id, requestedCc);
   const bouncedEmails = [...bouncedTo, ...bouncedCc];
   if (toEmails.length === 0) {
     return NextResponse.json({ error: allRecipientsBouncedMessage(bouncedTo) }, { status: 422 });

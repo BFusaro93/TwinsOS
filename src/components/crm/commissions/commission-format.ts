@@ -32,5 +32,5 @@ export function negativeClass(cents: number): string {
 /** "Adjustment: Mowing" / "Adjustment: refund / void" -> "Mowing" / "Refund / void". */
 export function adjustmentServiceLabel(serviceName: string | null): string {
   const s = (serviceName ?? "").replace(/^Adjustment:\s*/i, "").trim();
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Refund / void";
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Refund / void / write-off";
 }

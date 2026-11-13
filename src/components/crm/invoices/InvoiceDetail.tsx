@@ -16,6 +16,7 @@ import {
   useDeleteInvoice,
   LINE_ITEM_MUTATION_KEY,
   useVoidInvoice,
+  useRevokeInvoicePayLinks,
   useDuplicateVoidInvoice,
   voidBlockedMessage,
   useUnappliedPayments,
@@ -64,7 +65,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn, formatCurrency } from "@/lib/utils";
 import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
-import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff, Link2Off } from "lucide-react";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -810,6 +811,8 @@ export function InvoiceDetail({
   const [deleting, setDeleting] = useState(false);
   const [confirmVoidOpen, setConfirmVoidOpen] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [confirmRevokeOpen, setConfirmRevokeOpen] = useState(false);
+  const { mutateAsync: revokePayLinks, isPending: revokingPayLinks } = useRevokeInvoicePayLinks();
   const [confirmDuplicateOpen, setConfirmDuplicateOpen] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
@@ -982,7 +985,7 @@ export function InvoiceDetail({
   }
 
   function handlePrint() {
-    const win = window.open(`/api/crm/invoices/${invoice!.id}/pdf`, "_blank");
+    const win = window.open(`/api/crm/invoices/${invoice!.id}/pdf?print=1`, "_blank");
     if (win) win.addEventListener("load", () => win.print(), { once: true });
     // A printed invoice has gone out to the client on paper even though no
     // email was sent — move it out of "draft" the same way emailing does, so
@@ -1107,6 +1110,17 @@ export function InvoiceDetail({
     finally { setVoiding(false); }
   }
 
+  async function handleRevokePayLinks() {
+    if (!invoice) return;
+    try {
+      const revoked = await revokePayLinks({ id: invoice.id });
+      toast.success(revoked > 0 ? "Pay link revoked" : "This invoice had no active pay link");
+      setConfirmRevokeOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't revoke the pay link");
+    }
+  }
+
   async function handleDuplicate() {
     if (!invoice) return;
     setDuplicating(true);
@@ -1214,6 +1228,13 @@ export function InvoiceDetail({
               <DropdownMenuItem onSelect={handleDownloadPDF}>
                 <Printer className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Download PDF
               </DropdownMenuItem>
+              {/* Void/merge/delete revoke the links automatically, so a void
+                  invoice has nothing to revoke. */}
+              {(can("acct_send_invoices") || canModifyInvoice) && invoice.status !== "void" && (
+                <DropdownMenuItem onSelect={() => setConfirmRevokeOpen(true)}>
+                  <Link2Off className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Revoke pay link
+                </DropdownMenuItem>
+              )}
               {canModifyInvoice && <DropdownMenuSeparator />}
               {canModifyInvoice && invoice.status !== "void" && (
                 <DropdownMenuItem
@@ -1271,6 +1292,29 @@ export function InvoiceDetail({
             <Button variant="outline" size="sm" onClick={() => setConfirmVoidOpen(false)}>Cancel</Button>
             <Button variant="destructive" size="sm" onClick={handleVoid} disabled={voiding || voidBlocked !== null}>
               {voiding ? "Voiding…" : "Void Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revoke pay link confirmation */}
+      <Dialog open={confirmRevokeOpen} onOpenChange={setConfirmRevokeOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Revoke pay link?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
+            Every &quot;View &amp; Pay Online&quot; link already sent for this invoice stops working right away — use this
+            if an email went to the wrong person or a link was forwarded.
+            <span className="mt-2 block">
+              The invoice itself doesn&apos;t change. The next time you email it or download its PDF, a new link is
+              created.
+            </span>
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setConfirmRevokeOpen(false)}>Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={handleRevokePayLinks} disabled={revokingPayLinks}>
+              {revokingPayLinks ? "Revoking…" : "Revoke pay link"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1996,6 +2040,7 @@ export function InvoiceDetail({
         terms={invoice.terms}
         clientName={invoice.clientName ?? null}
         clientEmail={invoice.clientEmail ?? null}
+        clientId={invoice.clientId ?? null}
         pinnedPdfTemplateId={invoice.pdfTemplateId ?? null}
         open={emailDialogOpen}
         onClose={() => setEmailDialogOpen(false)}

@@ -440,6 +440,78 @@ export function useUpdateProject() {
   });
 }
 
+/**
+ * How many billing milestones cancelling this project removed that reopening it can bring back
+ * (estimate_milestones.canceled_with_project_at — only the latest cancel's rows).
+ */
+export async function countRestorableMilestones(projectId: string): Promise<number> {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- column added in 20270103000700, not in the generated types yet
+  const { count, error } = await (supabase as any)
+    .from("estimate_milestones")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId)
+    .eq("status", "pending")
+    .not("deleted_at", "is", null)
+    .not("canceled_with_project_at", "is", null);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export interface ReopenProjectResult {
+  /** Milestones brought back. */
+  restoredCount: number;
+  /** Spread across them so the schedule fits the current contract (the contract moved while canceled). */
+  adjustedCents: number;
+  /** A reduction the restored milestones couldn't absorb without going below zero. */
+  unabsorbedCents: number;
+}
+
+/**
+ * Reopens a canceled project (back to Sold) and, when asked, restores the pending milestones
+ * the cancel removed — re-balanced against the current contract price — in one transaction
+ * (reopen_canceled_project). Needs the projects key.
+ */
+export function useReopenCanceledProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, restoreMilestones }: { id: string; restoreMilestones: boolean }): Promise<ReopenProjectResult> => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC added in 20270103000700, not in the generated types yet
+      const { data, error } = await (supabase.rpc as any)("reopen_canceled_project", {
+        p_project_id: id,
+        p_restore_milestones: restoreMilestones,
+      });
+      // PostgrestError is a plain object — rethrow as an Error so the toast shows the reason.
+      if (error) throw Object.assign(new Error(error.message), { code: error.code });
+      const row = ((data ?? []) as { restored_count: number; adjusted_cents: number; unabsorbed_cents: number }[])[0];
+      return {
+        restoredCount: row?.restored_count ?? 0,
+        adjustedCents: row?.adjusted_cents ?? 0,
+        unabsorbedCents: row?.unabsorbed_cents ?? 0,
+      };
+    },
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: ["projects"] });
+      const previous = queryClient.getQueriesData<Project[]>({ queryKey: ["projects"] });
+      patchProjectCache(queryClient, id, { status: "sold" });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      for (const [key, data] of context?.previous ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
+    onSettled: (_, _err, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", id] });
+      queryClient.invalidateQueries({ queryKey: ["project-milestones", id] });
+      queryClient.invalidateQueries({ queryKey: ["estimate-milestones"] });
+      queryClient.invalidateQueries({ queryKey: ["client-projects"] });
+    },
+  });
+}
+
 export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({

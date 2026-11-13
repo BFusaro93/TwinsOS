@@ -1876,7 +1876,7 @@ function JobDetailSheet({
             {/* Products (materials) section — used vs. billed qty can differ, see JobProductsSection */}
             {job && (
               <div className="border-t px-4 py-3">
-                <JobProductsSection jobId={job.id} visitId={visit.id} commitDraftRef={productDraftRef} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
+                <JobProductsSection jobId={job.id} visitId={visit.id} commitDraftRef={productDraftRef} contractLinked={!!job.contractId} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
               </div>
             )}
             {/* Equipment the crew needs to bring — rolls up onto the Crew Board */}
@@ -2412,8 +2412,8 @@ function TeamAssignDialog({
       } else {
         await setDailyMember({ memberId, crewId: targetCrewId, workDate: selectedDate });
       }
-    } catch {
-      toast.error("Failed to move member");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to move member");
     }
   }
 
@@ -2449,8 +2449,8 @@ function TeamAssignDialog({
   async function unplaceMember(memberId: string) {
     try {
       await clearDailyMember({ memberId, workDate: selectedDate });
-    } catch {
-      toast.error("Failed to unassign");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to unassign");
     }
   }
 

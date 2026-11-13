@@ -168,6 +168,18 @@ export function ApprovalFlowsGuide() {
           as if it had approved.
         </p>
         <Callout>
+          <strong>An approval covers exactly what the approver saw.</strong> For requisitions and
+          POs, each approval records the vendor and lines (item, quantity, unit cost, taxable flag,
+          project) and the total at the moment it was given. If any of that changes &mdash; while
+          the chain is still running or after it finished &mdash; the record goes back through
+          approval and every approval that no longer matches is asked again. If the change pushes
+          the total over a higher step&apos;s threshold, that step is added before the record can be
+          approved. After a rejection, resubmitting starts the whole chain over. A PO made from an
+          approved requisition that only buys what the requisition already approved (same items,
+          no more quantity, no higher price, within its approved total) is approved on submit
+          without a chain.
+        </Callout>
+        <Callout>
           <strong>Managers can&apos;t override an admin step.</strong> A manager can approve on
           behalf of another approver on a non-admin step, in chain order, but a step whose
           Required Role is <em>admin</em> can only be decided by an admin. The override option

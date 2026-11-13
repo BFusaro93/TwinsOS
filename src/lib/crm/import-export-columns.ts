@@ -177,3 +177,9 @@ export function serviceToCsvRow(s: CRMService): Record<string, string> {
     isActive: s.isActive ? "yes" : "no",
   };
 }
+
+/** The client / lead importers' opt-in: fire Lead created / Client created for the new records. */
+export const IMPORT_AUTOMATIONS_OPTION = {
+  label: "Run automations for imported records",
+  hint: "New leads fire Lead created and new active clients fire Client created — your Communication Automations and Zapier run as if each was added by hand. Off by default; records that match an existing client never fire.",
+} as const;

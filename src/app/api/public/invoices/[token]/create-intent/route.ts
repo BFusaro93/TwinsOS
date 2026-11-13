@@ -8,7 +8,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { z } from "zod";
-import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { createPaymentIntentNotCanceled } from "@/lib/stripe/idempotency";
 import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { refuseIfChargeInFlight, ensureIntentCustomer, cancelMicrodepositIntents } from "@/lib/stripe/duplicate-charge";
 import { reuseOrCancelOpenIntent, rememberOpenIntent } from "@/lib/stripe/open-intent";
@@ -198,7 +198,7 @@ export async function POST(
     balance_cents: String(invoice.balance_cents),
     fee_cents: String(feeCents),
   };
-  const reused = await reuseOrCancelOpenIntent({
+  const { reusable: reused, supersededIds } = await reuseOrCancelOpenIntent({
     stripe,
     connectedAccountId: org.stripe_connect_account_id,
     db: supabase,
@@ -222,7 +222,8 @@ export async function POST(
   // Created directly on the org's connected account (a "direct charge") so the
   // funds land in their own Stripe balance/payouts, never the platform's —
   // same as every other crm_invoice payment entry point (see create-intent.ts).
-  const paymentIntent = await stripe.paymentIntents.create(
+  const paymentIntent = await createPaymentIntentNotCanceled(
+    stripe,
     {
       amount: totalChargeCents,
       currency: "usd",
@@ -236,7 +237,9 @@ export async function POST(
     },
     {
       stripeAccount: org.stripe_connect_account_id,
-      idempotencyKey: chargeIdempotencyKey(["crm_invoice_public", invoice.id, totalChargeCents, paymentMethod]),
+      // The intents just canceled are part of the key, so switching card ->
+      // bank -> card inside the window never gets a canceled intent back.
+      keyParts: ["crm_invoice_public", invoice.id, totalChargeCents, paymentMethod, ...supersededIds],
     }
   );
   await rememberOpenIntent(supabase, invoice.org_id, [invoice.id], paymentIntent.id);

@@ -100,6 +100,7 @@ export async function resolveEmailRecipients(
       .from("client_contacts")
       .select("email")
       .eq("client_id", params.clientId)
+      .eq("org_id", params.orgId)
       .eq("ok_to_email", true)
       .is("deleted_at", null);
     for (const contact of contacts ?? []) addEmail(contact.email);

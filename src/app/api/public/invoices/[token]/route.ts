@@ -39,17 +39,6 @@ export async function GET(
     return NextResponse.json({ error: "This invoice link has expired" }, { status: 410 });
   }
 
-  // Records the FIRST view only (only fires while still null) — awaited
-  // rather than fire-and-forget since a serverless function can be frozen
-  // the instant the response is returned, before an unawaited write lands.
-  if (!shareToken.viewed_at) {
-    await supabase
-      .from("invoice_share_tokens")
-      .update({ viewed_at: new Date().toISOString() })
-      .eq("id", shareToken.id)
-      .is("viewed_at", null);
-  }
-
   const { data: inv, error: invErr } = await supabase
     .from("crm_invoices")
     .select(`
@@ -63,8 +52,24 @@ export async function GET(
     .is("deleted_at", null)
     .single();
 
-  if (invErr || !inv) {
+  // A draft isn't issued yet (it may still change, and create-intent refuses
+  // to take payment on it), so its link shows nothing until it is sent or
+  // printed — same "not found" as a bad token, so a draft's existence isn't
+  // confirmed either.
+  if (invErr || !inv || inv.status === "draft") {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  }
+
+  // Records the FIRST view only (only fires while still null) — awaited
+  // rather than fire-and-forget since a serverless function can be frozen
+  // the instant the response is returned, before an unawaited write lands.
+  // After the draft check, so opening a draft's link doesn't count as viewed.
+  if (!shareToken.viewed_at) {
+    await supabase
+      .from("invoice_share_tokens")
+      .update({ viewed_at: new Date().toISOString() })
+      .eq("id", shareToken.id)
+      .is("viewed_at", null);
   }
 
   const { data: org } = await supabase

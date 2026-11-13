@@ -434,16 +434,33 @@ export function ReportCenterGuide() {
           </li>
           <li>
             <strong>Paid time is the shift.</strong> Each person&apos;s day is clock-in at the shop to
-            clock-out at the shop, less lunch and unpaid pauses (whether a job pause is paid follows
-            the company setting, or the visit&apos;s own override). A job&apos;s pause comes off a
-            person only up to the time they were on that job, never more. The <strong>On jobs</strong> column
+            clock-out at the shop, less lunch and unpaid pauses. Whether a job pause is paid follows
+            the visit&apos;s own override when the office set one, otherwise the company&apos;s
+            &ldquo;Crew pauses are unpaid&rdquo; setting <em>as it was when that person&apos;s day
+            ended</em> &mdash; each day keeps the setting it ended under, so changing it later only
+            affects days ended after the change and never re-prices a past or locked pay period. A
+            job&apos;s pause comes off a person only up to the time they were on that job, never more.
+            A punch after midnight on a shift that started the evening before (storm work) counts
+            on the day the shift started. The <strong>On jobs</strong> column
             is the part of that day spent on stops &mdash; the same punches Job Costing uses &mdash; so
             the gap is drive and shop time. If nobody tapped Start Day for a person, their job punches
             are used instead and the day is flagged.
           </li>
           <li>
-            <strong>Totals by person.</strong> One row per employee with Day hours, On jobs, Extra and
-            Total. Click a row to open the day-by-day detail.
+            <strong>Totals by person.</strong> One row per employee with Day hours, On jobs, Extra,
+            Total, <strong>Regular</strong> and <strong>OT</strong>. Click a row to open the day-by-day
+            detail, which shows each day&apos;s regular and overtime hours too.
+          </li>
+          <li>
+            <strong>Overtime.</strong> Each person&apos;s Total is split into Regular and OT hours by
+            your company&apos;s overtime rule, set by an admin in{" "}
+            <strong>Settings → Organization → Overtime</strong>: either hours over a weekly limit
+            (default 40) in a Monday&ndash;Sunday week, or hours over a daily limit (default 8) in one
+            day. The rule in use is printed above the table. A day&apos;s hours are its Total &mdash;
+            day hours (or your override) plus Extra hours. With the weekly rule, days earlier in the
+            same week count toward the limit even when your period starts mid-week, and the overtime
+            lands on the day the limit is passed. Overtime hours are reported, not priced: apply the
+            overtime pay rate in your payroll system.
           </li>
           <li>
             <strong>Correct any day.</strong> In the detail, change the <strong>clock-in and
@@ -469,8 +486,9 @@ export function ReportCenterGuide() {
           </li>
           <li>
             <strong>Export.</strong> The <strong>Export</strong> menu has Excel (a Totals sheet plus a
-            Daily sheet), CSV of totals by employee, CSV of daily detail, and PDF. Hours are numbers,
-            so Excel and payroll uploads can add them up. The totals include a{" "}
+            Daily sheet), CSV of totals by employee, CSV of daily detail, and PDF. Every export has{" "}
+            <strong>Regular Hours</strong> and <strong>OT Hours</strong> columns, per person and per
+            day. Hours are numbers, so Excel and payroll uploads can add them up. The totals include a{" "}
             <strong>Days to Review</strong> count per person: days with a shift that was never ended
             (open) or with job time but no Start Day (no shift), where hours may be understated or
             missing. The PDF prints the totals by employee first, then a separate table for each
@@ -481,7 +499,12 @@ export function ReportCenterGuide() {
             <strong>Lock payroll through</strong> at the top of the tab to its last day and taps{" "}
             <strong>Lock</strong>. From then on nothing dated on or before that day can change
             &mdash; day shifts, job punches and corrections alike, whether from Payroll, the dispatch
-            board&apos;s Edit Job Times or the crew app. Locked days show a <em>Locked</em> badge and
+            board&apos;s Edit Job Times or the crew app. The pay-related parts of a visit on a locked
+            day are locked too: its pause minutes, whether its pause is paid, and its clock-in and
+            clock-out times (a visit counts as locked when it is scheduled on or before the lock date
+            or carries a crew punch from a locked day). A job punch is dated the way Payroll pays it,
+            so a 1&nbsp;a.m. punch on a storm shift that started the evening before is locked with
+            that earlier day. Locked days show a <em>Locked</em> badge and
             can&apos;t be edited; anyone who tries is told &ldquo;Payroll is locked through &hellip;;
             ask an admin to move the lock date&rdquo;. The lock date must be before today. To fix a
             locked day, an admin moves the lock back (<strong>Move lock</strong>) or taps{" "}
@@ -497,8 +520,8 @@ export function ReportCenterGuide() {
           Someone marked <em>Not working</em> in Edit Crew is skipped. Someone deactivated or taken
           off the crew partway through a day still has that day&apos;s shift closed by End Day, and
           the office can still correct the punches they already had. Every change to a shift and
-          every correction made here is kept in the audit history. Payroll doesn&apos;t calculate
-          overtime &mdash; do that in your payroll system.
+          every correction made here is kept in the audit history. Payroll reports regular and
+          overtime hours but not pay amounts &mdash; apply pay rates in your payroll system.
         </Callout>
       </Section>
 

@@ -4,7 +4,20 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { alreadyBilledReason, billedInPeriod, billingAnchorStamp, currentPeriodBillingDate, planContractBilling, planFirstPeriodProration, prorationPending, termSkipReason } from "@/lib/contract-billing";
+import {
+  alreadyBilledReason,
+  billedInPeriod,
+  billingAnchorStamp,
+  currentPeriodBillingDate,
+  cycleBilledBy,
+  normalizeBillingFrequency,
+  planContractBilling,
+  planFirstPeriodProration,
+  prorationPending,
+  termSkipReason,
+  type ContractCycle,
+  type ContractInvoiceRef,
+} from "@/lib/contract-billing";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { getMyTimeZone, getOrgTimeZone } from "@/lib/time/org-timezone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
@@ -242,10 +255,11 @@ export function contractToCsvRow(c: CRMContract): string[] {
  * (ambiguous names are skipped, not guessed). A row whose client + title + start date already
  * exists is skipped so re-importing a file doesn't double up. Imports don't fire automations.
  *
- * Imported contracts were billed up to now by the system they came from, so a contract whose
- * start date is already past is marked as billed for the period in progress (last_billed_date =
- * that period's billing date) unless the file gives its own lastBilledDate — otherwise the
- * first cron run would invoice the current period a second time.
+ * Imported signed/active contracts were billed up to now by the system they came from, so each
+ * is marked as billed for the period in progress (last_billed_date = that period's billing
+ * date; with no start date the period is counted from the import day) unless the file gives its
+ * own lastBilledDate — otherwise the first cron run would invoice the current period a second
+ * time.
  */
 export function useBulkImportContracts() {
   const qc = useQueryClient();
@@ -331,9 +345,12 @@ export function useBulkImportContracts() {
           lastBilledDate = normalizeCsvDate(r.lastBilledDate);
           if (!lastBilledDate) warnings.push({ row: rowNo, reason: `lastBilledDate "${r.lastBilledDate.trim()}" isn't a valid date (use YYYY-MM-DD or M/D/YYYY) — ignored` });
         }
-        if (!lastBilledDate && startDate && startDate < orgTodayStr) {
+        // A contract imported as signed/active was billing in the system it came from: mark the
+        // period in progress billed (anchored on today when the file has no start date) so the
+        // first run doesn't bill it again. Draft/sent/ended contracts weren't billing — no seed.
+        if (!lastBilledDate && (status === "signed" || status === "active")) {
           lastBilledDate = currentPeriodBillingDate(
-            { billing_frequency: billingFrequency, billing_day_of_month: billingDayOfMonth, bill_month_in_advance: billMonthInAdvance, start_date: startDate },
+            { billing_frequency: billingFrequency, billing_day_of_month: billingDayOfMonth, bill_month_in_advance: billMonthInAdvance, start_date: startDate, created_at: orgTodayStr },
             orgTodayDate,
           );
         }
@@ -662,7 +679,7 @@ export function useUpdateContractStatus() {
       // entirely so re-marking an already-signed contract as "signed" can't
       // overwrite signed_at/signed_by a second time.
       if (currentStatus === status) {
-        return { clientId: undefined as string | undefined, status, skipped: true as const };
+        return { clientId: undefined as string | undefined, status, previousStatus: currentStatus, skipped: true as const };
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -683,7 +700,7 @@ export function useUpdateContractStatus() {
         await cancelFutureContractVisits(supabase, id, data.org_id as string);
       }
 
-      return { clientId: data?.client_id as string | undefined, status, skipped: false as const };
+      return { clientId: data?.client_id as string | undefined, status, previousStatus: currentStatus ?? null, skipped: false as const };
     },
     onSuccess: (data) => {
       if (data.skipped) return;
@@ -737,12 +754,12 @@ async function createProratedFirstInvoice(
       sales_rep_id: contract.sales_rep_id ?? null,
       description: `${baseDescription}\n${stub.label}\n${stub.formula}`,
       po_number: contract.po_number ?? null,
-      // No later than the period's last day: (contract_id, invoice_date) is unique, so a stub
-      // dated today could block the regular invoice dated today.
-      invoice_date: orgToday < stub.periodEnd ? orgToday : stub.periodEnd,
+      // Dated today, even when the stub period has already ended (a contract signed late):
+      // back-dating it to the period's last day made it born overdue. The per-date unique index
+      // covers regular contract invoices only, so this can share a date with today's regular one.
+      invoice_date: orgToday,
       terms: invoiceTerms,
-      // Terms run from the invoice date, which is clamped above, not from today.
-      due_date: computeDueDate(orgToday < stub.periodEnd ? orgToday : stub.periodEnd, invoiceTerms),
+      due_date: computeDueDate(orgToday, invoiceTerms),
       status: "draft",
       subtotal_cents: stub.amountCents,
       total_cents: stub.amountCents,
@@ -753,7 +770,7 @@ async function createProratedFirstInvoice(
     .select("id")
     .single();
   if (invErr || !invoice) {
-    return { contractId, status: "skipped", reason: invErr?.code === "23505" ? "already billed for this date" : (invErr?.message ?? "insert failed") };
+    return { contractId, status: "skipped", reason: invErr?.code === "23505" ? "prorated first period already billed" : (invErr?.message ?? "insert failed") };
   }
   const { error: liErr } = await supabase.from("crm_invoice_line_items").insert({
     invoice_id: invoice.id,
@@ -808,7 +825,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, billing_anchor_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, clients!inner(deleted_at, default_terms, status)")
+          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, billing_anchor_date, reactivated_at, signed_at, created_at, start_billing_mode, first_period_prorated_at, clients!inner(deleted_at, default_terms, status)")
           .eq("id", contractId)
           .is("clients.deleted_at", null)
           .is("deleted_at", null)
@@ -901,10 +918,12 @@ export function useGenerateContractInvoices() {
         let existingQuery = (supabase as any)
           .from("crm_invoices")
           .select("id")
-          .eq("client_id", contract.client_id)
+          // Contract only: a contract moved to another client keeps its billed periods.
           .eq("contract_id", contract.id)
-          // The prorated stub is its own invoice, not this period's regular one.
+          // The prorated stub and a missed-cycles catch-up are their own invoices,
+          // not this period's regular one.
           .is("proration_period_start", null)
+          .is("catch_up_period_start", null)
           // A source voided by Consolidate Invoices still counts as billed: its charge lives on
           // the consolidated invoice, which carries no contract_id.
           .or("deleted_at.is.null,consolidated_into_id.not.is.null")
@@ -913,7 +932,22 @@ export function useGenerateContractInvoices() {
         // the contract at all means it's been billed.
         if (plan.periodStart) existingQuery = existingQuery.gte("invoice_date", plan.periodStart);
         if (plan.periodEnd) existingQuery = existingQuery.lte("invoice_date", plan.periodEnd);
-        const { data: existing } = await existingQuery.maybeSingle();
+        let { data: existing } = await existingQuery.maybeSingle();
+        // A missed-cycles catch-up invoice whose span holds this cycle also bills it.
+        if (!existing && plan.periodStart && plan.periodEnd) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: catchUp } = await (supabase as any)
+            .from("crm_invoices")
+            .select("id")
+            .eq("contract_id", contract.id)
+            .not("catch_up_period_start", "is", null)
+            .lte("catch_up_period_start", plan.periodEnd)
+            .gte("catch_up_period_end", plan.periodStart)
+            .or("deleted_at.is.null,consolidated_into_id.not.is.null")
+            .limit(1)
+            .maybeSingle();
+          existing = catchUp;
+        }
         if (existing) {
           results.push({ contractId, status: "skipped", reason: alreadyBilledReason(plan) });
           continue;
@@ -1036,6 +1070,260 @@ export function useGenerateContractInvoices() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-contracts"] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+    },
+  });
+}
+
+// ── missed cycles, cancel clean-up, held visits ─────────────────────────────────
+
+/** The contract columns the missed-cycles prompt reads (see unbilledContractCycles). */
+export const MISSED_CYCLE_CONTRACT_COLUMNS =
+  "id, client_id, status, is_active, auto_generate, start_date, end_date, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at, last_billed_date, billing_anchor_date, reactivated_at, monthly_amount_cents, monthly_amounts";
+
+/**
+ * Every invoice on the contract, as the "already billed" checks read them —
+ * deleted ones included (a source merged by Consolidate Invoices still counts)
+ * and void ones included (the billing paths count them too). See cycleBilledBy.
+ */
+export async function fetchContractInvoiceRefs(contractId: string): Promise<ContractInvoiceRef[]> {
+  const supabase = createClient();
+  return fetchAllRows<ContractInvoiceRef>(() =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("crm_invoices")
+      .select("id, invoice_date, deleted_at, consolidated_into_id, proration_period_start, catch_up_period_start, catch_up_period_end")
+      .eq("contract_id", contractId)
+      .or("deleted_at.is.null,consolidated_into_id.not.is.null")
+      .order("id")
+  );
+}
+
+/**
+ * Bills EARLIER missed cycles of a contract (signed or activated late) on one
+ * catch-up invoice dated today: one line per cycle, its service date the
+ * cycle's start. The invoice carries catch_up_period_start/_end, so the
+ * billing paths never mistake it for the current cycle's regular invoice.
+ * last_billed_date moves up to the last cycle billed (never back), and a
+ * quarterly/annual contract's cycle grid is pinned (billing_anchor_date) the
+ * way its first regular invoice would pin it. The cycle the daily run bills
+ * next is NOT billed here — that goes through Create Invoices.
+ */
+export function useBillContractCatchUp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ contractId, cycles }: { contractId: string; cycles: ContractCycle[] }): Promise<GenerateInvoicesResult> => {
+      const supabase = createClient();
+      const ordered = [...cycles].filter((c) => !c.isCurrent && c.amountCents > 0).sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+      if (ordered.length === 0) return { contractId, status: "skipped", reason: "no missed cycles to bill" };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: contract, error: fetchErr } = await (supabase as any)
+        .from("crm_contracts")
+        .select("id, org_id, client_id, title, status, po_number, sales_rep_id, invoice_line_items, billing_frequency, last_billed_date, billing_anchor_date, clients!inner(deleted_at, default_terms, status)")
+        .eq("id", contractId)
+        .is("deleted_at", null)
+        .single();
+      if (fetchErr || !contract) return { contractId, status: "skipped", reason: "contract not found" };
+      if (contract.status !== "signed" && contract.status !== "active") {
+        return { contractId, status: "skipped", reason: `contract is ${contract.status}, not signed/active` };
+      }
+      const clientStatus = (contract.clients as { status?: string | null; deleted_at?: string | null } | null)?.status ?? null;
+      if (clientStatus === "cancelled" || clientStatus === "inactive" || clientStatus === "lost" || clientStatus === "lead") {
+        return { contractId, status: "skipped", reason: `client is ${clientStatus}` };
+      }
+      // Re-check against what is billed NOW (a second tab, the daily run).
+      const refs = await fetchContractInvoiceRefs(contractId);
+      const toBill = ordered.filter((c) => !cycleBilledBy(c, refs));
+      if (toBill.length === 0) return { contractId, status: "skipped", reason: "those cycles are already billed" };
+
+      const orgToday = todayInZone(await getOrgTimeZone(supabase, contract.org_id));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: orgTermsRow } = await (supabase as any)
+        .from("organizations").select("default_billing_terms").eq("id", contract.org_id).maybeSingle();
+      const terms = resolveInvoiceTerms(contract.clients?.default_terms, orgTermsRow?.default_billing_terms);
+      const lineItems = (contract.invoice_line_items ?? []) as string[];
+      const baseName = lineItems.length > 0 ? lineItems.join(", ") : contract.title;
+      const baseDescription = lineItems.length > 0 ? lineItems.join("\n") : contract.title;
+      const total = toBill.reduce((sum, c) => sum + c.amountCents, 0);
+      const first = toBill[0]!;
+      const last = toBill[toBill.length - 1]!;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: invoice, error: invErr } = await (supabase as any)
+        .from("crm_invoices")
+        .insert({
+          client_id: contract.client_id,
+          contract_id: contract.id,
+          sales_rep_id: contract.sales_rep_id ?? null,
+          description: `${baseDescription}\nMissed billing cycles: ${toBill.map((c) => cycleShortLabel(c)).join(", ")}`,
+          po_number: contract.po_number ?? null,
+          invoice_date: orgToday,
+          terms,
+          due_date: computeDueDate(orgToday, terms),
+          status: "draft",
+          subtotal_cents: total,
+          total_cents: total,
+          balance_cents: total,
+          catch_up_period_start: first.periodStart,
+          catch_up_period_end: last.periodEnd,
+        })
+        .select("id")
+        .single();
+      if (invErr || !invoice) {
+        return { contractId, status: "skipped", reason: invErr?.code === "23505" ? "those cycles are already on a catch-up invoice" : (invErr?.message ?? "insert failed") };
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert(
+        toBill.map((c, i) => ({
+          invoice_id: invoice.id,
+          name: baseName,
+          description: `${baseDescription} — ${cycleShortLabel(c)}`,
+          qty: 1,
+          rate_cents: c.amountCents,
+          total_cents: c.amountCents,
+          service_date: c.cycleStart,
+          is_taxable: false,
+          sort_order: i + 1,
+        }))
+      );
+      if (liErr) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("crm_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", invoice.id);
+        return { contractId, status: "skipped", reason: `line item insert failed: ${liErr.message}` };
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: numErr } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: invoice.id });
+
+      const frequency = normalizeBillingFrequency(contract.billing_frequency);
+      const newLast = contract.last_billed_date && contract.last_billed_date > last.cycleStart ? contract.last_billed_date : last.cycleStart;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from("crm_contracts")
+        .update({
+          last_billed_date: newLast,
+          ...(!contract.billing_anchor_date && (frequency === "quarterly" || frequency === "annual") ? { billing_anchor_date: first.cycleStart } : {}),
+        })
+        .eq("id", contractId);
+      return {
+        contractId,
+        status: "created",
+        reason: numErr ? `invoice number not assigned (${numErr.message})` : undefined,
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-contracts"] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+    },
+  });
+}
+
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Sep 2026", "Aug – Oct 2026", "Oct 20, 2026" (weekly). */
+export function cycleShortLabel(c: Pick<ContractCycle, "frequency" | "periodStart" | "periodEnd">): string {
+  const [sy, sm, sd] = c.periodStart.split("-").map(Number);
+  const [ey, em] = c.periodEnd.split("-").map(Number);
+  if (c.frequency === "weekly" || c.frequency === "biweekly") return `${c.frequency === "weekly" ? "week" : "2 weeks"} of ${SHORT_MONTHS[sm - 1]} ${sd}, ${sy}`;
+  if (c.frequency === "monthly") return `${SHORT_MONTHS[sm - 1]} ${sy}`;
+  return `${SHORT_MONTHS[sm - 1]}${sy !== ey ? ` ${sy}` : ""} – ${SHORT_MONTHS[em - 1]} ${ey}`;
+}
+
+/** A contract draft invoice dated after the day the contract is cancelled. */
+export interface ContractFutureDraft {
+  id: string;
+  invoiceNumber: number | null;
+  invoiceDate: string;
+  totalCents: number;
+  clientId: string;
+}
+
+/**
+ * The contract's DRAFT invoices dated after today (org calendar) — what "bill
+ * 1 month in advance" (or an early Create Invoices) already raised for time
+ * after the cancellation. The cancel dialog offers to void them.
+ */
+export async function fetchContractFutureDrafts(contractId: string): Promise<ContractFutureDraft[]> {
+  const supabase = createClient();
+  const today = todayInZone(await getMyTimeZone(supabase));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from("crm_invoices")
+    .select("id, invoice_number, invoice_date, total_cents, client_id")
+    .eq("contract_id", contractId)
+    .eq("status", "draft")
+    .is("deleted_at", null)
+    .gt("invoice_date", today)
+    .order("invoice_date");
+  if (error) throw error;
+  return ((data ?? []) as { id: string; invoice_number: number | null; invoice_date: string; total_cents: number | null; client_id: string }[]).map((r) => ({
+    id: r.id,
+    invoiceNumber: r.invoice_number,
+    invoiceDate: r.invoice_date,
+    totalCents: r.total_cents ?? 0,
+    clientId: r.client_id,
+  }));
+}
+
+/**
+ * After a contract's invoices were voided: point last_billed_date back at the
+ * latest cycle it still bills (live, non-void regular or catch-up invoice), so
+ * "billed through" stops claiming the voided cycles are paid for — visits in
+ * them then bill per visit.
+ */
+export function useResyncContractLastBilled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (contractId: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_invoices")
+        .select("invoice_date, catch_up_period_end")
+        .eq("contract_id", contractId)
+        .is("deleted_at", null)
+        .neq("status", "void")
+        .is("proration_period_start", null);
+      if (error) throw error;
+      let latest: string | null = null;
+      for (const r of (data ?? []) as { invoice_date: string; catch_up_period_end: string | null }[]) {
+        const d = r.catch_up_period_end ?? r.invoice_date;
+        if (!latest || d > latest) latest = d;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updErr } = await (supabase as any)
+        .from("crm_contracts")
+        .update({ last_billed_date: latest })
+        .eq("id", contractId);
+      if (updErr) throw updErr;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contracts"] }),
+  });
+}
+
+export interface ReleaseHeldVisitsResult {
+  visits: number;
+  invoiced: number;
+}
+
+/**
+ * Re-runs visit billing for completed, not-yet-invoiced visits on the
+ * contract's jobs — the visits held "pending contract" while it was a draft /
+ * sent. Called after the contract is signed (its products' overage bills; the
+ * services are now inside the contract price) or cancelled without ever being
+ * signed (the visits bill per visit like any other work). Server side:
+ * /api/crm/contracts/[id]/release-held-visits.
+ */
+export function useReleaseHeldContractVisits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (contractId: string): Promise<ReleaseHeldVisitsResult> => {
+      const res = await fetch(`/api/crm/contracts/${contractId}/release-held-visits`, { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as Partial<ReleaseHeldVisitsResult> & { error?: string };
+      if (!res.ok) throw new Error(body.error ?? "Couldn't bill the visits held for this contract");
+      return { visits: body.visits ?? 0, invoiced: body.invoiced ?? 0 };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["crm-jobs"] });
     },
   });
 }

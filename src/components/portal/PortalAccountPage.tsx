@@ -9,6 +9,7 @@ import { useRemovePortalPaymentMethod, useSetPortalAutopay } from "@/lib/hooks/u
 const CONTACT_TYPES = [
   "Owner",
   "Primary",
+  "Billing",
   "Spouse",
   "Property Manager",
   "District Manager",

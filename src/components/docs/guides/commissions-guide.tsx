@@ -126,7 +126,10 @@ export function CommissionsGuide() {
           For rules earned <em>when paid</em>, each payment applied to the invoice earns its share on the
           payment date; refunds reduce what was applied. Only money actually received counts: account
           credits and AR write-offs applied to an invoice earn no commission. Rules earned <em>when invoiced</em> pay on the
-          invoice date for any invoice that has left draft and isn&apos;t void.
+          invoice date for any invoice that has left draft and isn&apos;t void, on the part of the invoice that
+          isn&apos;t settled by an AR write-off or an account credit (such as a goodwill credit): an invoice
+          written off in full earns nothing, and one with a $100 credit on a $400 invoice earns on $300 (before
+          tax).
         </p>
         <Callout>
           Every invoice line must name a service — that is what lets revenue and commission land in the
@@ -149,7 +152,8 @@ export function CommissionsGuide() {
         </p>
         <p>
           <strong>Refunds and voids after a statement.</strong> A statement never changes after it is created, so
-          if money is later refunded, a payment is deleted, or an invoice is voided or edited down, the earlier
+          if money is later refunded, a payment is deleted, or an invoice is voided or edited down — or, for rules
+          earned when invoiced, its balance is settled by an AR write-off or an account credit — the earlier
           statement keeps its original amount. The shortfall is taken back on the rep&apos;s <em>next</em>
           statement as an <strong>Adjustment</strong> line with a negative amount, at the rate the original line
           earned. It is added once per change: a further refund adds only the extra difference, and if the
@@ -159,7 +163,7 @@ export function CommissionsGuide() {
           matching positive adjustment. An adjustment is not tied to the period you pick, and a statement can
           be created for an adjustment alone. Voiding a statement releases its adjustments along with its lines.
           Before you create a statement, the rep&apos;s card on the Earnings tab shows <em>Includes $X in
-          adjustments for refunds/voids since the last statement</em>, and a Pending adjustments table lists
+          adjustments for refunds, voids and write-offs since the last statement</em>, and a Pending adjustments table lists
           each line. On the statement, adjustment lines carry an <strong>Adjustment</strong> badge and a link to
           the invoice, with negative amounts in red. If adjustments outweigh new earnings the statement total is
           negative and is labeled <em>owed back</em>; it is an amount to carry against the rep&apos;s future pay.

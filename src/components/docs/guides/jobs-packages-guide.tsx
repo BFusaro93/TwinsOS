@@ -575,10 +575,20 @@ export function JobsPackagesGuide() {
         <p>
           <strong>Contracts.</strong> A renewal stays linked to last season&apos;s contract only if that
           contract is still active and covers the whole renewed program, from its first step to its
-          last — a contract-linked package is billed inside the contract and gets no invoices of its
-          own, so a contract ending mid-season would leave the later steps billed nowhere. Otherwise the window says so and the
+          last — a contract-linked package&apos;s services are billed inside the contract and get no
+          invoices of their own, so a contract ending mid-season would leave the later steps billed nowhere. Otherwise the window says so and the
           renewal is not linked, which means it bills on its own on the client&apos;s invoice frequency
           — link the renewed contract on the new job if it should bill under one.
+        </p>
+        <p>
+          <strong>Products on contract-linked jobs and packages.</strong> The contract covers the
+          services, and materials follow each product&apos;s <strong>In contract</strong> checkbox on the
+          job&apos;s Products table (on by default): ticked, only the quantity used above the planned
+          amount is billed on the visit&apos;s invoice (10 bags planned, 12 used bills 2); unticked, the
+          full quantity is billed. Chemical-program products work the same way. The job&apos;s contract
+          picker shows each contract&apos;s status; picking a Draft or Sent one warns that completed
+          visits are held &mdash; not invoiced &mdash; until the contract is signed (then it covers them)
+          or cancelled (then they bill per visit). Cancelled contracts aren&apos;t offered.
         </p>
         <p>
           <strong>Raising prices.</strong> Rates are copied as they were unless you fill in{" "}

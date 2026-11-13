@@ -9,7 +9,7 @@ import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-con
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee, encodeAllocations, MAX_ALLOCATION_METADATA_LENGTH } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
-import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { createPaymentIntentNotCanceled } from "@/lib/stripe/idempotency";
 import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { refuseIfChargeInFlight, ensureIntentCustomer, cancelMicrodepositIntents } from "@/lib/stripe/duplicate-charge";
 import { reuseOrCancelOpenIntent, rememberOpenIntent } from "@/lib/stripe/open-intent";
@@ -204,7 +204,7 @@ export async function POST(request: Request) {
       fee_cents: String(feeCents),
     };
     // One open form per invoice — see the single-invoice route.
-    const reused = await reuseOrCancelOpenIntent({
+    const { reusable: reused, supersededIds } = await reuseOrCancelOpenIntent({
       stripe,
       connectedAccountId: org.stripe_connect_account_id,
       db: service,
@@ -225,7 +225,8 @@ export async function POST(request: Request) {
       });
     }
 
-    const paymentIntent = await stripe.paymentIntents.create(
+    const paymentIntent = await createPaymentIntentNotCanceled(
+      stripe,
       {
         amount: totalChargeCents,
         currency: "usd",
@@ -239,7 +240,9 @@ export async function POST(request: Request) {
       },
       {
         stripeAccount: org.stripe_connect_account_id,
-        idempotencyKey: chargeIdempotencyKey(["crm_invoice_multi_portal", clientId, encoded, totalChargeCents, paymentMethod]),
+        // The intents just canceled are part of the key, so switching card ->
+        // bank -> card inside the window never gets a canceled intent back.
+        keyParts: ["crm_invoice_multi_portal", clientId, encoded, totalChargeCents, paymentMethod, ...supersededIds],
       }
     );
     await rememberOpenIntent(service, ctx.orgId, stillOwed.map((a) => a.invoiceId), paymentIntent.id);

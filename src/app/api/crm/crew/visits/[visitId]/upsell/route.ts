@@ -252,6 +252,9 @@ export async function POST(
       status: "open",
       ref_id: ticket.id,
       ref_table: "crm_tickets",
+      // Required for crew: client_activity's crew INSERT policy only accepts
+      // rows the crew login itself is recorded as writing.
+      created_by: user.id,
     });
     if (activityError) {
       logger.error("[crew/upsell] client activity insert failed, suggestion kept", {

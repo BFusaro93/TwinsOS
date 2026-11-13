@@ -33,6 +33,7 @@ import {
   previewProjectCancel,
   cancelProjectVisitsRemote,
   projectCancelConfirmOptions,
+  projectReopenConfirmOptions,
   projectVisitsConfirmOptions,
   type ProjectCancelPreview,
 } from "@/lib/project-visits-api";
@@ -64,7 +65,14 @@ import {
 import { PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useRequisitions, useAddRequisitionLineItem } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders, useAddPOLineItem } from "@/lib/hooks/use-purchase-orders";
-import { useDeleteProject, useUpdateProject, useArchiveProject, useProjectCostTotal } from "@/lib/hooks/use-projects";
+import {
+  useDeleteProject,
+  useUpdateProject,
+  useArchiveProject,
+  useProjectCostTotal,
+  useReopenCanceledProject,
+  countRestorableMilestones,
+} from "@/lib/hooks/use-projects";
 import {
   useProjectDirectItems,
   useAddProjectDirectItem,
@@ -1260,6 +1268,50 @@ function DetailsTab({
     }
   }
 
+  // Reopening a canceled project asks whether to bring back the pending milestones the cancel
+  // removed (reopen_canceled_project restores and re-balances them in one transaction). Only a
+  // login with the projects key is asked — the RPC needs it; anyone else reopens as before.
+  const { mutate: reopenCanceled, isPending: reopening } = useReopenCanceledProject();
+  const [checkingReopen, setCheckingReopen] = useState(false);
+  async function reopenCanceledProject() {
+    if (reopening || checkingReopen) return;
+    if (!can("sched_add_modify_projects")) {
+      onStatusChange("sold");
+      return;
+    }
+    setCheckingReopen(true);
+    let restorable = 0;
+    try {
+      restorable = await countRestorableMilestones(project.id);
+    } catch {
+      toast.warning("Couldn't check the milestones cancelling removed — reopening without them.");
+    } finally {
+      setCheckingReopen(false);
+    }
+    const restore = restorable > 0 && (await askConfirm(projectReopenConfirmOptions(restorable)));
+    reopenCanceled(
+      { id: project.id, restoreMilestones: restore },
+      {
+        onSuccess: (r) => {
+          if (r.restoredCount > 0) {
+            const adjusted = r.adjustedCents !== 0
+              ? ` — ${formatCurrency(Math.abs(r.adjustedCents))} ${r.adjustedCents > 0 ? "added across them" : "taken off them"} to match the current contract`
+              : "";
+            toast.success(`Project reopened — ${r.restoredCount} milestone${r.restoredCount !== 1 ? "s" : ""} restored${adjusted}`);
+          } else {
+            toast.success("Project reopened");
+          }
+          if (r.unabsorbedCents !== 0) {
+            toast.warning(
+              `${formatCurrency(Math.abs(r.unabsorbedCents))} of the contract change couldn't be taken off the restored milestones — check the billing schedule.`,
+            );
+          }
+        },
+        onError: (e) => toast.error(mutationErrorMessage(e, "Failed to reopen the project")),
+      },
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5 p-6">
       {confirmDialog}
@@ -1296,7 +1348,7 @@ function DetailsTab({
             <Button size="sm" variant="outline" onClick={() => onStatusChange("in_progress")}>Reopen</Button>
           )}
           {status === "canceled" && (
-            <Button size="sm" variant="outline" onClick={() => onStatusChange("sold")}>Reopen</Button>
+            <Button size="sm" variant="outline" onClick={reopenCanceledProject} disabled={reopening || checkingReopen}>Reopen</Button>
           )}
         </div>}
       </div>

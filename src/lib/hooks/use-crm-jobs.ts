@@ -3748,6 +3748,10 @@ export interface CRMJobProduct {
   jobServiceSubitemId: string | null;
   /** Set on per-visit rows (recurring/package sub-item products); null = job-level. */
   visitId: string | null;
+  /** What the office called for when the row was planned (crm_job_products.planned_qty). */
+  plannedQty: number | null;
+  /** On a contract-linked job: bill only the quantity used above plannedQty (true) or all of it (false). */
+  includedInContract: boolean;
 }
 
 function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
@@ -3766,6 +3770,8 @@ function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
     invoiceLineItemId: row.invoice_line_item_id as string | null,
     jobServiceSubitemId: (row.job_service_subitem_id as string | null) ?? null,
     visitId: (row.visit_id as string | null) ?? null,
+    plannedQty: row.planned_qty != null ? Number(row.planned_qty) : null,
+    includedInContract: row.included_in_contract !== false,
   };
 }
 
@@ -3896,6 +3902,33 @@ export function useUpdateCRMJobProduct() {
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', v.jobId] });
+    },
+  });
+}
+
+/**
+ * "Included in contract" on a job product (only meaningful on a job linked to
+ * a contract): included bills just the quantity used above what was planned;
+ * not included bills the full quantity per visit. Only a row not yet on an
+ * invoice can change — the flag is read when the visit is billed.
+ */
+export function useSetJobProductIncludedInContract() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: { id: string; jobId: string; included: boolean }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('crm_job_products')
+        .update({ included_in_contract: p.included })
+        .eq('id', p.id)
+        .is('invoice_line_item_id', null)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error("This material is already on an invoice — remove it from the invoice first.");
+    },
+    onSuccess: (_, v) => {
+      qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
     },
   });
 }

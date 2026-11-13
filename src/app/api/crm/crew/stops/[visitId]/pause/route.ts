@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertOrgWritable } from "@/lib/org-writable";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
@@ -126,6 +127,13 @@ export async function POST(
     .is("clocked_out_at", null)
     .select();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Inside the payroll lock period (a stop left running since a locked day): the
+  // database's own sentence, as a 409.
+  if (error) {
+    return NextResponse.json(
+      { error: error.message, ...(isPayrollLockedError(error.message) ? { code: "payroll_locked" } : {}) },
+      { status: isPayrollLockedError(error.message) ? 409 : 500 }
+    );
+  }
   return NextResponse.json({ visitIds: openIds, visits: data });
 }

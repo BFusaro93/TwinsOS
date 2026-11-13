@@ -401,16 +401,22 @@ export const SA_PARITY_REPORTS: PrebuiltReportDef[] = [
         driveMinutesByCrewDay.set(k, (driveMinutesByCrewDay.get(k) ?? 0) + Math.max(0, Number(d.minutes ?? 0)));
       }
 
-      // Job-costing labor rate: the crew member's burdened $/hr (the same rate
-      // rpt_timesheets' labor cost uses).
+      // Job-costing labor rate per member — the one rule (crm_crew_member_labor_rates:
+      // the member's burden rate, else the employee's hourly rate × the org's labor
+      // burden), the same rate rpt_timesheets and job costing use. Rates are only
+      // returned to Show Wage Burden holders; everyone else gets the hours without cost.
+      const { data: canSeeCost } = await supabase.rpc("has_settings_permission", { p_key: "payroll_show_wage_burden" });
+      const showCost = canSeeCost === true;
       const memberIds = [...new Set(payroll.map((r) => r.crewMemberId))];
       const rateByMember = new Map<string, number>();
-      for (let i = 0; i < memberIds.length; i += 200) {
-        const chunk = memberIds.slice(i, i + 200);
-        const members = await fetchAllRows<{ id: string; labor_burden_cents_per_hour: number | null }>(() =>
-          supabase.from("crm_crew_members").select("id, labor_burden_cents_per_hour").in("id", chunk)
-        );
-        for (const m of members) rateByMember.set(m.id, Number(m.labor_burden_cents_per_hour ?? 0));
+      if (showCost) {
+        for (let i = 0; i < memberIds.length; i += 200) {
+          const { data: rates, error: ratesErr } = await supabase.rpc("crm_crew_member_labor_rates", { p_member_ids: memberIds.slice(i, i + 200) });
+          if (ratesErr) throw new Error(ratesErr.message);
+          for (const m of (rates ?? []) as { crew_member_id: string; rate_cents: number | null }[]) {
+            rateByMember.set(m.crew_member_id, Number(m.rate_cents ?? 0));
+          }
+        }
       }
 
       interface Bucket { hours: number; cost: number }
@@ -451,7 +457,7 @@ export const SA_PARITY_REPORTS: PrebuiltReportDef[] = [
         }
         openPunches += r.openPunches;
         if (services + drivePart + shop + breaks <= 0) continue;
-        if (rate <= 0) noRateResources.add(r.memberName);
+        if (showCost && rate <= 0) noRateResources.add(r.memberName);
 
         const p = periodOf(r.workDate, params.period ?? "");
         const gk = `${r.memberName}|${p.key}`;
@@ -478,7 +484,7 @@ export const SA_PARITY_REPORTS: PrebuiltReportDef[] = [
             minutes: Math.round(g.b[t.key].hours * 60),
             hours: r2(g.b[t.key].hours),
             pct_of_total: totalH > 0 ? Math.round((g.b[t.key].hours / totalH) * 1000) / 10 : 0,
-            cost_cents: Math.round(g.b[t.key].cost),
+            ...(showCost ? { cost_cents: Math.round(g.b[t.key].cost) } : {}),
           }));
         });
 
@@ -492,8 +498,11 @@ export const SA_PARITY_REPORTS: PrebuiltReportDef[] = [
       if (openPunches > 0) {
         flags.push(`${openPunches} job punch(es) are still clocked in and are not counted.`);
       }
-      if (noRateResources.size > 0) {
-        flags.push(`No labor burden rate is set for: ${[...noRateResources].sort().join(", ")} — their cost shows as $0.`);
+      if (showCost && noRateResources.size > 0) {
+        flags.push(`No labor rate is set for: ${[...noRateResources].sort().join(", ")} (no burden rate on the crew member and no hourly rate on the employee) — their cost shows as $0.`);
+      }
+      if (!showCost) {
+        flags.push("Cost is hidden: it needs the Show Wage Burden permission.");
       }
 
       const result = buildResult(
@@ -504,7 +513,7 @@ export const SA_PARITY_REPORTS: PrebuiltReportDef[] = [
           col("minutes", "Minutes", "number", true),
           col("hours", "Hours", "hours"),
           col("pct_of_total", "% of Total", "percent"),
-          col("cost_cents", "Cost", "money"),
+          ...(showCost ? [col("cost_cents", "Cost", "money")] : []),
         ],
         rows,
         [
@@ -513,7 +522,7 @@ export const SA_PARITY_REPORTS: PrebuiltReportDef[] = [
           "Drive Time: drive segments recorded by the member's crew that day (yard to first stop, between stops, last stop to yard). Drive is recorded per crew, not per person, so every member working on that crew that day is credited with the crew's full drive time, capped at the shift time not spent on jobs.",
           "Shop / Other Paid Time: the rest of the paid shift — shop, loading, unrecorded driving or waiting.",
           "Breaks & Lunch (unpaid): unpaid time off the clock inside the day — the shift's recorded break, lunch/breaks on job punches, and unpaid stop pauses. Paid pauses stay inside Time on Services. Breaks carry no cost.",
-          "Cost is hours × the crew member's labor burden rate per hour (the rate on the crew member record, as in the Timesheet report). % of Total is each type's share of that resource's total for the period.",
+          "Cost is hours × the crew member's labor rate per hour: the burden rate on the crew member record, else the employee's hourly rate plus the company labor burden — the same rate the Timesheet report and job costing use. % of Total is each type's share of that resource's total for the period.",
           "Break Down By = All shows the whole date range as one period per resource.",
           ...flags,
         ],

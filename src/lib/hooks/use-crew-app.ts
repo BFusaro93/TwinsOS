@@ -1740,14 +1740,15 @@ export function useSetVisitBreakPaid() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ breakPaid }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      // The server's own sentence: no permission, or "Payroll is locked through …".
+      if (!res.ok) throw await crewRequestError(res, "Failed to update break pay");
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
     },
-    onError: () => toast.error("Failed to update break pay"),
+    onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to update break pay"),
   });
 }
 

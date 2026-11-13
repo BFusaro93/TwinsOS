@@ -15,6 +15,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, isoInZone } from "@/lib/time/zone";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { assertOrgWritable } from "@/lib/org-writable";
+import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 
 const log = logger.child("crew/clock-out");
 
@@ -158,7 +159,8 @@ export async function POST(
   if (isChemicalGateError(error?.message)) {
     return NextResponse.json({ error: "Confirm the chemicals applied before finishing this job.", code: "chemical_confirmation_required" }, { status: 409 });
   }
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // A visit left running since a day inside the payroll lock: the database's own sentence, as a 409.
+  if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
   if (!clockedOut) return NextResponse.json({ error: "Already clocked out" }, { status: 409 });
 
   const transitioned = !alreadyCompleted;

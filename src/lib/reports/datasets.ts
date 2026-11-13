@@ -558,7 +558,9 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "break_minutes", label: "Break (Min)", type: "number" },
       { key: "lunch_minutes", label: "Lunch (Min)", type: "number" },
       { key: "hours", label: "Hours", type: "hours" },
-      { key: "labor_burden_cents_per_hour", label: "Burden / Hr", type: "money", totalable: false },
+      // The labor rate the cost uses (crew member burden rate, else employee hourly × company burden);
+      // blank, like Labor Cost, without the Show Wage Burden permission.
+      { key: "labor_burden_cents_per_hour", label: "Labor Rate / Hr", type: "money", totalable: false },
       { key: "labor_cost_cents", label: "Labor Cost", type: "money" },
     ],
   },

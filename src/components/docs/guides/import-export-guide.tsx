@@ -45,7 +45,7 @@ const DEDUPE_BEHAVIOR: [string, string, string][] = [
   ["Invoices", "client + invoice date + total + description; or, when the file has an invoiceNumber column, client + invoice number + total", "The row is skipped and listed as already existing, so re-running a file (after an error, or by mistake) doesn't bill anyone twice. Each existing invoice absorbs one row, so a file that really contains two identical invoices still imports both the first time. If an invoice's line can't be saved, the half-made invoice is removed and the row is listed as failed; the rest of the file still imports."],
   ["Payments", "client + amount + payment date + reference / check #", "The row is skipped and listed as already recorded. Each existing payment absorbs one row, so two genuinely identical payments in one file both import the first time."],
   ["Employees", "email; rows with no email are matched on full name", "A matched employee is updated with only the cells your file filled in: blank phone, address or hourly rate cells never erase saved values. An employee with no email whose first and last name already exist is skipped as a duplicate. Hourly rate accepts $ and thousands separators."],
-  ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. A contract whose start date has already passed is treated as billed for the period in progress (by the system it came from), so its first invoice here is the next cycle; put a lastBilledDate in the file to set that yourself. Imports don\u2019t fire automations."],
+  ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. A contract imported as signed or active is treated as billed for the period in progress (by the system it came from; counted from the import day when it has no start date), so its first invoice here is the next cycle; put a lastBilledDate in the file to set that yourself. Draft, sent, expired and cancelled contracts weren\u2019t billing, so nothing is marked. Imports don\u2019t fire automations."],
   ["Purchase Orders", "po_number (derived as PO-{year}-{csv PO #})", "The PO is skipped and listed in the failed-rows summary (\u201calready exists\u201d) — not merged, not counted as imported. Existing POs are never overwritten by a re-import."],
 ];
 
@@ -476,6 +476,12 @@ export function ImportExportGuide() {
           </li>
           <li>
             <strong>New tags.</strong> Tags in a client file that aren&apos;t in Settings → Tags yet are added there when your role can edit CRM settings, so you can filter and bulk-tag by them.
+          </li>
+          <li>
+            <strong>Automations for imported clients and leads.</strong> An import doesn&apos;t fire automations on its own. To have new records treated like ones added by hand, tick <strong>Run automations for imported records</strong> on the preview step (it starts unticked every time). New leads then fire <strong>Lead created</strong> and new active clients fire <strong>Client created</strong>, for both Communication Automations and Zapier. Rows that matched an existing client, conversions of existing leads, and records imported as lost, cancelled or inactive fire nothing. A big file&apos;s automations are queued and go out over the next few minutes.
+          </li>
+          <li>
+            <strong>Permissions for client and lead imports.</strong> Creating records needs Add Client / Add Lead, Bulk Create, or Imports. Updating clients that already exist (a matching account number) needs the Clients <em>Allow Edit</em> permission; without it those rows are listed as failed and the rest still import. Linking the new records to their parent accounts is allowed for the person who just imported them.
           </li>
           <li>
             <strong>Leads import report.</strong> The leads import lists every row that failed or matched an existing client, with its line number.

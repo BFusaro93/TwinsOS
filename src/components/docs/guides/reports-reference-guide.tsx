@@ -727,6 +727,7 @@ const SECTIONS: ReportSection[] = [
         description: "Shows individual clock-in/out entries with breaks, hours, and labor cost per employee.",
         notes: [
           "These are job punches (clock-in/out on stops), which feed Job Costing. Paid hours for payroll come from the Start Day / End Day shift on the Report Center's Payroll tab instead, so the two can differ by drive and shop time.",
+          "Labor cost is paid hours × the crew member's labor rate: the burden rate on the crew member record, else the employee's hourly rate plus the company labor burden (the same rate job costing uses). The rate and labor cost are blank for anyone without the Show Wage Burden permission.",
         ],
         filters: "Worked Between, Crew",
       },
@@ -740,7 +741,7 @@ const SECTIONS: ReportSection[] = [
           "Drive Time: drive recorded by the member's crew that day. Drive is recorded per crew, not per person, so each member working on that crew that day is credited with the crew's full drive time, capped at the shift time not spent on jobs.",
           "Shop / Other Paid Time: the rest of the paid shift — shop, loading, unrecorded driving or waiting.",
           "Breaks & Lunch (unpaid): unpaid time off the clock inside the day. Paid pauses stay inside Time on Services. Breaks carry no cost.",
-          "Cost is hours × the crew member's labor burden rate. Days with no Start Day / End Day shift count job punches and recorded drive time only; the report lists how many such days, open shifts and members with no rate it found.",
+          "Cost is hours × the crew member's labor rate: the burden rate on the crew member record, else the employee's hourly rate plus the company labor burden — the same rate the Timesheet report and job costing use. Cost is only shown to admins and roles with the Show Wage Burden permission. Days with no Start Day / End Day shift count job punches and recorded drive time only; the report lists how many such days, open shifts and members with no rate it found.",
         ],
       },
       {

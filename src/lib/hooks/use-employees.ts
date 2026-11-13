@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
-import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
 import { memberWorksOn } from "@/lib/crew/roster-days";
 import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import type { CRMEmployee, CRMCrew, CRMCrewMember, CRMCrewLogin } from "@/types/crm-employees";
@@ -454,6 +453,9 @@ export function useActivateEmployee() {
 
 // ── crews ─────────────────────────────────────────────────────────────────────
 
+/** crm_crew_members columns an end user may read (everything but labor_burden_cents_per_hour). */
+const CREW_MEMBER_COLUMNS = "id, org_id, crew_id, name, role, created_at, days_of_week, employee_id, is_foreman, deleted_at";
+
 export function useCrews(activeOnly = false) {
   return useQuery({
     queryKey: ["crm-crews", { activeOnly }],
@@ -462,14 +464,32 @@ export function useCrews(activeOnly = false) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_crews")
-        .select("*, crm_crew_members(*, crm_employees(first_name, last_name, resource_code)), foreman:foreman_id(first_name, last_name)")
+        // Member columns are listed: labor_burden_cents_per_hour is not
+        // SELECT-able by end users; it comes from the gated RPC below.
+        .select(`*, crm_crew_members(${CREW_MEMBER_COLUMNS}, crm_employees(first_name, last_name, resource_code)), foreman:foreman_id(first_name, last_name)`)
         .is("deleted_at", null)
         .is("crm_crew_members.deleted_at", null)
         .order("name");
       if (activeOnly) q = q.eq("is_active", true);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (q as any);
+      // Burden rates only for Show Wage Burden holders (no rows otherwise — the
+      // field is hidden for them anyway).
+      const [{ data, error }, { data: rates, error: ratesError }] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        q as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).rpc("crm_crew_member_labor_rates", {}),
+      ]);
       if (error) throw error;
+      // Fail rather than show 0: the Team Assignments burden field saves on blur.
+      if (ratesError) throw ratesError;
+      const burdenByMember = new Map<string, number>(
+        ((rates ?? []) as { crew_member_id: string; labor_burden_cents_per_hour: number | null }[])
+          .map((r) => [r.crew_member_id, Number(r.labor_burden_cents_per_hour ?? 0)])
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const crew of data as any[]) {
+        for (const m of crew.crm_crew_members ?? []) m.labor_burden_cents_per_hour = burdenByMember.get(m.id) ?? 0;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data.map(mapCrew)) as import("@/types/crm-employees").CRMCrew[];
     },
@@ -663,6 +683,25 @@ export function useCrewDailyMembersRange(fromDate: string, toDate: string) {
   });
 }
 
+/**
+ * Closes a member's open job punches on every crew but `newCrewId` (null = no
+ * crew today) — server-side (/api/crm/crew/member-moves), which checks the
+ * caller may manage the roster and writes with the service role. Throws the
+ * server's sentence (no permission, payroll locked) so the move is refused
+ * rather than leaving the old crew's punch running.
+ */
+async function closeOpenPunchesForMove(memberId: string, newCrewId: string | null): Promise<void> {
+  const res = await fetch("/api/crm/crew/member-moves", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ memberId, newCrewId }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+    throw new Error(typeof body?.error === "string" ? body.error : "Failed to close the member's open job punches");
+  }
+}
+
 /** Move a crew member onto `crewId` for `workDate` only — replaces any prior override for that day. */
 export function useSetCrewDailyMember() {
   const qc = useQueryClient();
@@ -673,7 +712,7 @@ export function useSetCrewDailyMember() {
       // Moving someone mid-day: close their open job punches on the old crew's
       // visits now (the day shift keeps running; hours are counted once).
       if (workDate === today()) {
-        await closeMemberPunchesOnOtherCrews(supabase, { memberId, newCrewId: crewId, at: new Date().toISOString() });
+        await closeOpenPunchesForMove(memberId, crewId);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
@@ -712,8 +751,8 @@ export function useClearCrewDailyMember() {
         if (rowErr) throw rowErr;
         const r = row as { crew_id: string | null; days_of_week: number[] | null; deleted_at: string | null } | null;
         const resolvedCrewId = r && !r.deleted_at && r.crew_id && memberWorksOn(r.days_of_week, workDate) ? r.crew_id : null;
-        // No crew today: "" matches no visit's crew, so every open job punch closes.
-        await closeMemberPunchesOnOtherCrews(supabase, { memberId, newCrewId: resolvedCrewId ?? "", at: new Date().toISOString() });
+        // No crew today (null): every open job punch closes.
+        await closeOpenPunchesForMove(memberId, resolvedCrewId);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)

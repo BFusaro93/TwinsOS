@@ -105,8 +105,13 @@ export function InvoicingGuide() {
             by hand.
           </li>
           <li>
-            <strong>A contract&apos;s billing cycle.</strong> Any job linked to a contract is billed on
-            that contract&apos;s schedule instead — visit completion never invoices it directly. A daily
+            <strong>A contract&apos;s billing cycle.</strong> The services on a job linked to a contract
+            are billed on that contract&apos;s schedule instead &mdash; visit completion doesn&apos;t invoice
+            them. Its <strong>materials</strong> still bill when the visit is completed: a product marked{" "}
+            <strong>In contract</strong> (the default on a contract job) bills only what was used above
+            its planned quantity, an unmarked one bills in full. While the contract is still a Draft or
+            Sent, completed visits are <strong>held</strong> (nothing invoiced): signing the contract puts
+            them inside it, cancelling it unsigned bills them per visit. A daily
             cron job checks every active contract with auto-generate on, and creates that month&apos;s
             invoice on its configured <code>billing_day_of_month</code> (clamped to the last day of
             a shorter month). A contract can also bill a month <em>in advance</em>, which shifts the
@@ -116,7 +121,10 @@ export function InvoicingGuide() {
             another. A contract never bills before its start date, nor a billing cycle that began
             before it (see the Contracts guide for mid-cycle starts and proration). A contract
             entered or signed a few days after its billing day still has the current cycle billed,
-            with the invoice dated the day it&apos;s created and due from that date.
+            with the invoice dated the day it&apos;s created and due from that date; one signed months
+            after its start date lists every missed cycle and can bill them on one catch-up invoice
+            (see the Contracts guide). A catch-up invoice has one line per missed cycle, each with the
+            cycle&apos;s start as its service date.
           </li>
           <li>
             <strong>Manual creation.</strong> You can always build one by hand from Accounting →
@@ -127,7 +135,8 @@ export function InvoicingGuide() {
           <strong>The manual Invoice buttons follow the same rules.</strong> The dispatch board&apos;s
           visit popup hides its Invoice button &mdash; and the job page&apos;s Invoice button refuses with
           a message &mdash; when the client&apos;s contract covers that work (it bills on the contract&apos;s
-          cycle), for project jobs (billed by milestones) and for snow jobs (billed from Snow Invoicing).
+          cycle) or is still waiting to be signed (the visit is held), for project jobs (billed by
+          milestones) and for snow jobs (billed from Snow Invoicing).
           An invoice made from one of these buttons is dated the day you create it; its lines keep the
           visit&apos;s service date.
         </Callout>
@@ -311,6 +320,15 @@ export function InvoicingGuide() {
             and Clear bounce on the client lifts a bounce once the mailbox works again.
           </li>
           <li>
+            <strong>Billing contacts are copied.</strong> Every contact on the client whose type is{" "}
+            <strong>Billing</strong> and who is marked <strong>OK to email</strong> gets a copy (CC)
+            of the client&apos;s invoice emails &mdash; single sends, Bulk Email and resends from
+            Email Activity &mdash; and of account statements. Each address is copied once, and never
+            when it&apos;s already in the To line. The single-invoice Send dialog lists them in CC so
+            you can take one off for that send; the statement dialog notes that they&apos;re added.
+            To stop copying someone, change their contact type or untick OK to email.
+          </li>
+          <li>
             <strong>Pay Now needs online payments set up.</strong> The emailed invoice carries a{" "}
             <strong>View &amp; Pay Invoice Online</strong> button, and the <code>[paymentlink]</code>{" "}
             merge tag (in invoice emails and invoice automations) renders a <strong>Pay Now</strong>{" "}
@@ -318,6 +336,20 @@ export function InvoicingGuide() {
             <strong>View Invoice</strong> instead and still open the online invoice, the attached
             PDF says &quot;View Online&quot; rather than &quot;View &amp; Pay Online&quot;, and the online
             invoice page shows a note asking the client to contact you to pay instead of a Pay button.
+          </li>
+          <li>
+            <strong>Drafts have no online link.</strong> Downloading the PDF of a draft gives a preview
+            without the &quot;View &amp; Pay Online&quot; link, and a draft&apos;s link (if one exists)
+            shows &quot;not found&quot; until the invoice is sent or printed. Printing a draft marks it
+            Printed and the printout carries the link. Creating a link needs the{" "}
+            <em>Email Invoices</em> or <em>Add/Modify Invoices</em> permission; someone who can only view
+            invoices gets a PDF with the existing link, or none. Crew logins never see invoice links.
+          </li>
+          <li>
+            <strong>Revoking the online link.</strong> If an invoice email went to the wrong person, choose{" "}
+            <strong>Revoke pay link</strong> from the invoice&apos;s &#8942; menu: every link already sent
+            stops working, and the next email or PDF gets a new one. Voiding, merging, consolidating or
+            deleting an invoice revokes its links automatically.
           </li>
           <li>
             <strong>The invoice button in the email.</strong> An invoice button or link you place in

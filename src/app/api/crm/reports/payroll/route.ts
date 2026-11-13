@@ -6,9 +6,13 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
+import { applyOvertime, getOvertimeRule, overtimeComputeRange } from "@/lib/payroll/overtime";
 
 /**
- * GET  /api/crm/reports/payroll?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * GET  /api/crm/reports/payroll?from=YYYY-MM-DD&to=YYYY-MM-DD — rows carry
+ *      regular / overtime hours under the org's overtime rule (returned as
+ *      `overtime`); a weekly rule is computed over whole weeks around the range
+ *      so a pay period starting mid-week still counts the week's earlier days.
  * PUT  /api/crm/reports/payroll — upsert one member-day adjustment.
  *
  * Requires the payroll_report permission (admins always have it). Crew logins
@@ -65,8 +69,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Pick a range of at most ${MAX_RANGE_DAYS} days` }, { status: 400 });
   }
 
-  const rows = await computePayroll(auth.db, auth.orgId, from, to);
-  return NextResponse.json({ from, to, rows });
+  const overtime = await getOvertimeRule(auth.db, auth.orgId);
+  const span = overtimeComputeRange(overtime, from, to);
+  const rows = applyOvertime(await computePayroll(auth.db, auth.orgId, span.from, span.to), overtime)
+    .filter((r) => r.workDate >= from && r.workDate <= to);
+  return NextResponse.json({ from, to, rows, overtime });
 }
 
 export async function PUT(request: Request) {

@@ -14,6 +14,7 @@ import { DEFAULT_TIME_ZONE, SELECTABLE_TIME_ZONES } from "@/lib/time/zone";
 import { ApplyRatesToProjectsDialog } from "@/components/shared/ApplyRatesToProjectsDialog";
 import { ApplyTaxRateToClientsDialog } from "@/components/shared/ApplyTaxRateToClientsDialog";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { parseOvertimeRule, type OvertimeMode } from "@/lib/payroll/overtime";
 
 // General organization settings — name, address, tax rate, and labor rates.
 // Branding (logo/accent color) lives in BrandingTab; the maintenance-request
@@ -79,6 +80,20 @@ export function OrganizationTab() {
   // this is only so the error shows before a round trip.
   const replyToValid = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(replyToDraft.trim());
 
+  // Overtime rule for the Payroll tab (customizations.overtime). Defaults: weekly over 40.
+  const persistedOvertime = parseOvertimeRule(remoteCustomizations);
+  const [otModeDraft, setOtModeDraft] = useState<OvertimeMode>(persistedOvertime.mode);
+  const [otWeeklyDraft, setOtWeeklyDraft] = useState(String(persistedOvertime.weeklyHours));
+  const [otDailyDraft, setOtDailyDraft] = useState(String(persistedOvertime.dailyHours));
+  const otWeekly = Number(otWeeklyDraft);
+  const otDaily = Number(otDailyDraft);
+  const otValid = otModeDraft === "daily"
+    ? Number.isFinite(otDaily) && otDaily > 0 && otDaily <= 24
+    : Number.isFinite(otWeekly) && otWeekly > 0 && otWeekly <= 168;
+  const otDirty =
+    otModeDraft !== persistedOvertime.mode ||
+    (otModeDraft === "weekly" ? otWeekly !== persistedOvertime.weeklyHours : otDaily !== persistedOvertime.dailyHours);
+
   const seeded = useRef(false);
   useEffect(() => {
     if (!remoteSettings || seeded.current) return;
@@ -91,6 +106,10 @@ export function OrganizationTab() {
     if (typeof savedRate === "number") setBreakevenDraft((savedRate / 100).toFixed(2));
     const savedBurdened = (remoteSettings.customizations as Record<string, unknown>)?.burdenedLaborRateCents;
     if (typeof savedBurdened === "number") setBurdenedDraft((savedBurdened / 100).toFixed(2));
+    const savedOvertime = parseOvertimeRule(remoteSettings.customizations);
+    setOtModeDraft(savedOvertime.mode);
+    setOtWeeklyDraft(String(savedOvertime.weeklyHours));
+    setOtDailyDraft(String(savedOvertime.dailyHours));
   }, [remoteSettings, seeded]);
 
   return (
@@ -392,7 +411,7 @@ export function OrganizationTab() {
           </SettingRow>
           <SettingRow
             label="Crew pauses are unpaid"
-            description="When a crew pauses a stop (lunch, a break), that time is deducted from their paid labor cost. Turn off to pay for pauses. Hours worked are always net of pauses. The office can override this per visit on the dispatch board."
+            description="When a crew pauses a stop (lunch, a break), that time is deducted from their pay and paid labor cost. Turn off to pay for pauses. Hours worked are always net of pauses. The office can override this per visit on the dispatch board. Each day keeps the setting it ended under, so a change applies to days ended from now on — past and locked pay periods are not re-priced."
           >
             <Switch
               checked={remoteCustomizations.crewBreaksUnpaid !== false}
@@ -400,6 +419,54 @@ export function OrganizationTab() {
               onCheckedChange={(checked) => updateOrgSettings({ customizations: { crewBreaksUnpaid: checked } }, saveFeedback("Crew pause setting"))}
               aria-label="Crew pauses are unpaid"
             />
+          </SettingRow>
+          <SettingRow
+            label="Overtime"
+            description="How the Payroll tab and its exports split each person's paid hours into regular and overtime (OT). Weekly counts hours over the limit in a Monday–Sunday week; daily counts hours over the limit in one day. Extra hours added on the Payroll tab count toward it."
+          >
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <select
+                value={otModeDraft}
+                onChange={(e) => setOtModeDraft(e.target.value === "daily" ? "daily" : "weekly")}
+                aria-label="Overtime rule"
+                className="min-w-0 rounded-md border border-slate-300 dark:border-neutral-700 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="weekly">Over hours per week</option>
+                <option value="daily">Over hours per day</option>
+              </select>
+              <input
+                type="number"
+                min={1}
+                max={otModeDraft === "daily" ? 24 : 168}
+                step={0.5}
+                value={otModeDraft === "daily" ? otDailyDraft : otWeeklyDraft}
+                onChange={(e) => (otModeDraft === "daily" ? setOtDailyDraft(e.target.value) : setOtWeeklyDraft(e.target.value))}
+                aria-label={otModeDraft === "daily" ? "Overtime after hours per day" : "Overtime after hours per week"}
+                className="w-20 rounded-md border border-slate-300 dark:border-neutral-700 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              <span className="text-sm text-muted-foreground">hrs</span>
+              <Button
+                size="sm"
+                className="h-8"
+                disabled={savingSettings || !otValid || !otDirty}
+                onClick={() =>
+                  updateOrgSettings(
+                    {
+                      customizations: {
+                        overtime: {
+                          mode: otModeDraft,
+                          weeklyHours: otModeDraft === "weekly" ? otWeekly : persistedOvertime.weeklyHours,
+                          dailyHours: otModeDraft === "daily" ? otDaily : persistedOvertime.dailyHours,
+                        },
+                      },
+                    },
+                    saveFeedback("Overtime rule")
+                  )
+                }
+              >
+                Save
+              </Button>
+            </div>
           </SettingRow>
         </div>
       </div>

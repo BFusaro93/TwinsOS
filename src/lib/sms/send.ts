@@ -2,7 +2,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { monthStartInZone } from "@/lib/time/zone";
 import { toE164Us } from "@/lib/utils/phone";
-import { findOptedOutNumbers, recordCarrierOptOut } from "@/lib/sms/opt-outs";
+import { findOptedOutNumbers, phoneLast10, recordCarrierOptOut } from "@/lib/sms/opt-outs";
 import { smsSegmentCount } from "@/lib/sms/segments";
 import { logger } from "@/lib/logger";
 
@@ -22,6 +22,56 @@ export async function orgCanSendSms(supabase: any, orgId: string): Promise<boole
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
+
+/** Every number on a contact (main phone + its phone list) as last-10 keys. */
+function contactNumberKeys(contact: { phone: string | null; phones: unknown }): string[] {
+  const typed = Array.isArray(contact.phones) ? (contact.phones as { phone?: string }[]) : [];
+  return [contact.phone, ...typed.map((p) => p.phone)]
+    .map((p) => phoneLast10(p))
+    .filter((k): k is string => !!k);
+}
+
+/**
+ * Consent for texting THIS number for this client, or why not. The client's own
+ * numbers (primary phone and its phone list) go by the client's consent; a number
+ * that belongs only to one of its contacts goes by that contact's consent. Any
+ * other number (not on file) falls back to the client's consent.
+ */
+async function smsConsentRefusal(
+  supabase: AnyClient,
+  clientId: string,
+  toPhone: string,
+): Promise<{ reason: string; permanent: boolean } | null> {
+  const no = (reason: string) => ({ reason, permanent: true });
+  const { data: client } = await supabase
+    .from("clients")
+    .select("sms_opt_in, primary_phone, phones")
+    .eq("id", clientId)
+    .single();
+  if (!client) return no("client has not opted in to SMS");
+  const clientRefusal = client.sms_opt_in ? null : no("client has not opted in to SMS");
+  const key = phoneLast10(toPhone);
+  if (!key) return clientRefusal;
+  const clientPhones = Array.isArray(client.phones) ? (client.phones as { phone?: string }[]) : [];
+  const clientKeys = new Set(
+    [client.primary_phone as string | null, ...clientPhones.map((p) => p.phone)]
+      .map((p) => phoneLast10(p))
+      .filter((k): k is string => !!k),
+  );
+  if (clientKeys.has(key)) return clientRefusal;
+
+  const { data: contacts, error } = await supabase
+    .from("client_contacts")
+    .select("phone, phones, sms_opt_in")
+    .eq("client_id", clientId)
+    .is("deleted_at", null);
+  // Fail closed: a lookup error must not text someone who didn't consent.
+  if (error) return { reason: "couldn't check the contact's text consent", permanent: false };
+  const matching = ((contacts ?? []) as { phone: string | null; phones: unknown; sms_opt_in: boolean | null }[])
+    .filter((c) => contactNumberKeys(c).includes(key));
+  if (matching.length === 0) return clientRefusal;
+  return matching.some((c) => c.sms_opt_in === true) ? null : no("this contact has not opted in to SMS");
+}
 
 /**
  * Sends an SMS via Twilio's REST API (no SDK — a single authenticated POST),
@@ -53,12 +103,8 @@ export async function sendClientSms(
   // only in the automation-content resolver, so no future call site — a
   // manual 1:1 text feature, say — can accidentally bypass it.
   if (params.clientId) {
-    const { data: client } = await supabase
-      .from("clients")
-      .select("sms_opt_in")
-      .eq("id", params.clientId)
-      .single();
-    if (!client?.sms_opt_in) return { ok: false, reason: "client has not opted in to SMS", permanent: true };
+    const refusal = await smsConsentRefusal(supabase, params.clientId, params.toPhone);
+    if (refusal) return { ok: false, ...refusal };
   }
 
   // A number that texted STOP is opted out on its own — a contact's or

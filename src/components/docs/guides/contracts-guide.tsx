@@ -10,12 +10,12 @@ import {
 import { GuideLink } from "@/components/docs/GuideLink";
 
 const STATUS_FLOW: [string, string][] = [
-  ["Draft", "Just created. Nothing has been sent or agreed to yet — safe to edit freely."],
-  ["Sent", "The proposal went to the client. Also where a signed contract lands automatically if you edit its price, dates, or line items (see the callout below)."],
+  ["Draft", "Just created. Nothing has been sent or agreed to yet — safe to edit freely. Nothing bills, and completed visits on its jobs are held (see “Unsigned contracts” below)."],
+  ["Sent", "The proposal went to the client. Like a draft, nothing bills yet and completed visits on its jobs are held. Editing a signed contract’s terms does NOT move it back here — it stays Signed/Active with a “changed since signed” flag (see the callout below)."],
   ["Signed", "You (or the client) confirmed the terms. Sets signed_at and signed_by, and fires the “Contract Signed” automation/Zapier trigger."],
   ["Active", "The contract is live and, if Auto Generate is on, eligible for automatic monthly invoicing."],
-  ["Expired", "Past its end date. The expiry-warning email/notification fires 3 days before this, for any signed or active, non-auto-renewing contract (cancelled, expired and draft contracts get no warning). A retry never posts a duplicate in-app notification."],
-  ["Cancelled", "Terminated before or at its end date. No further invoices generate."],
+  ["Expired", "Past its end date. The expiry-warning email/notification fires 3 days before the end date for every signed or active contract (cancelled, expired, draft and sent contracts get no warning) — contracts never renew automatically, so every one is warned about. A retry never posts a duplicate in-app notification."],
+  ["Cancelled", "Terminated before or at its end date. No further invoices generate. Cancelling offers to void draft invoices already raised for dates after today."],
 ];
 
 const BILLING_FREQUENCIES: [string, string][] = [
@@ -56,8 +56,9 @@ export function ContractsGuide() {
       <Section id="what-is-a-contract" title="What a contract is">
         <p>
           A Contract (Landscapt → Accounting → Contracts) is the ongoing billing agreement behind
-          recurring service — a monthly amount, a billing day of month, whether it bills a month
-          ahead of service, and whether it renews automatically. It&apos;s separate from a{" "}
+          recurring service — a monthly amount, a billing day of month, and whether it bills a month
+          ahead of service. Contracts don&apos;t renew automatically: when one ends, create the next
+          season&apos;s contract. It&apos;s separate from a{" "}
           <em>Package</em>, which defines the service cadence template, and from the{" "}
           <em>Invoices</em> the contract actually generates — see the See also section below.
         </p>
@@ -195,7 +196,7 @@ export function ContractsGuide() {
           cent (a contract at $1,000 a month starting Oct 20 with billing day 1 bills $387.10 for
           Oct 20&ndash;31, then $1,000 from Nov 1). The invoice line names the stub period and shows
           the formula. It&apos;s generated once &mdash; by the cron or Create Invoices, whichever
-          comes first &mdash; and applies to Monthly, Quarterly and Annual contracts (a contract
+          comes first, as soon as the contract is signed and has started &mdash; and applies to Monthly, Quarterly and Annual contracts (a contract
           starting exactly on a billing day has no stub, and weekly, biweekly and one-time contracts
           never prorate). A contract that starts <em>before</em> its billing day (say Oct 20
           with billing day 25) bills Oct 20&ndash;24 as the stub and its first full cycle on Oct 25
@@ -206,9 +207,10 @@ export function ContractsGuide() {
           through Mar 31. Turning
           proration on for a contract that has already started regular billing doesn&apos;t bill a
           stub after the fact. The stub uses the starting month&apos;s entry in the monthly-amounts
-          grid when there is one, otherwise the flat amount. The stub invoice is dated no later than the last
-          day of its period (the day before the first billing day), not the day it is created, so it never
-          shares a date with that billing day&apos;s regular invoice.
+          grid when there is one, otherwise the flat amount. The stub invoice is dated the day it is
+          created and its due date counts from then &mdash; a contract signed after its stub period has
+          already ended gets its stub dated that day, not back-dated (so it isn&apos;t overdue the moment
+          it&apos;s made). It can share a date with that day&apos;s regular invoice.
         </p>
         <p>
           <strong>Billing in advance with a mid-month start.</strong> With Bill 1 Month in Advance on, a
@@ -263,19 +265,48 @@ export function ContractsGuide() {
           If a billing day is missed (an outage, or the cron failing that morning), the contract is
           billed later in the same period rather than skipped &mdash; for Weekly, Biweekly, Monthly,
           Quarterly and Annual contracts alike, as long as that period hasn&apos;t already been invoiced.
+          A run missed at the very end of a month (billing day 28&ndash;31) is still made up in the
+          following month, up until that month&apos;s own billing day, dated its original billing day.
           The same goes for a contract entered, signed or switched to Active a few days after its
           billing day (start Jan 1, billing day 1, entered Jan 3): the next run bills the current
           cycle, but the invoice is dated the day it&apos;s created (Jan 3) rather than back-dated to
           the billing day, and its due date counts the client&apos;s terms from that date. When you
-          mark a contract <strong>Signed</strong> or <strong>Active</strong> (or save one that is) after
-          that cycle&apos;s billing day, the contract window asks first: <strong>Bill January now (dated
-          today)</strong> creates the invoice right away, and <strong>Start billing with February</strong>{" "}
-          skips the cycle &mdash; nothing is billed for it and the first invoice is the next cycle&apos;s.
-          Contracts activated another way (the API, an import) follow the rule above. A cycle is
+          mark a contract <strong>Signed</strong> or <strong>Active</strong>, make it active again, or
+          save one that is, after that cycle&apos;s billing day, the contract window asks first:{" "}
+          <strong>Bill January now (dated today)</strong> creates the invoice right away, and{" "}
+          <strong>Start billing with February</strong> skips the cycle &mdash; nothing is billed for it
+          and the first invoice is the next cycle&apos;s.
+        </p>
+        <p>
+          <strong>Signed late: every missed cycle is listed.</strong> A contract signed well after its
+          start date (start Aug 1, signed Nov 10) has several cycles no billing run will ever bill on its
+          own. Signing it lists every unbilled cycle since the start date with its amount, and asks:{" "}
+          <strong>Bill all</strong> (the current cycle as its normal invoice, the earlier ones on one
+          catch-up invoice with a line per cycle, all dated today), <strong>Bill the current cycle
+          only</strong> (the earlier ones are never billed), or <strong>Start billing with the next
+          cycle</strong>. Visits done in a cycle you choose not to bill are still covered by the
+          contract &mdash; they aren&apos;t billed per visit. The same list appears after{" "}
+          <strong>Make Active</strong> (one contract or a selection) if any cycle from before the
+          pause was never billed. A cycle counts as billed when it has a contract invoice &mdash; even a
+          void one &mdash; exactly as the billing runs count it. Contracts recorded through the API or an
+          import as already Signed/Active are treated as already billed for the cycle in progress (see
+          below), so nothing is asked.
+        </p>
+        <p>
+          <strong>Make Inactive / Make Active.</strong> While a contract is inactive it doesn&apos;t bill,
+          and its jobs&apos; visits bill per visit (except visits inside a cycle the contract had already
+          invoiced). Making it active again starts contract billing with the <strong>next</strong>{" "}
+          cycle: the cycle in progress isn&apos;t billed again, and visits until that next cycle starts
+          keep billing per visit.
+        </p>
+        <p>
+          Contracts activated another way (the API, an import) follow the late-start rule above. A cycle is
           only ever billed once, whatever date its invoice carries &mdash; a later run or a Create
           Invoices click in the same period is skipped. Two exceptions are not back-billed: a client{" "}
           <strong>reactivated</strong> after the billing day (billing resumes at the next cycle), and
-          an imported contract, which is marked as billed for the period in progress. A contract whose client is{" "}
+          a contract imported or created through the API as Signed or Active, which is marked as
+          billed for the period in progress unless you give its last billed date (counted from the
+          import day when it has no start date). A contract whose client is{" "}
           <strong>cancelled</strong>, <strong>inactive</strong>, <strong>lost</strong> or still a{" "}
           <strong>lead</strong> (or deleted) stops billing, matching the visits, which also stop;
           reactivating the client (or converting the lead) resumes billing on the next cycle.
@@ -327,6 +358,26 @@ export function ContractsGuide() {
 
       <Section id="ending-contracts" title="Ending or cancelling a contract">
         <p>
+          <strong>Unsigned contracts hold their visits.</strong> A job can be linked to a Draft or Sent
+          contract (the job&apos;s contract picker shows each contract&apos;s status and warns you;
+          cancelled contracts aren&apos;t offered). Visits completed on it from the start date on are{" "}
+          <em>held</em> &mdash; not invoiced. When the contract is signed, they&apos;re covered by it (the
+          missed-cycles question above bills the cycles they fall in, if you choose). If it&apos;s
+          cancelled without ever being signed, the held visits are billed per visit straight away, on
+          the client&apos;s usual invoicing.
+        </p>
+        <p>
+          <strong>Materials on contract jobs.</strong> The contract covers the services on its jobs,
+          not automatically every material used. Each product on a contract-linked job has an{" "}
+          <strong>In contract</strong> checkbox (on by default) on the job&apos;s Products table and the
+          dispatch board&apos;s job panel. A product that&apos;s in the contract bills only what&apos;s
+          used above the planned quantity &mdash; 10 yd of mulch planned, 15 yd used bills 5 yd; 10 or
+          fewer used bills nothing and the product is marked &quot;Used, not billed&quot;. Untick it and
+          the full quantity bills. Either way the materials go on a normal per-visit invoice when the
+          visit is completed (the services stay inside the contract price). Chemical-program products
+          follow the same checkbox.
+        </p>
+        <p>
           While a contract is Signed/Active its jobs&apos; visits are billed inside the contract
           price and don&apos;t auto-invoice &mdash; from the start date on (a visit dated before the
           start date bills per visit), and past the end date through the last billing cycle the
@@ -338,6 +389,14 @@ export function ContractsGuide() {
           you confirm.
         </p>
         <p>
+          <strong>Cancelling voids future drafts on request.</strong> With Bill 1 Month in Advance (or
+          an early Create Invoices), a contract may already have a draft invoice for time after the
+          day you cancel it. The cancel confirmation lists every draft invoice dated after today with
+          a checkbox (all ticked); the ticked ones are voided as the contract is cancelled, and the
+          contract stops counting their cycles as paid for &mdash; so any work in that time bills per
+          visit. Sent or paid invoices are never touched: credit or refund those by hand if needed.
+        </p>
+        <p>
           <strong>Cancelling or deleting a contract cancels its upcoming visits.</strong> Visits on
           its linked jobs from today on that are still scheduled or dispatched and haven&apos;t been
           started are marked Cancelled, with a note on each. A visit a crew is clocked in to, and
@@ -345,9 +404,11 @@ export function ContractsGuide() {
           cancelled you get an error saying how many — cancel those from the Dispatch Board.
         </p>
         <p>
-          <strong>Snow contracts and storms outside the dates.</strong> A contract with a linked
-          snow job has a <strong>Storms outside the contract dates</strong> setting under its start
-          and end dates, for storms before the start date or after the end date:{" "}
+          <strong>Snow contracts and storms outside the dates.</strong> Tick{" "}
+          <strong>This contract includes snow service</strong> (under the start and end dates; it
+          stays locked on while a snow job is linked) to show the snow settings, including{" "}
+          <strong>Storms outside the contract dates</strong>, for storms before the start date or
+          after the end date:{" "}
           <strong>Don&apos;t service</strong> (the contract&apos;s snow jobs aren&apos;t offered for
           those storms on the Snow Jobs board), <strong>Included in the flat rate</strong>{" "}
           (dispatched and covered by the contract price) or <strong>Bill per event</strong> (the

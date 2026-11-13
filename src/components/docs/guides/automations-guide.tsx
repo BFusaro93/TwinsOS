@@ -41,7 +41,7 @@ const EVENT_TYPES: [string, string][] = [
   ],
   [
     "Text Message",
-    "Sends an SMS to the client's primary phone, their billing phone (a number typed Billing in the client's phone list), and/or every contact's phone, per the Send To boxes. Texting is gated by the client's SMS opt-in (contacts have no separate consent setting, so every number is texted under the client's opt-in). Can require manual approval before sending, same as email.",
+    "Sends an SMS to the client's primary phone, their billing phone (a number typed Billing in the client's phone list), and/or every contact's main phone, per the Send To boxes. Consent is per person: the client's primary and billing phones are texted only when the client has opted in to texts, and a contact only when that contact has its own Opted in to text messages box ticked — contacts who haven't are skipped. A number that replied STOP is always skipped. Can require manual approval before sending, same as email.",
   ],
   [
     "Alert",
@@ -556,6 +556,12 @@ export function AutomationsGuide() {
           </li>
           <li>
             <strong>Web-form leads.</strong> A lead created by a public web form fires <strong>Lead created</strong> as well as Form submitted, so lead automations pick it up.
+          </li>
+          <li>
+            <strong>Imported leads and clients.</strong> A CSV import doesn&apos;t fire anything unless you tick <strong>Run automations for imported records</strong> before importing. With it ticked, each new lead fires <strong>Lead created</strong> and each new active client fires <strong>Client created</strong> &mdash; automations and Zapier &mdash; just like adding them by hand. Rows that matched an existing client, and records imported as lost, cancelled or inactive, fire nothing. A large file is queued and runs over the next few minutes.
+          </li>
+          <li>
+            <strong>Texting contacts.</strong> A text step sent to <em>All contacts</em> only reaches contacts who have their own <strong>Opted in to text messages</strong> box ticked; the client&apos;s opt-in covers the client&apos;s own primary and billing phones. If nobody on the step has opted in, the step is skipped with that reason in the run history.
           </li>
           <li>
             <strong>Scheduling a campaign.</strong> Saving a campaign with a Schedule Send date keeps it as a draft. Use <strong>Mark Scheduled</strong> on the campaign row to arm it; scheduled campaigns go out at the top of the hour. Scheduling or sending needs Send/Launch Campaign. <strong>Send Now</strong> follows the same rules as a scheduled send: it is refused for a company whose subscription is canceled or whose trial has ended, and for demo companies.

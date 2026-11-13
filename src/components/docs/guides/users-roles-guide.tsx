@@ -351,7 +351,16 @@ export function UsersRolesGuide() {
             Payroll tab in the Report Center, where each person&apos;s Start Day / End Day hours are
             reviewed, corrected and exported. Admins always have it; the default Owner, Operations
             Manager and Office Admin roles have it. An organization role of Manager alone does
-            not grant it.
+            not grant it. It also lets someone correct crew punches in the dispatch board&apos;s Edit
+            Job Times and choose whether a stop&apos;s pause is paid &mdash; the same things the
+            Dispatch Board permission allows. Nobody else can change crew punches.
+          </li>
+          <li>
+            <strong>Show Wage Burden</strong> (Payroll Access) is what shows a crew member&apos;s labor
+            burden rate on Team → Crews and lets someone change it, and it shows the labor rate and
+            labor cost in the Timesheet reports and the cost column of Resource Time Utilization.
+            Without it those numbers are blank or hidden &mdash; and crew logins never see them.
+            Job Costing totals are unaffected.
           </li>
           <li>
             <strong>Individual report permissions</strong> under CRM Reports, Scheduling Reports, and
@@ -516,6 +525,15 @@ export function UsersRolesGuide() {
               accounts</strong> is off. For the same reason, reports built on jobs and visits
               (revenue, rates, job costing, budget vs. actual) return no data to a crew login, even on
               a dashboard marked visible to crews.
+            </p>
+            <p className="mt-2">
+              What a crew login can see about <em>clients</em> is limited to the clients on its own
+              stops. For those clients it sees the name, phone, address, gate code, property notes and
+              contacts the stop needs, plus that client&apos;s timeline; it never sees another
+              client&apos;s timeline, contacts or properties. A crew can add a note, a skip reason or an
+              upsell suggestion to the timeline of a client on its stops, but it cannot edit or delete
+              timeline entries, change a client&apos;s contacts, properties or details, or create a
+              client. Files uploaded to a client&apos;s Files tab are not available to crew logins.
             </p>
           </li>
           <li>

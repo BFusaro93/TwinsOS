@@ -175,6 +175,9 @@ export function AccountStatementDialog({ clientId, clientName, clientEmail, open
                 placeholder="client@example.com"
                 className="h-8 text-xs"
               />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Billing contacts marked OK to email are copied automatically.
+              </p>
               <Button
                 size="sm"
                 className="mt-2 h-7 w-full text-xs"

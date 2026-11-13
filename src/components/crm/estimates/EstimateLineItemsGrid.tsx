@@ -1346,7 +1346,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   // that property: a satellite property's own measurements (blank stays blank rather
   // than borrowing another address's numbers), while the client's own-address (master)
   // property still falls back to the client's figures it mirrors. No property = the client's.
-  const { data: clientProperties = [] } = useClientProperties(clientId ?? "");
+  const { data: clientProperties = [] } = useClientProperties(clientId ?? "", { keepId: propertyId ?? null });
   const estimateProperty = propertyId ? clientProperties.find((p) => p.id === propertyId) ?? null : null;
   const useSatelliteTakeoff = !!estimateProperty && !estimateProperty.isMaster;
   const takeoff: ClientTakeoff | null = client

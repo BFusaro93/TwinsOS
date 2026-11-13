@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { toast } from "sonner";
 import { Plus, ExternalLink, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -58,7 +59,7 @@ import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { useUpdateRequisitionStatus, useAddRequisitionLineItem, useUpdateRequisitionLineItem, useDeleteRequisitionLineItem, useDeleteRequisition } from "@/lib/hooks/use-requisitions";
 import { useCurrentUserStore } from "@/stores";
 import type { Requisition, LineItem, ApprovalStatus, PurchaseOrder } from "@/types";
-import { computeSalesTax } from "@/lib/utils/po-tax";
+import { computeSalesTax, effectiveDiscount } from "@/lib/utils/po-tax";
 
 interface RequisitionDetailPanelProps {
   requisition: Requisition;
@@ -104,6 +105,7 @@ function DetailsTab({
   const [addQty, setAddQty] = useState("1");
   const [addCost, setAddCost] = useState("");
   const [addProjectId, setAddProjectId] = useState("none");
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
 
   const { currentUser } = useCurrentUserStore();
   const { canWriteEquipt, canSubmitForApproval, canEditRequisition } = useRoleCapabilities();
@@ -136,7 +138,8 @@ function DetailsTab({
       discountCost: req.discountCost,
       discountReducesTax: req.discountReducesTax,
     });
-    const grandTotal = newSubtotal - req.discountCost + salesTax + req.shippingCost;
+    // A discount can zero the lines out but never push the total negative.
+    const grandTotal = newSubtotal - effectiveDiscount(req.discountCost, newSubtotal) + salesTax + req.shippingCost;
     return { subtotal: newSubtotal, salesTax, grandTotal };
   }
 
@@ -219,7 +222,7 @@ function DetailsTab({
                 submitForApproval(
                   { entityId: req.id, entityType: "requisition", grandTotalCents: grandTotal },
                   // The hook updates the DB status — only update local state here
-                  { onSuccess: () => onStatusChange("pending_approval") }
+                  { onSuccess: (res) => onStatusChange(res.autoApproved ? "approved" : "pending_approval") }
                 );
               }}
             >
@@ -259,8 +262,42 @@ function DetailsTab({
               </Button>
             </div>
           )}
+          {(status === "approved" || status === "ordered" || status === "rejected") && (
+            <Button size="sm" variant="outline" onClick={() => setCloseConfirmOpen(true)}>
+              Close Requisition
+            </Button>
+          )}
         </div>
         )}
+
+        <AlertDialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Close {req.requisitionNumber}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                A closed requisition is finished: no more purchase orders can be made from it and its
+                lines can no longer be edited. Purchase orders already made from it are not affected.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep Open</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  syncStatus(
+                    { id: req.id, status: "closed" },
+                    {
+                      onSuccess: () => onStatusChange("closed"),
+                      onError: (err) => toast.error(`Couldn't close the requisition: ${(err as { message?: string } | null)?.message ?? String(err)}`),
+                    }
+                  );
+                  setCloseConfirmOpen(false);
+                }}
+              >
+                Close Requisition
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       <Separator />
@@ -475,10 +512,10 @@ function DetailsTab({
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
-        {req.discountCost > 0 && (
+        {effectiveDiscount(req.discountCost, subtotal) > 0 && (
           <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
             <span>Discount</span>
-            <span>-{formatCurrency(req.discountCost)}</span>
+            <span>-{formatCurrency(effectiveDiscount(req.discountCost, subtotal))}</span>
           </div>
         )}
         <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">

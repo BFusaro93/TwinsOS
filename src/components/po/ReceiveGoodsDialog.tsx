@@ -40,7 +40,7 @@ import { useCreateGoodsReceipt, useDeleteGoodsReceipt, usePOGoodsReceipts } from
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
 import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
-import { correctPartReceipt, correctProductReceipt, logReceiptWithoutStock, setWOPartStock } from "@/lib/inventory/part-stock";
+import { logReceiptWithoutStock, setWOPartStock } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -303,10 +303,12 @@ export function ReceiveGoodsDialog({
     setApplyingInventory(true);
     // Every inventory RPC that succeeds in this submission is recorded as its
     // own step (a maintenance_part line is two: part, then product) so a later
-    // failure — including one between the two steps of the same line — can
-    // undo exactly what was applied. Otherwise a partial failure would leave
-    // increments live with no receipt surviving to account for them, and a
-    // retry would double-increment inventory.
+    // failure — including one between the two steps of the same line — can be
+    // undone. The receiving RPCs also count what they applied on the receipt
+    // lines, which is what rollback_goods_receipt takes back; the steps here
+    // carry the work-order shortfalls to reopen. Otherwise a partial failure
+    // would leave increments live with no receipt surviving to account for
+    // them, and a retry would double-increment inventory.
     type AppliedStep =
       | {
           kind: "part"; partId: string; quantity: number; unitCost: number;
@@ -385,49 +387,28 @@ export function ReceiveGoodsDialog({
         if (receivedPartId) await syncPartQtyToProduct(createClient(), receivedPartId);
       }
     } catch (err) {
-      // Undo the applied steps newest-first before rolling back the receipt,
-      // so the whole attempt is all-or-nothing. Both correction RPCs remove
-      // the units from this PO's cost layer (not FIFO from the oldest) and
-      // clamp at what is on hand instead of raising.
+      // Undo the attempt so it is all-or-nothing. Work-order shortfalls a part
+      // receipt settled are reopened first (newest-first; this puts those
+      // units back on hand), then rollback_goods_receipt takes back exactly
+      // the units this receipt added to stock — this PO's cost layers first,
+      // clamped at what is on hand — and deletes the receipt.
       if (applied.length > 0) {
         const supabase = createClient();
         for (const step of [...applied].reverse()) {
+          if (step.kind !== "part") continue;
           try {
-            if (step.kind === "part") {
-              // Reopen the work-order shortfalls the receipt settled first (this puts
-              // those units back on hand), so removing the receipt below leaves both
-              // stock and the WO lines exactly as they were.
-              for (const s of [...step.settled].reverse()) {
-                await setWOPartStock(supabase, s.woPartId, s.previousDeducted);
-              }
-              await correctPartReceipt(supabase, {
-                orgId: po.orgId,
-                partId: step.partId,
-                delta: -Math.round(step.quantity),
-                unitCost: step.unitCost,
-                poNumber: po.poNumber,
-              });
-            } else {
-              await correctProductReceipt(supabase, {
-                orgId: po.orgId,
-                productId: step.productId,
-                delta: -step.quantity,
-                unitCost: step.unitCost,
-                poNumber: po.poNumber,
-              });
+            for (const s of [...step.settled].reverse()) {
+              await setWOPartStock(supabase, s.woPartId, s.previousDeducted);
             }
           } catch (revertErr) {
-            toast.error(`Failed to reverse ${step.kind} inventory during rollback: ${errMsg(revertErr)}. Please review this PO's receipts manually.`);
+            toast.error(`Failed to reopen work-order part usage during rollback: ${errMsg(revertErr)}. Please review this PO's receipts manually.`);
           }
         }
       }
       setApplyingInventory(false);
-      // Inventory never moved (now reversed above if it had), so the receipt
-      // that says it did is now wrong — roll it back rather than leaving a
-      // receipt on record with no matching inventory change (which
-      // alreadyReceivedMap would then treat as real). The header delete
-      // cascades to goods_receipt_lines, including any rows for lines that
-      // succeeded before the failure.
+      // Roll the receipt back (stock it already added included) rather than
+      // leaving a receipt on record with no matching inventory change (which
+      // alreadyReceivedMap would then treat as real).
       try {
         await deleteReceipt(receipt.id);
       } catch (cleanupErr) {

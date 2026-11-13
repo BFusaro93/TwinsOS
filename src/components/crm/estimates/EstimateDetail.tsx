@@ -47,6 +47,7 @@ import { EstimateSummaryPanel } from "./EstimateSummaryPanel";
 import { AIDraftDialog } from "./AIDraftDialog";
 import { ConvertToJobDialog } from "./ConvertToJobDialog";
 import { ReservedDepositNotice } from "./ReservedDepositNotice";
+import { EstimateDepositWaiver } from "./EstimateDepositWaiver";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { WonLostReasonDialog } from "./WonLostReasonDialog";
 import { packageHeadersEmptiedBy } from "@/lib/estimates/package-group";
@@ -497,7 +498,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: allDocTemplates = [] } = useDocumentTemplates();
   const [toggleConflict, setToggleConflict] = useState<{ resolve: (replace: boolean) => void } | null>(null);
   const effectiveClientId = (headerEdits.client_id as string) ?? estimate?.clientId ?? "";
-  const { data: clientProperties } = useClientProperties(effectiveClientId);
+  const { data: clientProperties } = useClientProperties(effectiveClientId, { keepId: estimate?.propertyId ?? null });
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [wonLostDialog, setWonLostDialog] = useState<"accepted" | "lost" | null>(null);
   // Tiers still open on a Good/Better/Best estimate. With more than one,
@@ -2061,7 +2062,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         when accepting the proposal. A promise, not money —
                         amber, never the green "Collected". Hidden once a real
                         deposit is recorded. */}
-                    {estimate.depositCollectedCents === 0 && (estimate.depositPromisedCents ?? 0) > 0 && (
+                    {estimate.depositCollectedCents === 0 && !estimate.depositWaivedAt && (estimate.depositPromisedCents ?? 0) > 0 && (
                       <span
                         className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300"
                         title={`Nothing has been received yet — the client chose this on the proposal page when accepting.${estimate.depositPromisedReference ? ` Reference: ${estimate.depositPromisedReference}.` : ""} Record the payment when it arrives.`}
@@ -2084,7 +2085,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         screen that has to explain what happened and what the
                         client can do — the proposal link re-opens itself for a
                         retry while this is set, which is not obvious. */}
-                    {estimate.depositCollectedCents === 0 && !!estimate.depositFailedAt && (
+                    {estimate.depositCollectedCents === 0 && !estimate.depositWaivedAt && !!estimate.depositFailedAt && (
                       <span
                         className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/40 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-400"
                         title={`${estimate.depositFailedReason ?? "The payment was rejected."} The client can pay it again from their original proposal link — it re-opens automatically until a deposit is recorded.`}
@@ -2115,6 +2116,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           ? ` — submitted ${new Date(estimate.depositPendingAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : ""}
                       </span>
+                    )}
+                    {/* A skipped deposit on an accepted estimate stays due until
+                        it is paid, the job's invoices are paid in full, or
+                        staff waive it here. */}
+                    {estimate.depositCollectedCents === 0 && (
+                      <EstimateDepositWaiver
+                        estimate={estimate}
+                        canWaive={can("estimate_edit") || can("acct_add_modify_payments")}
+                      />
                     )}
                   </div>
                 </FieldRow>

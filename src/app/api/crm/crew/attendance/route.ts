@@ -9,6 +9,7 @@ import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { createServiceClient } from "@/lib/supabase/server";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 /**
  * POST /api/crm/crew/attendance — the crew leader marks a member as not
@@ -82,8 +83,15 @@ export async function POST(request: Request) {
   const workDate = isoInZone(new Date(now), await getOrgTimeZone(supabase, orgId));
 
   // A crew login can only mark members of its own crew (today's roster, so a
-  // same-day reassignment onto this crew counts).
-  if (profile.role === "crew") {
+  // same-day reassignment onto this crew counts). Anyone else needs to manage
+  // the roster (Teams, Dispatch Board or Payroll — admins pass) or run that
+  // crew themselves (a regular login linked to it): shift and punch writes
+  // below go through the service role, so this check is what authorizes them.
+  // (Office users used to write under their own RLS, which silently closed
+  // nothing for a role without Dispatch Board / Payroll.)
+  const isCrew = profile.role === "crew";
+  const officeMayManage = !isCrew && (await hasAnySettingsPermission(supabase, ["sched_teams", "sched_dispatch_board", "payroll_report"]));
+  if (!officeMayManage) {
     const callerCrewId = await resolveCallerCrewId(supabase, user.id, orgId);
     const { data: override } = await db
       .from("crm_crew_daily_members")
@@ -94,7 +102,14 @@ export async function POST(request: Request) {
       .maybeSingle();
     const memberCrewId = (override?.crew_id as string | undefined) ?? (member.crew_id as string);
     if (!callerCrewId || memberCrewId !== callerCrewId) {
-      return NextResponse.json({ error: "That crew member isn't on your crew" }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: isCrew
+            ? "That crew member isn't on your crew"
+            : "Changing who is working needs the Teams, Dispatch Board or Payroll permission",
+        },
+        { status: 403 }
+      );
     }
   }
 
@@ -108,18 +123,19 @@ export async function POST(request: Request) {
       .select("id, org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id)")
       .eq("id", visitId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
     if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-    if (profile.role === "crew" && !(await assertCallerOwnsVisit(db, user.id, orgId, visit))) {
+    if (!officeMayManage && !(await assertCallerOwnsVisit(db, user.id, orgId, visit))) {
       return NextResponse.json({ error: "That visit isn't on your crew" }, { status: 403 });
     }
     punchVisitId = await stopPunchOwnerVisitId(db, visitId);
   }
 
-  // Crew logins can't write shifts / punches directly (RLS) — their time writes
-  // go through the service client, after the own-crew check above. Office users
-  // keep writing under their own RLS.
-  const timeWriter = profile.role === "crew" ? createServiceClient() : db;
+  // Absence / shift / punch writes go through the service client for everyone,
+  // after the authorization above (crew logins can't write shifts or punches
+  // directly at all, and the tables' RLS — Dispatch Board or own crew only —
+  // would refuse or silently skip a Teams / Payroll office user).
+  const timeWriter = createServiceClient();
   if (absent) {
-    const { data: existing } = await db
+    const { data: existing } = await timeWriter
       .from("crm_crew_day_absences")
       .select("id")
       .eq("crew_member_id", crewMemberId)
@@ -127,7 +143,7 @@ export async function POST(request: Request) {
       .is("deleted_at", null)
       .limit(1);
     if (((existing ?? []) as unknown[]).length === 0) {
-      const { error } = await db
+      const { error } = await timeWriter
         .from("crm_crew_day_absences")
         .insert({ org_id: orgId, crew_member_id: crewMemberId, work_date: workDate, created_by: user.id });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -143,7 +159,7 @@ export async function POST(request: Request) {
     }
     if (punchVisitId) {
       // Ends an in-progress punch: the member isn't on this job any more.
-      await timeWriter
+      const { error: punchErr } = await timeWriter
         .from("crm_crew_member_times")
         .update({ clocked_out_at: now, updated_at: now })
         .eq("org_id", orgId)
@@ -152,11 +168,15 @@ export async function POST(request: Request) {
         .is("deleted_at", null)
         .is("clocked_out_at", null)
         .lt("clocked_in_at", now);
+      if (punchErr) {
+        return NextResponse.json({ error: punchErr.message }, { status: isPayrollLockedError(punchErr.message) ? 409 : 500 });
+      }
     }
   } else {
-    const { error } = await db
+    const { error } = await timeWriter
       .from("crm_crew_day_absences")
       .update({ deleted_at: now })
+      .eq("org_id", orgId)
       .eq("crew_member_id", crewMemberId)
       .eq("work_date", workDate)
       .is("deleted_at", null);

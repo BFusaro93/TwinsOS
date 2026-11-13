@@ -29,6 +29,8 @@ import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
 import { InvoicePhotosPanel } from "@/components/crm/invoices/InvoicePhotosPanel";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { useClientContacts } from "@/lib/hooks/use-clients";
+import { isBillingContactType, mergeCcRecipients } from "@/lib/email/billing-contact-cc";
 
 // Exported so bulk-send flows (InvoicesList's "Email Selected") send the
 // same default content a single manual send would, when no org default
@@ -58,6 +60,8 @@ interface Props {
   terms?: string | null;
   clientName: string | null;
   clientEmail: string | null;
+  /** The invoice's client — its Billing contacts that are OK to email are pre-filled in CC. */
+  clientId?: string | null;
   /** The PDF template this invoice is already pinned to (crm_invoices.pdf_template_id),
    *  if any — takes priority over the org default when auto-selecting. */
   pinnedPdfTemplateId?: string | null;
@@ -67,7 +71,7 @@ interface Props {
 }
 
 export function InvoiceEmailDialog({
-  invoiceId, invoiceNumber, totalCents, balanceCents, dueDate, terms, clientName, clientEmail, pinnedPdfTemplateId, open, onClose, onSent,
+  invoiceId, invoiceNumber, totalCents, balanceCents, dueDate, terms, clientName, clientEmail, clientId, pinnedPdfTemplateId, open, onClose, onSent,
 }: Props) {
   // Email content (subject/body) templates now live in Documents (doc type
   // "invoice_email") — a richer block-based builder than the old plain
@@ -88,6 +92,24 @@ export function InvoiceEmailDialog({
   const [toEmails, setToEmails] = useState<string[]>(clientEmail ? [clientEmail] : []);
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   const richTextRef = useRef<RichTextEditorHandle>(null);
+
+  // Billing contacts (type "Billing", OK to email) are copied on invoices. They
+  // are pre-filled here so the sender sees them and can take one off for this
+  // send; the route adds them itself only for sends that don't list CC (bulk).
+  const { data: contacts, isSuccess: contactsLoaded } = useClientContacts(clientId ?? "");
+  const ccPrefilledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open) {
+      ccPrefilledFor.current = null;
+      return;
+    }
+    if (!clientId || !contactsLoaded || ccPrefilledFor.current === invoiceId) return;
+    ccPrefilledFor.current = invoiceId;
+    const billing = (contacts ?? [])
+      .filter((c) => c.okToEmail && isBillingContactType(c.contactType) && c.email)
+      .map((c) => c.email as string);
+    setCcEmails(mergeCcRecipients(clientEmail ? [clientEmail] : [], [], billing));
+  }, [open, clientId, contactsLoaded, contacts, invoiceId, clientEmail]);
 
   // Reset the editable "To" field whenever a different invoice's dialog
   // opens — otherwise a manually-edited address from a prior send would
@@ -185,7 +207,11 @@ export function InvoiceEmailDialog({
       const res = await fetch("/api/crm/invoices/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId, subject, bodyHtml, ccEmails, to: toEmails, includePdf, templateId: pdfTemplateId || undefined }),
+        body: JSON.stringify({
+          invoiceId, subject, bodyHtml, ccEmails, to: toEmails, includePdf, templateId: pdfTemplateId || undefined,
+          // The CC list above already holds the billing contacts (or the sender removed them).
+          ccBillingContacts: clientId ? false : undefined,
+        }),
       });
       if (!res.ok) {
         const data = await res.json();

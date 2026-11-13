@@ -660,7 +660,8 @@ export function EstimatingGuide() {
           copying the link extends an existing one the same way. After it expires (or the client
           accepts through it) the next request creates a new one. Once a client has accepted, their
           link <strong>never expires</strong>: it stays viewable read-only as their record of what
-          they signed, and is where they pay a deposit that is still due.
+          they signed (including the <strong>Download PDF</strong> copy), and is where they pay a
+          deposit that is still due.
         </p>
         <p>
           The link only offers <strong>Accept</strong> while the estimate is in Sent, unchanged since
@@ -791,6 +792,32 @@ export function EstimatingGuide() {
           &ldquo;Deposit due&rdquo; with a <strong>Pay online</strong> link (the proposal link) when one
           has been sent. Staff are notified exactly as for a skipped deposit.
         </p>
+        <p>
+          <strong>When a skipped deposit stops being due.</strong> A deposit nobody paid stays due on
+          the proposal link and in the portal until one of these happens:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>A deposit is paid (or a bank transfer for it is clearing).</li>
+          <li>
+            <strong>The job is paid in full.</strong> Once the estimate&rsquo;s own invoices (the
+            estimate, the job or project converted from it, or a contract made from it) have been
+            sent and none of them has a balance left, there is nothing to put a deposit down on, so the
+            client is no longer asked for one. Draft invoices don&rsquo;t count &mdash; they haven&rsquo;t
+            been billed yet.
+          </li>
+          <li>
+            <strong>You waive it.</strong> On an accepted estimate with an unpaid deposit, click{" "}
+            <strong>Waive deposit</strong> under Deposit Required and optionally give a reason. The
+            estimate then shows a grey &ldquo;Deposit waived&rdquo; badge with the date and who waived
+            it (the reason is on hover), and the client&rsquo;s proposal link and portal stop showing
+            the deposit &mdash; including the &ldquo;your payment failed&rdquo; retry screen &mdash; and
+            won&rsquo;t take it. Nothing is charged or credited. <strong>Undo</strong> next to the badge
+            makes it due again. Waiving needs the <em>Edit estimates</em> or{" "}
+            <em>Add/modify payments</em> permission. Before a proposal is accepted there is nothing to
+            waive &mdash; change Deposit Required instead.
+          </li>
+          <li>The estimate is marked Lost.</li>
+        </ul>
         <Callout>
           <strong>A card deposit becomes a prepayment, not an invoice payment.</strong> It&rsquo;s
           taken at acceptance, before any invoice for the work exists, so there is nothing to apply it
@@ -847,13 +874,15 @@ export function EstimatingGuide() {
         <p>
           <strong>If the deposit fails</strong> &mdash; a returned bank transfer (insufficient funds,
           closed account, a mistyped routing number) or a declined card &mdash; the proposal{" "}
-          <em>stays accepted</em>. Only the money failed; nothing needs signing again. Four things
-          happen:
+          <em>stays accepted</em>. Only the money failed; nothing needs signing again. This is the
+          same however the proposal was accepted &mdash; through the link, in the client portal, or
+          marked accepted by your office. Four things happen:
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
             The estimate shows a red <strong>payment failed</strong> badge with the amount, the date,
-            and the bank&rsquo;s own reason on hover. That reason is the useful part &mdash;
+            and the bank&rsquo;s own reason on hover, and a <strong>Deposit failed</strong> entry is
+            added to the client&rsquo;s timeline. That reason is the useful part &mdash;
             &ldquo;insufficient funds&rdquo; means ask them to try again, &ldquo;account
             closed&rdquo; means pick up the phone.
           </li>
@@ -892,6 +921,15 @@ export function EstimatingGuide() {
           unapplied credit and you get a <strong>Deposit paid, not accepted</strong> bell notification
           (same recipients as proposal decisions, plus the sales rep). Re-send the proposal or refund
           the deposit.
+        </Callout>
+        <Callout>
+          <strong>Charged twice?</strong> If two deposit payments ever get through for the same
+          estimate (for example the client paid in two browser tabs at once), the first is the
+          estimate&rsquo;s deposit and the second is <em>not</em> thrown away: it is added to the
+          client&rsquo;s account as ordinary <strong>general credit</strong> (not reserved for the
+          estimate), noted on their timeline, and your admins get a <strong>Second deposit
+          charge</strong> bell notification. Apply it to an invoice or refund it from Accounting
+          &rarr; Payments.
         </Callout>
         <Callout>
           If you change the deposit amount (or the card fee setting) while a client has a card

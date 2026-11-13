@@ -6,13 +6,20 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 import type { PayrollRow } from "@/lib/payroll/compute";
+import type { OvertimeRule } from "@/lib/payroll/overtime";
 
-export type { PayrollRow };
+export type { PayrollRow, OvertimeRule };
 
 export class PayrollForbiddenError extends Error {}
 
+export interface PayrollReportData {
+  rows: PayrollRow[];
+  /** The org's overtime rule the rows' regular / overtime hours were split by. */
+  overtime: OvertimeRule;
+}
+
 export function usePayroll(from: string, to: string) {
-  return useQuery<PayrollRow[]>({
+  return useQuery<PayrollReportData>({
     queryKey: ["payroll-report", from, to],
     enabled: !!from && !!to && from <= to,
     retry: false,
@@ -20,8 +27,8 @@ export function usePayroll(from: string, to: string) {
       const res = await fetch(`/api/crm/reports/payroll?from=${from}&to=${to}`);
       if (res.status === 403) throw new PayrollForbiddenError("forbidden");
       if (!res.ok) throw new Error(await res.text());
-      const json = (await res.json()) as { rows: PayrollRow[] };
-      return json.rows;
+      const json = (await res.json()) as PayrollReportData;
+      return { rows: json.rows, overtime: json.overtime };
     },
   });
 }

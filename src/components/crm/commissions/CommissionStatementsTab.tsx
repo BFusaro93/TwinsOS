@@ -64,7 +64,7 @@ function StatementDetail({ statement, onClose }: { statement: CommissionStatemen
                           <Badge variant="outline" className="border-amber-200 bg-amber-50 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400">Adjustment</Badge>
                           <span>{adjustmentServiceLabel(l.serviceName)}</span>
                           <span className="text-xs text-muted-foreground">
-                            {l.commissionCents < 0 ? `refund/void on invoice #${l.invoiceNumber ?? "—"}` : `reversal on invoice #${l.invoiceNumber ?? "—"}`}
+                            {l.commissionCents < 0 ? `refund/void/write-off on invoice #${l.invoiceNumber ?? "—"}` : `reversal on invoice #${l.invoiceNumber ?? "—"}`}
                           </span>
                         </span>
                       ) : (

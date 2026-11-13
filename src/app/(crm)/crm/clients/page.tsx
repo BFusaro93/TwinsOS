@@ -21,7 +21,7 @@ import type { FilterRow } from "@/lib/client-filters";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 // Shared with Settings → Import / Export so both import the same columns.
-import { CLIENT_REQUIRED_COLUMNS, CLIENT_TEMPLATE_COLUMNS, clientToCsvRow } from "@/lib/crm/import-export-columns";
+import { CLIENT_REQUIRED_COLUMNS, CLIENT_TEMPLATE_COLUMNS, IMPORT_AUTOMATIONS_OPTION, clientToCsvRow } from "@/lib/crm/import-export-columns";
 
 
 // useSearchParams (for ?status= dashboard deep-links) needs a Suspense boundary.
@@ -124,8 +124,9 @@ function ClientsPageInner() {
                   setExporting(false);
                 }
               }}
-              onImport={async (rows) => {
-                const result = await bulkImportClients(rows);
+              importOption={IMPORT_AUTOMATIONS_OPTION}
+              onImport={async (rows, { optionChecked }) => {
+                const result = await bulkImportClients({ rows, runAutomations: optionChecked });
                 const { succeeded, failed } = result;
                 if (failed.length > 0) {
                   toast.warning(

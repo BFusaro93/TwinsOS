@@ -29,7 +29,7 @@ async function resubmitReqForApprovalIfNeeded(supabase: any, requisitionId: stri
       entityType: "requisition",
       grandTotalCents: grandTotal,
     });
-    toast.info("Requisition total changed — re-submitted for approval.");
+    toast.info("Requisition changed — re-submitted for approval.");
   }
 }
 
@@ -277,7 +277,7 @@ export function useUpdateRequisition() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: before } = await (supabase as any)
         .from("requisitions")
-        .select("grand_total")
+        .select("grand_total, vendor_id")
         .eq("id", id)
         .single();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -297,8 +297,9 @@ export function useUpdateRequisition() {
         })
         .eq("id", id);
       if (error) throw error;
-      // Shipping/discount/tax edits move the total just like line items do.
-      if (before && before.grand_total !== grandTotal) {
+      // Shipping/discount/tax edits move the total just like line items do,
+      // and a new vendor re-opens approval as well.
+      if (before && (before.grand_total !== grandTotal || (before.vendor_id ?? null) !== (vendorId ?? null))) {
         await resubmitReqForApprovalIfNeeded(supabase, id, grandTotal);
       }
     },
@@ -553,7 +554,7 @@ export function useDeleteRequisition() {
     mutationFn: async (id: string) => {
       const supabase = createClient();
       // A requisition that already produced purchase orders can't be deleted:
-      // the POs would be orphaned from their source. Cancel/close it instead.
+      // the POs would be orphaned from their source. Close it instead.
       const { data: req, error: reqErr } = await supabase
         .from("requisitions")
         .select("status")
@@ -567,7 +568,7 @@ export function useDeleteRequisition() {
         .is("deleted_at", null);
       if (poErr) throw poErr;
       if (req?.status === "ordered" || (poCount ?? 0) > 0) {
-        throw new Error("This requisition already has purchase orders created from it and can't be deleted. Cancel or close it instead.");
+        throw new Error("This requisition has purchase orders made from it, so it can't be deleted. Use Close Requisition instead.");
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("requisitions").update({ deleted_at: new Date().toISOString() }).eq("id", id);

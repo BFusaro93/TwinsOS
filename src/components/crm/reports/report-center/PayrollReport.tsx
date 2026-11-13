@@ -28,6 +28,7 @@ import { isPayrollDayLocked } from "@/lib/crew/payroll-lock";
 import {
   DAILY_HEADERS, DAYS_TO_REVIEW_NOTE, LONG_BREAK_MINUTES, SUMMARY_HEADERS, dailyRows, groupPayrollByMember, isLongBreak, offClockBreakdown, periodLabel, summaryRows,
 } from "@/lib/payroll/export";
+import { describeOvertimeRule } from "@/lib/payroll/overtime";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
@@ -59,7 +60,9 @@ export function PayrollReport() {
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [open, setOpen] = useState<Set<string>>(new Set());
-  const { data: rows = [], isLoading, error } = usePayroll(from, to);
+  const { data: report, isLoading, error } = usePayroll(from, to);
+  const rows = useMemo(() => report?.rows ?? [], [report]);
+  const overtimeLabel = report ? describeOvertimeRule(report.overtime) : null;
   const members = useMemo(() => groupPayrollByMember(rows), [rows]);
   const { data: lockedThrough = null } = usePayrollLock();
 
@@ -95,7 +98,11 @@ export function PayrollReport() {
     const text = (rows: (string | number)[][]) => rows.map((r) => r.map((c) => (typeof c === "number" ? fmt(c) : c)));
     try {
       await exportReportPDF(`Payroll ${periodLabel(from, to)}`, [
-        { heading: `Totals by employee — ${DAYS_TO_REVIEW_NOTE}`, columns: SUMMARY_HEADERS, rows: text(summaryRows(members)) },
+        {
+          heading: `Totals by employee — ${DAYS_TO_REVIEW_NOTE}${overtimeLabel ? ` ${overtimeLabel}.` : ""}`,
+          columns: SUMMARY_HEADERS,
+          rows: text(summaryRows(members)),
+        },
         // One table per employee (with its own total) instead of one long run of everyone's days.
         ...members.map((m) => {
           const dayRows = dailyRows([m], tz).map((r) => r.slice(2));
@@ -103,7 +110,7 @@ export function PayrollReport() {
             heading: `${m.memberName}${m.crewName ? ` — ${m.crewName}` : ""}`,
             columns: DAILY_HEADERS.slice(2),
             rows: text(dayRows),
-            totals: ["Total", "", "", "", "", fmt(m.shiftHours), fmt(m.jobHours), fmt(m.extra), fmt(m.total), "", ""],
+            totals: ["Total", "", "", "", "", fmt(m.shiftHours), fmt(m.jobHours), fmt(m.extra), fmt(m.total), fmt(m.regular), fmt(m.overtime), "", ""],
           };
         }),
       ]);
@@ -117,6 +124,7 @@ export function PayrollReport() {
   }
 
   const grand = members.reduce((s, m) => s + m.total, 0);
+  const grandOvertime = members.reduce((s, m) => s + m.overtime, 0);
 
   return (
     <div className="space-y-4">
@@ -133,7 +141,10 @@ export function PayrollReport() {
         <Button variant="outline" size="sm" onClick={() => setRange(lastWeek(tz))}>Last week</Button>
         <Button variant="outline" size="sm" onClick={() => setRange(lastTwoWeeks(tz))}>Last 2 weeks</Button>
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">Total <strong className="text-foreground">{fmt(grand)} h</strong></span>
+          <span className="text-sm text-muted-foreground">
+            Total <strong className="text-foreground">{fmt(grand)} h</strong>
+            {grandOvertime > 0 && <> · OT <strong className="text-foreground">{fmt(grandOvertime)} h</strong></>}
+          </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1" disabled={rows.length === 0}>
@@ -155,6 +166,7 @@ export function PayrollReport() {
       <p className="text-xs text-muted-foreground">
         Paid time is each person&apos;s day — clocked in at the shop to clocked out at the shop — less lunch and unpaid pauses.
         Edit any day to change its hours or add shop time/PTO. The recorded hours stay visible and job costing is not changed.
+        {overtimeLabel && <> {overtimeLabel} (change it in Settings → Organization).</>}
       </p>
       {flagged > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-amber-600">
@@ -179,6 +191,8 @@ export function PayrollReport() {
                 <TableHead className="text-right">On jobs</TableHead>
                 <TableHead className="text-right">Extra</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Regular</TableHead>
+                <TableHead className="text-right">OT</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -195,6 +209,8 @@ export function PayrollReport() {
                       <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(m.jobHours)}</TableCell>
                       <TableCell className="text-right tabular-nums">{fmt(m.extra)}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmt(m.total)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(m.regular)}</TableCell>
+                      <TableCell className={`text-right tabular-nums ${m.overtime > 0 ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>{fmt(m.overtime)}</TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
                         {(m.openShifts + m.openPunches + m.noShiftDays + m.longBreakDays) > 0 && (
                           <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300">
@@ -373,6 +389,8 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
         <Input disabled={locked} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="0.00" inputMode="decimal" className="h-8 w-20 text-right" />
       </TableCell>
       <TableCell className="text-right font-medium tabular-nums">{fmt(row.totalHours)}</TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">{fmt(row.regularHours)}</TableCell>
+      <TableCell className={`text-right tabular-nums ${row.overtimeHours > 0 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>{fmt(row.overtimeHours)}</TableCell>
       <TableCell className="space-x-1 whitespace-nowrap">
         <Button size="sm" className="h-8" disabled={locked || !dirty || save.isPending} onClick={() => submit()}>Save</Button>
         {row.adjusted && (

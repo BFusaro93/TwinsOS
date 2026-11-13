@@ -22,8 +22,14 @@ import {
   useDeleteContractService,
   useContractServiceVisitCounts,
   useContractJobServiceRows,
+  useReleaseHeldContractVisits,
+  useResyncContractLastBilled,
+  fetchContractFutureDrafts,
   type CRMContractService,
+  type ContractFutureDraft,
 } from "@/lib/hooks/use-contracts";
+import { useVoidInvoice } from "@/lib/hooks/use-invoices";
+import { useCancelContractPrompt } from "@/components/crm/contracts/CancelContractPrompt";
 import { useClientProperties } from "@/lib/hooks/use-clients";
 import { useCRMServices, useJobsByContract } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -1365,28 +1371,75 @@ export function ContractDialog({
   // Asks "bill this cycle now, or start with the next?" when a contract becomes
   // billable after its current billing day has passed (see LateCyclePrompt).
   const lateCycle = useLateCyclePrompt();
+  const cancelPrompt = useCancelContractPrompt();
+  const { mutateAsync: voidInvoice } = useVoidInvoice();
+  const { mutateAsync: resyncLastBilled } = useResyncContractLastBilled();
+  const { mutateAsync: releaseHeldVisits } = useReleaseHeldContractVisits();
   const isPending = creating || updating;
 
   async function handleStatusChange(status: ContractStatus) {
     if (!contract) return;
-    if (status === "cancelled" || status === "expired") {
-      // Visits on a contract that is no longer active stop being covered by the
-      // contract price and auto-invoice per visit instead — say so first.
-      const openJobs = (linkedJobs ?? []).filter((j) => j.status !== "completed" && j.status !== "cancelled").length;
-      if (openJobs > 0) {
-        const ok = await confirmEnd({
-          title: `${status === "cancelled" ? "Cancel" : "End"} this contract?`,
-          description: `${openJobs} linked job${openJobs !== 1 ? "s" : ""} will now bill per visit on the client's normal invoicing frequency instead of inside the contract price.`,
-          confirmLabel: status === "cancelled" ? "Cancel Contract" : "End Contract",
-          destructive: true,
-        });
-        if (!ok) return;
-      }
+    // Visits on a contract that is no longer active stop being covered by the
+    // contract price and auto-invoice per visit instead — say so first.
+    const openJobs = (linkedJobs ?? []).filter((j) => j.status !== "completed" && j.status !== "cancelled").length;
+    let voidDrafts: ContractFutureDraft[] = [];
+    if (status === "cancelled" && contract.status !== "cancelled") {
+      // Draft invoices already raised for dates after today (bill 1 month in advance) are
+      // listed so they can be voided along with the cancellation.
+      const drafts = await fetchContractFutureDrafts(contract.id).catch(() => [] as ContractFutureDraft[]);
+      const answer = await cancelPrompt.ask({
+        openJobs,
+        drafts,
+        unsigned: contract.status === "draft" || contract.status === "sent",
+      });
+      if (!answer) return;
+      voidDrafts = answer.voidDrafts;
+    } else if (status === "expired" && openJobs > 0) {
+      const ok = await confirmEnd({
+        title: "End this contract?",
+        description: `${openJobs} linked job${openJobs !== 1 ? "s" : ""} will now bill per visit on the client's normal invoicing frequency instead of inside the contract price.`,
+        confirmLabel: "End Contract",
+        destructive: true,
+      });
+      if (!ok) return;
     }
     try {
       const result = await updateStatus({ id: contract.id, status });
-      if (!result.skipped) toast.success(`Contract marked as ${status}`);
-      if (!result.skipped && (status === "signed" || status === "active")) await lateCycle.check(contract.id);
+      if (result.skipped) return;
+      toast.success(`Contract marked as ${status}`);
+
+      if (status === "cancelled" && voidDrafts.length > 0) {
+        let voided = 0;
+        for (const d of voidDrafts) {
+          try {
+            await voidInvoice({ id: d.id, clientId: d.clientId });
+            voided += 1;
+          } catch (err) {
+            toast.error(mutationErrorMessage(err, `Couldn't void invoice ${d.invoiceNumber != null ? `#${d.invoiceNumber}` : "draft"}`));
+          }
+        }
+        // "Billed through" must stop counting the voided cycles as paid for.
+        if (voided > 0) {
+          await resyncLastBilled(contract.id).catch(() => undefined);
+          toast.success(`${voided} draft invoice${voided !== 1 ? "s" : ""} voided`);
+        }
+      }
+
+      // Visits completed while it was unsigned were held. Signing puts them inside the contract
+      // (only their materials bill); cancelling unsigned bills them per visit.
+      const wasUnsigned = result.previousStatus === "draft" || result.previousStatus === "sent";
+      if (wasUnsigned && (status === "cancelled" || status === "signed" || status === "active")) {
+        try {
+          const released = await releaseHeldVisits(contract.id);
+          if (released.invoiced > 0) {
+            toast.success(`${released.invoiced} held visit${released.invoiced !== 1 ? "s" : ""} billed`);
+          }
+        } catch (err) {
+          toast.error(mutationErrorMessage(err, "Couldn't bill the visits held for this contract"));
+        }
+      }
+
+      if (status === "signed" || status === "active") await lateCycle.check(contract.id);
     } catch (err) {
       // Invalid state-machine transitions (e.g. cancelled -> active) throw a
       // descriptive Error from useUpdateContractStatus — surface that instead
@@ -1515,6 +1568,7 @@ export function ContractDialog({
       <DialogContent className="flex h-[85vh] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:p-0">
         {confirmEndDialog}
         {lateCycle.element}
+        {cancelPrompt.element}
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <div className="flex items-center gap-3">
             <DialogTitle className="text-xl font-bold">
@@ -1730,6 +1784,9 @@ export function ContractsList({ clientId }: Props) {
   const { mutateAsync: del } = useDeleteContract();
   const { mutateAsync: updateContract } = useUpdateContract();
   const { mutateAsync: generateInvoices, isPending: generatingInvoices } = useGenerateContractInvoices();
+  // Make Active resumes billing at the next cycle; any cycle left unbilled from
+  // BEFORE the pause (signed late) is still asked about, one contract at a time.
+  const lateCycle = useLateCyclePrompt();
 
   const baseContracts = (contracts ?? []);
   const filtered = baseContracts.filter((c) => {
@@ -1781,6 +1838,11 @@ export function ContractsList({ clientId }: Props) {
       toast.error(`${okCount} updated, ${failed.length} couldn't be changed: ${reason}`);
     }
     clearSelection();
+    if (active) {
+      for (const [i, id] of ids.entries()) {
+        if (results[i]?.status === "fulfilled") await lateCycle.check(id);
+      }
+    }
   }
 
   async function handleCreateInvoices() {
@@ -2126,6 +2188,7 @@ export function ContractsList({ clientId }: Props) {
         defaultClientId={clientId}
       />
       {confirmDialog}
+      {lateCycle.element}
     </div>
   );
 }
