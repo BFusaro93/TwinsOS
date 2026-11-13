@@ -2184,7 +2184,9 @@ export function ContractsList({ clientId }: Props) {
         key={editContract?.id ?? "new"}
         open={dialogOpen}
         onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditContract(undefined); }}
-        contract={editContract}
+        // The latest copy from the list, so a status change made in the dialog shows in its
+        // header right away (the snapshot taken when it opened would keep showing the old one).
+        contract={(editContract && contracts?.find((c) => c.id === editContract.id)) ?? editContract}
         defaultClientId={clientId}
       />
       {confirmDialog}
