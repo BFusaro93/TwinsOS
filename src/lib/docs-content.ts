@@ -972,7 +972,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Snow invoicing",
             detail:
-              "CRM > Accounting > Snow Invoicing groups a client's uninvoiced storm visits and computes the amount from the job's invoice type: a flat rate per event, a rate per inch of snowfall (per event or per push), or an hourly rate × actual hours logged. Make one snow job per service: Per Event/Per Inch and Per Push jobs price from their depth ranges and take one service (the service price isn't used), Hourly takes one service whose rate is the hourly rate, and Monthly Flat Rate bills only through a linked contract.",
+              "CRM > Accounting > Snow Invoicing groups a client's uninvoiced storm visits and computes the amount from the job's invoice type: a flat rate per event, a rate per inch of snowfall (per event or per push), or an hourly rate × actual hours logged. Make one snow job per service: Per Event/Per Inch and Per Push jobs price from their depth ranges and take one service (the service price isn't used), Hourly takes one service whose rate is the hourly rate, and Monthly Flat Rate bills only through a linked contract. A depth range can itself be billed Hourly (hourly rate × hours on site), usually as an all-inclusive top range. A job's Invoice Terms override the client's default terms, and a service can append the visit's clocked start-end times to its snow invoice line.",
           },
           {
             step: "Messaging clients about a storm",
@@ -2194,6 +2194,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Why does a return trip or extra crew show $0 on a snow stop?",
         a: "The storm is one charge on a Per Event or Per Event, Per Inch job, carried by the first push of the lead crew, so return trips and extra crews are recorded but not billed. Hourly jobs bill each crew's own hours, and Per Push jobs bill every push. On a flat Per Event job you can click the push's No charge tag to make it Billed (before it is invoiced).",
+      },
+      {
+        q: "How do I bill a snow depth range hourly?",
+        a: "On the job's depth ranges, set a range's Bill as to Hourly and enter the hourly rate (and optional budgeted hours, which are planning only). It bills the hours on site (clock out minus clock in minus breaks) × the rate; the usual setup is an all-inclusive top range such as 6 inches and up. On a Per Push job each push is priced by its own depth and bills its own hours. On a Per Event, Per Inch job the storm's deepest reading picks the range once, and an hourly range bills the hours of the storm's billed stops (return trips and extra crews stay unbilled there), so use Per Push when every trip should bill its hours.",
+      },
+      {
+        q: "How do I undo Dispatch, export the snow board, or hide old storms?",
+        a: "On the Snow Jobs board, tick stops and choose Actions > Cancel Dispatch to put dispatched stops back to Scheduled (stops the crew already started are left alone). Actions > Export Stops (CSV) downloads the stops currently shown after filters. To retire an old storm, open the status pill and choose Mark storm inactive; Show inactive next to the storm picker brings it back. Add Jobs also has a Service filter.",
+      },
+      {
+        q: "Can one job have different invoice terms than its client, and can invoices show visit times?",
+        a: "Yes. A job's Invoice Terms (Invoice Description tab) override the client's default terms for invoices made from that job, including Snow Invoicing; blank follows the client. An invoice bundling several snow jobs uses the override only if they all agree. Tick Show visit times on snow invoice lines on a service (Settings > Services) to append the visit's clocked start and end, like (7:05 AM - 8:40 AM), to its Snow Invoicing line.",
       },
       {
         q: "How do I bill a second salting?",

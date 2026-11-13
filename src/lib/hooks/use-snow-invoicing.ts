@@ -182,7 +182,7 @@ export function useUninvoicedSnowVisits(filters: {
             *,
             clients(display_name, primary_phone),
             crm_crews!crm_job_visits_crew_id_fkey(name),
-            crm_jobs!inner(*, crm_crews(name), crm_job_services(*))
+            crm_jobs!inner(*, crm_crews(name), crm_job_services(*, crm_services(invoice_time_on_lines)))
           `)
           .eq("status", "completed")
           .eq("crm_jobs.job_type", "snow")
@@ -615,11 +615,11 @@ export function useGenerateSnowInvoices() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: jobMetaRows } = await (supabase as any)
         .from("crm_jobs")
-        .select("id, po_number, sales_rep_id")
+        .select("id, po_number, sales_rep_id, invoice_terms")
         .in("id", [...new Set(groups.flatMap((g) => g.visits.map((v) => v.jobId)))]);
-      const jobMetaById = new Map<string, { po_number: string | null; sales_rep_id: string | null }>(
+      const jobMetaById = new Map<string, { po_number: string | null; sales_rep_id: string | null; invoice_terms: string | null }>(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ((jobMetaRows ?? []) as any[]).map((j): [string, { po_number: string | null; sales_rep_id: string | null }] => [j.id, j])
+        ((jobMetaRows ?? []) as any[]).map((j): [string, { po_number: string | null; sales_rep_id: string | null; invoice_terms: string | null }] => [j.id, j])
       );
 
       for (const group of groups) {
@@ -647,7 +647,11 @@ export function useGenerateSnowInvoices() {
         // dating the invoice the first storm made a late-billed storm's
         // invoice (and its due date) look weeks overdue on day one.
         const invoiceDate = todayInZone(orgTimeZone);
-        const invoiceTerms = resolveInvoiceTerms(defaultTermsByClient.get(group.clientId), orgTermsRow?.default_billing_terms);
+        // A job's own invoice terms win over the client's default. An invoice that bundles
+        // several jobs takes the override only when they all agree on one; otherwise the client's.
+        const jobTermsSet = new Set(billableVisits.map((v) => jobMetaById.get(v.jobId)?.invoice_terms ?? ""));
+        const jobTerms = jobTermsSet.size === 1 ? [...jobTermsSet][0] || null : null;
+        const invoiceTerms = resolveInvoiceTerms(jobTerms || defaultTermsByClient.get(group.clientId), orgTermsRow?.default_billing_terms);
 
         // Same tax rules as every other job → invoice path
         // (complete-visit-side-effects / useCreateInvoiceFromJob): a line is

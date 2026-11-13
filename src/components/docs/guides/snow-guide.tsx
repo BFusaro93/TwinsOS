@@ -225,6 +225,25 @@ export function SnowGuide() {
           <strong>Working</strong>. If a visit is added to a Complete storm any other way, the storm
           moves back to Working on its own, so it never reads as finished with work still to do.
         </p>
+        <p>
+          <strong>Add Jobs</strong> also has a <strong>Service</strong> filter (alongside the
+          search box) to narrow the list to one service. <strong>Actions &gt; Cancel Dispatch</strong>{" "}
+          puts the selected dispatched stops back to Scheduled; stops the crew has already started
+          are left alone and the message says how many. <strong>Actions &gt; Export Stops (CSV)</strong>{" "}
+          downloads the stops the board is currently showing (after filters) with date, client,
+          service, address, crew, status, depth, temperature, notes and amount. Old storms can be
+          retired from the picker: on the status pill choose <strong>Mark storm inactive</strong>,
+          and use <strong>Show inactive</strong> next to the picker to bring them back.
+        </p>
+        <p>
+          <strong>Invoice terms and times.</strong> A job&apos;s <strong>Invoice Terms</strong> (on
+          its Invoice Description tab) overrides the client&apos;s default terms for invoices made
+          from that job, including Snow Invoicing; leave it on the client&apos;s default to follow the
+          client. An invoice that bundles several snow jobs uses the override only when they all
+          agree. A service with <strong>Show visit times on snow invoice lines</strong> ticked (Settings
+          &gt; Services) adds the visit&apos;s clocked start and end, like (7:05 AM – 8:40 AM), to its
+          Snow Invoicing line.
+        </p>
       </Section>
 
       <Section id="board-tools" title="Filters, crews, route order, map, and weather">
@@ -668,6 +687,19 @@ export function SnowGuide() {
             <strong>0–1.99, 1.99–3.99, 3.99–5.99, 5.99–7.99</strong>. A push recorded at 4&quot; then
             lands in 3.99–5.99 and bills the 4–5.99 price. Depths above the last range bill $0 unless
             the last range is left open-ended, so price anything deeper by hand or add a top range.
+          </li>
+          <li>
+            <strong>Hourly ranges.</strong> Each range has a <strong>Bill as</strong> choice: Flat
+            (or Per inch for an open-ended top range) or <strong>Hourly</strong>. An hourly range
+            takes an hourly rate and optional budgeted hours, and bills the hours on site (clocked
+            out minus clocked in minus breaks) × that rate — the usual setup is an all-inclusive
+            top range (for example 6&quot;+ at $90 an hour) with flat prices below it. On a{" "}
+            <strong>Per Push</strong> job each push is priced by its own depth, and an hourly range
+            bills that push&apos;s hours. On a <strong>Per Event, Per Inch</strong> job the
+            storm&apos;s deepest reading picks the range once; if it is an hourly range, the storm
+            bills the hours of its billed stops (the lead crew&apos;s first push) × the rate. Return
+            trips and extra crews stay unbilled there, so use Per Push when every trip should bill
+            its hours. Budgeted hours are for planning only and do not change what is billed.
           </li>
           <li>
             <strong>A flat price per push</strong> (the same amount whatever the depth, for example a

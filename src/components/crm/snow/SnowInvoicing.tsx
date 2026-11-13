@@ -9,10 +9,12 @@ import {
   useGenerateSnowInvoices,
   billingGroupKey,
 } from "@/lib/hooks/use-snow-invoicing";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
 import {
   computeGroupAmountCents,
   describeAmount,
+  visitTimeRangeText,
   splitGroupAmountByVisit,
 } from "@/lib/snow-billing";
 import { capOverageLineText } from "@/lib/snow-caps";
@@ -78,6 +80,7 @@ export function SnowInvoicing() {
   const { can, isLoading: permissionsLoading } = usePermissions();
   const canGenerate = can("snow_invoicing_generate");
   const router = useRouter();
+  const orgTimeZone = useOrgTimeZone();
   const { data: events = [] } = useStormEvents();
   const [stormEventId, setStormEventId] = useState("");
   const { data: visits = [], isLoading, refetch } = useUninvoicedSnowVisits({
@@ -186,7 +189,11 @@ export function SnowInvoicing() {
             description: r.visit.capOverage ? capOverageLineText(r.visit.capOverage) : (r.visit.job?.services?.[0]?.serviceName ?? r.visit.job?.invoiceDescription ?? "Snow Service")
               + ((r.visit.pushNumber ?? 1) > 1 ? ` — Push ${r.visit.pushNumber}` : "")
               // Two trucks on an hourly stop would otherwise read as duplicate lines.
-              + (r.visit.crewGroupSecondary ? ` — ${r.visit.crewName ?? "Extra crew"}` : ""),
+              + (r.visit.crewGroupSecondary ? ` — ${r.visit.crewName ?? "Extra crew"}` : "")
+              // Services flagged "Show visit times on snow invoice lines" append when the crew clocked them.
+              + (r.visit.job?.services?.some((sv) => sv.serviceInvoiceTimeOnLines)
+                ? (() => { const t = visitTimeRangeText(r.visit, orgTimeZone); return t ? ` (${t})` : ""; })()
+                : ""),
             amountCents: r.amountCents,
             serviceDate: r.visit.scheduledDate,
             products: r.visit.stormProducts ?? [],
