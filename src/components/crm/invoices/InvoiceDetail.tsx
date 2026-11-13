@@ -382,13 +382,14 @@ function LineItemRow({
       </td>
       {/* Description */}
       <td className="px-3 py-2">
-        <input
+        <textarea
+          rows={Math.min(8, Math.max(1, notesToPlainText(row.description).split("\n").length))}
           value={notesToPlainText(row.description)}
-          onChange={(e) => update("description", e.target.value)}
+          onChange={(e) => update("description", e.target.value.replace(/^[-*] /gm, "• "))}
           onBlur={save}
-          placeholder="Description…"
+          placeholder="Description… (start a line with - for a bullet)"
           disabled={locked}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-700 dark:text-neutral-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full resize-y whitespace-pre-wrap rounded border border-transparent bg-transparent px-1 py-0.5 text-xs leading-snug text-slate-700 dark:text-neutral-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       {/* Service date */}

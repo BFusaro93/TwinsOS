@@ -285,7 +285,13 @@ export function DocumentsGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Invoice Email templates</strong> offer <strong>View &amp; pay invoice online</strong>,
-            which links each client to their own invoice page, plus a custom URL.
+            which links each client to their own invoice page, plus a custom URL. In the sent email the
+            button is drawn in the <strong>color of the invoice template</strong> you send with (your
+            company brand color if it has none), wherever you placed it in the template. If an Invoice
+            Email template has no invoice button or link, the email adds a{" "}
+            <strong>View &amp; Pay Invoice Online</strong> button at the bottom automatically, so the
+            client can always reach the invoice. The Preview tab in the send dialog shows whichever
+            applies.
           </li>
           <li>
             <strong>Every template type</strong> can use <strong>Custom URL</strong>. Enter a full address

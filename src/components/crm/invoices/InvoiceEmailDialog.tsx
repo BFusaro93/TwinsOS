@@ -20,6 +20,8 @@ import { formatCurrency } from "@/lib/utils";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { billingTermsLabel } from "@/lib/constants";
+import { invoiceBottomButtonHtml, styleInvoiceLinkButtons } from "@/lib/invoices/invoice-link-button";
+import { invoiceLinkLabel } from "@/lib/stripe/card-payments-available";
 import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { MERGE_TAGS_BY_TYPE } from "@/types/crm-documents";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
@@ -161,6 +163,18 @@ export function InvoiceEmailDialog({
       .replace(/\[(\w+)\]/g, (m) => escapeHtml(SAMPLE_MERGE_VALUES[m.toLowerCase()] ?? m));
   }
 
+  // Mirror the send route: a template link to the invoice shows as the branded
+  // button where it was placed; with none, the automatic bottom button the
+  // email adds is shown, so the preview matches what the client receives.
+  function previewWithInvoiceButton(html: string) {
+    const sampleUrl = SAMPLE_MERGE_VALUES["[viewinvoiceonline]"];
+    const accent = pdfTemplates.find((t) => t.id === pdfTemplateId)?.accentColor;
+    const brand = accent && /^#[0-9a-f]{6}$/i.test(accent) ? accent : "#60ab45";
+    const styled = styleInvoiceLinkButtons(html, escapeHtml(sampleUrl), brand);
+    if (styled.hasInvoiceLink) return styled.html;
+    return `${styled.html}${invoiceBottomButtonHtml(sampleUrl, escapeHtml(invoiceLinkLabel(true, "banner")), brand)}`;
+  }
+
   async function handleSend() {
     if (toEmails.length === 0) {
       toast.error("Enter at least one recipient email address");
@@ -269,6 +283,9 @@ export function InvoiceEmailDialog({
                 placeholder="Email body…"
                 minHeight={200}
               />
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                An invoice button or link here is sent as a button in the invoice template&apos;s color.
+              </p>
               {/* Merge tag reference */}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {MERGE_TAGS_BY_TYPE.invoice_email.map((mt) => (
@@ -287,8 +304,11 @@ export function InvoiceEmailDialog({
 
             <TabsContent value="preview" className="mt-2">
               <div className="min-h-[240px] rounded border bg-card p-4 text-sm overflow-auto">
-                <SandboxedHtmlPreview html={previewResolve(bodyHtml)} minHeight={208} />
+                <SandboxedHtmlPreview html={previewWithInvoiceButton(previewResolve(bodyHtml))} minHeight={208} />
               </div>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                The invoice button uses the color of the selected invoice template (your company brand color if it has none). If the email has no invoice link, this button is added at the bottom automatically.
+              </p>
             </TabsContent>
           </Tabs>
 
