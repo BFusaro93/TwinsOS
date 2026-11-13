@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { assertOrgWritable } from "@/lib/org-writable";
@@ -204,7 +205,7 @@ export async function POST(
   // email as failed, so it is logged and surfaced as a warning instead.
   const nowIso = new Date().toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: logErr } = await (supabase as any).from("client_activity").insert({
+  const { error: logErr } = await insertEmailActivity(supabase, {
     org_id: orgId,
     client_id: ticket.client_id,
     activity_type: "email",
@@ -216,7 +217,7 @@ export async function POST(
     ref_table: "crm_tickets",
     occurred_at: nowIso,
     created_by: user.id,
-  });
+  }, { html: resolvedBody });
   if (logErr) log.error("client_activity insert failed", { ticketId, error: logErr.message });
 
   // Optional status change after sending.

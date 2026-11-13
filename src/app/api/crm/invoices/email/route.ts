@@ -1,4 +1,5 @@
 import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
+import { insertEmailActivity } from "@/lib/email/log-email-activity";
 import { NextRequest, NextResponse } from "next/server";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { safeHexColor } from "@/lib/utils/safe-color";
@@ -12,6 +13,7 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { resolveDefaultInvoicePdfTemplate } from "@/lib/invoices/default-pdf-template";
 import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { billingTermsLabel } from "@/lib/constants";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
@@ -252,17 +254,7 @@ export async function POST(req: NextRequest) {
     pdfTemplate = chosenTemplate ?? null;
   }
   if (!pdfTemplate) pdfTemplate = inv.crm_invoice_pdf_templates ?? null;
-  if (!pdfTemplate) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: defaultTemplate } = await (supabase as any)
-      .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes")
-      .eq("org_id", inv.org_id)
-      .eq("is_default", true)
-      .is("deleted_at", null)
-      .maybeSingle();
-    pdfTemplate = defaultTemplate ?? null;
-  }
+  if (!pdfTemplate) pdfTemplate = await resolveDefaultInvoicePdfTemplate(supabase, inv.org_id);
   const layoutKey: InvoicePDFLayoutKey = (pdfTemplate?.layout_key as InvoicePDFLayoutKey) ?? "default";
   // Template accent / brand colour are org-editable text interpolated into a
   // style attribute: only a plain hex value is used (anything else could inject
@@ -606,7 +598,7 @@ export async function POST(req: NextRequest) {
 
   // Log activity
   if (inv.client_id) {
-    await bookkeepingDb.from("client_activity").insert({
+    await insertEmailActivity(bookkeepingDb, {
       org_id: effOrgId,
       client_id: inv.client_id,
       activity_type: "email",
@@ -618,7 +610,7 @@ export async function POST(req: NextRequest) {
       resend_message_id: sendData?.id ?? null,
       occurred_at: new Date().toISOString(),
       created_by: user.id,
-    });
+    }, { html, cc: ccEmails });
   }
 
   return NextResponse.json({ ok: true, bouncedSkipped: bouncedEmails });

@@ -935,9 +935,49 @@ export const DOC_SECTIONS: DocSection[] = [
               "Add jobs to the storm event, then dispatch visits in priority order — High before Normal before Low, set per client. Storm event status moves Pending → Working → Complete.",
           },
           {
+            step: "Storms that run several days",
+            detail:
+              "Every stop has its own Date (a column on the Snow Jobs board, plus a Dates filter). Click a stop's date to move just that stop, or tick several stops and use Move to date in the selection bar (or the map's selection panel). In Add Jobs each job also has its own date: tick the jobs for a day, pick the date, click Set date, then Add to Dispatch, and repeat for the next day. Finished and cancelled stops don't move, a stop a crew has clocked into can't change day, and the crew sees a stop on the day it is scheduled for. Route order is kept per crew per day, so Optimize Routes and the arrows work within one day at a time.",
+          },
+          {
+            step: "Return trips (pushes) and how they bill",
+            detail:
+              "When a crew has to go back to a site during a storm, each return is its own visit (Push 2, Push 3...) with its own clock-in/out, depth and crew, and a line on the client's timeline. The office clicks Add push next to the client's name; the crew can tap 'Going back? Add another push' on a finished stop in the crew app. Billing follows the job's invoice type: Per Push and Hourly jobs bill every push; Per Event, Per Inch jobs bill the storm once, on the deepest reading across all its visits (a return trip never bills separately, but a deeper reading on it sets the price); a flat Per Event job records a return trip at no charge unless you choose 'Bill it' when adding it (for example a second salting by another crew). The Billed / No charge tag on a push can be clicked to flip it until it is invoiced. Pushes the crew adds from the tablet start as No charge.",
+          },
+          {
+            step: "More than one crew on a stop",
+            detail:
+              "Tick the stops and use Assign crews... (selection bar or the map panel), tick the crews and click Set crews. The first crew is the Lead and carries the stop's charge; each extra crew gets its own row tagged Extra crew with its own clock-in, hours and depth. On Hourly jobs every crew bills its own hours on site; on every other billing type only the lead bills. Separate billable work (for example salt after plowing) is its own job, or Add push on a Per Push job, not an extra crew.",
+          },
+          {
+            step: "Crew app: need help, or can't make it (snow stops)",
+            detail:
+              "On a snow stop the crew app has 'Need help? Call in another crew': the crew they pick gets the stop on its tablet straight away (even after the first crew has clocked in), as an extra crew. Before the crew has started the stop it also has 'Can't make it? Hand off to another crew': the stop moves to the other crew's tablet and comes off theirs, same visit and same billing. Both put a line on the client's timeline; a hand-off also shows 'Handed off from ...' on the board. A stop that already has several crews has to be moved by the office. Both are for snow stops only for now.",
+          },
+          {
+            step: "Board tools: columns, filters, select all, map",
+            detail:
+              "Columns: Date, Service, Address, City, State, Zip, Priority, Trigger, Crew, Depth, Temp, Notes to Crew and Amt (the column chooser remembers your choice). Filters: crew, status, Dates, Services, Priorities, Cities and Zips, plus search. The header checkbox (or Actions > Select All Shown) selects every stop currently shown, so you can filter to an area and act on all of it. The Map button opens a working map with three tools: Select (click stops), Route order (left-click a stop to move it later in its crew's route, right-click to move it earlier) and Draw area (click points to outline an area, then Finish shape selects every stop inside). With stops selected, its panel shows their services, budgeted hours and total and lets you assign a crew, open Assign crews, move them to a date or dispatch them. Crews can be hidden or shown, and 'Show only selected stops' narrows the map or the table.",
+          },
+          {
+            step: "Master Routes",
+            detail:
+              "Click Master Routes on the Snow Jobs board (the same editor is in Settings > Services > Snow Routes). Pick a route or add one (name, default crew, Active). 'Find jobs for this route' searches snow jobs by client or address, service, zip code(s) and distance (1 to 25 miles of an address or of one of the route's stops), with 'Not already on a route' ticked by default; tick the results and Add to route. A job can be on only one route. Snow jobs added since the routes were built are listed at the top with a NEW flag. Order stops by dragging, typing a position or the arrows; Group Stops orders every stop by driving time from the crew's shop, Optimize Route keeps stop 1 and routes onward from it. Add Jobs can then bring in a whole route, and Actions > Save Order to Master Routes writes a storm's order back onto the routes.",
+          },
+          {
+            step: "Contract caps and overage (inches, salts, events, pushes)",
+            detail:
+              "On a Monthly Flat Rate snow contract, tick 'This contract includes snow service' (it ticks itself when a snow job is linked), then set Snow Caps & Overage: an Inch cap (for example 60 or 80 a year), a Salt cap (for example 35 salt applications), and optional Event and Push caps. Cap resets each contract year (from the start date) or monthly. Each linked job is tagged plowing (counts toward inch, event and push caps) or salting (salt cap). Work inside a cap stays covered by the contract price; work beyond it bills as overage in Snow Invoicing, tagged Overage, at the overage price per inch, salt, event or push you set (a cap with no overage price leaves the visits in the queue at $0 with a warning). Inches count once per storm on its deepest depth; a second salting counts as a second salt application. The contract shows usage (for example 42 of 80 in used) and a stop whose cap is used up shows an Overage chip on the board.",
+          },
+          {
             step: "Snow invoicing",
             detail:
               "CRM > Accounting > Snow Invoicing groups a client's uninvoiced storm visits and computes the amount from the job's invoice type: a flat rate per event, a rate per inch of snowfall (per event or per push), or an hourly rate × actual hours logged. Make one snow job per service: Per Event/Per Inch and Per Push jobs price from their depth ranges and take one service (the service price isn't used), Hourly takes one service whose rate is the hourly rate, and Monthly Flat Rate bills only through a linked contract.",
+          },
+          {
+            step: "Messaging clients about a storm",
+            detail:
+              "On the Snow Jobs board, tick the stops, then use Actions > Email Clients… or Text Clients… (also buttons on the selection bar; needs the Send Emails / Send Texts permission). A client with several stops gets one message. Pick a saved template to pre-fill it, edit freely, preview one recipient, then confirm: the dialog shows how many will receive it and who is skipped (no email or phone, bounced email, not opted in to texts, or a number that replied STOP). Storm messages are service notices, so Do Not Market clients still get them, but bounced addresses and text opt-outs are always respected. Every message is logged on the client's timeline. 'Jobs Without Emails…' lists selected (or shown) stops whose client has no usable email. Merge tags: [stormname], [stormdate], [snowservice], [snowcrew], [snowstatus], [snowarrival], [snowaddress], plus client/company tags. Save wording as a template in the dialog or in Documents (types 'Snow – Email' and 'Snow – Text Message'); the same templates can be used in an automation's Email or Text step (e.g. on visit dispatched or completed) for fixed messages that send on their own.",
           },
           {
             step: "Full guides",
@@ -2148,6 +2188,42 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "No. Each storm is its own stop in the crew app.",
       },
       {
+        q: "A crew has to go back to a property during a storm. How do I record and bill it?",
+        a: "On the Snow Jobs board click Add push next to the client's name (or the crew taps 'Going back? Add another push' on the finished stop in the crew app). The return is its own visit (Push 2, Push 3...) with its own times, depth and crew, and a line on the client's timeline. Per Push and Hourly jobs bill every push. Per Event, Per Inch jobs bill the storm once on the deepest reading across all visits, so the return trip never bills separately. A flat Per Event job records it at no charge unless you choose Bill it.",
+      },
+      {
+        q: "Why does a return trip or extra crew show $0 on a snow stop?",
+        a: "The storm is one charge on a Per Event or Per Event, Per Inch job, carried by the first push of the lead crew, so return trips and extra crews are recorded but not billed. Hourly jobs bill each crew's own hours, and Per Push jobs bill every push. On a flat Per Event job you can click the push's No charge tag to make it Billed (before it is invoiced).",
+      },
+      {
+        q: "How do I bill a second salting?",
+        a: "Add a push to the salt job and choose Bill it (flat Per Event salt jobs), then set the crew if another crew did it. It then bills as its own charge. On a Per Push or Hourly salt job every push already bills. On a contract with a salt cap, each salting counts as one application toward the cap, and ones past the cap bill as overage.",
+      },
+      {
+        q: "Two trucks are needed at one snow stop. How do I add a second crew, and who bills?",
+        a: "Tick the stop and use Assign crews... (selection bar or map panel), tick both crews, and click Set crews. The first crew ticked is the Lead and bills the storm; the other gets its own row tagged Extra crew with its own clock-in and hours. On Hourly jobs each crew bills its own hours on site; otherwise the extra crew is not billed.",
+      },
+      {
+        q: "Crew B needs help, or can't make it to a snow stop. What can the crew do from the tablet?",
+        a: "On a snow stop, Need help? Call in another crew gives the stop to the crew they pick straight away, even after clocking in. Before starting the stop, Can't make it? Hand off to another crew moves the stop to that crew's tablet and off theirs. Both log a line on the client's timeline and hand-offs show 'Handed off from ...' on the board. A stop with several crews has to be moved by the office, and these buttons are for snow stops only.",
+      },
+      {
+        q: "The storm runs several days. How do I put stops on different days?",
+        a: "Every stop has its own Date. In Add Jobs, tick the jobs for one day, pick the date and click Set date; repeat for each day. On the board click a stop's date, or tick several and use Move to date. Completed and cancelled stops don't move, and a stop a crew has clocked into can't change day. Filter by the Dates filter to work on one day; route order and Optimize Routes work per crew per day.",
+      },
+      {
+        q: "How do I select every snow stop in an area?",
+        a: "Open the Map on the Snow Jobs board, choose Draw area, click points around the area and click Finish shape: every stop inside is selected (and selected in the table). Then assign a crew, move a date or dispatch from the map panel. Or filter the table by zip or city and tick the header checkbox to select all shown.",
+      },
+      {
+        q: "How do snow contract caps and overage work?",
+        a: "On a Monthly Flat Rate snow contract you can cap inches (for example 60 or 80 a year), salt applications (for example 35), and optionally events and pushes, resetting each contract year or monthly. Work inside the cap is covered by the flat price; work beyond it bills as overage in Snow Invoicing at the overage price you set. Inches count once per storm on its deepest reading; each salting counts one application. The contract shows usage and a stop past its cap shows an Overage chip.",
+      },
+      {
+        q: "How do I build or change snow Master Routes?",
+        a: "Click Master Routes on the Snow Jobs board (also in Settings > Services > Snow Routes). Search for jobs by service, zip or distance, add them to a route, order the stops by dragging or with Group Stops / Optimize Route, and set the route's default crew. Snow jobs not on any route are flagged NEW. A job can be on only one route.",
+      },
+      {
         q: "What happens to storms outside a snow contract's dates?",
         a: "You choose on the contract. Don't service: the jobs aren't offered for those storms. Included in the flat rate: they're plowed and covered by the price. Bill per event: they're plowed and billed, with a Monthly Flat Rate job billing the contract's Price per storm. If no price is set, Snow Invoicing shows a warning instead of billing $0.",
       },
@@ -2781,11 +2857,11 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Can two crews work the same job on the same day?",
-        a: "Yes. Open the visit on the Dispatch Board (or the job's Visits table > Change date / crew) and use 'Crews on this stop' > 'Add another crew…'. Each crew gets its own visit, so it has its own row in its own column, its own stop in the Crew App, and clocks its own hours. The original visit is the Lead: it carries the revenue and creates the one invoice, the added crew's visit shows $0 and never invoices, and Job Costing adds up every crew's labor. A shared stop uses one contract visit, rescheduling one crew moves the others that haven't started, and snow visits can't take a second crew.",
+        a: "Yes. Open the visit on the Dispatch Board (or the job's Visits table > Change date / crew) and use 'Crews on this stop' > 'Add another crew…'. Each crew gets its own visit, so it has its own row in its own column, its own stop in the Crew App, and clocks its own hours. The original visit is the Lead: it carries the revenue and creates the one invoice, the added crew's visit shows $0 and never invoices, and Job Costing adds up every crew's labor. A shared stop uses one contract visit, rescheduling one crew moves the others that haven't started, and a snow stop can take extra crews too from the Snow Jobs board (the lead carries the storm's charge; on Hourly jobs each crew bills its own hours).",
       },
       {
         q: "Can I put several crews on many visits at once from the Dispatch Board?",
-        a: "Yes. Check the visits, then Actions > Re-assign Crew > Multiple crews… and tick the crews. The ticked crews become each stop's full crew list: the first crew you tick is the Lead (it bills the stop), the others are added as Shared, and any crew on the stop that you didn't tick is removed. With one stop selected the dialog opens with its current crews ticked, so you can untick one to remove it or tick the first one you want as Lead. Selecting one row of a shared stop covers the whole stop. A stop is skipped, with a message, if its Lead has already started; a crew that has already started stays on the stop; completed and cancelled visits are never changed, and snow visits can't take extra crews.",
+        a: "Yes. Check the visits, then Actions > Re-assign Crew > Multiple crews… and tick the crews. The ticked crews become each stop's full crew list: the first crew you tick is the Lead (it bills the stop), the others are added as Shared, and any crew on the stop that you didn't tick is removed. With one stop selected the dialog opens with its current crews ticked, so you can untick one to remove it or tick the first one you want as Lead. Selecting one row of a shared stop covers the whole stop. A stop is skipped, with a message, if its Lead has already started; a crew that has already started stays on the stop; completed and cancelled visits are never changed, and snow stops take extra crews from the Snow Jobs board's Assign crews... button (the lead bills; Hourly extras bill their own hours).",
       },
       {
         q: "Why does the second crew on a shared stop show $0 and no Invoice button?",

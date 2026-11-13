@@ -27,6 +27,10 @@ import {
   useStopPause,
   useStopResume,
   useSkipVisit,
+  useAddCrewPush,
+  useHelperCrews,
+  useRequestHelp,
+  useHandOffStop,
   useAcknowledgeNotes,
   useAddCrewNote,
   useUploadVisitPhoto,
@@ -284,6 +288,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const stopPause    = useStopPause();
   const stopResume   = useStopResume();
   const skipVisit     = useSkipVisit();
+  const addCrewPush   = useAddCrewPush();
+  const requestHelp   = useRequestHelp();
+  const handOff       = useHandOffStop();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpMode, setHelpMode] = useState<"help" | "handoff">("help");
+  const { data: helperCrews = [], isLoading: helperCrewsLoading } = useHelperCrews(helpOpen);
   const acknowledge   = useAcknowledgeNotes();
   const addNote       = useAddCrewNote();
   const uploadPhoto   = useUploadVisitPhoto();
@@ -377,6 +387,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         })
       : null;
   // Cancelled is terminal too: it used to offer a big Start Job that only got a server error.
+  // Calling in another crew / handing off a stop is snow-only for now (the DB functions enforce it too).
+  const isSnowStop = !!stop?.visits.some((v) => v.stormEventId && v.job?.jobType === "snow");
+  // A finished snow stop the crew has to return to: the visit the next push hangs off (latest push).
+  const snowPushSource = stop?.visits
+    .filter((v) => v.status === "completed" && v.stormEventId && v.job?.jobType === "snow")
+    .sort((a, b) => (b.pushNumber ?? 1) - (a.pushNumber ?? 1))[0];
   const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped" || stop?.derivedStatus === "cancelled";
   const isPaused = isActive && !!stop?.pausedAt;
 
@@ -1077,6 +1093,27 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
         )}
 
+        {/* Need help: call another crew onto this stop — it lands on their tablet straight away. */}
+        {!isComplete && stop && isSnowStop && (
+          <button
+            type="button"
+            onClick={() => { setHelpMode("help"); setHelpOpen(true); }}
+            className="min-h-11 w-full rounded-xl border border-border bg-card px-4 text-sm font-medium text-slate-700 dark:text-neutral-300 hover:bg-muted"
+          >
+            {t("Need help? Call in another crew")}
+          </button>
+        )}
+        {/* Can't make it at all: only before the crew has started the stop. */}
+        {!isComplete && stop && isSnowStop && !stop.clockedInAt && (
+          <button
+            type="button"
+            onClick={() => { setHelpMode("handoff"); setHelpOpen(true); }}
+            className="min-h-11 w-full rounded-xl border border-border bg-card px-4 text-sm font-medium text-slate-700 dark:text-neutral-300 hover:bg-muted"
+          >
+            {t("Can't make it? Hand off to another crew")}
+          </button>
+        )}
+
         {isComplete && (
           <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 text-center">
             <p className="font-medium text-green-800 dark:text-green-300">
@@ -1086,6 +1123,23 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                 {clock(stop.clockedInAt)} – {clock(stop.clockedOutAt)}
               </p>
+            )}
+            {stop.derivedStatus === "completed" && snowPushSource && (
+              <button
+                type="button"
+                disabled={addCrewPush.isPending}
+                onClick={async () => {
+                  try {
+                    await addCrewPush.mutateAsync(snowPushSource.id);
+                  } catch {
+                    return; // surfaced by the mutation's onError
+                  }
+                  router.push("/crm/crew");
+                }}
+                className="mt-3 min-h-11 w-full rounded-lg border border-green-300 dark:border-green-700 bg-card px-3 text-sm font-medium text-green-800 dark:text-green-300 disabled:opacity-60"
+              >
+                {addCrewPush.isPending ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : t("Going back? Add another push")}
+              </button>
             )}
           </div>
         )}
@@ -1462,6 +1516,57 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 t("Send to office")
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Need help — pick the crew to call in */}
+      <Dialog open={helpOpen} onOpenChange={(o) => { if (!requestHelp.isPending && !handOff.isPending) setHelpOpen(o); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{helpMode === "handoff" ? t("Hand off this stop") : t("Call in another crew")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600 dark:text-neutral-400">
+            {helpMode === "handoff"
+              ? t("The stop moves to their tablet right away and comes off yours.")
+              : t("They'll get this stop on their tablet right away, and you both stay on it.")}
+          </p>
+          <div className="max-h-72 space-y-1 overflow-y-auto">
+            {helperCrewsLoading && <Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-400" />}
+            {!helperCrewsLoading && helperCrews.length === 0 && (
+              <p className="py-3 text-center text-sm text-slate-400 dark:text-neutral-500">{t("No other crews")}</p>
+            )}
+            {helperCrews.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                disabled={requestHelp.isPending || handOff.isPending}
+                onClick={async () => {
+                  const ids = (stop?.visits ?? []).filter((v) => !["completed", "cancelled", "skipped"].includes(v.status)).map((v) => v.id);
+                  if (ids.length === 0) return;
+                  try {
+                    if (helpMode === "handoff") {
+                      const res = await handOff.mutateAsync({ visitIds: ids, crewId: c.id });
+                      toast.success(t("Handed off to {crew}", { crew: res.crewName || c.name }));
+                      setHelpOpen(false);
+                      router.push("/crm/crew");
+                      return;
+                    }
+                    const res = await requestHelp.mutateAsync({ visitIds: ids, crewId: c.id });
+                    toast.success(t("{crew} was called in", { crew: res.crewName || c.name }));
+                    setHelpOpen(false);
+                  } catch {
+                    // surfaced by the mutation's onError; keep the dialog open
+                  }
+                }}
+                className="min-h-11 w-full rounded-lg border border-border px-3 text-left text-sm hover:bg-muted disabled:opacity-60"
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" disabled={requestHelp.isPending || handOff.isPending} onClick={() => setHelpOpen(false)}>{t("Cancel")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

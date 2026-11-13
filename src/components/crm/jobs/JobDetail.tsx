@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { VisitStatusIcon } from "@/components/shared/VisitStatusIcon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SnowCapKindSelect } from "@/components/crm/jobs/SnowCapKindSelect";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -1432,7 +1433,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           />
                         )}
                         {((edits.invoice_type as string | undefined) ?? job.invoiceType) === "monthly_flat_rate" && (
-                          <SnowMonthlyBillingLink jobId={job.id} clientId={job.clientId} contractId={job.contractId} />
+                          <>
+                            <SnowMonthlyBillingLink jobId={job.id} clientId={job.clientId} contractId={job.contractId} />
+                            <SnowCapKindSelect
+                              small
+                              value={((edits.snow_cap_kind as string | undefined) ?? job.snowCapKind) === "salt" ? "salt" : "inches"}
+                              onChange={(k) => patch("snow_cap_kind", k)}
+                            />
+                          </>
                         )}
                         <div className="flex flex-col gap-1">
                           <Label className="text-xs text-muted-foreground">Asset Type</Label>

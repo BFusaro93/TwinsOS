@@ -49,6 +49,7 @@ export function CrewAppGuide() {
           <TOCLink href="#crew-day">Start Day and End Day</TOCLink>
           <TOCLink href="#working-a-stop">Working a stop</TOCLink>
           <TOCLink href="#shared-stops">When another crew is on your stop</TOCLink>
+          <TOCLink href="#snow-stops">Snow: going back, calling in help, handing off</TOCLink>
           <TOCLink href="#hours">How your hours are worked out</TOCLink>
           <TOCLink href="#notes-photos">Notes and photos</TOCLink>
           <TOCLink href="#suggest-work">Suggesting work you spot</TOCLink>
@@ -499,6 +500,37 @@ export function CrewAppGuide() {
           the office from the lead crew&apos;s stop, so your stop doesn&apos;t create its own invoice,
           and chemicals are confirmed on the lead crew&apos;s stop. Materials and sub-items for the stop
           show on your stop too, so either crew can record what was used.
+        </p>
+      </Section>
+
+      <Section id="snow-stops" title="Snow: going back, calling in help, handing off">
+        <p>
+          Three buttons on a <strong>snow</strong> stop cover the things that happen mid-storm. They
+          show on snow stops only, for now.
+        </p>
+        <p>
+          <strong>Going back? Add another push.</strong> On a stop you have finished, tap this when
+          you have to return to the site during the same storm. It adds the next push (<em>Push 2</em>,{" "}
+          <em>Push 3</em>…) to your list as its own stop, with its own Start Job, Stop Job, hours and
+          photos, so every trip to the property is on record. Whether a return trip bills depends on
+          the job (the office decides and can change it): it can be part of the storm&apos;s one
+          charge, no charge, or billed on its own. Pushes you add start as no charge until the office
+          says otherwise.
+        </p>
+        <p>
+          <strong>Need help? Call in another crew.</strong> On a stop that isn&apos;t finished, tap
+          this and pick the crew you want. The stop appears on that crew&apos;s tablet straight away
+          (even if you have already started it), as in <em>When another crew is on your stop</em>
+          above: you each clock your own hours, and the lead crew&apos;s stop carries the charge (on
+          Hourly snow jobs each crew bills its own hours).
+        </p>
+        <p>
+          <strong>Can&apos;t make it? Hand off to another crew.</strong> Before you tap Start Job, if
+          you can&apos;t get to a stop at all, tap this and pick a crew. The stop moves to their
+          tablet straight away and comes off yours. If you have already started, use Need help
+          instead. A stop that already has several crews can&apos;t be handed off from the app — call
+          the office. The office sees a <em>Handed off from …</em> flag on the snow board and a line on
+          the client&apos;s timeline.
         </p>
       </Section>
 

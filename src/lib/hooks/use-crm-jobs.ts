@@ -622,6 +622,7 @@ function mapJobFull(row: any): CRMJob {
   return {
     ...mapJob(row),
     contractId: row.contract_id ?? null,
+    snowCapKind: row.snow_cap_kind === "salt" || row.snow_cap_kind === "inches" ? row.snow_cap_kind : null,
     schedule: row.schedule ?? null,
     scheduleDays: row.schedule_days ?? [],
     packageName: row.package_name ?? null,
@@ -847,6 +848,8 @@ export function mapVisit(row: any): CRMJobVisit {
     jobServiceId: row.job_service_id ?? null,
     stormEventId: row.storm_event_id ?? null,
     pushNumber: Number(row.push_number ?? 1) || 1,
+    billPush: row.bill_push === true,
+    handedOffFromCrewId: row.handed_off_from_crew_id ?? null,
     snowDepthInches: row.snow_depth_inches ?? null,
     temperature: row.temperature ?? null,
     assetType: row.asset_type ?? null,
@@ -1476,6 +1479,7 @@ export function useUpdateVisit() {
         completed_at: string | null;
         order_num: number | null;
         snow_depth_inches: number | null;
+        bill_push: boolean;
         temperature: number | null;
         asset_type: string | null;
         materials_used: { name: string; qty: number; rate_cents: number }[];
@@ -1795,6 +1799,7 @@ export function useCreateClientJob() {
           conflict_days: values.conflictDays,
           inch_trigger: values.inchTrigger ?? null,
           invoice_type: values.invoiceType || null,
+          snow_cap_kind: values.snowCapKind ?? null,
           rate_per_inch_cents: values.ratePerInchCents ?? null,
           asset_type: values.assetType || null,
           sales_rep_id: values.salesRepId || null,
