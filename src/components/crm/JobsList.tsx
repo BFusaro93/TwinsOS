@@ -42,11 +42,13 @@ interface JobSummary {
   jobServiceId: string | null;
   visitCount: number;
   completedCount: number;
+  /** Pending visits dated before today (never completed, skipped or cancelled). */
+  overdueCount: number;
 }
 
 const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
 
-function summarizeJob(job: CRMJob, window?: { from: string; to: string }): JobSummary {
+function summarizeJob(job: CRMJob, window?: { from: string; to: string }, today?: string): JobSummary {
   const visits = job.visits ?? [];
   if (visits.length === 0) {
     return {
@@ -58,6 +60,7 @@ function summarizeJob(job: CRMJob, window?: { from: string; to: string }): JobSu
       jobServiceId: null,
       visitCount: 0,
       completedCount: 0,
+      overdueCount: 0,
     };
   }
   const sorted = [...visits].sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
@@ -76,6 +79,10 @@ function summarizeJob(job: CRMJob, window?: { from: string; to: string }): JobSu
   const inWindow = window
     ? pending.find((v) => (!window.from || v.scheduledDate >= window.from) && (!window.to || v.scheduledDate <= window.to))
     : undefined;
+  // Missed work stays visible on the row even when the job is listed for a later visit.
+  const overdueCount = today && job.status !== "cancelled" && job.status !== "hold"
+    ? pending.filter((v) => v.scheduledDate < today).length
+    : 0;
   const rep = inWindow ?? pending[0] ?? sorted[sorted.length - 1];
   const status =
     job.status === "cancelled" || job.status === "hold"
@@ -94,6 +101,7 @@ function summarizeJob(job: CRMJob, window?: { from: string; to: string }): JobSu
     jobServiceId: rep.jobServiceId,
     visitCount: sorted.length,
     completedCount,
+    overdueCount,
   };
 }
 
@@ -175,8 +183,8 @@ export function JobsList() {
   });
 
   const summaries = useMemo(
-    () => jobs.map((j) => summarizeJob(j, { from: fromDate, to: toDate })),
-    [jobs, fromDate, toDate]
+    () => jobs.map((j) => summarizeJob(j, { from: fromDate, to: toDate }, todayInZone(orgTimeZone))),
+    [jobs, fromDate, toDate, orgTimeZone]
   );
 
   const viewFiltered = summaries.filter((o) => {
@@ -426,7 +434,7 @@ export function JobsList() {
 }
 
 function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () => void }) {
-  const { job, status, crewName, jobServiceId, visitCount, completedCount } = occurrence;
+  const { job, status, crewName, jobServiceId, visitCount, completedCount, overdueCount } = occurrence;
   // Package jobs carry every step (e.g. all 5 Fert applications) on job.services,
   // but this occurrence is only for the ONE step its visit is linked to — show
   // just that, not every step on the whole package (same fix as Waiting List
@@ -464,6 +472,15 @@ function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () =
         <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[status] ?? "bg-muted text-muted-foreground")}>
           {STATUS_LABEL[status] ?? status}
         </Badge>
+        {overdueCount > 0 && (
+          <Badge
+            variant="outline"
+            className="ml-1 text-[10px] border-transparent bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"
+            title={`${overdueCount} earlier visit${overdueCount > 1 ? "s were" : " was"} never completed, skipped or cancelled`}
+          >
+            {overdueCount} overdue
+          </Badge>
+        )}
         {visitCount > 1 && (
           <p className="mt-0.5 text-[10px] text-slate-400 dark:text-neutral-500">{completedCount}/{visitCount} visits</p>
         )}
