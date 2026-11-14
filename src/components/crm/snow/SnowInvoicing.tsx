@@ -371,6 +371,15 @@ export function SnowInvoicing() {
                         {visit.billingWarning && (
                           <span className="mt-1 block text-[10px] text-amber-700 dark:text-amber-400">{visit.billingWarning}</span>
                         )}
+                        {/* A depth was recorded but no range / rate covers it — otherwise a silent $0 that
+                            only surfaces as a toast at generate time. */}
+                        {amountCents === 0 &&
+                          (visit.job?.invoiceType === "per_event_per_inch" || visit.job?.invoiceType === "per_push_per_inch") &&
+                          visit.snowDepthInches != null && visit.snowDepthInches > 0 && (
+                            <span className="mt-1 block text-[10px] text-amber-700 dark:text-amber-400">
+                              {visit.snowDepthInches}&quot; isn&apos;t covered by any depth range or rate per inch on this job — add one to bill it.
+                            </span>
+                          )}
                         {(visit.job?.invoiceType === "per_event_per_inch" || visit.job?.invoiceType === "per_push_per_inch") &&
                           (visit.snowDepthInches == null || visit.snowDepthInches <= 0) && (
                             <SnowDepthInput visit={visit} onSaved={() => void refetch()} />
