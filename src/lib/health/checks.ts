@@ -14,6 +14,8 @@ export interface HealthCheckResult {
   detail: string;
   /** Per-org problems behind a degraded/down row (staff-only data). */
   failures?: { label: string; detail: string }[];
+  /** ISO time of the underlying check when the row is served from a long cache; the page formats it in the viewer's timezone. */
+  checkedAt?: string;
 }
 
 export interface UptimeMonitor {
@@ -51,6 +53,8 @@ async function timed(
     };
   }
 }
+
+const withCheckedAt = (result: HealthCheckResult, at: number): HealthCheckResult => ({ ...result, checkedAt: new Date(at).toISOString() });
 
 function notConfigured(id: string, name: string, envVar: string): HealthCheckResult {
   return { id, name, status: "not_configured", latencyMs: null, detail: `${envVar} is not set` };
@@ -113,10 +117,10 @@ async function listConnectedAccounts(stripe: Stripe): Promise<Map<string, Stripe
  */
 async function checkStripeConnect(): Promise<HealthCheckResult> {
   if (!isStripeConfigured()) return notConfigured("stripe_connect", "Stripe — org accounts", "STRIPE_SECRET_KEY");
-  if (stripeConnectCache && Date.now() - stripeConnectCache.at < STRIPE_CONNECT_TTL_MS) return stripeConnectCache.result;
+  if (stripeConnectCache && Date.now() - stripeConnectCache.at < STRIPE_CONNECT_TTL_MS) return withCheckedAt(stripeConnectCache.result, stripeConnectCache.at);
   const result = await runStripeConnectCheck();
   stripeConnectCache = { at: Date.now(), result };
-  return result;
+  return withCheckedAt(result, stripeConnectCache.at);
 }
 
 async function runStripeConnectCheck(): Promise<HealthCheckResult> {
@@ -263,10 +267,10 @@ let subaccountCache: { at: number; result: HealthCheckResult } | null = null;
  * subaccount before an org's texts start failing.
  */
 async function checkTwilioSubaccounts(): Promise<HealthCheckResult> {
-  if (subaccountCache && Date.now() - subaccountCache.at < SUBACCOUNT_TTL_MS) return subaccountCache.result;
+  if (subaccountCache && Date.now() - subaccountCache.at < SUBACCOUNT_TTL_MS) return withCheckedAt(subaccountCache.result, subaccountCache.at);
   const result = await runTwilioSubaccountCheck();
   subaccountCache = { at: Date.now(), result };
-  return result;
+  return withCheckedAt(result, subaccountCache.at);
 }
 
 async function runTwilioSubaccountCheck(): Promise<HealthCheckResult> {
@@ -306,19 +310,39 @@ async function runTwilioSubaccountCheck(): Promise<HealthCheckResult> {
   });
 }
 
-/** Returns a short problem description, or null when the subaccount is healthy. */
+/**
+ * Returns a short problem description, or null when the subaccount is healthy.
+ *
+ * The key is probed against the Messaging API — the same family provisioning
+ * uses it for. (Twilio restricts API keys on the classic Accounts resource, so
+ * fetching the Account with the key 401s even when the key is fine.) Whether the
+ * subaccount itself is suspended/closed is read with the platform credentials,
+ * which is how the classic API is meant to be called for a subaccount.
+ */
 async function probeOrgSubaccount(db: ReturnType<typeof createServiceClient>, orgId: string): Promise<string | null> {
   try {
     const creds = await getOrgTwilioCreds(db, orgId);
     if (!creds) return "Credentials unavailable (API secret missing from Vault)";
-    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${creds.subaccountSid}.json`, {
+    const keyRes = await fetch("https://messaging.twilio.com/v1/Services?PageSize=1", {
       headers: { Authorization: `Basic ${Buffer.from(`${creds.apiKeySid}:${creds.apiKeySecret}`).toString("base64")}` },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (res.status === 401 || res.status === 403) return `API key rejected (${res.status}) — revoked or secret out of sync`;
-    if (!res.ok) return `Twilio returned ${res.status}`;
-    const body = (await res.json()) as { status?: string };
-    if (body.status && body.status !== "active") return `Subaccount ${body.status}`;
+    if (keyRes.status === 401 || keyRes.status === 403) return `API key rejected (${keyRes.status}) — revoked or secret out of sync`;
+    if (!keyRes.ok) return `Twilio returned ${keyRes.status}`;
+
+    const platformSid = process.env.TWILIO_PLATFORM_ACCOUNT_SID;
+    const platformToken = process.env.TWILIO_PLATFORM_AUTH_TOKEN;
+    if (platformSid && platformToken) {
+      const acctRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${creds.subaccountSid}.json`, {
+        headers: { Authorization: `Basic ${Buffer.from(`${platformSid}:${platformToken}`).toString("base64")}` },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (acctRes.status === 404) return "Subaccount not found under the platform account";
+      if (acctRes.ok) {
+        const body = (await acctRes.json()) as { status?: string };
+        if (body.status && body.status !== "active") return `Subaccount ${body.status}`;
+      }
+    }
     return null;
   } catch (err) {
     return err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError") ? "Timed out" : "Check failed";
@@ -332,14 +356,12 @@ const MAPS_TTL_MS = 6 * 60 * 60 * 1000;
 let mapsCache: { at: number; result: HealthCheckResult } | null = null;
 
 async function checkGoogleMaps(): Promise<HealthCheckResult> {
-  if (mapsCache && Date.now() - mapsCache.at < MAPS_TTL_MS) {
-    const checked = new Date(mapsCache.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    return { ...mapsCache.result, detail: `${mapsCache.result.detail} · checked ${checked}` };
-  }
+  if (mapsCache && Date.now() - mapsCache.at < MAPS_TTL_MS) return withCheckedAt(mapsCache.result, mapsCache.at);
   const result = await runGoogleMapsCheck();
   // Don't cache a missing key — fixing the env var should show up immediately.
-  if (result.status !== "not_configured") mapsCache = { at: Date.now(), result };
-  return result;
+  if (result.status === "not_configured") return result;
+  mapsCache = { at: Date.now(), result };
+  return withCheckedAt(result, mapsCache.at);
 }
 
 async function runGoogleMapsCheck(): Promise<HealthCheckResult> {
@@ -361,13 +383,10 @@ const ORG_MAPS_CONCURRENCY = 5;
 let orgMapsCache: { at: number; result: HealthCheckResult } | null = null;
 
 async function checkOrgGoogleMapsKeys(): Promise<HealthCheckResult> {
-  if (orgMapsCache && Date.now() - orgMapsCache.at < ORG_MAPS_TTL_MS) {
-    const checked = new Date(orgMapsCache.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    return { ...orgMapsCache.result, detail: `${orgMapsCache.result.detail} · checked ${checked}` };
-  }
+  if (orgMapsCache && Date.now() - orgMapsCache.at < ORG_MAPS_TTL_MS) return withCheckedAt(orgMapsCache.result, orgMapsCache.at);
   const result = await runOrgGoogleMapsCheck();
   orgMapsCache = { at: Date.now(), result };
-  return result;
+  return withCheckedAt(result, orgMapsCache.at);
 }
 
 /**

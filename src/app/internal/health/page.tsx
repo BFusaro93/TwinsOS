@@ -121,7 +121,10 @@ export default function Page() {
                           {c.detail} — {isOpen ? "hide" : "show"} orgs
                         </button>
                       ) : (
-                        <p className="truncate text-xs text-muted-foreground">{c.detail}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {c.detail}
+                          {c.checkedAt && ` · checked ${new Date(c.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
+                        </p>
                       )}
                     </div>
                     {c.latencyMs !== null && <span className="text-xs tabular-nums text-muted-foreground">{c.latencyMs} ms</span>}
