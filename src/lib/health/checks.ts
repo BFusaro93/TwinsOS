@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import Stripe from "stripe";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getOrgTwilioCreds } from "@/lib/twilio/client";
 
@@ -86,6 +87,83 @@ async function checkStripe(): Promise<HealthCheckResult> {
   return timed("stripe", "Stripe", async () => {
     await getStripe().balance.retrieve();
     return { detail: "Platform key authenticated" };
+  });
+}
+
+// One list call per 100 connected accounts per mode, so cache longer than the route's 60s.
+const STRIPE_CONNECT_TTL_MS = 10 * 60 * 1000;
+const STRIPE_CONNECT_MAX_ACCOUNTS = 1000;
+let stripeConnectCache: { at: number; result: HealthCheckResult } | null = null;
+
+async function listConnectedAccounts(stripe: Stripe): Promise<Map<string, Stripe.Account>> {
+  const accounts = new Map<string, Stripe.Account>();
+  for await (const account of stripe.accounts.list({ limit: 100 })) {
+    accounts.set(account.id, account);
+    if (accounts.size >= STRIPE_CONNECT_MAX_ACCOUNTS) break;
+  }
+  return accounts;
+}
+
+/**
+ * Each org has its own Stripe Connect account. Reads them live from Stripe
+ * (the cached status on `organizations` is webhook-driven and can go stale)
+ * and flags any that are restricted, can't charge or pay out, have
+ * past-due requirements, or no longer exist on the platform.
+ */
+async function checkStripeConnect(): Promise<HealthCheckResult> {
+  if (!isStripeConfigured()) return notConfigured("stripe_connect", "Stripe — org accounts", "STRIPE_SECRET_KEY");
+  if (stripeConnectCache && Date.now() - stripeConnectCache.at < STRIPE_CONNECT_TTL_MS) return stripeConnectCache.result;
+  const result = await runStripeConnectCheck();
+  stripeConnectCache = { at: Date.now(), result };
+  return result;
+}
+
+async function runStripeConnectCheck(): Promise<HealthCheckResult> {
+  return timed("stripe_connect", "Stripe — org accounts", async () => {
+    const db = createServiceClient();
+    const { data, error } = await db
+      .from("organizations")
+      .select("id, name, stripe_connect_account_id, stripe_connect_livemode")
+      .not("stripe_connect_account_id", "is", null)
+      .is("deleted_at", null);
+    if (error) throw new Error(error.message);
+    const orgs = data ?? [];
+    if (orgs.length === 0) return { detail: "No orgs have connected Stripe" };
+
+    // Orgs connected in Stripe test mode (rare) live under the separate test key.
+    const liveAccounts = await listConnectedAccounts(getStripe());
+    const testKey = process.env.STRIPE_SECRET_KEY_TEST;
+    const needsTest = orgs.some((o) => o.stripe_connect_livemode === false);
+    const testAccounts = needsTest && testKey ? await listConnectedAccounts(new Stripe(testKey)) : new Map<string, Stripe.Account>();
+
+    const problems: { label: string; detail: string }[] = [];
+    for (const org of orgs) {
+      const accountId = org.stripe_connect_account_id as string;
+      const isTest = org.stripe_connect_livemode === false;
+      if (isTest && !testKey) {
+        problems.push({ label: org.name, detail: "Test-mode account but STRIPE_SECRET_KEY_TEST is not set" });
+        continue;
+      }
+      const account = (isTest ? testAccounts : liveAccounts).get(accountId);
+      if (!account) {
+        problems.push({ label: org.name, detail: "Connected account not found in Stripe (disconnected or deauthorized)" });
+        continue;
+      }
+      const reasons: string[] = [];
+      if (account.requirements?.disabled_reason) reasons.push(`Restricted: ${account.requirements.disabled_reason.replace(/[._]/g, " ")}`);
+      if (!account.charges_enabled) reasons.push("charges disabled");
+      if (!account.payouts_enabled) reasons.push("payouts disabled");
+      const pastDue = account.requirements?.past_due?.length ?? 0;
+      if (pastDue > 0) reasons.push(`${pastDue} past-due requirement(s)`);
+      if (reasons.length > 0) problems.push({ label: org.name, detail: reasons.join(" · ") });
+    }
+
+    if (problems.length === 0) return { detail: `${orgs.length} connected account(s), all able to charge and pay out` };
+    return {
+      status: problems.length === orgs.length ? "down" : "degraded",
+      detail: `${problems.length} of ${orgs.length} connected account(s) have a problem`,
+      failures: problems,
+    };
   });
 }
 
@@ -375,6 +453,7 @@ export async function runHealthChecks(): Promise<HealthCheckResult[]> {
     checkSupabaseAuth(),
     checkSupabaseStorage(),
     checkStripe(),
+    checkStripeConnect(),
     checkResend(),
     checkTwilioTwins(),
     checkTwilioPlatform(),
