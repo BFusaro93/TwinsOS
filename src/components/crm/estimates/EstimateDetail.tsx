@@ -1025,9 +1025,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 )}
               </span>
               {estimate.reason && (effectiveStage === "accepted" || effectiveStage === "lost") && (
-                <span className="ml-2 text-xs text-muted-foreground font-normal">
-                  · {estimate.reason}
-                </span>
+                <Badge variant="outline" className="ml-2 text-[10px] font-normal" title={effectiveStage === "lost" ? "Lost reason" : "Won reason"}>
+                  {effectiveStage === "lost" ? "Lost reason" : "Won reason"}: {estimate.reason}
+                </Badge>
               )}
             </h1>
             <p className="text-xs text-slate-400 dark:text-neutral-500">

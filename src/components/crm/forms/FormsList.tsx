@@ -1,5 +1,9 @@
 "use client";
 
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
+
+import { useStackedFilters } from "@/lib/hooks/use-stacked-filters";
+
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForms, useCreateForm, useDeleteForm, useUpdateForm, useCopyForm, fetchFormWithFields } from "@/lib/hooks/use-crm-forms";
@@ -235,8 +239,12 @@ export function FormsList() {
   const [newOpen, setNewOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
-  const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
-  const [colFilterValue, setColFilterValue] = useState("");
+  const {
+    activeKey: activeColFilter, filterValue: colFilterValue, setFilterValue: setColFilterValue, toggleKey, clearActive, isSet,
+    entries: filterEntries,
+  } = useStackedFilters<ColFilterKey>();
+  // Status is multi-select (stacks with every other filter).
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
 
   const stats = useMemo(() => ({
     total:      forms.length,
@@ -255,14 +263,16 @@ export function FormsList() {
     let list = forms;
     if (quickFilter !== "all") list = list.filter((f) => f.status === quickFilter);
 
-    if (activeColFilter && colFilterValue.trim()) {
+    // Every filter with a value applies at once.
+    for (const [activeColFilter, colFilterValue] of filterEntries) {
       const fv = colFilterValue.toLowerCase();
       list = list.filter((f) => {
         if (activeColFilter === "name")   return f.name.toLowerCase().includes(fv);
-        if (activeColFilter === "status") return f.status === colFilterValue;
         return true;
       });
     }
+
+    if (statusFilters.length > 0) list = list.filter((f) => statusFilters.includes(f.status));
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -270,7 +280,7 @@ export function FormsList() {
     }
 
     return list;
-  }, [forms, quickFilter, activeColFilter, colFilterValue, search]);
+  }, [forms, quickFilter, filterEntries, statusFilters, search]);
 
   if (!permissionsLoading && !can("forms_view_submit")) {
     return (
@@ -316,16 +326,21 @@ export function FormsList() {
       <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
         <span className="shrink-0 text-xs font-medium text-muted-foreground mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-          {COL_FILTERS.map(({ key, label }) => (
+          {COL_FILTERS.map(({ key, label }) => key === "status" ? (
+            <MultiSelectFilterTab
+              key={key}
+              label={label}
+              options={[{ value: "published", label: "Published" }, { value: "draft", label: "Draft" }]}
+              selected={statusFilters}
+              onChange={setStatusFilters}
+            />
+          ) : (
             <button
               key={key}
-              onClick={() => {
-                if (activeColFilter === key) { setActiveColFilter(null); setColFilterValue(""); }
-                else { setActiveColFilter(key); setColFilterValue(""); }
-              }}
+              onClick={() => toggleKey(key)}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                activeColFilter === key
+                activeColFilter === key || isSet(key)
                   ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
                   : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
@@ -335,19 +350,7 @@ export function FormsList() {
           ))}
           {activeColFilter && (
             <>
-              {activeColFilter === "status" ? (
-                <select
-                  autoFocus
-                  value={colFilterValue}
-                  onChange={(e) => setColFilterValue(e.target.value)}
-                  aria-label="Filter by Status"
-                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
-                >
-                  <option value="">Select…</option>
-                  <option value="published">Published</option>
-                  <option value="draft">Draft</option>
-                </select>
-              ) : (
+              {(
                 <Input
                   autoFocus
                   value={colFilterValue}
@@ -356,7 +359,7 @@ export function FormsList() {
                   className="ml-2 h-6 w-48 text-xs"
                 />
               )}
-              <button onClick={() => { setActiveColFilter(null); setColFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
+              <button title="Clear this filter" onClick={clearActive} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>

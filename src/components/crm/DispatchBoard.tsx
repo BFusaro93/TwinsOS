@@ -45,6 +45,7 @@ import { jobCustomFieldValue, usePropertyCustomFieldDefs } from "@/lib/hooks/use
 import type { PropertyCustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { downloadXLSX } from "@/lib/xlsx-export";
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import { WeekStrip } from "./WeekStrip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -634,6 +635,9 @@ function StatusCycleButton({
 }
 
 // ── column visibility ─────────────────────────────────────────────────────────
+
+// Sentinel in crewFilters for visits with no crew.
+const NO_CREW = "none";
 
 type ColKey = "service" | "date" | "city" | "zip" | "assigned" | "last_svc" | "start" | "end" | "b_hrs" | "actual" | "variance" | "men" | "qty" | "rate" | "amt" | "icons"
   | "priority" | "sales_rep" | "notes_to_crew" | "gate_code" | "turf_sqft" | "mulch_sqft" | "gross_sqft" | "lin_perimeter" | "lin_edging" | "yards_mulch" | "parking_sqft";
@@ -4411,7 +4415,10 @@ export function DispatchBoard() {
   const [bulkMultiCrewOpen, setBulkMultiCrewOpen] = useState(false);
   const [legendOpen,     setLegendOpen]      = useState(false);
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
-  const [colFilterValue,  setColFilterValue]  = useState("");
+  // Per-filter text values so Client + Date + City + Zip (and the multi-select
+  // Service / Crew filters) all stack; colFilterKey only picks which input shows.
+  const [colFilters,      setColFilters]      = useState<Record<string, string>>({});
+  const setColFilter = (key: string, value: string) => setColFilters((prev) => ({ ...prev, [key]: value }));
   // Service filter is multi-select (unlike the other Select-a-Filter text
   // filters), so it gets its own array instead of sharing colFilterValue.
   const [serviceFilters,  setServiceFilters]  = useState<string[]>([]);
@@ -4837,7 +4844,7 @@ export function DispatchBoard() {
   function captureViewFilters(): DispatchViewFilters {
     return {
       serviceFilters, crewFilters, tagFilters, priorityFilters, statusFilter, search,
-      colFilterKey, colFilterValue, visibleKeys, dateMode,
+      colFilterKey: null, colFilterValue: "", colFilters, visibleKeys, dateMode,
     };
   }
 
@@ -4867,8 +4874,19 @@ export function DispatchBoard() {
     setPriorityFilters(f.priorityFilters ?? []);
     setStatusFilter(FILTER_TABS.some((t) => t.value === f.statusFilter) ? (f.statusFilter as FilterTab) : "all");
     setSearch(f.search ?? "");
-    setColFilterKey(f.colFilterKey ?? null);
-    setColFilterValue(f.colFilterValue ?? "");
+    setColFilterKey(null);
+    if (f.colFilters) {
+      setColFilters(f.colFilters);
+    } else if (f.colFilterKey && f.colFilterValue && f.colFilterKey !== "crew") {
+      setColFilters({ [f.colFilterKey]: f.colFilterValue }); // older single-filter view
+    } else {
+      setColFilters({});
+    }
+    // Older views stored one crew id in the Crew column filter.
+    const legacyCrew = f.colFilterValue;
+    if (f.colFilterKey === "crew" && legacyCrew && !f.colFilters) {
+      setCrewFilters((prev) => (prev.includes(legacyCrew) ? prev : [...prev, legacyCrew]));
+    }
     // Only keys this board still knows — a column removed since the view was saved is dropped.
     if (f.visibleKeys) {
       const known = new Set(allColumnDefs.map((d) => d.key));
@@ -4939,7 +4957,7 @@ export function DispatchBoard() {
   const filtered = allVisits.filter((v) => {
     // Effective crew, not the raw column — a visit that inherits its crew from
     // the job would otherwise never match its own crew's filter chip.
-    if (crewFilters.length > 0 && !crewFilters.includes(effectiveCrewIdOf(v) ?? "")) return false;
+    if (crewFilters.length > 0 && !crewFilters.includes(effectiveCrewIdOf(v) ?? NO_CREW)) return false;
     if (statusFilter !== "all" && v.status !== statusFilter) return false;
     // "All" hides cancelled jobs (they used to sit on the board forever); the Cancelled tab still lists them to restore.
     if (statusFilter === "all" && v.status === "cancelled") return false;
@@ -4986,19 +5004,14 @@ export function DispatchBoard() {
         .toLowerCase();
       if (!cli.includes(q) && !cty.includes(q) && !svc.includes(q) && !other.includes(q)) return false;
     }
-    if (colFilterKey && colFilterValue) {
-      const q = colFilterValue.toLowerCase();
-      switch (colFilterKey) {
+    for (const [key, val] of Object.entries(colFilters)) {
+      if (!val) continue;
+      const q = val.toLowerCase();
+      switch (key) {
         case "client":  if (!(v.clientName ?? "").toLowerCase().includes(q)) return false; break;
-        case "date":    if ((v.scheduledDate ?? "") !== colFilterValue) return false; break;
+        case "date":    if ((v.scheduledDate ?? "") !== val) return false; break;
         case "city":    if (!(v.job?.serviceCity ?? "").toLowerCase().includes(q)) return false; break;
         case "zip":     if (!(v.job?.serviceZip ?? "").includes(q)) return false; break;
-        // The value is a crew id picked from the list ("none" = no crew).
-        case "crew": {
-          const effId = effectiveCrewIdOf(v);
-          if (colFilterValue === "none" ? !!effId : effId !== colFilterValue) return false;
-          break;
-        }
       }
     }
     return true;
@@ -5638,62 +5651,53 @@ export function DispatchBoard() {
         <div className="flex flex-wrap items-center gap-1">
           {(["client","service","date","city","zip","crew"] as const).map((key) => {
             const label = key === "client" ? "Client" : key === "service" ? "Service" : key === "date" ? "Date" : key === "city" ? "City" : key === "zip" ? "Zip" : "Crew";
+            // Service and Crew are checklists that stack with every other filter;
+            // they read/write the same serviceFilters / crewFilters that saved views store.
+            if (key === "service") {
+              return (
+                <MultiSelectFilterTab
+                  key={key}
+                  className="max-lg:py-2"
+                  label={label}
+                  title="Services"
+                  options={(allServices ?? []).map((svc) => ({ value: svc.name, label: svc.name }))}
+                  selected={serviceFilters}
+                  onChange={setServiceFilters}
+                />
+              );
+            }
+            if (key === "crew") {
+              return (
+                <MultiSelectFilterTab
+                  key={key}
+                  className="max-lg:py-2"
+                  label={label}
+                  title="Crews"
+                  options={[
+                    { value: NO_CREW, label: "Unassigned" },
+                    ...(crews ?? []).filter((c) => c.isActive !== false).map((c) => ({ value: c.id, label: `${c.name}${c.code ? ` (${c.code})` : ""}` })),
+                  ]}
+                  selected={crewFilters}
+                  onChange={setCrewFilters}
+                />
+              );
+            }
             return (
               <button
                 key={key}
-                onClick={() => { if (colFilterKey === key) { setColFilterKey(null); setColFilterValue(""); } else { setColFilterKey(key); setColFilterValue(""); } }}
+                onClick={() => setColFilterKey(colFilterKey === key ? null : key)}
                 className={cn(
                   "rounded px-2 py-0.5 max-lg:py-2 text-xs transition-colors whitespace-nowrap",
-                  colFilterKey === key ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
+                  colFilterKey === key || colFilters[key] ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
                 )}
               >
                 {label}
-                {key === "service" && serviceFilters.length > 0 && (
-                  <span className="ml-1 text-brand-500 dark:text-brand-400">· {serviceFilters.length}</span>
-                )}
-                {key !== "service" && colFilterKey === key && colFilterValue && (
-                  <span className="ml-1 text-brand-500 dark:text-brand-400">· {colFilterValue}</span>
+                {colFilters[key] && (
+                  <span className="ml-1 text-brand-500 dark:text-brand-400">· {colFilters[key]}</span>
                 )}
               </button>
             );
           })}
-
-          {/* Service: popover with a multi-select checklist (can filter to
-              more than one service at once, unlike the other text filters). */}
-          {colFilterKey === "service" && (
-            <Popover defaultOpen onOpenChange={(o) => { if (!o) setColFilterKey(null); }}>
-              <PopoverTrigger className="sr-only" />
-              <PopoverContent className="w-56 p-1" align="start">
-                <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 dark:text-neutral-500 tracking-wide">Services</p>
-                {(allServices ?? []).length === 0 && (
-                  <p className="px-2 py-2 text-xs text-slate-400 dark:text-neutral-500 italic">No services found</p>
-                )}
-                {/* Capped to the room below the trigger so a long service list scrolls instead of running off screen. */}
-                <div className="max-h-[min(24rem,var(--radix-popover-content-available-height,24rem))] overflow-y-auto overscroll-contain">
-                {(allServices ?? []).map((svc) => (
-                  <FilterOptionRow
-                    key={svc.id}
-                    checked={serviceFilters.includes(svc.name)}
-                    onToggle={() => setServiceFilters((prev) =>
-                      prev.includes(svc.name) ? prev.filter((x) => x !== svc.name) : [...prev, svc.name]
-                    )}
-                    className={serviceFilters.includes(svc.name) ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : undefined}
-                  >
-                    {svc.name}
-                  </FilterOptionRow>
-                ))}
-                </div>
-                <div className="border-t mt-1 pt-1">
-                  <button
-                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:bg-muted"
-                    onClick={() => { setServiceFilters([]); setColFilterKey(null); }}
-                  >
-                    <XIcon className="h-3 w-3" /> Clear filter
-                  </button>
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
 
           {/* Date: a real date picker instead of freeform text — the stored
               value is already an ISO date (YYYY-MM-DD), same format a native
@@ -5703,43 +5707,28 @@ export function DispatchBoard() {
               <Input
                 autoFocus
                 type="date"
-                value={colFilterValue}
-                onChange={(e) => setColFilterValue(e.target.value)}
+                value={colFilters.date ?? ""}
+                onChange={(e) => setColFilter("date", e.target.value)}
                 className="ml-2 h-6 w-36 text-xs"
               />
-              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
+              <button onClick={() => { setColFilter("date", ""); setColFilterKey(null); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <XIcon className="h-3.5 w-3.5" />
               </button>
             </>
           )}
 
           {/* Other filters: text input */}
-          {colFilterKey && colFilterKey !== "service" && colFilterKey !== "date" && (
+          {/* Other filters: text input */}
+          {colFilterKey && colFilterKey !== "date" && (
             <>
-              {colFilterKey === "crew" ? (
-                <select
-                  autoFocus
-                  value={colFilterValue}
-                  onChange={(e) => setColFilterValue(e.target.value)}
-                  aria-label="Filter by Crew"
-                  className="ml-2 h-6 w-44 rounded-md border border-input bg-background px-1 text-xs"
-                >
-                  <option value="">Select a crew…</option>
-                  <option value="none">Unassigned</option>
-                  {(crews ?? []).filter((c) => c.isActive !== false).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.code ? ` (${c.code})` : ""}</option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  autoFocus
-                  value={colFilterValue}
-                  onChange={(e) => setColFilterValue(e.target.value)}
-                  placeholder={`Filter by ${colFilterKey}…`}
-                  className="ml-2 h-6 w-44 text-xs"
-                />
-              )}
-              <button onClick={() => { setColFilterKey(null); setColFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
+              <Input
+                autoFocus
+                value={colFilters[colFilterKey] ?? ""}
+                onChange={(e) => setColFilter(colFilterKey, e.target.value)}
+                placeholder={`Filter by ${colFilterKey}…`}
+                className="ml-2 h-6 w-44 text-xs"
+              />
+              <button onClick={() => { setColFilter(colFilterKey, ""); setColFilterKey(null); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <XIcon className="h-3.5 w-3.5" />
               </button>
             </>
@@ -5978,6 +5967,12 @@ export function DispatchBoard() {
           <PopoverContent className="w-48 p-1" align="start">
             <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>
               All Crews
+            </FilterOptionRow>
+            <FilterOptionRow
+              checked={crewFilters.includes(NO_CREW)}
+              onToggle={() => setCrewFilters((prev) => prev.includes(NO_CREW) ? prev.filter((x) => x !== NO_CREW) : [...prev, NO_CREW])}
+            >
+              Unassigned
             </FilterOptionRow>
             {(crews ?? []).map((c) => (
               <FilterOptionRow
@@ -6482,7 +6477,7 @@ export function DispatchBoard() {
               <tr>
                 <td colSpan={20} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search || crewFilters.length > 0 || statusFilter !== "all" || tagFilters.length > 0 ||
-                    priorityFilters.length > 0 || serviceFilters.length > 0 || (colFilterKey && colFilterValue)
+                    priorityFilters.length > 0 || serviceFilters.length > 0 || Object.values(colFilters).some(Boolean)
                     ? "No visits match the current filters"
                     : "No visits scheduled for this date"}
                 </td>
