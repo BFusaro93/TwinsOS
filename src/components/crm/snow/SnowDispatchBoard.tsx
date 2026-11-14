@@ -1047,8 +1047,10 @@ function CloseOutDialog({
             updates: {
               status: "completed",
               completed_at: new Date().toISOString(),
-              snow_depth_inches: depth ? Math.max(0, parseFloat(depth)) : null,
-              temperature: temp ? parseFloat(temp) : null,
+              // Only write what was typed: a blank field used to null out a depth or
+              // temperature already on the visit, which un-prices a Per Inch stop.
+              ...(depth ? { snow_depth_inches: Math.max(0, parseFloat(depth)) } : {}),
+              ...(temp ? { temperature: parseFloat(temp) } : {}),
               // Hours entered here are hours ON SITE (what an hourly snow job bills,
               // once). actual_hours is man-hours for job costing — the crew-app
               // clock-out stores Σ every member's punches — so it's stored × the
