@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   LifeBuoy,
   Mail,
+  Activity,
   BookOpen,
   ChevronDown,
   ChevronRight,
@@ -392,7 +393,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                 {!query && (
                   <section>
                     <DocsEyebrow>Get in Touch</DocsEyebrow>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       <a
                         href="mailto:support@landscapt.com"
                         className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
@@ -417,6 +418,21 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                           <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a] dark:text-neutral-100">Advanced Guides</p>
                           <p className="mt-0.5 text-sm font-medium text-[#60ab45]">Browse Docs</p>
                           <p className="mt-1 text-xs text-[#5a5a56] dark:text-neutral-300">In-depth, step-by-step guides for every part of the platform.</p>
+                        </div>
+                      </a>
+                      <a
+                        href="https://stats.uptimerobot.com/taTmWtuTlT"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
+                          <Activity className="h-5 w-5 text-[#60ab45]" />
+                        </div>
+                        <div>
+                          <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a] dark:text-neutral-100">System Status</p>
+                          <p className="mt-0.5 text-sm font-medium text-[#60ab45]">View Status Page</p>
+                          <p className="mt-1 text-xs text-[#5a5a56] dark:text-neutral-300">Live uptime for Landscapt and the services it relies on.</p>
                         </div>
                       </a>
                     </div>
