@@ -16,6 +16,9 @@ export interface DispatchViewFilters {
   /** Stacked Select-a-Filter text values (client/date/city/zip). Newer views
    *  use this; older ones only have the single colFilterKey/Value above. */
   colFilters?: Record<string, string>;
+  /** City / Zip checklists (exact values). Older views kept them as text in colFilters. */
+  cityFilters?: string[];
+  zipFilters?: string[];
   visibleKeys: string[];
   /** Relative range preset, or null when the dates were picked by hand (not saved). */
   dateMode: string | null;
