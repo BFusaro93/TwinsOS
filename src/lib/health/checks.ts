@@ -219,38 +219,70 @@ const checkTwilioTwins = () => checkTwilioAccount("twilio_twins", "Twilio — Tw
 const checkTwilioPlatform = () =>
   checkTwilioAccount("twilio_platform", "Twilio — platform account", "TWILIO_PLATFORM_ACCOUNT_SID", "TWILIO_PLATFORM_AUTH_TOKEN");
 
+// How long a registration may sit in a step before it's flagged as stuck.
+// Steps our own pipeline (or the org's user) has to advance should move within days;
+// steps waiting on Twilio's review (brand/campaign vetting) can legitimately take weeks.
+const STUCK_AFTER_DAYS_ACTION = 3;
+const STUCK_AFTER_DAYS_TWILIO_REVIEW = 21;
+const AWAITING_TWILIO_REVIEW = new Set(["profile_submitted", "brand_submitted", "campaign_submitted"]);
+const NEEDS_ADVANCING = new Set(["subaccount_created", "profile_approved", "brand_approved", "number_provisioned", "campaign_approved"]);
+
 /**
  * Twilio is per-org: each org gets its own subaccount and A2P registration
- * (profile → brand → campaign), and Twilio can reject any step. The platform
- * check above only proves the parent account works; this one surfaces orgs
- * whose registration was rejected, with Twilio's reason.
+ * (profile → brand → campaign). The platform check above only proves the
+ * parent account works; this one surfaces orgs that are rejected at a step
+ * (with Twilio's reason) or stuck in one for longer than expected.
+ * `not_started` and `complete` are never flagged.
  */
 async function checkTwilioRegistrations(): Promise<HealthCheckResult> {
   return timed("twilio_orgs", "Twilio — org registrations", async () => {
     const db = createServiceClient();
     const { data, error } = await db
       .from("org_sms_registrations")
-      .select("org_id, status, twilio_brand_failure_reason, twilio_campaign_failure_reason")
+      .select("org_id, status, updated_at, twilio_brand_failure_reason, twilio_campaign_failure_reason")
       .is("deleted_at", null)
       .is("released_at", null);
     if (error) throw new Error(error.message);
     const rows = data ?? [];
     if (rows.length === 0) return { detail: "No orgs registered" };
 
-    const rejected = rows.filter((r) => r.status.endsWith("_rejected"));
-    if (rejected.length === 0) return { detail: `${rows.length} org registration(s), none rejected` };
+    const now = Date.now();
+    const flagged: { orgId: string; detail: string; rejected: boolean }[] = [];
+    for (const r of rows) {
+      if (r.status.endsWith("_rejected")) {
+        const reason = r.status === "campaign_rejected" ? r.twilio_campaign_failure_reason : r.twilio_brand_failure_reason;
+        flagged.push({ orgId: r.org_id, rejected: true, detail: `${r.status.replace(/_/g, " ")}${reason ? `: ${reason}` : ""}`.slice(0, 400) });
+        continue;
+      }
+      const limitDays = AWAITING_TWILIO_REVIEW.has(r.status)
+        ? STUCK_AFTER_DAYS_TWILIO_REVIEW
+        : NEEDS_ADVANCING.has(r.status)
+          ? STUCK_AFTER_DAYS_ACTION
+          : null;
+      if (limitDays === null) continue;
+      const days = Math.floor((now - new Date(r.updated_at).getTime()) / 86_400_000);
+      if (days >= limitDays) {
+        const where = r.status.replace(/_/g, " ");
+        flagged.push({
+          orgId: r.org_id,
+          rejected: false,
+          detail: AWAITING_TWILIO_REVIEW.has(r.status)
+            ? `Waiting on Twilio review (${where}) for ${days} days`
+            : `Stuck at "${where}" for ${days} days — setup hasn't advanced`,
+        });
+      }
+    }
+    if (flagged.length === 0) return { detail: `${rows.length} org registration(s), none rejected or stuck` };
 
-    const { data: orgs } = await db.from("organizations").select("id, name").in("id", rejected.map((r) => r.org_id));
+    const { data: orgs } = await db.from("organizations").select("id, name").in("id", flagged.map((f) => f.orgId));
     const names = new Map((orgs ?? []).map((o) => [o.id, o.name]));
+    const rejectedCount = flagged.filter((f) => f.rejected).length;
+    const stuckCount = flagged.length - rejectedCount;
+    const parts = [rejectedCount ? `${rejectedCount} rejected` : "", stuckCount ? `${stuckCount} stuck` : ""].filter(Boolean).join(", ");
     return {
       status: "degraded",
-      detail: `${rejected.length} of ${rows.length} org registration(s) rejected`,
-      failures: rejected.map((r) => ({
-        label: names.get(r.org_id) ?? "Unknown org",
-        detail: `${r.status.replace(/_/g, " ")}${
-          r.status === "campaign_rejected" ? (r.twilio_campaign_failure_reason ? `: ${r.twilio_campaign_failure_reason}` : "") : r.twilio_brand_failure_reason ? `: ${r.twilio_brand_failure_reason}` : ""
-        }`.slice(0, 400),
-      })),
+      detail: `${flagged.length} of ${rows.length} org registration(s) need attention (${parts})`,
+      failures: flagged.map((f) => ({ label: names.get(f.orgId) ?? "Unknown org", detail: f.detail })),
     };
   });
 }
@@ -281,11 +313,13 @@ async function runTwilioSubaccountCheck(): Promise<HealthCheckResult> {
       .select("org_id")
       .not("twilio_subaccount_sid", "is", null)
       .not("twilio_api_key_sid", "is", null)
+      // Only orgs far enough along to send. Earlier steps are covered by the registrations row above.
+      .not("twilio_messaging_service_sid", "is", null)
       .is("deleted_at", null)
       .is("released_at", null);
     if (error) throw new Error(error.message);
     const orgIds = (data ?? []).map((r) => r.org_id);
-    if (orgIds.length === 0) return { detail: "No org subaccounts" };
+    if (orgIds.length === 0) return { detail: "No orgs with a live Twilio setup" };
 
     const problems: { orgId: string; detail: string }[] = [];
     let next = 0;
