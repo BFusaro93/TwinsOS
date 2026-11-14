@@ -13,6 +13,9 @@ export interface DispatchViewFilters {
   /** The board's single "Select a Filter" column filter (city/zip/etc.). */
   colFilterKey: string | null;
   colFilterValue: string;
+  /** Stacked Select-a-Filter text values (client/date/city/zip). Newer views
+   *  use this; older ones only have the single colFilterKey/Value above. */
+  colFilters?: Record<string, string>;
   visibleKeys: string[];
   /** Relative range preset, or null when the dates were picked by hand (not saved). */
   dateMode: string | null;

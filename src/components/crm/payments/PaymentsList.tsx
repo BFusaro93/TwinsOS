@@ -1,5 +1,9 @@
 "use client";
 
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
+
+import { useStackedFilters } from "@/lib/hooks/use-stacked-filters";
+
 import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
 import { inDateRange } from "@/lib/utils/column-filters";
 import { useState, useMemo, useEffect, useRef, Fragment } from "react";
@@ -970,8 +974,12 @@ export function PaymentsList({ clientId }: Props) {
   useEffect(() => {
     if (searchParams.get("new") === "1") setDialogOpen(true);
   }, [searchParams]);
-  const [activeFilter, setActiveFilter] = useState<FilterField | null>(null);
-  const [filterValue, setFilterValue] = useState("");
+  const {
+    activeKey: activeFilter, filterValue, setFilterValue, toggleKey, clearActive, isSet,
+    entries: filterEntries,
+  } = useStackedFilters<FilterField>();
+  // Payment Method is multi-select (stacks with every other filter).
+  const [methodFilters, setMethodFilters] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PAYMENT_COLUMNS.map((c) => c.key));
   const [viewPayment, setViewPayment] = useState<CRMPayment | null>(null);
@@ -985,12 +993,17 @@ export function PaymentsList({ clientId }: Props) {
   const livePayments = useMemo(() => (payments ?? []).filter((p) => p.deletedAt == null), [payments]);
   const deletedPayments = useMemo(() => (payments ?? []).filter((p) => p.deletedAt != null), [payments]);
 
+  const methodOptions = useMemo(
+    () => Array.from(new Set((payments ?? []).map((p) => p.method).filter(Boolean))).sort(),
+    [payments]
+  );
+
   const filtered = useMemo(() => {
     let list = payments ?? [];
 
     // A column filter or a search is looking for something specific, so it
     // reaches past the 30-day window instead of silently hiding older payments.
-    const narrowing = search.trim() !== "" || (activeFilter != null && filterValue !== "");
+    const narrowing = search.trim() !== "" || (filterEntries.length > 0 || methodFilters.length > 0);
     if (activeTab === "last30") {
       list = list.filter((p) => p.deletedAt == null && (narrowing || p.paymentDate >= thirtyDaysAgo));
     } else if (activeTab === "all") {
@@ -999,7 +1012,8 @@ export function PaymentsList({ clientId }: Props) {
       list = list.filter((p) => p.deletedAt != null);
     }
 
-    if (activeFilter && filterValue) {
+    // Every filter with a value applies at once.
+    for (const [activeFilter, filterValue] of filterEntries) {
       const v = filterValue.toLowerCase();
       list = list.filter((p) => {
         switch (activeFilter) {
@@ -1007,11 +1021,12 @@ export function PaymentsList({ clientId }: Props) {
           case "date": return inDateRange(p.paymentDate, filterValue);
           case "client": return (p.clientName ?? "").toLowerCase().includes(v);
           case "address": return (p.clientAddress ?? "").toLowerCase().includes(v);
-          case "method": return p.method.toLowerCase().includes(v);
           default: return true;
         }
       });
     }
+
+    if (methodFilters.length > 0) list = list.filter((p) => methodFilters.includes(p.method));
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -1023,7 +1038,7 @@ export function PaymentsList({ clientId }: Props) {
     }
 
     return list;
-  }, [payments, activeTab, activeFilter, filterValue, search, thirtyDaysAgo]);
+  }, [payments, activeTab, filterEntries, methodFilters, search, thirtyDaysAgo]);
 
   if (!permissionsLoading && !can("acct_view_payment_list")) {
     return (
@@ -1100,12 +1115,23 @@ export function PaymentsList({ clientId }: Props) {
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {(["reference", "date", "client", "address", "method"] as FilterField[]).map((key) => {
             const label = { reference: "Reference #", date: "Date", client: "Client", address: "Address", method: "Payment Method" }[key];
+            if (key === "method") {
+              return (
+                <MultiSelectFilterTab
+                  key={key}
+                  label={label}
+                  options={methodOptions.map((m) => ({ value: m, label: m }))}
+                  selected={methodFilters}
+                  onChange={setMethodFilters}
+                />
+              );
+            }
             return (
               <button
                 key={key}
-                onClick={() => { setActiveFilter(key); setFilterValue(""); }}
+                onClick={() => toggleKey(key)}
                 className={`px-2 py-0.5 rounded text-xs transition-colors whitespace-nowrap ${
-                  activeFilter === key ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
+                  activeFilter === key || isSet(key) ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
                 }`}
               >
                 {label}
@@ -1125,7 +1151,7 @@ export function PaymentsList({ clientId }: Props) {
                   autoFocus
                 />
               )}
-              <button onClick={() => { setActiveFilter(null); setFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
+              <button title="Clear this filter" onClick={clearActive} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>

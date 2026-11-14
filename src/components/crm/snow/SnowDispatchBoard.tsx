@@ -68,6 +68,7 @@ import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import { buildSnowStopsCsv, downloadCsv, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDialog";
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
 import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
@@ -1171,66 +1172,6 @@ function visitServiceName(v: CRMJobVisit): string {
   return v.job?.services?.[0]?.serviceName || v.job?.invoiceDescription || "Snow Service";
 }
 
-/** A "Select a Filter" pill for the white strip above the dark bar (same look as the Dispatch Board's):
- *  click it for a multi-select checklist; it shows how many values are picked. */
-function FilterPill({ label, options, selected, onChange, format, searchable }: {
-  label: string;
-  options: string[];
-  selected: string[];
-  onChange: (next: string[]) => void;
-  format?: (value: string) => string;
-  /** Adds a search box (for long lists, e.g. every client on the storm). */
-  searchable?: boolean;
-}) {
-  const [query, setQuery] = useState("");
-  const shownOptions = query.trim() ? options.filter((o) => (format ? format(o) : o).toLowerCase().includes(query.trim().toLowerCase())) : options;
-  const toggleValue = (o: string) => onChange(selected.includes(o) ? selected.filter((x) => x !== o) : [...selected, o]);
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          className={cn(
-            "rounded px-2 py-0.5 max-lg:py-2 text-xs transition-colors whitespace-nowrap",
-            selected.length > 0
-              ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
-              : "hover:bg-muted text-slate-600 dark:text-neutral-400"
-          )}
-        >
-          {label}
-          {selected.length > 0 && <span className="ml-1 text-brand-500 dark:text-brand-400">· {selected.length}</span>}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-56 max-h-[min(24rem,var(--radix-popover-content-available-height,24rem))] overflow-y-auto overscroll-contain p-1" align="start">
-        <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{label}</p>
-        {searchable && (
-          <div className="px-1 pb-1">
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${label.toLowerCase()}s…`} className="h-7 text-xs" aria-label={`Search ${label.toLowerCase()}s`} />
-          </div>
-        )}
-        {options.length === 0 && <p className="px-2 py-2 text-xs italic text-slate-400 dark:text-neutral-500">Nothing to filter yet</p>}
-        {options.length > 0 && shownOptions.length === 0 && <p className="px-2 py-2 text-xs italic text-slate-400 dark:text-neutral-500">No match</p>}
-        {shownOptions.map((o) => (
-          <FilterOptionRow
-            key={o}
-            checked={selected.includes(o)}
-            onToggle={() => toggleValue(o)}
-            className={selected.includes(o) ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : undefined}
-          >
-            {format ? format(o) : o}
-          </FilterOptionRow>
-        ))}
-        {selected.length > 0 && (
-          <div className="mt-1 border-t pt-1">
-            <button className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 hover:bg-muted dark:text-neutral-500" onClick={() => onChange([])}>
-              Clear filter
-            </button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 /** Every icon and badge on the snow board, for the Legend button (same idea as the Dispatch Board's). */
 function SnowLegendDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const statusRows: { icon: React.ReactNode; label: string }[] = [
@@ -1935,11 +1876,11 @@ export function SnowDispatchBoard() {
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-card px-4 py-2 shrink-0">
           <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">Select a Filter:</span>
           <div className="flex flex-wrap items-center gap-1">
-            <FilterPill label="Client" options={clientOptions} selected={clientFilters} onChange={setClientFilters} format={(id) => clientNameById.get(id) ?? id} searchable />
-            <FilterPill label="Date" options={dateOptions} selected={dateFilters} onChange={setDateFilters} format={(d) => (d === "—" ? d : `${shortDateLabel(d)}  ${d}`)} />
-            <FilterPill label="Service" options={serviceOptions} selected={serviceFilters} onChange={setServiceFilters} />
-            <FilterPill label="City" options={cityOptions} selected={cityFilters} onChange={setCityFilters} />
-            <FilterPill label="Zip" options={zipOptions} selected={zipFilters} onChange={setZipFilters} />
+            <MultiSelectFilterTab className="max-lg:py-2" label="Client" options={clientOptions.map((id) => ({ value: id, label: clientNameById.get(id) ?? id }))} selected={clientFilters} onChange={setClientFilters} />
+            <MultiSelectFilterTab className="max-lg:py-2" label="Date" options={dateOptions.map((d) => ({ value: d, label: d === "—" ? d : `${shortDateLabel(d)}  ${d}` }))} selected={dateFilters} onChange={setDateFilters} />
+            <MultiSelectFilterTab className="max-lg:py-2" label="Service" options={serviceOptions.map((o) => ({ value: o, label: o }))} selected={serviceFilters} onChange={setServiceFilters} />
+            <MultiSelectFilterTab className="max-lg:py-2" label="City" options={cityOptions.map((o) => ({ value: o, label: o }))} selected={cityFilters} onChange={setCityFilters} />
+            <MultiSelectFilterTab className="max-lg:py-2" label="Zip" options={zipOptions.map((o) => ({ value: o, label: o }))} selected={zipFilters} onChange={setZipFilters} />
           </div>
           <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
             <Button

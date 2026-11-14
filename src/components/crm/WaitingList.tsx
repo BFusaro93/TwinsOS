@@ -1,5 +1,7 @@
 "use client";
 
+import { useStackedFilters } from "@/lib/hooks/use-stacked-filters";
+
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { useMemo, useState } from "react";
@@ -57,6 +59,7 @@ import { useOrgTags } from "@/lib/hooks/use-clients";
 import { Flame, Tag, Users } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
 import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
 import { packageStepEligibility } from "@/lib/package-step-eligibility";
 import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
@@ -135,6 +138,8 @@ function extraColCellText(key: string, job: CRMJob): string {
     default:              return "—";
   }
 }
+
+const NO_SALES_REP = "__none__";
 
 type ColFilterKey = "client" | "city" | "zip" | "crew";
 
@@ -571,11 +576,15 @@ export function WaitingList() {
     setSavedRange({ preset: "custom", start, end });
   }
   const [search, setSearch] = useState("");
-  const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
-  const [colFilterValue, setColFilterValue] = useState("");
+  const {
+    activeKey: activeColFilter, filterValue: colFilterValue, setFilterValue: setColFilterValue, toggleKey, clearActive, isSet,
+    entries: filterEntries,
+  } = useStackedFilters<ColFilterKey>();
   // Service is multi-select (can filter to more than one at once), same as
   // the Dispatch Board's Service filter.
   const [serviceFilters, setServiceFilters] = useState<string[]>([]);
+  // Sales rep is multi-select too ("__none__" = jobs with no sales rep).
+  const [repFilters, setRepFilters] = useState<string[]>([]);
   const [crewFilters, setCrewFilters] = useState<string[]>([]);
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
@@ -622,6 +631,12 @@ export function WaitingList() {
     return Array.from(names).sort();
   }, [all]);
 
+  const allReps = useMemo(() => {
+    const names = new Set<string>();
+    for (const job of all) if (job.salesRepName) names.add(job.salesRepName);
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [all]);
+
   const filtered = useMemo(() => {
     let list = all;
 
@@ -647,8 +662,14 @@ export function WaitingList() {
     if (serviceFilters.length > 0) {
       list = list.filter((job) => (job.services ?? []).some((s) => serviceFilters.includes(s.serviceName)));
     }
+    if (repFilters.length > 0) {
+      list = list.filter((job) =>
+        job.salesRepName ? repFilters.includes(job.salesRepName) : repFilters.includes(NO_SALES_REP)
+      );
+    }
 
-    if (activeColFilter && colFilterValue.trim()) {
+    // Every filter with a value applies at once.
+    for (const [activeColFilter, colFilterValue] of filterEntries) {
       const v = colFilterValue.toLowerCase();
       list = list.filter((job) => {
         switch (activeColFilter) {
@@ -680,7 +701,7 @@ export function WaitingList() {
     }
 
     return list;
-  }, [all, activeColFilter, colFilterValue, search, crewFilters, tagFilters, priorityFilters, serviceFilters, crewCodeById]);
+  }, [all, filterEntries, search, crewFilters, tagFilters, priorityFilters, serviceFilters, repFilters, crewCodeById]);
 
   // Package jobs carry one crm_job_services row per visit, each with its own
   // date window — expand those into one row per visit so each can be scheduled
@@ -826,13 +847,10 @@ export function WaitingList() {
           {COL_FILTERS.map(({ key, label }) => (
             <button
               key={key}
-              onClick={() => {
-                if (activeColFilter === key) { setActiveColFilter(null); setColFilterValue(""); }
-                else { setActiveColFilter(key); setColFilterValue(""); }
-              }}
+              onClick={() => toggleKey(key)}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                activeColFilter === key
+                activeColFilter === key || isSet(key)
                   ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
                   : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
@@ -841,52 +859,15 @@ export function WaitingList() {
             </button>
           ))}
 
-          {/* Service: multi-select popover, same as the Dispatch Board. Placed
-              right after the tab buttons and before the text-filter Input
-              below, so that Input always docks at the end of the row no
-              matter which tab is active — matching the Dispatch Board,
-              where every "Select a Filter" tab lives in one group before
-              the shared Input. */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                  serviceFilters.length > 0 ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
-                )}
-              >
-                Service{serviceFilters.length > 0 && ` · ${serviceFilters.length}`}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-1" align="start">
-              <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 dark:text-neutral-500 tracking-wide">Services</p>
-              {allServices.length === 0 && (
-                <p className="px-2 py-2 text-xs text-slate-400 dark:text-neutral-500 italic">No services found</p>
-              )}
-              {allServices.map((name) => (
-                <FilterOptionRow
-                  key={name}
-                  checked={serviceFilters.includes(name)}
-                  onToggle={() => setServiceFilters((prev) =>
-                    prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]
-                  )}
-                  className={serviceFilters.includes(name) ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : undefined}
-                >
-                  {name}
-                </FilterOptionRow>
-              ))}
-              {serviceFilters.length > 0 && (
-                <div className="border-t mt-1 pt-1">
-                  <button
-                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:bg-muted"
-                    onClick={() => setServiceFilters([])}
-                  >
-                    <X className="h-3 w-3" /> Clear filter
-                  </button>
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
+          {/* Service + Sales Rep: multi-select checklists (stack with every other filter). */}
+          <MultiSelectFilterTab label="Service" title="Services" options={allServices.map((n) => ({ value: n, label: n }))} selected={serviceFilters} onChange={setServiceFilters} />
+          <MultiSelectFilterTab
+            label="Sales Rep"
+            title="Sales Reps"
+            options={[{ value: NO_SALES_REP, label: "Unassigned" }, ...allReps.map((n) => ({ value: n, label: n }))]}
+            selected={repFilters}
+            onChange={setRepFilters}
+          />
 
           {activeColFilter && (
             <>
@@ -914,7 +895,7 @@ export function WaitingList() {
                 />
               )}
               <button
-                onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
+                title="Clear this filter" onClick={clearActive}
                 className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               >
                 <X className="h-3.5 w-3.5" />
@@ -1153,7 +1134,7 @@ export function WaitingList() {
             ) : visitRows.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
-                  {search || activeColFilter
+                  {search || filterEntries.length > 0
                     ? "No jobs match your filters"
                     : "No jobs on the waiting list for this date range"}
                 </td>

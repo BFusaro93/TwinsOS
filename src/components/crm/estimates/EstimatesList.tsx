@@ -40,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const ESTIMATE_COLUMNS: ColumnDef[] = [
@@ -50,6 +51,7 @@ const ESTIMATE_COLUMNS: ColumnDef[] = [
   { key: "date",        label: "Date" },
   { key: "valid_until", label: "Valid Until" },
   { key: "sales_rep",   label: "Sales Rep" },
+  { key: "reason",      label: "Won / Lost Reason" },
   { key: "prob",        label: "Prob %" },
   { key: "income",      label: "Income" },
   { key: "gp",          label: "Gross Profit" },
@@ -91,8 +93,10 @@ const FALLBACK_STAGE_TABS: { value: StageFilter; label: string }[] = [
 ];
 
 const UNASSIGNED_REP = "__unassigned__";
+// Pseudo-stage: an Accepted estimate that already has a job (shown as "Converted").
+const CONVERTED_STAGE = "__converted__";
 
-type FilterKey = "description" | "client" | "stage" | "date" | "sales_rep";
+type FilterKey = "description" | "client" | "stage" | "date" | "sales_rep" | "service";
 
 const FILTER_BUTTONS: { key: FilterKey; label: string }[] = [
   { key: "description", label: "Description" },
@@ -100,6 +104,7 @@ const FILTER_BUTTONS: { key: FilterKey; label: string }[] = [
   { key: "stage",       label: "Stage" },
   { key: "date",        label: "Date" },
   { key: "sales_rep",   label: "Sales Rep" },
+  { key: "service",     label: "Service" },
 ];
 
 function formatDate(d: string): string {
@@ -149,7 +154,17 @@ export function EstimatesList({ clientId }: Props) {
   }
   const [search,          setSearch]          = useState("");
   const [activeFilterKey, setActiveFilterKey] = useState<FilterKey | null>(null);
-  const [filterValue,     setFilterValue]     = useState("");
+  // Free-text value for the Description / Client / Date filters.
+  // Per-filter values, kept when you switch tabs so Description + Client + Date
+  // (and the multi-selects below) all stack. activeFilterKey only picks which
+  // input is showing.
+  const [textFilters,     setTextFilters]     = useState<Record<"description" | "client" | "date", string>>({ description: "", client: "", date: "" });
+  const setTextFilter = (key: "description" | "client" | "date", value: string) =>
+    setTextFilters((prev) => ({ ...prev, [key]: value }));
+  // Stage, Sales Rep and Service are multi-select: several can be checked at once.
+  const [stageFilters,    setStageFilters]    = useState<string[]>([]);
+  const [repFilters,      setRepFilters]      = useState<string[]>([]);
+  const [serviceFilters,  setServiceFilters]  = useState<string[]>([]);
   const [selectedIds,     setSelectedIds]     = useState<Set<string>>(new Set());
   const [duplicateTarget, setDuplicateTarget] = useState<{ id: string; description: string } | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "pipeline">("list");
@@ -164,7 +179,7 @@ export function EstimatesList({ clientId }: Props) {
   // any of them changes, rows that are no longer shown must not stay selected
   // (a bulk Email / Mark as Lost would otherwise act on estimates the user
   // can't see). Same rule as the Clients and Leads lists.
-  const selectionScope = JSON.stringify([stageFilter, stageSet, search, activeFilterKey, filterValue]);
+  const selectionScope = JSON.stringify([stageFilter, stageSet, search, textFilters, stageFilters, repFilters, serviceFilters]);
   const [selectionScopeSeen, setSelectionScopeSeen] = useState(selectionScope);
   if (selectionScopeSeen !== selectionScope) {
     setSelectionScopeSeen(selectionScope);
@@ -205,8 +220,8 @@ export function EstimatesList({ clientId }: Props) {
     return c;
   }, [allEstimates, stageTabs]);
 
-  const clientFilterOptions = useMemo(
-    () => Array.from(new Set(allEstimates.map((e) => e.clientName).filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b)),
+  const serviceFilterOptions = useMemo(
+    () => Array.from(new Set(allEstimates.flatMap((e) => e.serviceNames ?? []))).sort((a, b) => a.localeCompare(b)),
     [allEstimates]
   );
   const repFilterOptions = useMemo(
@@ -226,22 +241,26 @@ export function EstimatesList({ clientId }: Props) {
           (e.clientName ?? "").toLowerCase().includes(q)
       );
     }
-    if (activeFilterKey && filterValue.trim()) {
-      const fv = filterValue.toLowerCase();
-      list = list.filter((e) => {
-        switch (activeFilterKey) {
-          case "description": return (e.description ?? "").toLowerCase().includes(fv);
-          // Client, Stage and Sales Rep are picked from a list (exact match).
-          case "client":      return (e.clientName ?? "") === filterValue;
-          case "stage":       return e.stage === filterValue;
-          case "date":        return inDateRange(e.estimateDate, filterValue);
-          case "sales_rep":   return filterValue === UNASSIGNED_REP ? !e.salesRepName : e.salesRepName === filterValue;
-          default:            return true;
-        }
-      });
+    // Every filter with a value applies at once.
+    const fDesc = textFilters.description.trim().toLowerCase();
+    const fClient = textFilters.client.trim().toLowerCase();
+    if (fDesc) list = list.filter((e) => (e.description ?? "").toLowerCase().includes(fDesc));
+    if (fClient) list = list.filter((e) => (e.clientName ?? "").toLowerCase().includes(fClient));
+    if (textFilters.date.trim()) list = list.filter((e) => inDateRange(e.estimateDate, textFilters.date));
+    if (stageFilters.length > 0) {
+      list = list.filter((e) =>
+        stageFilters.includes(e.stage) ||
+        (stageFilters.includes(CONVERTED_STAGE) && e.stage === "accepted" && !!estimateIdsWithJobs?.has(e.id))
+      );
+    }
+    if (repFilters.length > 0) {
+      list = list.filter((e) => (e.salesRepName ? repFilters.includes(e.salesRepName) : repFilters.includes(UNASSIGNED_REP)));
+    }
+    if (serviceFilters.length > 0) {
+      list = list.filter((e) => (e.serviceNames ?? []).some((n) => serviceFilters.includes(n)));
     }
     return list;
-  }, [allEstimates, stageFilter, stageSet, search, activeFilterKey, filterValue]);
+  }, [allEstimates, stageFilter, stageSet, search, textFilters, stageFilters, repFilters, serviceFilters, estimateIdsWithJobs]);
 
   const totalIncome  = filtered.reduce((s, e) => s + (e.revenueCents ?? 0), 0);
   const totalGP      = filtered.reduce((s, e) => s + (e.grossProfitCents ?? 0), 0);
@@ -410,57 +429,61 @@ export function EstimatesList({ clientId }: Props) {
       <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
         <span className="shrink-0 text-xs text-muted-foreground font-medium mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-          {FILTER_BUTTONS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => {
-                if (activeFilterKey === key) { setActiveFilterKey(null); setFilterValue(""); }
-                else { setActiveFilterKey(key); setFilterValue(""); }
-              }}
-              className={cn(
-                "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                activeFilterKey === key
-                  ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
-                  : "hover:bg-muted text-slate-600 dark:text-neutral-400"
-              )}
-            >
-              {label}
-            </button>
-          ))}
+          {FILTER_BUTTONS.map(({ key, label }) => {
+            const multi: Record<string, { selected: string[]; set: (v: string[]) => void; options: { value: string; label: string }[]; title: string } | undefined> = {
+              stage: {
+                selected: stageFilters, set: setStageFilters, title: "Stages",
+                options: [
+                  ...stageTabs.filter((t) => t.value !== "all").map((t) => ({ value: t.value as string, label: t.label })),
+                  { value: CONVERTED_STAGE, label: "Converted" },
+                ],
+              },
+              sales_rep: {
+                selected: repFilters, set: setRepFilters, title: "Sales Reps",
+                options: [{ value: UNASSIGNED_REP, label: "Unassigned" }, ...repFilterOptions.map((n) => ({ value: n, label: n }))],
+              },
+              service: {
+                selected: serviceFilters, set: setServiceFilters, title: "Services",
+                options: serviceFilterOptions.map((n) => ({ value: n, label: n })),
+              },
+            };
+            const m = multi[key];
+            if (m) {
+              return (
+                <MultiSelectFilterTab key={key} label={label} title={m.title} options={m.options} selected={m.selected} onChange={m.set} />
+              );
+            }
+            return (
+              <button
+                key={key}
+                onClick={() => {
+                  setActiveFilterKey(activeFilterKey === key ? null : key);
+                }}
+                className={cn(
+                  "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
+                  activeFilterKey === key || (key in textFilters && textFilters[key as keyof typeof textFilters].trim())
+                    ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
+                    : "hover:bg-muted text-slate-600 dark:text-neutral-400"
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
           {activeFilterKey && (
             <>
               {activeFilterKey === "date" ? (
-                <DateRangeFilter value={filterValue} onChange={setFilterValue} label="Estimate date" />
-              ) : activeFilterKey === "client" || activeFilterKey === "stage" || activeFilterKey === "sales_rep" ? (
-                <select
-                  autoFocus
-                  value={filterValue}
-                  onChange={(e) => setFilterValue(e.target.value)}
-                  aria-label={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}`}
-                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
-                >
-                  <option value="">Select…</option>
-                  {activeFilterKey === "client" && clientFilterOptions.map((n) => <option key={n} value={n}>{n}</option>)}
-                  {activeFilterKey === "stage" && stageTabs.filter((t) => t.value !== "all").map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                  {activeFilterKey === "sales_rep" && (
-                    <>
-                      <option value={UNASSIGNED_REP}>Unassigned</option>
-                      {repFilterOptions.map((n) => <option key={n} value={n}>{n}</option>)}
-                    </>
-                  )}
-                </select>
+                <DateRangeFilter value={textFilters.date} onChange={(v) => setTextFilter("date", v)} label="Estimate date" />
               ) : (
                 <Input
                   autoFocus
-                  value={filterValue}
-                  onChange={(e) => setFilterValue(e.target.value)}
+                  value={textFilters[activeFilterKey as "description" | "client"]}
+                  onChange={(e) => setTextFilter(activeFilterKey as "description" | "client", e.target.value)}
                   placeholder={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}…`}
                   className="ml-2 h-6 w-48 text-xs"
                 />
               )}
-              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
+              <button title="Clear this filter" onClick={() => { setTextFilter(activeFilterKey as "description" | "client" | "date", ""); setActiveFilterKey(null); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>
@@ -702,7 +725,7 @@ export function EstimatesList({ clientId }: Props) {
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={colSpan} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
-                  {stageFilter !== "all" || stageSet || activeFilterKey || search
+                  {stageFilter !== "all" || stageSet || Object.values(textFilters).some((v) => v.trim()) || stageFilters.length > 0 || repFilters.length > 0 || serviceFilters.length > 0 || search
                     ? "No estimates match the current filters"
                     : "No estimates yet — create one to get started"}
                 </td>
@@ -777,6 +800,12 @@ export function EstimatesList({ clientId }: Props) {
                           return <td key={col.key} className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{e.validUntilDate ? formatDate(e.validUntilDate) : "—"}</td>;
                         case "sales_rep":
                           return <td key={col.key} className="px-3 py-2.5 text-xs text-slate-600 dark:text-neutral-400">{e.salesRepName ?? "—"}</td>;
+                        case "reason":
+                          return (
+                            <td key={col.key} className="px-3 py-2.5 max-w-[180px] truncate text-xs text-slate-600 dark:text-neutral-400" title={e.reason ?? undefined}>
+                              {e.stage === "accepted" || e.stage === "lost" ? (e.reason ?? "—") : "—"}
+                            </td>
+                          );
                         case "prob":
                           return <td key={col.key} className="px-3 py-2.5 text-right text-xs text-muted-foreground">{e.probabilityBps > 0 ? `${(e.probabilityBps / 100).toFixed(0)}%` : "—"}</td>;
                         // Income / GP / Margin: "—" only when the estimate has no
