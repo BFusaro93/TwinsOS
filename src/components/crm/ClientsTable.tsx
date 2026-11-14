@@ -375,9 +375,9 @@ export function ClientsTable({
           </div>
         )}
 
-        {/* With rows selected the Actions menu takes the Columns slot and Columns moves to the right edge, as on the dispatch boards. */}
+        {/* Columns always sits at the right edge; with rows selected the Actions menu takes its old slot next to Filters, as on the dispatch boards. */}
 
-        <div className={selectedCount > 0 ? "order-last ml-auto" : undefined}>
+        <div className={selectedCount > 0 ? "order-last ml-auto" : "order-last"}>
 
           <ColumnSelector columns={columnDefs} visible={cols} onToggle={toggleCol} />
 
