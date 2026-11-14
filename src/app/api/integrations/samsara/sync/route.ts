@@ -116,6 +116,8 @@ async function handleSync(request: Request) {
         last_sync_status: orgResult.errors > 0
           ? (orgResult.matched > 0 ? "partial" : "error")
           : "ok",
+        // Shown to staff on /internal/health; cleared on a clean run.
+        last_sync_error: orgResult.errors > 0 ? orgResult.detail.join("; ").slice(0, 500) || null : null,
       })
       .eq("id", integration.id);
   }
