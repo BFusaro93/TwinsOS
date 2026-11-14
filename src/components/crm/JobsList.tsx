@@ -46,7 +46,7 @@ interface JobSummary {
 
 const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
 
-function summarizeJob(job: CRMJob): JobSummary {
+function summarizeJob(job: CRMJob, window?: { from: string; to: string }): JobSummary {
   const visits = job.visits ?? [];
   if (visits.length === 0) {
     return {
@@ -69,7 +69,14 @@ function summarizeJob(job: CRMJob): JobSummary {
   // job). A job whose every visit was skipped or cancelled was never done — it
   // is flagged Needs Attention, not counted as Completed. A cancelled or
   // on-hold JOB always shows its own status, whatever its visits say.
-  const rep = pending[0] ?? sorted[sorted.length - 1];
+  // Prefer the earliest pending visit INSIDE the list's date window. Using the
+  // earliest pending visit overall let one stale, never-completed visit from
+  // months ago pull the whole job out of the window, so a recurring job with
+  // visits scheduled next week vanished from the Active list and its stats.
+  const inWindow = window
+    ? pending.find((v) => (!window.from || v.scheduledDate >= window.from) && (!window.to || v.scheduledDate <= window.to))
+    : undefined;
+  const rep = inWindow ?? pending[0] ?? sorted[sorted.length - 1];
   const status =
     job.status === "cancelled" || job.status === "hold"
       ? job.status
@@ -167,7 +174,10 @@ export function JobsList() {
     jobType: typeFilter !== "all" ? typeFilter : undefined,
   });
 
-  const summaries = useMemo(() => jobs.map(summarizeJob), [jobs]);
+  const summaries = useMemo(
+    () => jobs.map((j) => summarizeJob(j, { from: fromDate, to: toDate })),
+    [jobs, fromDate, toDate]
+  );
 
   const viewFiltered = summaries.filter((o) => {
     if (viewMode === "unscheduled") return o.date === null;
@@ -176,12 +186,11 @@ export function JobsList() {
     if (o.date === null) return false;
     if (o.status === "completed" || o.status === "cancelled") return false;
     // RULE: the Active tab's From/To window applies to every row, keyed on
-    // the job's representative date (its earliest still-pending visit — see
-    // summarizeJob). Overdue jobs (that date is in the past) are NOT exempt:
-    // an earlier version let them bypass the window so stale recurring jobs
-    // would "surface", which in practice made the default 30-day window look
-    // ignored (March/July jobs listed under 09/05–10/05). To see overdue
-    // work, widen From — the filter now means exactly what it shows.
+    // the job's representative date (its earliest still-pending visit inside
+    // the window — see summarizeJob). A job with ONLY overdue pending visits is
+    // NOT exempt: letting it bypass the window made stale March/July jobs
+    // list under 09/05–10/05. But an overdue visit no longer hides a job that
+    // also has visits in the window. To see overdue-only work, widen From.
     if (fromDate && o.date < fromDate) return false;
     if (toDate && o.date > toDate) return false;
     return true;
