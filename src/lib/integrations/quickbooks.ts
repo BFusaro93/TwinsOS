@@ -200,7 +200,11 @@ export async function getValidConnection(
       log.error("QuickBooks token refresh failed", { err, orgId });
       await db
         .from("integrations")
-        .update({ last_sync_at: new Date().toISOString(), last_sync_status: "error" })
+        .update({
+          last_sync_at: new Date().toISOString(),
+          last_sync_status: "error",
+          last_sync_error: "Token refresh failed — the connection was revoked or expired; the org must reconnect QuickBooks",
+        })
         .eq("id", row.id);
       return null;
     }
@@ -222,7 +226,7 @@ export async function getValidConnection(
     // now-superseded tokens.
     const { data: updated } = await db
       .from("integrations")
-      .update({ config: nextConfig, last_sync_at: new Date().toISOString(), last_sync_status: "ok" })
+      .update({ config: nextConfig, last_sync_at: new Date().toISOString(), last_sync_status: "ok", last_sync_error: null })
       .eq("id", row.id)
       .eq("config->>refresh_token", config.refresh_token)
       .select("config")
