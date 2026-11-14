@@ -2154,7 +2154,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What can a crew login see about our clients?",
-        a: "Only the clients on that crew's own stops: name, phone, address, gate code, property notes, contacts and timeline. Other clients' records and the client Files tab are not visible to crews.",
+        a: "Only the clients on that crew's own stops: name, phone, address, gate code and property notes. Crews don't see client contacts, the client Files tab, or the client timeline — only the notes, skip reasons and upsell suggestions the crew itself sent. Invoices, payments, emails and office notes on the timeline stay with the office.",
       },
       {
         q: "Can a crew edit client details or timeline entries?",

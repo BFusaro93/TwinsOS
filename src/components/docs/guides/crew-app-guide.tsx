@@ -188,10 +188,12 @@ export function CrewAppGuide() {
           card (see below).
         </p>
         <p>
-          A crew login only ever sees the clients on its own stops. Other clients&apos; timelines,
-          contacts, properties and files stay with the office. Notes, skip reasons and upsell
-          suggestions the crew sends land on the client&apos;s timeline, but the crew can&apos;t edit
-          or delete timeline entries or change a client&apos;s details — call the office for that.
+          A crew login only ever sees the clients on its own stops: name, phone, address, gate code
+          and property notes. Client timelines, contacts and files stay with the office. Notes, skip
+          reasons and upsell suggestions the crew sends land on the client&apos;s timeline, and the crew
+          can see only the entries it sent itself — not invoices, payments, emails or office notes.
+          The crew can&apos;t edit or delete timeline entries or change a client&apos;s details — call
+          the office for that.
         </p>
       </Section>
 
