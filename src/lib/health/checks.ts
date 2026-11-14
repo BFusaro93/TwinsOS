@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import Stripe from "stripe";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getOrgTwilioCreds } from "@/lib/twilio/client";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
 
 export type HealthStatus = "ok" | "degraded" | "down" | "not_configured";
 
@@ -124,8 +125,7 @@ async function runStripeConnectCheck(): Promise<HealthCheckResult> {
     const { data, error } = await db
       .from("organizations")
       .select("id, name, stripe_connect_account_id, stripe_connect_livemode")
-      .not("stripe_connect_account_id", "is", null)
-      .is("deleted_at", null);
+      .not("stripe_connect_account_id", "is", null);
     if (error) throw new Error(error.message);
     const orgs = data ?? [];
     if (orgs.length === 0) return { detail: "No orgs have connected Stripe" };
@@ -355,6 +355,89 @@ async function runGoogleMapsCheck(): Promise<HealthCheckResult> {
   });
 }
 
+// Each probe is a billed Geocoding call on the ORG's own Google account, so cache for hours.
+const ORG_MAPS_TTL_MS = 6 * 60 * 60 * 1000;
+const ORG_MAPS_CONCURRENCY = 5;
+let orgMapsCache: { at: number; result: HealthCheckResult } | null = null;
+
+async function checkOrgGoogleMapsKeys(): Promise<HealthCheckResult> {
+  if (orgMapsCache && Date.now() - orgMapsCache.at < ORG_MAPS_TTL_MS) {
+    const checked = new Date(orgMapsCache.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return { ...orgMapsCache.result, detail: `${orgMapsCache.result.detail} · checked ${checked}` };
+  }
+  const result = await runOrgGoogleMapsCheck();
+  orgMapsCache = { at: Date.now(), result };
+  return result;
+}
+
+/**
+ * Orgs without Route Optimization (not Enterprise, no add-on) run on a Google
+ * Maps key they saved under Settings → Integrations. Those keys are used
+ * server-side (geocoding, address check, route optimization), so a key that is
+ * invalid, lacks the Geocoding API, or is referrer-restricted breaks the
+ * feature for that org. Entitled orgs use the platform key, so their saved key
+ * (if any) is skipped. Keys never leave the server or appear in the result.
+ */
+async function runOrgGoogleMapsCheck(): Promise<HealthCheckResult> {
+  return timed("org_google_maps", "Google Maps — org keys", async () => {
+    const db = createServiceClient();
+    const { data, error } = await db
+      .from("organizations")
+      .select("id, name, customizations")
+      .not("customizations->>google_maps_api_key", "is", null);
+    if (error) throw new Error(error.message);
+
+    const candidates = (data ?? [])
+      .map((o) => ({
+        id: o.id,
+        name: o.name,
+        key: ((o.customizations as Record<string, unknown> | null)?.google_maps_api_key as string | undefined)?.trim() ?? "",
+      }))
+      .filter((o) => o.key);
+
+    const targets: typeof candidates = [];
+    for (const org of candidates) {
+      if (!(await orgHasAddon(db, org.id, "route_optimization"))) targets.push(org);
+    }
+    if (targets.length === 0) return { detail: "No orgs rely on their own Google Maps key" };
+
+    const problems: { label: string; detail: string }[] = [];
+    let next = 0;
+    const worker = async () => {
+      while (next < targets.length) {
+        const org = targets[next++];
+        const problem = await probeGoogleMapsKey(org.key);
+        if (problem) problems.push({ label: org.name, detail: problem });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(ORG_MAPS_CONCURRENCY, targets.length) }, worker));
+
+    if (problems.length === 0) return { detail: `${targets.length} org key(s) working` };
+    return {
+      status: problems.length === targets.length ? "down" : "degraded",
+      detail: `${problems.length} of ${targets.length} org Google Maps key(s) rejected`,
+      failures: problems,
+    };
+  });
+}
+
+/** Short problem description, or null when the key can geocode. Never echoes the key. */
+async function probeGoogleMapsKey(key: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=Boston%2C%20MA&key=${encodeURIComponent(key)}`,
+      { signal: AbortSignal.timeout(TIMEOUT_MS) }
+    );
+    if (!res.ok) return `Google returned HTTP ${res.status}`;
+    const body = (await res.json()) as { status?: string; error_message?: string };
+    if (body.status === "OK" || body.status === "ZERO_RESULTS") return null;
+    const message = (body.error_message ?? "").replace(key, "[key]");
+    return `${body.status ?? "Error"}${message ? `: ${message}` : ""}`.slice(0, 240);
+  } catch (err) {
+    return err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError") ? "Timed out" : "Check failed";
+  }
+}
+
 async function checkAnthropic(): Promise<HealthCheckResult> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return notConfigured("anthropic", "Anthropic (Ask AI)", "ANTHROPIC_API_KEY");
@@ -460,6 +543,7 @@ export async function runHealthChecks(): Promise<HealthCheckResult[]> {
     checkTwilioRegistrations(),
     checkTwilioSubaccounts(),
     checkGoogleMaps(),
+    checkOrgGoogleMapsKeys(),
     checkAnthropic(),
     checkQuickBooks(),
     checkSamsara(),
