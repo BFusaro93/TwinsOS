@@ -375,13 +375,19 @@ export function ClientsTable({
           </div>
         )}
 
-        <ColumnSelector columns={columnDefs} visible={cols} onToggle={toggleCol} />
+        {/* With rows selected the Actions menu takes the Columns slot and Columns moves to the right edge, as on the dispatch boards. */}
+
+        <div className={selectedCount > 0 ? "order-last ml-auto" : undefined}>
+
+          <ColumnSelector columns={columnDefs} visible={cols} onToggle={toggleCol} />
+
+        </div>
 
         {/* Bulk Actions */}
         {selectedCount > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" className="h-8 gap-1.5 ml-auto">
+              <Button size="sm" className="h-8 gap-1.5">
                 Actions ({selectedCount})
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>

@@ -792,7 +792,7 @@ export function WaitingList() {
             else setSavedRange({ preset: v });
           }}
           aria-label="Date window preset"
-          className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="rounded border border-border bg-slate-50 dark:bg-muted/40 pl-2 pr-6 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
         >
           {RANGE_PRESETS.map((p) => (
             <option key={p.value} value={p.value}>{p.label}</option>

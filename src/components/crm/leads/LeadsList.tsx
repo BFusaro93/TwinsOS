@@ -54,7 +54,7 @@ import { useLoadMoreSentinel } from "@/lib/hooks/use-load-more-sentinel";
 import { useLeadFilterFields } from "@/lib/hooks/use-lead-filter-fields";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, UserCheck, XCircle, Building2, Home, ChevronDown, X, Maximize2 } from "lucide-react";
+import { UserCheck, XCircle, Building2, Home, ChevronDown, X, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -559,12 +559,18 @@ export function LeadsList({
 
         <ClientFilterPopover fields={FILTER_FIELDS} rows={filterRows} onRowsChange={setFilterRows} />
 
-        <ColumnSelector columns={LEAD_COLUMNS} visible={cols} onToggle={toggleCol} />
+        {/* With rows selected the Actions menu takes the Columns slot and Columns moves to the right edge, as on the dispatch boards. */}
+
+        <div className={selectedCount > 0 ? "order-last ml-auto" : undefined}>
+
+          <ColumnSelector columns={LEAD_COLUMNS} visible={cols} onToggle={toggleCol} />
+
+        </div>
 
         {selectedCount > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" className="h-8 gap-1.5 ml-auto">
+              <Button size="sm" className="h-8 gap-1.5">
                 Actions ({selectedCount})
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
@@ -589,11 +595,6 @@ export function LeadsList({
           </span>
         )}
 
-        {!controlled && (
-          <Button size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> Add Lead
-          </Button>
-        )}
       </div>
 
       {/* Active filter chips */}
