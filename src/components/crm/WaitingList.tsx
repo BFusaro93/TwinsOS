@@ -805,6 +805,8 @@ export function WaitingList() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-4 py-2.5 shadow-sm">
         <ListOrdered className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
         <span className="text-sm font-medium text-slate-700 dark:text-neutral-300">Date Window</span>
+        {/* appearance-none + our own chevron: the native arrow ignores padding in Chrome/macOS and sits against the border. */}
+        <div className="relative">
         <select
           value={savedRange.preset}
           onChange={(e) => {
@@ -813,13 +815,15 @@ export function WaitingList() {
             else setSavedRange({ preset: v });
           }}
           aria-label="Date window preset"
-          className="rounded border border-border bg-slate-50 dark:bg-muted/40 pl-2 pr-6 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="appearance-none rounded border border-border bg-slate-50 dark:bg-muted/40 pl-2 pr-8 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
         >
           {RANGE_PRESETS.map((p) => (
             <option key={p.value} value={p.value}>{p.label}</option>
           ))}
           <option value="custom">Custom range</option>
         </select>
+        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500 dark:text-neutral-400" />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
