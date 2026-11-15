@@ -78,6 +78,7 @@ export async function GET() {
     id: row.id,
     clientName: (row.oauth_clients as unknown as { client_name: string } | null)?.client_name ?? "Unknown app",
     connectedByName: (row.profiles as unknown as { name: string | null } | null)?.name ?? null,
+    connectedByUserId: row.user_id,
     scopes: row.scopes ?? [],
     lastUsedAt: lastUsedByConnection.get(`${row.client_id}:${row.user_id}`) ?? row.last_used_at,
     createdAt: row.created_at,

@@ -1,5 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { resolveDefaultInvoicePdfTemplate } from "@/lib/invoices/default-pdf-template";
+import { livePinnedTemplate, resolveDefaultInvoicePdfTemplate } from "@/lib/invoices/default-pdf-template";
 import { createElement } from "react";
 import { InvoiceDocument, InvoiceDocumentMulti } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import { fetchOrgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
@@ -12,6 +12,7 @@ import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications
 import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit-notes";
 import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
 import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
+import { fetchInvoiceCreditAvailableCents } from "@/lib/invoices/credit-available";
 
 /** Per-invoice PDF builds in flight at once for a combined print. */
 const PDF_BUILD_CONCURRENCY = 5;
@@ -41,7 +42,7 @@ async function buildInvoicePDFData(
       *,
       clients(display_name, billing_address, billing_city, billing_state, billing_zip),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes)
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes, deleted_at)
     `)
     .eq("id", invoiceId)
     .eq("org_id", orgId)
@@ -62,8 +63,9 @@ async function buildInvoicePDFData(
   }
 
   // Invoice's own pdf_template_id wins; otherwise fall back to the org's default template.
+  // A pinned template that was deleted since falls back to the org default too.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let template: any = inv.crm_invoice_pdf_templates ?? null;
+  let template: any = livePinnedTemplate(inv.crm_invoice_pdf_templates);
   if (!template) template = await resolveDefaultInvoicePdfTemplate(supabase, inv.org_id);
   const layoutKey: InvoicePDFLayoutKey = (template?.layout_key as InvoicePDFLayoutKey) ?? "default";
 
@@ -155,6 +157,7 @@ async function buildInvoicePDFData(
     totalCents: (inv.total_cents as number) ?? 0,
     amountPaidCents: (inv.amount_paid_cents as number) ?? 0,
     balanceCents: (inv.balance_cents as number) ?? 0,
+    creditAvailableCents: await fetchInvoiceCreditAvailableCents(supabase, inv.id as string),
     lineItems: printedLineItems,
     statement,
     photos: includePhotos ? await loadInvoicePhotosForPdf(inv.id as string, inv.org_id as string) : [],

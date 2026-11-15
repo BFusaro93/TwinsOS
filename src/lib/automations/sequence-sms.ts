@@ -129,6 +129,8 @@ export async function resolveSmsStepContent(
     clientId: string;
     meetingId?: string | null;
     invoiceId?: string | null;
+    /** The visit a visit-event trigger fired for — the snow merge tags read this stop. */
+    visitId?: string | null;
     bodyTemplate: string;
     /** The step's "Send To" selection (client_primary_phone | billing_phone | all_contacts). Defaults to the client's primary phone. */
     toSelection?: string[];
@@ -174,7 +176,7 @@ export async function resolveSmsStepContent(
     extras["[creditcardending]"] = params.cardExpiryContext.last4;
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
-  Object.assign(extras, await buildSnowExtras(supabase, { orgId: params.orgId, clientId: params.clientId }));
+  Object.assign(extras, await buildSnowExtras(supabase, { orgId: params.orgId, clientId: params.clientId, visitId: params.visitId ?? null }));
   Object.assign(
     extras,
     await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: false }),

@@ -6,6 +6,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 import { orgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
+import { fetchInvoiceCreditAvailable } from "@/lib/invoices/credit-available";
 
 interface InvoiceRow {
   id: string;
@@ -156,9 +157,20 @@ export default async function BillingPage() {
     .eq("id", ctx.orgId)
     .maybeSingle();
 
+  // Unapplied credit the customer already holds against each open invoice
+  // (shown, never subtracted — staff apply it).
+  const creditByInvoice = await fetchInvoiceCreditAvailable(
+    supabase,
+    invoices.filter((i) => i.balance_cents > 0).map((i) => i.id)
+  );
+
   return (
     <PortalBillingPage
-      invoices={invoices.map((inv) => ({ ...inv, accountName: accountNames.get(inv.client_id) ?? null }))}
+      invoices={invoices.map((inv) => ({
+        ...inv,
+        accountName: accountNames.get(inv.client_id) ?? null,
+        creditAvailableCents: creditByInvoice.get(inv.id)?.creditAvailableCents ?? 0,
+      }))}
       today={today}
       payments={payments}
       accounts={accounts.map((a) => ({ id: a.id, displayName: a.displayName, isSelf: a.isSelf }))}

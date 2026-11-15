@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 import { purgeExpiredIdempotencyKeys } from "@/lib/api/idempotency";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const SAMSARA_STATS_URL =
   "https://api.samsara.com/fleet/vehicles/stats?types=obdOdometerMeters,gpsDistanceMeters";
@@ -62,6 +63,10 @@ async function handleSync(request: Request) {
     if (!profile || profile.role !== "admin" || profile.status === "inactive") {
       return NextResponse.json({ error: "Admin role required" }, { status: 403 });
     }
+    // Syncs profiles.org_id (the staff member's HOME org) with the service
+    // role — refuse while impersonating another tenant.
+    const impersonating = await rejectIfImpersonating(userClient, user.id, "syncing Samsara");
+    if (impersonating) return impersonating;
     callerOrgId = profile.org_id;
   }
 

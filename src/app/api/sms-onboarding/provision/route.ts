@@ -3,6 +3,7 @@ import { createClient as createServerClient, createServiceClient } from "@/lib/s
 import { advanceRegistration } from "@/lib/twilio/provisioning";
 import { requireSmsSetupAllowed } from "@/lib/twilio/sms-setup-gate";
 import { logger } from "@/lib/logger";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const log = logger.child("sms-onboarding provision");
 
@@ -26,6 +27,11 @@ export async function POST() {
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // Service-role writes below target profiles.org_id (the staff member's HOME
+  // org) — refuse while impersonating another tenant.
+  const impersonating = await rejectIfImpersonating(authed, user.id, "managing SMS setup");
+  if (impersonating) return impersonating;
   // Every step costs real money at Twilio: paid SMS add-on + a writable org only.
   const blocked = await requireSmsSetupAllowed(profile.org_id);
   if (blocked) return blocked;

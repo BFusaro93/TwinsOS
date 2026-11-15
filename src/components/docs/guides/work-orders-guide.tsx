@@ -47,6 +47,7 @@ export function WorkOrdersGuide() {
           <TOCLink href="#pm-schedules">Where PM Schedules fit in</TOCLink>
           <TOCLink href="#labor">Labor tracking</TOCLink>
           <TOCLink href="#parts">Parts, inventory, and the clamp-at-zero behavior</TOCLink>
+          <TOCLink href="#deleting">Deleting a Work Order</TOCLink>
           <TOCLink href="#requisitions">Requesting parts via a Requisition</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
         </div>
@@ -182,11 +183,16 @@ export function WorkOrdersGuide() {
             work order. New submissions email your org&apos;s admins/managers automatically (if
             that notification preference is on) — except the person who submitted it.
           </li>
+          <li>
+            <strong>Crew logins</strong> use the internal field repair-request page. It lists your
+            active assets and vehicles by name; that list and the crew&apos;s own requests are all a
+            crew login can see in Equipt. A crew&apos;s request always starts as Open.
+          </li>
         </ul>
         <p>
           <strong>Who can change a request.</strong> Admins, managers and staff triage requests:
-          they move it through the statuses below and can edit any request. Requestors and
-          Purchasers can edit only their <em>own</em> requests — title, description, priority and
+          they move it through the statuses below and can edit any request. Requestors,
+          Purchasers and crew logins can edit only their <em>own</em> requests — title, description, priority and
           asset/vehicle — and only while the request is still <strong>Open</strong>; the same goes
           for deleting it. Once someone starts reviewing it, it&apos;s locked for them. Editing a
           request keeps the equipment name it was submitted with unless you pick a different asset
@@ -243,6 +249,11 @@ export function WorkOrdersGuide() {
           text, not linked to a user account), a description, hours, and an hourly rate — each entry
           rolls up into a running labor total for the work order.
         </p>
+        <p>
+          Users with the <strong>Requestor</strong> role don&apos;t see the Costs tab: work-order
+          parts, labor and vendor charges are hidden from them, along with part costs, purchase
+          orders and receiving. Viewers and Purchasers still see costs.
+        </p>
       </Section>
 
       <Section id="parts" title="Parts, inventory, and the clamp-at-zero behavior">
@@ -258,7 +269,8 @@ export function WorkOrdersGuide() {
           <strong>Using more than you have doesn&apos;t error — it clamps at zero.</strong> If you
           add more of a part to a Work Order than is actually in stock, quantity on hand is set to 0
           instead of going negative, with a toast telling you how many you were short. Nothing blocks
-          you from doing this; it&apos;s a warning, not a hard stop.
+          you from doing this; it&apos;s a warning, not a hard stop. The part&apos;s history records
+          what was really taken, for example &ldquo;used 1 on WO-&hellip; (2 short)&rdquo;.
         </Callout>
         <p>
           <strong>The shortfall isn&apos;t forgotten.</strong> The work order line remembers how many
@@ -301,6 +313,32 @@ export function WorkOrdersGuide() {
           A physical <strong>shelf count</strong> on the part (see the Parts guide) also clears its
           shortfalls: the counted number already reflects the parts used, so the next delivery
           won&apos;t take them again.
+        </p>
+      </Section>
+
+      <Section id="deleting" title="Deleting a Work Order">
+        <p>
+          Use the trash button on the work order. Deleting it also deletes every sub-work-order
+          under it, and can&apos;t be undone from the app.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Open, On Hold, In Progress or Skipped:</strong> the parts each line took from
+            stock go straight back on hand. You aren&apos;t asked.
+          </li>
+          <li>
+            <strong>Done</strong> (the work order itself, or a sub-work-order under it): the delete
+            dialog asks <strong>&ldquo;Did the parts go back on the shelf?&rdquo;</strong> Choose{" "}
+            <em>Yes, return them to stock</em> only if the parts were never fitted and are back in
+            stock; choose <em>No, they were used</em> to leave stock as it is. Delete stays disabled
+            until you answer.
+          </li>
+        </ul>
+        <p>
+          Only what each line really took is returned (never more than was deducted), and the
+          linked Products-catalog item&apos;s stock follows automatically. Work orders can only be
+          deleted this way: they are never removed outright, so their history stays in reports and
+          the audit trail.
         </p>
       </Section>
 

@@ -110,7 +110,7 @@ export function SnowInvoicing() {
     const amountByVisitId = new Map<string, number>();
     for (const groupVisits of byGroup.values()) {
       const total = computeGroupAmountCents(groupVisits, tiersByJobId);
-      for (const [visitId, amount] of splitGroupAmountByVisit(groupVisits, total)) {
+      for (const [visitId, amount] of splitGroupAmountByVisit(groupVisits, total, tiersByJobId)) {
         amountByVisitId.set(visitId, amount);
       }
     }
@@ -140,9 +140,10 @@ export function SnowInvoicing() {
 
   // Visit ids per billing group. A per-event group's price is split across
   // its visits, and once ANY member is invoiced the whole group leaves the
-  // queue (see useUninvoicedSnowVisits) — so billing only some of a group's
-  // visits would charge a fraction of the event price and strand the rest
-  // forever. Selection therefore always covers whole groups.
+  // queue (see useUninvoicedSnowVisits; only an hourly-range storm's crews that
+  // finish later come back, as additional hours) — so billing only some of a
+  // group's visits would charge a fraction of the event price and strand the
+  // rest forever. Selection therefore always covers whole groups.
   const groupMemberIds = useMemo(() => {
     const byKey = new Map<string, string[]>();
     for (const v of visits) {
@@ -190,6 +191,8 @@ export function SnowInvoicing() {
               + ((r.visit.pushNumber ?? 1) > 1 ? ` — Push ${r.visit.pushNumber}` : "")
               // Two trucks on an hourly stop would otherwise read as duplicate lines.
               + (r.visit.crewGroupSecondary ? ` — ${r.visit.crewName ?? "Extra crew"}` : "")
+              // Hours a crew worked after this storm was already invoiced.
+              + (r.visit.addedAfterInvoice ? " — additional hours" : "")
               // Services flagged "Show visit times on snow invoice lines" append when the crew clocked them.
               + (r.visit.job?.services?.some((sv) => sv.serviceInvoiceTimeOnLines)
                 ? (() => { const t = visitTimeRangeText(r.visit, orgTimeZone); return t ? ` (${t})` : ""; })()
@@ -360,6 +363,11 @@ export function SnowInvoicing() {
                       </td>
                       <td className="px-2 py-2 text-muted-foreground">
                         {visit.job?.services?.[0]?.serviceName ?? "Snow Service"}
+                        {visit.addedAfterInvoice && (
+                          <span className="ml-2 rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300" title="This storm was already invoiced. A crew finished more on-site hours after that, so only those hours bill here.">
+                            Additional hours
+                          </span>
+                        )}
                         {visit.capOverage && (
                           <span className="ml-2 rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300" title="This stop is past the contract's cap, so it bills on its own instead of being covered by the contract price">
                             Overage

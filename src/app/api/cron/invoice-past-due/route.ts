@@ -5,6 +5,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 import { invoiceAgingAnchor } from "@/lib/invoice-status";
+import { fetchInvoiceCreditAvailable } from "@/lib/invoices/credit-available";
 
 /**
  * GET /api/cron/invoice-past-due — called daily by Vercel Cron.
@@ -94,6 +95,10 @@ export async function GET(request: Request) {
     const orgTriggers = await fetchOrgTriggers(supabase, orgId, "invoice_past_due");
 
     const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
+    // An invoice the client's unapplied credit (a deposit, prepayment or
+    // overpayment) already covers isn't chased: staff apply the credit
+    // instead. `covered` spends each credit once, oldest due first.
+    const credit = await fetchInvoiceCreditAvailable(supabase, rows.map((r) => r.id));
     // Rows come back id-ordered; start at a different row each day too, so an org with more
     // rows than one run can handle doesn't skip the same tail every day.
     const rowOffset = rows.length ? Math.floor(startedAt / 86_400_000) % rows.length : 0;
@@ -103,6 +108,7 @@ export async function GET(request: Request) {
       // due, and the UTC-bounded query above may have included one.
       const effectiveDue = invoiceAgingAnchor({ dueDate: invoice.due_date, invoiceDate: invoice.invoice_date });
       if (!effectiveDue || !(effectiveDue.slice(0, 10) < orgToday)) continue;
+      if (credit.get(invoice.id)?.covered) continue;
       await fireSimpleTrigger(supabase, {
         orgId,
         clientId: invoice.client_id,

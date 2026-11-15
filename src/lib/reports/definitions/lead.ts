@@ -6,13 +6,13 @@ import {
   col,
   dateRangeFilterDef,
   MONTH_LABELS,
-  netPaymentCents,
   resolveDateRange,
   orgDayRangeBounds,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { isClientStatus, isLeadStatus } from "@/lib/reports/client-status";
 import { shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
+import { fetchCashRefunds, sumRefundCents } from "@/lib/reports/refunds";
 
 // ============================================================
 // Lead section — pre-built reports.
@@ -476,13 +476,15 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
             .from("crm_payments")
             .select("amount_cents, refunded_amount_cents")
             .is("deleted_at", null)
-            // Rule B (helpers.ts): real cash only, net of refunds.
+            // Rule B (helpers.ts): real cash only. Refunds come off in the
+            // week they were issued (fetchCashRefunds), not the payment's week.
             .eq("is_credit", false)
             .neq("method", AR_WRITE_OFF_METHOD)
             .gte("payment_date", start)
             .lte("payment_date", end)
         );
-        return data.reduce((sum, r) => sum + netPaymentCents(r), 0);
+        const refunds = await fetchCashRefunds(supabase, start, end);
+        return data.reduce((sum, r) => sum + (r.amount_cents ?? 0), 0) - sumRefundCents(refunds);
       }
 
       // Pre-tax (total − sales tax): sales tax is not revenue.

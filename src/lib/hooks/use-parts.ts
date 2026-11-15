@@ -305,28 +305,12 @@ export function useAdjustPartQuantityManual() {
       expectedQty?: number | null;
     }) => {
       const supabase = createClient();
-      const { data: part, error: fetchErr } = await supabase
-        .from("parts")
-        .select("product_item_id")
-        .eq("id", input.id)
-        .single();
-      if (fetchErr) throw fetchErr;
-
+      // The linked product's stock follows in the same transaction (DB trigger
+      // sync_part_stock_to_product) — no client-side mirror.
       await adjustPartQuantity(supabase, input.id, input.quantityOnHand, input.reason, {
         kind: input.kind,
         expectedQty: input.expectedQty,
       });
-
-      if (part.product_item_id) {
-        const { error: mirrorErr } = await supabase
-          .from("product_items")
-          .update({ quantity_on_hand: input.quantityOnHand })
-          .eq("id", part.product_item_id);
-        if (mirrorErr) {
-          const { toast } = await import("sonner");
-          toast.warning(`Part quantity updated, but the linked product's stock could not be synced: ${mirrorErr.message}`);
-        }
-      }
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });

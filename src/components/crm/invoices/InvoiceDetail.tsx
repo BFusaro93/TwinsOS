@@ -98,6 +98,7 @@ import { InvoiceEmailDialog } from "@/components/crm/invoices/InvoiceEmailDialog
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Textarea } from "@/components/ui/textarea";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
+import { hiddenLineTargets } from "@/lib/invoices/hidden-lines";
 import { getDisplayInvoiceStatus } from "@/lib/invoice-status";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
@@ -245,9 +246,11 @@ function nextLineSortOrder(lines: InvoiceLineItem[]): number {
 }
 
 function LineItemRow({
-  item, invoiceId, taxRateBps, discounts, locked = false, index, count, onMove,
+  item, invoiceId, taxRateBps, discounts, locked = false, index, count, onMove, rollsInto = null,
 }: {
   item: InvoiceLineItem; invoiceId: string; taxRateBps: number; discounts: CRMDiscount[]; locked?: boolean;
+  /** Hidden line: the visible line its amount prints inside on the customer's invoice. */
+  rollsInto?: string | null;
   /** Position in the displayed order, for the up/down buttons. */
   index: number; count: number;
   /** Move this line one place up (-1) or down (1). */
@@ -452,6 +455,14 @@ function LineItemRow({
         )}
         {row.name && row.name !== lineServices.find((s) => s.id === row.serviceId)?.name && (
           <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">{row.name}</span>
+        )}
+        {row.hideOnPrint && rollsInto && (
+          <span
+            className="mt-0.5 block truncate text-[10px] font-normal text-brand-600 dark:text-brand-400"
+            title={`Hidden from the customer — this amount prints inside "${rollsInto}". Reorder lines to change it.`}
+          >
+            Rolls into: {rollsInto}
+          </span>
         )}
       </td>
       {/* Description */}
@@ -950,6 +961,15 @@ export function InvoiceDetail({
   // applied, so PostgREST returns rows in unspecified order — sort explicitly
   // by sort_order to match the printed PDF (src/app/api/crm/invoices/[id]/pdf/route.ts).
   const lineItems = [...(invoice.lineItems ?? [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  // Hidden lines print inside another line (nearest visible above, else below) —
+  // say which on each hidden row, since a reorder or merge can move it.
+  const rollUpTargets = hiddenLineTargets(lineItems);
+  const rollsIntoByIndex = rollUpTargets.map((t, i) => {
+    if (t == null) return null;
+    const target = lineItems[t];
+    const label = target.name?.trim() || notesToPlainText(target.description).split("\n")[0]?.trim() || `line ${t + 1}`;
+    return `${label}${t < i ? " (above)" : " (below)"}`;
+  });
   const payments = invoice.payments ?? [];
   const hasTax = taxRateBps > 0;
 
@@ -964,6 +984,7 @@ export function InvoiceDetail({
     discountType,
     discountValue,
     taxRateBps: hasTax ? taxRateBps : 0,
+    discountTaxBasis: invoice.discountTaxBasis,
   });
   const subtotal = previewTotals.subtotalCents;
   const appliedDiscountCents = previewTotals.discountCents;
@@ -1831,6 +1852,7 @@ export function InvoiceDetail({
                   <LineItemRow
                     key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts}
                     locked={readOnly} index={i} count={lineItems.length} onMove={moveLine}
+                    rollsInto={rollsIntoByIndex[i]}
                   />
                 ))}
                 {lineItems.length === 0 && (
@@ -1848,7 +1870,8 @@ export function InvoiceDetail({
             {lineItems.some((l) => l.hideOnPrint) && (
               <p className="border-t px-4 py-2 text-[11px] text-slate-500 dark:text-neutral-400">
                 Hidden lines (crossed-eye) roll into the nearest visible line <strong>above</strong> them on the customer&apos;s
-                invoice. Reorder lines to change which line absorbs a hidden amount; totals don&apos;t change.
+                invoice (or below, when none is above) — each hidden row says which under &ldquo;Rolls into&rdquo;. Reorder lines
+                to change which line absorbs a hidden amount; totals don&apos;t change.
               </p>
             )}
 
@@ -1989,16 +2012,17 @@ export function InvoiceDetail({
             </div>
           </div>
 
-          {/* Unapplied money the client already has. A proposal deposit is
-              taken before any invoice exists and is never applied
-              automatically, so without this prompt a converted job gets
-              invoiced its full amount and the client is asked for money they
-              have already paid. */}
+          {/* Credit available: unapplied money the client already has. The
+              estimate's own reserved deposit is applied automatically when the
+              invoice is issued; other credit (prepayments, overpayments, a
+              deposit larger than this invoice) is shown here, on the PDF, the
+              pay page and the portal, and applied by staff with this button.
+              Invoices this credit fully covers get no past-due reminders. */}
           {unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
             <div className="mx-4 md:mx-8 mb-5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-blue-900 dark:text-blue-200">
-                  <strong>{formatCurrency(unappliedCents)}</strong> of unapplied{" "}
+                  Credit available: <strong>{formatCurrency(unappliedCents)}</strong> of unapplied{" "}
                   {unappliedPayments.length === 1 ? "payment" : "payments"} on this client
                   {unappliedPayments.some((p) => p.isPrepayment) && " (including a deposit)"} —{" "}
                   {formatCurrency(Math.min(unappliedCents, invoice.balanceCents))} can go to this invoice.

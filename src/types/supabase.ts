@@ -19545,7 +19545,9 @@ export type Database = {
           client_name: string | null
           clocked_in_at: string | null
           clocked_out_at: string | null
+          crew_member_id: string | null
           crew_name: string | null
+          employee_id: string | null
           hours: number | null
           id: string | null
           labor_burden_cents_per_hour: number | null
@@ -21119,12 +21121,13 @@ export type Database = {
         }[]
       }
       rollback_goods_receipt: { Args: { p_receipt_id: string }; Returns: Json }
-      rpt_crew_member_labor_rates: {
+      rpt_crew_labor_rates: {
         Args: never
         Returns: {
+          avg_rate: number
           crew_id: string
+          members: number
           org_id: string
-          rate: number
         }[]
       }
       rpt_resolve_column: {

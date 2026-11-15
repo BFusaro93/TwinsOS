@@ -19,6 +19,7 @@ export function AppSidebar() {
   const hasPhotoAccess = currentUser.role === "admin" || Boolean((currentUser as any).photoModuleAccess);
   const isAdmin = currentUser.role === "admin";
   const isCrew = currentUser.role === "crew";
+  const isRequestor = currentUser.role === "requestor";
 
   return (
     <aside
@@ -69,6 +70,7 @@ export function AppSidebar() {
               .filter((item) => !item.adminOnly || isAdmin)
               .filter((item) => item.href !== "/jobs" || hasPhotoAccess)
               .filter((item) => !item.hideFromCrew || !isCrew)
+              .filter((item) => !item.hideFromRequestor || !isRequestor)
               .map((item) => {
               const isActive =
                 pathname === item.href ||

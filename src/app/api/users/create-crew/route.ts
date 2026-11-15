@@ -1,18 +1,26 @@
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type User } from "@supabase/supabase-js";
+import { Resend } from "resend";
+import { EMAIL_FROM } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 import { FALLBACK_CREW_COLORS } from "@/components/crm/dispatch/crew-color";
 
 const log = logger.child("users-create-crew");
 
+/** Auto-generated crew logins live here; nobody outside Landscapt receives mail at it. */
+const CREW_EMAIL_DOMAIN = "crew.landscapt.com";
+
 /**
  * POST /api/users/create-crew
  * Creates a shared crew account (no email invite needed).
  * Admin-only. Generates a login email from the team slug.
- * Body: { teamName: string; password: string }
+ * Body: { teamName: string; password: string; customEmail?: string }
+ * A customEmail (a real outside address) is created UNCONFIRMED and its owner
+ * is emailed a confirmation link; the login works only after they confirm.
  * Also gives the login a Landscapt crew (crm_crews.user_id) so the Crew App has
  * a schedule to show: an existing unlinked crew with the same name is linked,
  * otherwise a new one is created. Either stays editable/unlinkable in
@@ -63,37 +71,73 @@ export async function POST(request: Request) {
   }
 
   // 3. Determine login email — use custom if provided, otherwise auto-generate
+  const orgTag = String(callerProfile.org_id).replace(/-/g, "").slice(0, 8);
   let loginEmail: string;
+  let needsConfirmation = false;
   if (customEmail?.trim()) {
     // Basic email format validation
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customEmail.trim())) {
       return NextResponse.json({ error: "Invalid email address format." }, { status: 400 });
     }
     loginEmail = customEmail.trim().toLowerCase();
+    // The generated crew domain is reserved for auto-generated addresses (they
+    // carry the org tag); a hand-typed one could claim another org's address.
+    if (loginEmail.endsWith(`@${CREW_EMAIL_DOMAIN}`)) {
+      return NextResponse.json(
+        { error: `Leave the email blank to get a ${CREW_EMAIL_DOMAIN} address, or use a real email address.` },
+        { status: 400 }
+      );
+    }
+    // A real outside address must be proven by its owner before it can sign
+    // in — otherwise any admin could claim someone else's address.
+    needsConfirmation = true;
   } else {
     const slug = teamName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
     // Short org id keeps auto emails unique per tenant (a bare slug collided
     // across orgs and revealed that another org used the same team name).
-    const orgTag = String(callerProfile.org_id).replace(/-/g, "").slice(0, 8);
-    loginEmail = `${slug || "crew"}-${orgTag}@crew.landscapt.com`;
+    loginEmail = `${slug || "crew"}-${orgTag}@${CREW_EMAIL_DOMAIN}`;
   }
 
-  // 4. Create the auth user with the service role client (no email confirmation needed)
+  // 4. Create the auth user with the service role client
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+  const userMetadata = {
+    name: teamName.trim(),
+    role: "crew",
+    org_id: callerProfile.org_id,
+  };
 
-  const { data: createdUser, error: createErr } = await adminClient.auth.admin.createUser({
-    email: loginEmail,
-    password,
-    email_confirm: true,
-    user_metadata: {
-      name: teamName.trim(),
-      role: "crew",
-      org_id: callerProfile.org_id,
-    },
-  });
+  let createdUser: { user: User | null } | null = null;
+  let createErr: { message?: string; code?: string } | null = null;
+  let confirmTokenHash: string | null = null;
+  if (needsConfirmation) {
+    // Creates the login UNCONFIRMED and returns a signup confirmation token
+    // (no email is sent by Supabase); we email the link ourselves below.
+    const { data, error } = await adminClient.auth.admin.generateLink({
+      type: "signup",
+      email: loginEmail,
+      password,
+      // No org_id here: handle_new_user must not treat this as a founder
+      // self-signup. The profile below is the only place the org is set.
+      options: { data: { name: userMetadata.name, role: userMetadata.role } },
+    });
+    createdUser = data?.user ? { user: data.user } : null;
+    createErr = error;
+    confirmTokenHash = data?.properties?.hashed_token ?? null;
+  } else {
+    // Our own crew domain: nobody else can receive mail there, so the login is
+    // created confirmed (no email needed).
+    const { data, error } = await adminClient.auth.admin.createUser({
+      email: loginEmail,
+      password,
+      email_confirm: true,
+      user_metadata: userMetadata,
+    });
+    createdUser = data?.user ? { user: data.user } : null;
+    createErr = error;
+  }
 
   if (createErr || !createdUser?.user) {
     const msg = createErr?.message ?? "Failed to create crew account";
@@ -138,6 +182,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to create crew account" }, { status: 500 });
   }
 
+  // 5b. Outside address: email the owner a confirmation link. The login can't
+  // sign in until it is confirmed. If the email can't be sent, undo the account.
+  if (needsConfirmation) {
+    const sent = confirmTokenHash ? await sendCrewConfirmationEmail(loginEmail, teamName.trim(), confirmTokenHash) : false;
+    if (!sent) {
+      await adminClient.from("profiles").delete().eq("id", createdUser.user.id);
+      const { error: cleanupErr } = await adminClient.auth.admin.deleteUser(createdUser.user.id);
+      if (cleanupErr) log.error("crew auth user cleanup failed", { error: cleanupErr.message });
+      return NextResponse.json({ error: "Couldn't send the confirmation email. Try again, or leave the email blank to auto-generate one." }, { status: 500 });
+    }
+  }
+
   // 6. Give the login a Landscapt crew. Non-fatal: the account already works,
   // and the crew can still be linked by hand in Landscapt → Team → Crews.
   const crew = await linkOrCreateCrew(adminClient, {
@@ -147,7 +203,36 @@ export async function POST(request: Request) {
     createdBy: user.id,
   });
 
-  return NextResponse.json({ success: true, loginEmail, crew }, { status: 200 });
+  return NextResponse.json({ success: true, loginEmail, crew, confirmationSent: needsConfirmation }, { status: 200 });
+}
+
+async function sendCrewConfirmationEmail(email: string, teamName: string, tokenHash: string): Promise<boolean> {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
+  const confirmUrl = `${siteUrl}/confirm?token_hash=${encodeURIComponent(tokenHash)}&type=signup`;
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY!);
+    const { error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: email,
+      subject: "Confirm your crew login on Landscapt",
+      html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+        <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Confirm your crew login</h2>
+        <p style="margin:0 0 24px;color:#475569">This address was set up as the shared Landscapt crew login for <strong>${escapeHtml(teamName)}</strong>. Confirm it to let the crew sign in.</p>
+        <a href="${confirmUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Confirm email</a>
+        <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">If you weren't expecting this, you can ignore this email and the login will never work.</p>
+      </div>
+    `,
+    });
+    if (error) {
+      log.error("crew confirmation email failed", { error });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    log.error("crew confirmation email failed", { error: err instanceof Error ? err.message : String(err) });
+    return false;
+  }
 }
 
 async function linkOrCreateCrew(

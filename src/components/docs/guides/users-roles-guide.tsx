@@ -14,9 +14,9 @@ const STAFF_ROLES: [string, string][] = [
   ["Manager", "Full operational access across purchasing and maintenance — everything except organization settings and user management."],
   ["Purchaser", "Manages the full procurement lifecycle from requisition to receiving. Read-only on work orders. Can submit maintenance requests and edit or delete their own while they're still Open, but can't review or convert requests."],
   ["Staff", "Standard Equipt access — creates and manages work orders (not limited to ones assigned to them), and can initiate procurement for parts."],
-  ["Viewer", "Read-only in Equipt. No create, edit, delete, or approve access there. Landscapt access follows their Landscapt role."],
-  ["Requestor", "Submits maintenance requests and draft purchase requisitions only. Can edit or delete their own maintenance request (title, description, priority, asset/vehicle) only while it's still Open — once it's being reviewed it's locked. Can't approve, review or convert anything, and has no access to assets, vendors, or inventory."],
-  ["Crew", "A shared login for a field crew team (e.g. MAINT1, ENHANCE1), not an individual person — confined to the crew field surface, not the full dashboard."],
+  ["Viewer", "Read-only in Equipt, including costs and prices. No create, edit, delete, or approve access there. Landscapt access follows their Landscapt role."],
+  ["Requestor", "Submits maintenance requests and draft purchase requisitions only. Can edit or delete their own maintenance request (title, description, priority, asset/vehicle) only while it's still Open — once it's being reviewed it's locked. Can't approve, review or convert anything, and has no access to assets, vendors, or inventory. Sees no Equipt costs: work-order parts, labor and vendor charges, part costs, purchase orders and receiving are hidden."],
+  ["Crew", "A shared login for a field crew team (e.g. MAINT1, ENHANCE1), not an individual person — confined to the crew field surface, not the full dashboard. In Equipt it can only file repair requests (and see the asset and vehicle names to pick from)."],
 ];
 
 const MATRIX_ROWS: [string, string, string, string, string, string, string][] = [
@@ -25,8 +25,8 @@ const MATRIX_ROWS: [string, string, string, string, string, string, string][] = 
   ["Purchaser",  "No",  "No", "No", "Requisitions/POs/receiving/vendors full; work orders read-only", "None by default", "N/A"],
   ["Staff",      "No",  "No", "No", "Work orders, PM, parts, meters full; can create requisitions/POs for parts", "None by default", "N/A"],
   ["Viewer",     "No",  "No", "No", "Read-only", "None by default", "N/A"],
-  ["Requestor",  "No",  "No", "No", "Maintenance requests (own, editable while Open) + draft requisitions only", "None by default", "N/A"],
-  ["Crew",       "No",  "No", "No", "None — confined to crew field surface", "None — crew app only", "N/A"],
+  ["Requestor",  "No",  "No", "No", "Maintenance requests (own, editable while Open) + draft requisitions only; no costs", "None by default", "N/A"],
+  ["Crew",       "No",  "No", "No", "Repair requests only (own requests; asset/vehicle names)", "None — crew app only", "N/A"],
 ];
 
 export function UsersRolesGuide() {
@@ -190,6 +190,12 @@ export function UsersRolesGuide() {
           </li>
           <li>That employee record has an active <strong>Landscapt Role</strong> — the role that defines what they can see and do inside Landscapt.</li>
         </ol>
+        <p>
+          The employee record must be in the same organization as the login. A login can only be
+          linked to an employee record (or a crew&apos;s Linked Login) in its own organization; linking
+          a login from another organization, or a client portal login, is refused with &quot;That login
+          does not belong to this organization&quot;.
+        </p>
         <p>
           Without both, a user with a perfectly valid organization role (say, Manager) is blocked
           from Landscapt entirely — Landscapt checks for a Landscapt role on their employee record,
@@ -439,6 +445,13 @@ export function UsersRolesGuide() {
             first&quot;.
           </li>
           <li>
+            <strong>Changing an Admin to another role</strong> opens a confirmation that lists the API keys
+            they created and the apps they connected (Claude, MCP clients and other OAuth apps), with{" "}
+            <strong>Revoke these keys</strong> and <strong>Disconnect these apps</strong> checked by default.
+            Keys and connected apps keep working after the role change unless you revoke them there, or
+            later under Settings → Integrations. Cancel leaves the role unchanged.
+          </li>
+          <li>
             <strong>A login and its employee record stay in sync.</strong> Deactivating a user on the
             Users page also deactivates their employee record under Team → Employees, and reactivating
             the user reactivates it. It works the other way too: deactivating (or terminating) an
@@ -461,7 +474,10 @@ export function UsersRolesGuide() {
           the Users table. If you leave the optional Login Email blank, the login gets an
           auto-generated address ending in <code>@crew.landscapt.com</code>; those aren&apos;t real
           mailboxes, so they can&apos;t receive a normal password-reset email. Type a real email
-          instead if you want one.
+          instead if you want one: that address gets a confirmation email, and the crew can sign in
+          only after someone opens it and confirms the address (the success screen says so). If the
+          confirmation email can&apos;t be sent, the account isn&apos;t created. You can&apos;t type your
+          own <code>@crew.landscapt.com</code> address; leave the field blank to get one.
         </p>
         <p>
           Creating a crew account also creates a matching Landscapt crew and links the login to it,
@@ -508,6 +524,15 @@ export function UsersRolesGuide() {
             to job sites. It has no access to purchasing, assets, inventory, settings, or the rest
             of Landscapt — opening any other Landscapt page is blocked, whatever Landscapt role the
             crew might otherwise have.
+            <p className="mt-2">
+              In Equipt a crew login can only file a repair request from the field page. It can read
+              the names of your active assets and vehicles (to pick the broken one) and see the
+              requests it filed itself. Work orders, parts and stock, meters, PM schedules,
+              automations, purchase orders and receiving are closed to it — it can&apos;t read them,
+              change them or move stock, even by reading the data some other way with the crew&apos;s
+              login. A crew&apos;s new request always starts as Open, and the crew can change it only
+              while it is still Open, just like a Requestor.
+            </p>
             <p className="mt-2">
               What a crew login can <em>change</em> is deliberately narrow: it may update only the
               visits belonging to its own crew, and cannot move a visit to a different crew. Jobs and
@@ -617,6 +642,15 @@ export function UsersRolesGuide() {
           </li>
           <li>
             <strong>Invites.</strong> An invite can only give a Landscapt role that is active. Inviting someone whose old employee record is inactive (a re-hire) links and reactivates that record.
+          </li>
+          <li>
+            <strong>Employee contact details.</strong> Everyone in your organization can see employee names (for assignee, crew and sales rep pickers). Home address, phone numbers, emergency contact, manager, starting address and notes show only to Admins and to roles with Edit Employee, Manage Employees or View Employee Information; Notes also show with View Resource Notes. Everyone can see their own details. Others see those fields blank on the Employees page, in the Employees report and in exports.
+          </li>
+          <li>
+            <strong>Lead forms.</strong> Forms and their submissions are Landscapt data: Equipt-only logins and crew logins can&apos;t see or change them. Building or changing a form needs Edit Forms; reading submissions, marking them read and the internal test submit need View/Submit Forms; changing a submission&apos;s status or deleting it needs Edit Forms. Submissions are never permanently deleted. Public forms on your website keep working for anonymous visitors.
+          </li>
+          <li>
+            <strong>Your plan decides which product you can change.</strong> On the Equipt plan you can view but not create or change Landscapt records (clients, jobs, estimates, invoices, contracts and the like); on the Starter plan the same applies to Equipt records (work orders, assets, parts, PM schedules, meters, vehicles, maintenance requests). Vendors, products, requisitions, purchase orders and projects are shared and always editable. Trial, Growth and Enterprise include both. The public API follows the same rule.
           </li>
         </ul>
       </Section>

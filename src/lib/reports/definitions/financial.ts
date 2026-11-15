@@ -15,6 +15,8 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { todayInZone } from "@/lib/time/zone";
 import { invoiceDaysPastDue } from "@/lib/invoice-status";
+import { formatCurrency } from "@/lib/utils";
+import { fetchCashRefunds, REFUNDS_OWN_DATE_NOTE, sumRefundCents, sumRefundFeeCents } from "@/lib/reports/refunds";
 
 // ============================================================
 // Financial section — pre-built reports.
@@ -261,34 +263,37 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         refunded_amount_cents: number | null;
         processing_fee_cents: number | null;
       };
-      let appliedCents = 0;
+      // Cash in on its payment date at the full amount; refunds (and the
+      // refunded share of card fees) come off on the day they were issued.
+      let receivedCents = 0;
       let unappliedCents = 0;
       let processingFeeCents = 0;
       for (const p of (data ?? []) as unknown as PayRow[]) {
-        const amount = p.amount_cents ?? 0;
-        const unused = p.unused_amount_cents ?? 0;
-        const refunded = p.refunded_amount_cents ?? 0;
-        // Mirrors rpt_payments.applied_amount_cents = greatest(0, amount - unused - refunded).
-        appliedCents += Math.max(0, amount - unused - refunded);
-        unappliedCents += unused;
+        receivedCents += p.amount_cents ?? 0;
+        unappliedCents += p.unused_amount_cents ?? 0;
         processingFeeCents += p.processing_fee_cents ?? 0;
       }
-      const totalIncome = appliedCents + unappliedCents + processingFeeCents;
+      const refunds = await fetchCashRefunds(supabase, from, to);
+      const refundedCents = sumRefundCents(refunds);
+      const netFeeCents = processingFeeCents - sumRefundFeeCents(refunds);
+      const totalIncome = receivedCents - refundedCents + netFeeCents;
 
       const { materialsCents, laborCents } = await sumExpenses(supabase, from, to, timeZone);
       const totalExpenses = materialsCents + laborCents;
 
       const rows = [
-        { type: "Income", name: "Payments applied", amount_cents: appliedCents },
-        { type: "Income", name: "Unapplied / prepayments", amount_cents: unappliedCents },
-        { type: "Income", name: "Credit card processing fees", amount_cents: processingFeeCents },
+        { type: "Income", name: "Payments received", amount_cents: receivedCents },
+        { type: "Income", name: "Refunds issued", amount_cents: -refundedCents },
+        { type: "Income", name: "Credit card processing fees (net of refunds)", amount_cents: netFeeCents },
         { type: "Expenses", name: "Job materials", amount_cents: materialsCents },
         { type: "Expenses", name: "Field labor", amount_cents: laborCents },
         { type: "Total", name: "Total Profit", amount_cents: totalIncome - totalExpenses },
       ];
 
       return buildResult(PROFIT_LOSS_COLUMNS, rows, [
-        "Cash basis: income is counted when payment is received, not when work is invoiced. Cash only: excludes account credits and AR write-offs; net of refunds.",
+        "Cash basis: income is counted when payment is received, not when work is invoiced. Cash only: excludes account credits and AR write-offs.",
+        REFUNDS_OWN_DATE_NOTE,
+        `Payments received includes ${formatCurrency(unappliedCents)} not yet applied to an invoice (prepayments / account credit).`,
         "Credit card processing fees are the surcharge collected from clients on card payments (never on ACH) — separate from the invoice amount itself.",
         "Expenses include job material costs and catalog products recorded as used on jobs (by the date they were logged) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
       ]);
@@ -463,10 +468,10 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
 
       type PayRow = { amount_cents: number | null; refunded_amount_cents: number | null };
       const payments = (payData ?? []) as unknown as PayRow[];
-      const totalPayments = payments.reduce(
-        (sum, r) => sum + (r.amount_cents ?? 0) - (r.refunded_amount_cents ?? 0),
-        0
-      );
+      // Refunds come off on the day they were issued, not the payment's date.
+      const totalPayments =
+        payments.reduce((sum, r) => sum + (r.amount_cents ?? 0), 0) -
+        sumRefundCents(await fetchCashRefunds(supabase, from, to));
 
       type BalRow = { due_date: string | null; invoice_date: string | null; balance_cents: number | null };
       const today = todayInZone(timeZone); // org calendar, not UTC

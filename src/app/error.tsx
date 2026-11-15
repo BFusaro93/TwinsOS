@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { Button } from "@/components/ui/button";
-import { isChunkLoadError, reloadOnceForChunkError } from "@/lib/utils/chunk-load-recovery";
+import { hasUnsavedWork, isChunkLoadError, reloadOnceForChunkError } from "@/lib/utils/chunk-load-recovery";
 
 interface Props {
   error: Error & { digest?: string };
@@ -17,6 +17,22 @@ export default function GlobalError({ error, reset }: Props) {
     if (reloadOnceForChunkError(error)) return;
     Sentry.captureException(error);
   }, [error]);
+
+  if (isChunkLoadError(error) && hasUnsavedWork()) {
+    // Offline (or a save still waiting): a reload would drop the queued changes and
+    // land on the browser's offline page. Keep the page; retry once back online.
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 p-8 text-center">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-neutral-100">This part of the page couldn&apos;t load</h2>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          You look to be offline, or changes are still waiting to save. Don&apos;t reload — your changes are kept on this page. Try again once you have signal.
+        </p>
+        <Button onClick={reset} variant="outline" size="sm">
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   if (isChunkLoadError(error)) {
     return (

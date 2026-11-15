@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { computeInvoiceTotals } from "@/lib/invoices/totals";
+import { computeInvoiceTotals, resolveDiscountTaxBasis } from "@/lib/invoices/totals";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("crm invoice refresh draft totals");
@@ -28,7 +28,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: inv } = await (supabase as any)
     .from("crm_invoices")
-    .select("id, status, amount_paid_cents, tax_rate_bps, discount_cents, discount_type, discount_value, subtotal_cents, tax_cents, total_cents, balance_cents, crm_invoice_line_items(total_cents, discount_cents, is_taxable)")
+    .select("id, status, discount_tax_basis, amount_paid_cents, tax_rate_bps, discount_cents, discount_type, discount_value, subtotal_cents, tax_cents, total_cents, balance_cents, crm_invoice_line_items(total_cents, discount_cents, is_taxable)")
     .eq("id", id)
     .eq("org_id", orgId)
     .is("deleted_at", null)
@@ -43,6 +43,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     discountType: inv.discount_type ?? null,
     discountValue: inv.discount_value ?? null,
     taxRateBps: inv.tax_rate_bps ?? 0,
+    discountTaxBasis: resolveDiscountTaxBasis(inv.discount_tax_basis, inv.status),
   });
   const balanceCents = Math.max(0, computed.totalCents - (inv.amount_paid_cents ?? 0));
   // Every stored total, not just subtotal/total: the caller no longer re-derives a draft's

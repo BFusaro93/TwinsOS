@@ -7,7 +7,7 @@ import { GitMerge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
-import { computeMergedInvoiceTotals } from "@/lib/invoice-merge";
+import { computeMergedInvoiceTotals, mixedTaxRateMergeError } from "@/lib/invoice-merge";
 import type { CRMInvoice } from "@/types/crm-invoices";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
@@ -52,9 +52,13 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
     ? computeMergedInvoiceTotals(
         allLineItems,
         invoices.map((i) => ({ discountCents: i.discountCents, amountPaidCents: i.amountPaidCents })),
-        parent.taxRateBps
+        parent.taxRateBps,
+        parent.discountTaxBasis
       ).totalCents
     : 0;
+  // The server refuses a merge across tax rates (each child would be re-taxed
+  // at the parent's rate): say so up front instead of after the click.
+  const mixedRatesError = mixedTaxRateMergeError(invoices.map((i) => i.taxRateBps));
 
   // Different clients: offer to bill them together on their parent account
   // (sub-accounts of one parent). The server decides whether that's valid.
@@ -145,6 +149,10 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
             Invoice{lockedInvoices.length > 1 ? "s" : ""} #{lockedInvoices.map((i) => i.invoiceNumber).join(", #")} {lockedInvoices.length > 1 ? "are" : "is"} locked.
             Unlock {lockedInvoices.length > 1 ? "them" : "it"} before merging — a locked invoice can&apos;t have its totals rewritten or be voided out.
           </div>
+        ) : mixedRatesError ? (
+          <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+            {mixedRatesError}
+          </div>
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-slate-600 dark:text-neutral-400">
@@ -228,7 +236,7 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
               {merging ? "Consolidating…" : "Consolidate to Parent"}
             </Button>
           )}
-          {sameClient && !hasLocked && (
+          {sameClient && !hasLocked && !mixedRatesError && (
             <Button onClick={handleMerge} disabled={merging || !parentId}>
               {merging ? "Merging…" : "Merge Invoices"}
             </Button>

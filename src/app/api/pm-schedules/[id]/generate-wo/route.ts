@@ -103,48 +103,15 @@ async function copyTemplatePartsAndDeduct(
     .select("id, part_id, part_name, quantity");
   if (insertErr) throw new Error(`Failed to copy parts onto the work order: ${insertErr.message}`);
 
+  // Each part's linked product follows its stock in the same transaction
+  // (DB trigger sync_part_stock_to_product).
   const short: string[] = [];
-  const touched: string[] = [];
-  try {
-    for (const row of (inserted ?? []) as { id: string; part_id: string | null; part_name: string; quantity: number }[]) {
-      if (!row.part_id) continue;
-      const res = await setWOPartStock(userClient, row.id, row.quantity);
-      touched.push(row.part_id);
-      if (res.appliedDelta > res.requestedDelta) short.push(row.part_name);
-    }
-  } finally {
-    // Mirror every part whose stock moved (even on a mid-loop failure, before
-    // the caller's rollback) — same as the Costs tab and WO delete.
-    await syncPartsToProducts(userClient, touched);
+  for (const row of (inserted ?? []) as { id: string; part_id: string | null; part_name: string; quantity: number }[]) {
+    if (!row.part_id) continue;
+    const res = await setWOPartStock(userClient, row.id, row.quantity);
+    if (res.appliedDelta > res.requestedDelta) short.push(row.part_name);
   }
   return short;
-}
-
-/**
- * After set_wo_part_stock moves parts.quantity_on_hand, mirror the new value
- * onto each part's linked product_items row so the Products page stays in
- * sync — the server-side twin of syncPartQtyToProduct (use-wo-costs.ts),
- * which the Costs tab and WO delete already call. Best-effort: the stock
- * move itself already succeeded.
- */
-async function syncPartsToProducts(userClient: ServerSupabase, partIds: string[]) {
-  for (const partId of new Set(partIds)) {
-    try {
-      const { data: part } = await userClient
-        .from("parts")
-        .select("quantity_on_hand, product_item_id")
-        .eq("id", partId)
-        .single();
-      if (part?.product_item_id) {
-        await userClient
-          .from("product_items")
-          .update({ quantity_on_hand: part.quantity_on_hand })
-          .eq("id", part.product_item_id);
-      }
-    } catch (err) {
-      log.error("failed to sync part quantity to product", { partId, error: err instanceof Error ? err.message : String(err) });
-    }
-  }
 }
 
 /**
@@ -166,15 +133,12 @@ async function rollbackGeneratedWOs(
     .in("work_order_id", workOrderIds)
     .is("deleted_at", null)
     .not("part_id", "is", null);
-  const touched: string[] = [];
   for (const wp of (parts ?? []) as { id: string; part_id: string }[]) {
     await setWOPartStock(userClient, wp.id, 0)
-      .then(() => { touched.push(wp.part_id); })
       .catch((err: unknown) => {
         log.error("rollback: failed to return part to stock", { woPartId: wp.id, error: err instanceof Error ? err.message : String(err) });
       });
   }
-  await syncPartsToProducts(userClient, touched);
   await adminClient
     .from("work_orders")
     .update({ deleted_at: new Date().toISOString() })

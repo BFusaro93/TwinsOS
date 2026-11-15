@@ -193,14 +193,19 @@ export function SnowGuide() {
           list as its own stop. Billing follows the job: <strong>Per Push</strong> and{" "}
           <strong>Hourly</strong> jobs bill every push; <strong>Per Event</strong> and{" "}
           <strong>Per Event, Per Inch</strong> jobs bill the storm once, on the first push. On a{" "}
-          <strong>Per Event, Per Inch</strong> job a return trip is part of the event: it never
-          bills separately, and a deeper reading on any trip sets the storm&apos;s price (the
-          event is priced on the deepest reading across all its visits). On a flat{" "}
+          <strong>Per Event, Per Inch</strong> job a return trip is part of the event: a deeper
+          reading on any trip sets the storm&apos;s price (the event is priced on the deepest
+          reading across all its visits), and it doesn&apos;t bill separately — unless that depth
+          lands in an <strong>hourly range</strong>, where the return trip&apos;s own hours on site
+          bill too (see Rate tiers). On a flat{" "}
           <strong>Per Event</strong> job, Adding a push asks whether it is <em>No charge</em> (the
           default — recorded only, $0, never in Snow Invoicing) or <em>Bill it</em> (its own
           charge, the job&apos;s flat rate again — use this when a second crew salts again). A
           push&apos;s <em>Billed</em> / <em>No charge</em> tag can be clicked to flip it until it
-          is invoiced. Pushes the crew adds from the crew app start as No charge.
+          is invoiced. Pushes the crew adds from the crew app start as No charge. Only one push
+          can be open at a time: if two crews tap <strong>Add another push</strong> at the same
+          moment, one push is added and the other tablet is told another push is already open
+          (it&apos;s on their list).
         </p>
         <p>
           <strong>Two storms on the same day are two trips.</strong> If a job is on two storm events
@@ -291,9 +296,11 @@ export function SnowGuide() {
             <strong>Assign crews…</strong>: tick the crews and click <strong>Set crews</strong>.
             The first crew you tick is the lead and carries the stop&apos;s charge; each extra crew
             gets its own row (tagged <em>Extra crew</em>) with its own clock-in, hours and
-            depth. On <strong>Hourly</strong> jobs every crew bills its own hours on site; on
-            every other billing type the lead carries the charge and the extra crew is not
-            billed. If an extra crew is doing separate billable work (salt after plowing, another
+            depth. Wherever a stop bills <em>time</em>, every crew bills its own hours on site
+            (crew-hours): on <strong>Hourly</strong> jobs, and on <strong>Per Push</strong> or{" "}
+            <strong>Per Event, Per Inch</strong> jobs whose depth lands in an hourly range (an
+            extra crew that didn&apos;t record a depth uses the lead&apos;s). On every other
+            billing type the lead carries the charge and the extra crew is not billed. If an extra crew is doing separate billable work (salt after plowing, another
             pass), give it its own job, or use <strong>Add push</strong> on a Per Push job. Crews can be added or removed until a crew
             starts the stop. A crew can also ask for help itself: <strong>Need help? Call in
             another crew</strong> on a stop in the crew app lists the other crews; the one picked
@@ -589,7 +596,18 @@ export function SnowGuide() {
           For Per Event and Per Event/Per Inch jobs, every visit on the storm collapses into one
           charge — a morning push and an afternoon push during the same event are one line, priced
           off the storm&apos;s single deepest reading, not two separate charges. Per Push and
-          Hourly jobs are the opposite: each visit prices and invoices on its own.
+          Hourly jobs are the opposite: each visit prices and invoices on its own. The exception is
+          a Per Event/Per Inch storm in an <strong>hourly range</strong>: it bills time, so each
+          visit on the storm (the first push, extra crews, return trips) is its own line at its own
+          hours × the rate.
+        </p>
+        <p>
+          <strong>Additional hours.</strong> Once a storm is invoiced it leaves the queue. On a Per
+          Event/Per Inch storm in an hourly range, a crew that finishes <em>after</em> the invoice
+          was made (a return trip, a second truck) comes back into the queue tagged{" "}
+          <em>Additional hours</em>, priced on its own hours only — generate it like any other row
+          to bill it on a new draft invoice. Hours already on the storm&apos;s invoice are never
+          offered again.
         </p>
       </Section>
 
@@ -704,8 +722,9 @@ export function SnowGuide() {
             bills that push&apos;s hours. On a <strong>Per Event, Per Inch</strong> job the
             storm&apos;s deepest reading picks the range once; if it is an hourly range, the storm
             bills the on-site hours of every visit on the storm (the first push, return trips and
-            extra crews) × the rate, as one line on the invoice. Use Per Push when you want each
-            trip as its own line. Budgeted hours are for planning only and do not change what is billed.
+            extra crews) × the rate, each visit on its own line. Hours worked after the storm was
+            invoiced come back as <em>Additional hours</em> rows. On either type, every crew on a
+            multi-crew stop bills its own hours in an hourly range. Budgeted hours are for planning only and do not change what is billed.
           </li>
           <li>
             <strong>A flat price per push</strong> (the same amount whatever the depth, for example a

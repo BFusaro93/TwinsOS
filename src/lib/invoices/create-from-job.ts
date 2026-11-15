@@ -275,7 +275,7 @@ export async function createInvoiceFromJob(
   }
   const { data: job, error: jobErr } = await supabase
     .from("crm_jobs")
-    .select("org_id, sales_rep_id, job_type, estimate_id, invoice_terms, clients(default_tax_rate_bps, default_terms, is_taxable), crm_job_services(id, service_id, is_taxable, crm_services(is_taxable))")
+    .select("org_id, sales_rep_id, job_type, estimate_id, invoice_terms, clients(default_tax_rate_bps, default_terms, is_taxable), crm_job_services(id, service_id, is_taxable, max_visits, crm_services(is_taxable))")
     .eq("id", jobId)
     .single();
   if (jobErr) throw jobErr;
@@ -286,7 +286,7 @@ export async function createInvoiceFromJob(
     estimate_id: string | null;
     invoice_terms: string | null;
     clients: { default_tax_rate_bps: number | null; default_terms: string | null; is_taxable: boolean | null } | null;
-    crm_job_services: { id: string; service_id: string | null; is_taxable: boolean | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
+    crm_job_services: { id: string; service_id: string | null; is_taxable: boolean | null; max_visits: number | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
   };
   const orgId = jobRow.org_id;
 
@@ -364,7 +364,10 @@ export async function createInvoiceFromJob(
     [...new Set(lineItems.map((li) => li.jobServiceId).filter((id): id is string => !!id))]
   );
   const itemizedLines: InvoiceFromJobLine[] = lineItems.flatMap((li) => {
-    const split = li.jobServiceId && !li.productId ? splitPrintedSubitems(li, printedBySvc.get(li.jobServiceId)) : null;
+    // A recurring line is ONE visit's share, so sub-items split per visit (the line's
+    // visit count is the service's limit) — same divisor as the per-visit auto invoice.
+    const lineVisits = jobRow.job_type === "recurring" ? (li.jobServiceId ? svcById.get(li.jobServiceId)?.max_visits ?? 0 : 0) : 1;
+    const split = li.jobServiceId && !li.productId ? splitPrintedSubitems(li, printedBySvc.get(li.jobServiceId), lineVisits) : null;
     if (!split) return [li];
     return [
       { ...li, rateCents: split.parent.rateCents, totalCents: split.parent.totalCents },

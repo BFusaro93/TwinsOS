@@ -199,10 +199,10 @@ export function PayrollReport() {
             </TableHeader>
             <TableBody>
               {members.map((m) => {
-                const isOpen = open.has(m.crewMemberId);
+                const isOpen = open.has(m.personKey);
                 return (
-                  <Fragment key={m.crewMemberId}>
-                    <TableRow className="cursor-pointer" onClick={() => toggle(m.crewMemberId)}>
+                  <Fragment key={m.personKey}>
+                    <TableRow className="cursor-pointer" onClick={() => toggle(m.personKey)}>
                       <TableCell>{isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</TableCell>
                       <TableCell className="font-medium">{m.memberName}</TableCell>
                       <TableCell className="text-muted-foreground">{m.crewName ?? "—"}</TableCell>
@@ -223,7 +223,7 @@ export function PayrollReport() {
                       </TableCell>
                     </TableRow>
                     {isOpen && m.days.map((d) => (
-                      <DayRow key={d.workDate} row={d} tz={tz} locked={isPayrollDayLocked(d.workDate, lockedThrough)} />
+                      <DayRow key={`${d.crewMemberId}|${d.workDate}`} row={d} tz={tz} locked={isPayrollDayLocked(d.workDate, lockedThrough)} />
                     ))}
                   </Fragment>
                 );

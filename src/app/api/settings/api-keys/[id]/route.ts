@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const log = logger.child("settings-api-keys");
 
@@ -25,6 +26,9 @@ export async function PATCH(_request: Request, { params }: { params: Promise<{ i
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+  // API keys belong to profiles.org_id (the staff member's HOME org).
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "managing API keys");
+  if (impersonating) return impersonating;
 
   const { data: key } = await supabase
     .from("api_keys")
@@ -69,6 +73,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+  // API keys belong to profiles.org_id (the staff member's HOME org).
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "managing API keys");
+  if (impersonating) return impersonating;
 
   const { error } = await supabase
     .from("api_keys")

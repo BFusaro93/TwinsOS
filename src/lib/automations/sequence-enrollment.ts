@@ -224,6 +224,8 @@ export async function enrollClientInSequence(
     /** The start trigger that created this run — decides when a record-scoped run
      *  ends on its own (sequence_enrollment_record_stop_reason). */
     triggerType?: string | null;
+    /** The visit a visit-event trigger fired for — the snow merge tags read this stop. */
+    visitId?: string | null;
   }
 ): Promise<string | null> {
   const { data: firstEvent } = await supabase
@@ -253,6 +255,7 @@ export async function enrollClientInSequence(
       invoice_id: params.invoiceId ?? null,
       meeting_id: params.meetingId ?? null,
       trigger_type: params.triggerType ?? null,
+      ...(params.visitId ? { visit_id: params.visitId } : {}),
       enrolled_at: new Date().toISOString(),
       // Start at the first ACTIVE step's real position (positions can have
       // gaps from deleted/deactivated steps), past it when it's a wait whose
@@ -899,7 +902,7 @@ export async function fetchOrgTriggers(
  */
 export async function fireServiceVisitCompletedTriggers(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; serviceIds: string[] }
+  params: { orgId: string; clientId: string; serviceIds: string[]; visitId?: string | null }
 ): Promise<string[]> {
   if (params.serviceIds.length === 0) return [];
 
@@ -939,6 +942,7 @@ export async function fireServiceVisitCompletedTriggers(
       orgId: params.orgId,
       clientId: params.clientId,
       triggerType: "service_visit_completed",
+      visitId: params.visitId ?? null,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
   }
@@ -982,6 +986,9 @@ export async function fireSimpleTrigger(
      * (the same record shape the trigger's polling sample shows).
      */
     recordId?: string | null;
+    /** The visit a visit-event trigger is about — stored on the enrollment so the snow
+     *  merge tags read that stop, not the client's latest one. */
+    visitId?: string | null;
   },
   /** The org's triggers of this type, already loaded by a caller that fires many events for
    *  one org (the past-due crons) — saves a paged trigger query per row. */
@@ -1047,6 +1054,7 @@ export async function fireSimpleTrigger(
       invoiceId: params.invoiceId ?? null,
       meetingId: params.meetingId ?? null,
       triggerType: params.triggerType,
+      visitId: params.visitId ?? null,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
   }

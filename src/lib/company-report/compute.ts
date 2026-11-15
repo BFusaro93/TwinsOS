@@ -22,6 +22,7 @@ import { runAnalysis } from "@/lib/reports/engine";
 import { isoInZone, shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { invoiceDaysPastDue } from "@/lib/invoice-status";
 import { logger } from "@/lib/logger";
+import { fetchCashRefunds, sumRefundCents } from "@/lib/reports/refunds";
 
 // ============================================================
 // Company Report — Landscapt-native replacement for the old screenshot-fed
@@ -441,7 +442,9 @@ async function sumCashPayments(supabase: Client, from: string, to: string): Prom
       .order("id")
       .range(f, t)
   );
-  return rows.reduce((s, r) => s + (r.amount_cents ?? 0) - (r.refunded_amount_cents ?? 0), 0);
+  // Refunds come off on the day they were issued, not the payment's date.
+  const refunds = await fetchCashRefunds(supabase, from, to);
+  return rows.reduce((s, r) => s + (r.amount_cents ?? 0), 0) - sumRefundCents(refunds);
 }
 
 async function computeMonthlyOps(supabase: Client, months: MonthWindow[]): Promise<MonthlyOpsRow[]> {

@@ -19,6 +19,7 @@ import {
   useEstimateChangeRequests,
   useResolveChangeRequest,
   recalcEstimateTotals,
+  useEstimateApprovalGate,
   type AIDraftLineItem,
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
@@ -396,6 +397,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // lines, then recurring lines). Convert stays available while accepted
   // lines remain unconverted.
   const { data: convertedInfo } = useEstimateConvertedLines(estimateId);
+  // Accept / Convert / Invoice wait for approval unless this user could
+  // approve it (the database refuses them too — estimate_approval_gate).
+  const { data: approvalGate } = useEstimateApprovalGate(estimateId);
+  const approvalHold = !!approvalGate?.blocked && !approvalGate.canOverride;
+  const approvalHoldTitle = approvalHold
+    ? `${approvalGate?.reason ?? "This estimate needs approval."} Accept, Convert to Job and Invoice open up once it's approved.`
+    : undefined;
   // Priced sub-items per line — real revenue the Invoice button has to bill.
   const { data: subitemTotals, isLoading: subitemTotalsLoading } = useEstimateSubitemTotals(estimateId);
   const unconvertedLineCount = convertedInfo?.legacyConverted
@@ -1052,16 +1060,18 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           )}
           {effectiveStage === "accepted" && can("job_add") && (estimateJobs.length === 0 || canConvertMore) && (
             <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700"
-              title={estimateJobs.length > 0
+              disabled={approvalHold}
+              title={approvalHoldTitle ?? (estimateJobs.length > 0
                 ? `${unconvertedLineCount} accepted line${unconvertedLineCount !== 1 ? "s" : ""} not on a job yet`
-                : "Create a job from this accepted estimate"}
+                : "Create a job from this accepted estimate")}
               onClick={() => setConvertDialogOpen(true)}>
               <Briefcase className="mr-1 h-3.5 w-3.5" />
               {estimateJobs.length > 0 ? "Convert Remaining" : "Convert to Job"}
             </Button>
           )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            title="Mark this estimate's stage as Accepted — updates the estimate only, not individual line items"
+            disabled={approvalHold && effectiveStage !== "accepted"}
+            title={approvalHold && effectiveStage !== "accepted" ? approvalHoldTitle : "Mark this estimate's stage as Accepted — updates the estimate only, not individual line items"}
             onClick={() => setWonLostDialog("accepted")}>
             <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-500 dark:text-green-400" />Accepted
           </Button>
@@ -1122,7 +1132,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              disabled={creatingInvoice || subitemTotalsLoading}
+              disabled={creatingInvoice || subitemTotalsLoading || approvalHold}
+              title={approvalHoldTitle}
               onClick={async () => {
                 if (!estimate || !subitemTotals) return;
                 try {
@@ -1275,6 +1286,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
           </Button>
         </div>
       </div>
+
+      {approvalHold && (
+        <div className="border-b border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 px-6 py-2 text-xs text-amber-800 dark:text-amber-300">
+          {approvalHoldTitle}
+        </div>
+      )}
 
       {estimate.approvalStatus !== "not_required" && (
         <div className="border-b bg-slate-50 dark:bg-muted/40 px-6 py-3">
@@ -2209,6 +2226,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             estimate={estimate}
             onRecalculate={handleSaveFinancials}
             recalcPending={recalcPending}
+            priceFrozen={!!convertedInfo && (convertedInfo.legacyConverted || convertedInfo.convertedLineIds.size > 0)}
           />
         </div>
       </div>

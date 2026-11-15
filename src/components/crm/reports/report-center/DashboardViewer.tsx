@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Pencil, Printer } from "lucide-react";
+import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Pencil, Printer, Target } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
   Select,
@@ -23,12 +24,13 @@ import { downloadXLSX } from "@/lib/xlsx-export";
 import { resultCellColors } from "@/lib/reports/cell-colors";
 import { exportReportPDF, printReportPDF } from "@/lib/reports/export-pdf";
 import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
-import { buildTotalsRow } from "@/lib/reports/export-rows";
+import { buildTotalsRow, partialExportRow } from "@/lib/reports/export-rows";
 import {
   useDashboard,
   useReportFilterOptions,
   useRunReport,
   useRunVisualQuery,
+  useSetGaugeTarget,
 } from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
 import { computeTotals } from "@/lib/reports/engine";
@@ -43,6 +45,132 @@ import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { AdvancedReportingUpsell } from "./AdvancedReportingGate";
 
 const HUB_HREF = "/crm/admin/reports?tab=dashboards";
+
+/**
+ * Gauge goals for the open dashboard (crm_dashboard_gauge_targets). A built-in
+ * dashboard's gauge has no goal until the org sets one — its shipped number
+ * ($4M revenue, 600 leads, ...) is ignored and the panel asks for the goal
+ * instead. A custom gauge falls back to the goal it was built with. Admins and
+ * Manage Report Center holders set and change goals right on the gauge, on
+ * every plan (no Advanced Reporting needed).
+ */
+interface GaugeGoalContextValue {
+  dashboardId: string;
+  targets: Record<string, number>;
+  isSystemSeeded: boolean;
+  canEdit: boolean;
+}
+
+const GaugeGoalContext = createContext<GaugeGoalContextValue | null>(null);
+
+function GoalForm({
+  initial,
+  isMoney,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  initial?: number;
+  isMoney: boolean;
+  saving: boolean;
+  onSave: (target: number) => void;
+  onCancel?: () => void;
+}) {
+  // Money goals are typed in dollars and stored in cents, like the gauge value.
+  const [text, setText] = useState(
+    initial === undefined ? "" : String(isMoney ? Math.round(initial) / 100 : initial)
+  );
+  const parsed = Number(text.replace(/[$,\s]/g, ""));
+  const valid = text.trim() !== "" && Number.isFinite(parsed) && parsed > 0;
+  return (
+    <form
+      className="flex flex-wrap items-center justify-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) onSave(isMoney ? Math.round(parsed * 100) : parsed);
+      }}
+    >
+      <Input
+        inputMode="decimal"
+        aria-label="Goal"
+        placeholder={isMoney ? "Goal in dollars" : "Goal"}
+        className="h-8 w-36 text-sm"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <Button type="submit" size="sm" disabled={!valid || saving}>
+        {saving ? "Saving…" : "Save goal"}
+      </Button>
+      {onCancel && (
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      )}
+    </form>
+  );
+}
+
+function GaugeGoalPanel({ panel, result }: { panel: DashboardPanel; result: ReportResult }) {
+  const ctx = useContext(GaugeGoalContext);
+  const [editing, setEditing] = useState(false);
+  const setGoal = useSetGaugeTarget(ctx?.dashboardId ?? "");
+  const col = result.columns.find((c) => c.key === panel.visual.kpiColumn);
+  const isMoney = col?.type === "money";
+  const saved = ctx?.targets[panel.id];
+  const goal = saved ?? (ctx?.isSystemSeeded ? undefined : panel.visual.gaugeMax);
+
+  const save = (target: number) =>
+    setGoal.mutate(
+      { panelId: panel.id, target },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (err) => toast.error(err.message),
+      }
+    );
+
+  if (goal === undefined || editing) {
+    const raw = result.rows[0]?.[panel.visual.kpiColumn ?? ""];
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 py-4 text-center">
+        <p className="text-2xl font-bold text-slate-900 dark:text-neutral-100">
+          {col && raw !== undefined ? formatCellValue(raw, col.type) : "—"}
+        </p>
+        {ctx?.canEdit ? (
+          <>
+            <p className="text-xs text-muted-foreground">
+              {goal === undefined ? "What's your goal for this gauge?" : "Change the goal for this gauge."}
+            </p>
+            <GoalForm
+              initial={goal}
+              isMoney={isMoney}
+              saving={setGoal.isPending}
+              onSave={save}
+              onCancel={goal === undefined ? undefined : () => setEditing(false)}
+            />
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">No goal set yet. An admin can set one.</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <VisualRenderer result={result} visual={{ ...panel.visual, gaugeMax: goal }} />
+      {ctx?.canEdit && (
+        <button
+          type="button"
+          className="absolute right-0 top-0 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-slate-900 dark:hover:text-neutral-100 print:hidden"
+          onClick={() => setEditing(true)}
+        >
+          <Target className="h-3 w-3" />
+          Edit goal
+        </button>
+      )}
+    </div>
+  );
+}
 
 const PANEL_SIZE_CLASSES: Record<DashboardPanel["size"], string> = {
   third: "md:col-span-2",
@@ -67,7 +195,10 @@ function exportRowsWithTotals<T>(
   result: ReportResult,
   format: (value: unknown, type: ReportFieldType) => T
 ): (T | string)[][] {
-  const body = result.rows.map((row) => result.columns.map((c) => format(row[c.key], c.type)));
+  const body: (T | string)[][] = result.rows.map((row) => result.columns.map((c) => format(row[c.key], c.type)));
+  // Cut off at the row cap: no totals (they'd cover only these rows), say so instead.
+  const partial = partialExportRow(result);
+  if (partial) return [...body, partial];
   if (result.groupSubtotals || result.rows.length < 2) return body;
   const totals = result.totals ?? computeTotals(result.columns, result.rows);
   if (!totals) return body;
@@ -216,6 +347,11 @@ function DashboardVisualPanelView({
 
   if (!data) return null;
 
+  // Goal-based gauges (no budget column from the query itself) take the org's goal.
+  if (panel.visual.type === "gauge" && !panel.visual.budgetColumn && data.rows.length > 0) {
+    return <GaugeGoalPanel panel={panel} result={data} />;
+  }
+
   return <VisualRenderer result={data} visual={panel.visual} />;
 }
 
@@ -344,6 +480,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
           cellColors: grouped
             ? undefined
             : resultCellColors(result, panel.visual.formatRules, panel.visual.colorSpectrumColumns),
+          footers: grouped || !partialExportRow(result) ? undefined : [partialExportRow(result) as string[]],
         };
       });
       const title = `${dashboardName} — ${tab.name}`;
@@ -457,6 +594,17 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
 export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
   const router = useRouter();
   const { data: dashboard, isLoading, isError } = useDashboard(dashboardId);
+  const { can } = usePermissions();
+  const canEditGoals = can("manage_report_center");
+  const gaugeGoals = useMemo<GaugeGoalContextValue>(
+    () => ({
+      dashboardId,
+      targets: dashboard?.gaugeTargets ?? {},
+      isSystemSeeded: dashboard?.isSystemSeeded ?? false,
+      canEdit: canEditGoals,
+    }),
+    [dashboardId, dashboard?.gaugeTargets, dashboard?.isSystemSeeded, canEditGoals]
+  );
   // Built-in dashboards open on every plan; custom ones and editing need the
   // Advanced Reporting add-on (the API answers 403 for a custom one).
   const { allowed: hasAdvancedReporting, isLoading: addonLoading } = useAddonAccess("advanced_reporting");
@@ -505,6 +653,7 @@ export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
   }
 
   return (
+    <GaugeGoalContext.Provider value={gaugeGoals}>
     <div className="flex h-full flex-col gap-4">
       <PageHeader
         title={dashboard.name}
@@ -570,5 +719,6 @@ export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
         </Tabs>
       )}
     </div>
+    </GaugeGoalContext.Provider>
   );
 }

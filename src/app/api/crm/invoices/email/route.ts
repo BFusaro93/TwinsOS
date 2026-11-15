@@ -13,7 +13,7 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { resolveDefaultInvoicePdfTemplate } from "@/lib/invoices/default-pdf-template";
+import { livePinnedTemplate, resolveDefaultInvoicePdfTemplate } from "@/lib/invoices/default-pdf-template";
 import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { billingTermsLabel } from "@/lib/constants";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
@@ -23,7 +23,7 @@ import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { fetchOrgCardPaymentsAvailable, invoiceLinkLabel } from "@/lib/stripe/card-payments-available";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
-import { computeInvoiceTotals } from "@/lib/invoices/totals";
+import { computeInvoiceTotals, resolveDiscountTaxBasis } from "@/lib/invoices/totals";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -32,6 +32,7 @@ import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/e
 import { fetchBillingContactCcEmails, mergeCcRecipients } from "@/lib/email/billing-contact-cc";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { isOrgReadOnly } from "@/lib/org-writable";
+import { fetchInvoiceCreditAvailableCents } from "@/lib/invoices/credit-available";
 
 const log = logger.child("email-invoice");
 
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
         linear_ft_perimeter, linear_ft_edging, gate_lock_code, notes_to_crew
       ),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes),
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes, deleted_at),
       sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name, last_name)
     `)
     .eq("id", invoiceId)
@@ -185,6 +186,7 @@ export async function POST(req: NextRequest) {
       discountType: inv.discount_type ?? null,
       discountValue: inv.discount_value ?? null,
       taxRateBps: inv.tax_rate_bps ?? 0,
+      discountTaxBasis: resolveDiscountTaxBasis(inv.discount_tax_basis, inv.status),
     });
     if (computed.totalCents !== (inv.total_cents ?? 0) || computed.subtotalCents !== (inv.subtotal_cents ?? 0)) {
       const patch = {
@@ -268,7 +270,8 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     pdfTemplate = chosenTemplate ?? null;
   }
-  if (!pdfTemplate) pdfTemplate = inv.crm_invoice_pdf_templates ?? null;
+  // A pinned template that was deleted since falls back to the org default.
+  if (!pdfTemplate) pdfTemplate = livePinnedTemplate(inv.crm_invoice_pdf_templates);
   if (!pdfTemplate) pdfTemplate = await resolveDefaultInvoicePdfTemplate(supabase, inv.org_id);
   const layoutKey: InvoicePDFLayoutKey = (pdfTemplate?.layout_key as InvoicePDFLayoutKey) ?? "default";
   // Template accent / brand colour are org-editable text interpolated into a
@@ -506,6 +509,7 @@ export async function POST(req: NextRequest) {
     totalCents: (inv.total_cents as number) ?? 0,
     amountPaidCents: (inv.amount_paid_cents as number) ?? 0,
     balanceCents: (inv.balance_cents as number) ?? 0,
+    creditAvailableCents: await fetchInvoiceCreditAvailableCents(supabase, inv.id as string),
     lineItems: pdfLineItems,
     statement,
     photos: includePdf ? await loadInvoicePhotosForPdf(inv.id as string, inv.org_id as string) : [],

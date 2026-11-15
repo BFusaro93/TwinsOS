@@ -7,6 +7,7 @@ import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
+import { AWAITING_APPROVAL_CLIENT_MESSAGE, estimateAwaitingApproval } from "@/lib/estimates/approval-gate";
 import { logger } from "@/lib/logger";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
@@ -107,6 +108,11 @@ export async function POST(
       { error: "This estimate was updated after it was sent to you. We'll send you the latest version shortly." },
       { status: 409 }
     );
+  }
+  // Internal approval is still outstanding (edited past what was approved,
+  // or the approval was withdrawn): the database refuses the accept too.
+  if (action === "accept" && await estimateAwaitingApproval(supabase, estimate.id)) {
+    return NextResponse.json({ error: AWAITING_APPROVAL_CLIENT_MESSAGE }, { status: 409 });
   }
 
   if (action === "request_changes") {

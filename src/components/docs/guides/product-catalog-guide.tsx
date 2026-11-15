@@ -312,6 +312,14 @@ export function ProductCatalogGuide() {
           <em>not</em> connect to it — it creates a second, separate Part record. Check CMMS &gt;
           Parts first if you suspect a duplicate already exists.
         </Callout>
+        <p>
+          The part&apos;s quantity on hand is the one that counts: every stock movement on the part
+          (work order usage, returns, shelf counts, receipts) is copied onto its product in the same
+          save. For that reason a Maintenance Part product can&apos;t be used as a material on a
+          Landscapt job — the job pickers leave them out, and the database refuses one added any
+          other way (API, integrations, imports). Use a Stocked or Project Material for job
+          materials.
+        </p>
       </Section>
 
       <Section id="cost-vs-price" title="Unit Cost vs. Sale Price vs. a PO line's actual cost">

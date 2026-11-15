@@ -40,7 +40,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useApiKeys } from "@/lib/hooks/use-api-keys";
+import { useApiKeys, useRevokeApiKey } from "@/lib/hooks/use-api-keys";
+import { useOAuthConnections, useDisconnectOAuthConnection } from "@/lib/hooks/use-oauth-connections";
 
 const AVATAR_COLORS = [
   "bg-violet-500", "bg-blue-500", "bg-emerald-500", "bg-amber-500",
@@ -376,6 +377,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loginEmail, setLoginEmail] = useState<string | null>(null);
   const [crewStatus, setCrewStatus] = useState<"created" | "linked" | "failed" | null>(null);
+  const [confirmationSent, setConfirmationSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createCrewAccount = useCreateCrewAccount();
   const creating = createCrewAccount.isPending;
@@ -387,6 +389,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
     setConfirmPassword("");
     setLoginEmail(null);
     setCrewStatus(null);
+    setConfirmationSent(false);
     setError(null);
   }
 
@@ -410,6 +413,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
       });
       setLoginEmail(data.loginEmail);
       setCrewStatus(data.crew);
+      setConfirmationSent(data.confirmationSent === true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create crew account.");
     }
@@ -421,7 +425,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
         <DialogHeader>
           <DialogTitle>Create Crew Account</DialogTitle>
           <DialogDescription>
-            Creates a shared login for a crew team (e.g. MAINT1, ENHANCE1). You can use a real email or leave it blank to auto-generate one. Credentials are shown once after creation.
+            Creates a shared login for a crew team (e.g. MAINT1, ENHANCE1). Leave the email blank to auto-generate one, or use a real email address: its owner gets a confirmation email, and the login works once they confirm it. Credentials are shown once after creation.
           </DialogDescription>
         </DialogHeader>
 
@@ -445,6 +449,11 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
                 {crewStatus === "linked" && "Linked to your existing Landscapt crew with this name."}
                 {crewStatus === "failed" && "Could not create a Landscapt crew — link this login to one under Team → Crews."}
               </p>
+              {confirmationSent && (
+                <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+                  We sent a confirmation email to {loginEmail}. The crew can&apos;t sign in until someone opens that email and confirms the address.
+                </p>
+              )}
               <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
                 Save these credentials — the password cannot be retrieved after this dialog is closed.
               </p>
@@ -468,7 +477,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="crew-email">
-                Login Email <span className="text-slate-400 dark:text-neutral-500 font-normal text-xs">(optional — auto-generated if blank)</span>
+                Login Email <span className="text-slate-400 dark:text-neutral-500 font-normal text-xs">(optional — auto-generated if blank; a real address must be confirmed)</span>
               </Label>
               <Input
                 id="crew-email"
@@ -737,6 +746,137 @@ function DeactivateUserDialog({
 }
 
 // ---------------------------------------------------------------------------
+// DemoteAdminDialog
+// ---------------------------------------------------------------------------
+
+/**
+ * Taking Admin away from someone doesn't touch the API keys they created or
+ * the apps (MCP / OAuth) they connected — those keep the access they were
+ * granted. Same as deactivation, list them with "revoke" checked by default.
+ */
+function DemoteAdminDialog({
+  demotion,
+  onOpenChange,
+}: {
+  demotion: { user: OrgUser; newRole: OrgUser["role"]; newRoleLabel: string } | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { mutateAsync: updateRole, isPending: saving } = useUpdateUserRole();
+  const { mutateAsync: revokeKey } = useRevokeApiKey();
+  const { mutateAsync: disconnect } = useDisconnectOAuthConnection();
+  const { data: keys = [], isLoading: keysLoading } = useApiKeys({ enabled: !!demotion });
+  const { data: connections = [], isLoading: connLoading } = useOAuthConnections({ enabled: !!demotion });
+  const [revokeKeys, setRevokeKeys] = useState(true);
+  const [revokeApps, setRevokeApps] = useState(true);
+  const [working, setWorking] = useState(false);
+  const user = demotion?.user ?? null;
+  const theirKeys = user ? keys.filter((k) => k.createdBy === user.id && !k.revokedAt) : [];
+  const theirApps = user ? connections.filter((c) => c.connectedByUserId === user.id) : [];
+
+  async function submit() {
+    if (!demotion || !user) return;
+    setWorking(true);
+    try {
+      await updateRole({ userId: user.id, role: demotion.newRole });
+    } catch {
+      setWorking(false);
+      return; // useUpdateUserRole already toasts the reason
+    }
+    let failed = 0;
+    let revokedKeys = 0;
+    let disconnectedApps = 0;
+    if (revokeKeys) {
+      for (const k of theirKeys) {
+        try { await revokeKey(k.id); revokedKeys++; } catch { failed++; }
+      }
+    }
+    if (revokeApps) {
+      for (const c of theirApps) {
+        try { await disconnect(c.id); disconnectedApps++; } catch { failed++; }
+      }
+    }
+    setWorking(false);
+    const extras = [
+      revokedKeys ? `${revokedKeys} API key${revokedKeys === 1 ? "" : "s"} revoked` : null,
+      disconnectedApps ? `${disconnectedApps} connected app${disconnectedApps === 1 ? "" : "s"} disconnected` : null,
+    ].filter(Boolean);
+    toast.success(`${user.name} is now ${demotion.newRoleLabel}` + (extras.length ? ` (${extras.join(", ")})` : ""));
+    if (failed) toast.warning(`${failed} key${failed === 1 ? "" : "s"} or app${failed === 1 ? "" : "s"} could not be revoked. Revoke them under Settings → Integrations.`);
+    onOpenChange(false);
+  }
+
+  const loading = keysLoading || connLoading;
+  return (
+    <Dialog
+      open={!!demotion}
+      onOpenChange={(open) => {
+        if (!open) { setRevokeKeys(true); setRevokeApps(true); }
+        onOpenChange(open);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Change {user?.name ?? "this user"} from Admin to {demotion?.newRoleLabel}?</DialogTitle>
+          <DialogDescription>
+            They lose admin access right away. API keys they created and apps they connected keep working until they are
+            revoked, so revoke them unless the org still needs them.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <p className="text-xs text-muted-foreground">Checking for API keys and connected apps…</p>
+        ) : (
+          <>
+            {theirKeys.length > 0 && (
+              <div className="rounded-md border p-3">
+                <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">API keys they created ({theirKeys.length})</p>
+                <ul className="mt-2 space-y-0.5">
+                  {theirKeys.map((k) => (
+                    <li key={k.id} className="text-xs text-slate-700 dark:text-neutral-300">
+                      {k.name} <span className="font-mono text-muted-foreground">{k.keyPrefix}…</span>
+                    </li>
+                  ))}
+                </ul>
+                <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
+                  <Checkbox checked={revokeKeys} onCheckedChange={(c) => setRevokeKeys(c === true)} />
+                  Revoke these keys
+                </label>
+              </div>
+            )}
+            {theirApps.length > 0 && (
+              <div className="rounded-md border p-3">
+                <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Apps they connected ({theirApps.length})</p>
+                <ul className="mt-2 space-y-0.5">
+                  {theirApps.map((c) => (
+                    <li key={c.id} className="text-xs text-slate-700 dark:text-neutral-300">{c.clientName}</li>
+                  ))}
+                </ul>
+                <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
+                  <Checkbox checked={revokeApps} onCheckedChange={(c) => setRevokeApps(c === true)} />
+                  Disconnect these apps
+                </label>
+              </div>
+            )}
+            {theirKeys.length === 0 && theirApps.length === 0 && (
+              <p className="text-xs text-muted-foreground">They have no API keys or connected apps.</p>
+            )}
+          </>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={working || saving}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={working || saving || loading}>
+            {working || saving ? "Saving…" : "Change role"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // UsersPage
 // ---------------------------------------------------------------------------
 
@@ -807,12 +947,23 @@ export function UsersPage() {
   const [crewDialogOpen, setCrewDialogOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<OrgUser | null>(null);
   const [deactivateUser, setDeactivateUser] = useState<OrgUser | null>(null);
+  const [demotion, setDemotion] = useState<{ user: OrgUser; newRole: OrgUser["role"]; newRoleLabel: string } | null>(null);
 
   const totalUsers = users.length;
   const activeUsers = users.filter((u) => u.status === "active").length;
   const pendingInvites = users.filter((u) => u.status === "invited").length;
 
   function handleRoleChange(userId: string, newRole: OrgUser["role"]) {
+    const target = users.find((u) => u.id === userId);
+    // Taking Admin away: ask about their API keys / connected apps first.
+    if (target && target.role === "admin" && newRole !== "admin") {
+      setDemotion({
+        user: target,
+        newRole,
+        newRoleLabel: ROLE_LABELS[newRole as keyof typeof ROLE_LABELS] ?? newRole,
+      });
+      return;
+    }
     updateRole({ userId, role: newRole });
   }
 
@@ -1065,6 +1216,11 @@ export function UsersPage() {
       <DeactivateUserDialog
         user={deactivateUser}
         onOpenChange={(open) => { if (!open) setDeactivateUser(null); }}
+      />
+
+      <DemoteAdminDialog
+        demotion={demotion}
+        onOpenChange={(open) => { if (!open) setDemotion(null); }}
       />
     </div>
   );

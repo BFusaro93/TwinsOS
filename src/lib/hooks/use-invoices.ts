@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
-import { computeInvoiceTotals } from "@/lib/invoices/totals";
+import { computeInvoiceTotals, resolveDiscountTaxBasis } from "@/lib/invoices/totals";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { fireQuickBooksInvoiceSync, fireQuickBooksInvoiceUpdate, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
@@ -220,6 +220,7 @@ export function mapInvoice(row: any): CRMInvoice {
     discountValue: row.discount_value ?? null,
     appliedDiscountId: row.applied_discount_id ?? null,
     taxRateBps: row.tax_rate_bps,
+    discountTaxBasis: resolveDiscountTaxBasis(row.discount_tax_basis, row.status),
     taxCents: row.tax_cents,
     totalCents: row.total_cents,
     amountPaidCents: row.amount_paid_cents,
@@ -1724,7 +1725,7 @@ export async function recalcInvoiceTotalsFromLines(supabase: any, invoiceId: str
   // from zero line items and write a $0 total over the real one.
   const { data: inv, error: invReadErr } = await supabase
     .from("crm_invoices")
-    .select("amount_paid_cents, tax_rate_bps, discount_cents, discount_type, discount_value, client_id")
+    .select("amount_paid_cents, tax_rate_bps, discount_cents, discount_type, discount_value, client_id, status, discount_tax_basis")
     .eq("id", invoiceId)
     .single();
   if (invReadErr) throw invReadErr;
@@ -1749,6 +1750,7 @@ export async function recalcInvoiceTotalsFromLines(supabase: any, invoiceId: str
     discountType: inv?.discount_type ?? null,
     discountValue: inv?.discount_value ?? null,
     taxRateBps: inv?.tax_rate_bps ?? 0,
+    discountTaxBasis: resolveDiscountTaxBasis(inv?.discount_tax_basis, inv?.status),
   });
   const paid = inv?.amount_paid_cents ?? 0;
   const balanceCents = Math.max(0, totalCents - paid);
@@ -1861,6 +1863,14 @@ export function useUpdateInvoiceFinancials() {
       // discount is a separate reduction stacked on top of that. One shared
       // helper (see computeInvoiceTotals) keeps this identical to a line
       // delete's recompute.
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: inv, error: invReadErr } = await (supabase as any)
+        .from("crm_invoices")
+        .select("amount_paid_cents, client_id, status, discount_tax_basis")
+        .eq("id", id)
+        .single();
+      if (invReadErr) throw invReadErr;
       const computed = computeInvoiceTotals({
         lines: lineItems.map((li) => ({
           totalCents: li.totalCents,
@@ -1871,18 +1881,12 @@ export function useUpdateInvoiceFinancials() {
         discountType,
         discountValue,
         taxRateBps,
+        // An invoice issued before the pro-rata rule keeps its own rule.
+        discountTaxBasis: resolveDiscountTaxBasis(inv?.discount_tax_basis, inv?.status),
       });
       const { subtotalCents, taxCents, totalCents } = computed;
       discountCents = computed.discountCents;
       taxRateBps = computed.taxRateBps;
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: inv, error: invReadErr } = await (supabase as any)
-        .from("crm_invoices")
-        .select("amount_paid_cents, client_id")
-        .eq("id", id)
-        .single();
-      if (invReadErr) throw invReadErr;
       const paid = inv?.amount_paid_cents ?? 0;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patch: Record<string, any> = {

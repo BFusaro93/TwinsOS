@@ -27,6 +27,7 @@ export interface NavItem {
   exact?: boolean;       // when true, only highlight on exact pathname match
   adminOnly?: boolean;   // when true, only visible to users with role "admin"
   hideFromCrew?: boolean; // when true, hidden from users with role "crew"
+  hideFromRequestor?: boolean; // when true, hidden from the requestor role (pages that are mostly prices / costs)
 }
 
 export interface NavSection {
@@ -45,8 +46,8 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Purchasing",
     items: [
       { label: "Requisitions", href: "/po/requisitions", icon: FileText, hideFromCrew: true },
-      { label: "Purchase Orders", href: "/po/orders", icon: ShoppingCart, hideFromCrew: true },
-      { label: "Receiving", href: "/po/receiving", icon: Package, hideFromCrew: true },
+      { label: "Purchase Orders", href: "/po/orders", icon: ShoppingCart, hideFromCrew: true, hideFromRequestor: true },
+      { label: "Receiving", href: "/po/receiving", icon: Package, hideFromCrew: true, hideFromRequestor: true },
       { label: "Products", href: "/po/products", icon: BookOpen, hideFromCrew: true },
     ],
   },
@@ -58,7 +59,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "PM Schedules", href: "/cmms/pm-schedules", icon: CalendarClock, hideFromCrew: true },
       { label: "Vehicles", href: "/cmms/vehicles", icon: Truck, hideFromCrew: true },
       { label: "Assets", href: "/cmms/assets", icon: Cpu, hideFromCrew: true },
-      { label: "Parts Inventory", href: "/cmms/parts", icon: Cog, hideFromCrew: true },
+      { label: "Parts Inventory", href: "/cmms/parts", icon: Cog, hideFromCrew: true, hideFromRequestor: true },
       { label: "Meters", href: "/cmms/meters", icon: Gauge, hideFromCrew: true },
       { label: "Automations", href: "/cmms/automations", icon: Zap, hideFromCrew: true },
     ],

@@ -71,3 +71,21 @@ export function computeLineWarnings(i: LineWarningInput): LineWarning[] {
 
   return out;
 }
+
+/**
+ * Estimate-level: with no cost basis at all (a new org that hasn't set a
+ * breakeven labor rate, and no line, sub-item, equipment or direct cost
+ * entered) every margin computes to 100%, which reads as "very profitable"
+ * rather than "unknown". Returns the warning to show in place of the margin,
+ * or null when there is something to measure against.
+ */
+export function estimateCostBasisWarning(i: {
+  revenueCents: number;
+  totalCostCents: number;
+  breakevenRateCents: number | undefined;
+}): string | null {
+  if (i.revenueCents <= 0 || i.totalCostCents > 0) return null;
+  return i.breakevenRateCents
+    ? "No costs on this estimate yet, so its margin can't be measured. Add budgeted hours or costs to the lines."
+    : "Set your breakeven rate (Settings → Organization → Break-Even Labor Rate) or enter line costs. With no costs the margin can't be measured.";
+}

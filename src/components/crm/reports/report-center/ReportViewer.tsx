@@ -24,7 +24,7 @@ import { HeaderVisual } from "./HeaderVisual";
 import { ReportScheduleDialog } from "./ReportScheduleDialog";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
-import { buildTotalsRow, exportRowsWithTotals } from "@/lib/reports/export-rows";
+import { buildTotalsRow, exportRowsWithTotals, partialExportRow } from "@/lib/reports/export-rows";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useAddonAccess } from "@/lib/hooks/use-module-access";
 
@@ -168,7 +168,9 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
             totals: grouped ? undefined : buildTotalsRow(result, formatCellValue) ?? undefined,
             grouped,
             cellColors: grouped ? undefined : resultCellColors(result, def.formatRules, undefined),
-            footers: grouped ? undefined : summaryRows(formatCellValue),
+            footers: grouped
+              ? undefined
+              : [...summaryRows(formatCellValue), ...(partialExportRow(result) ? [partialExportRow(result) as string[]] : [])],
           },
         ],
         charts

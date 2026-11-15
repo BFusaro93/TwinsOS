@@ -16,6 +16,8 @@ export function fireAutomationTrigger(params: {
   invoiceId?: string;
   /** The value(s) this event pertains to — checked against a trigger's config.filter_values, if configured (e.g. a client's new source, a ticket's category). */
   matchValues?: string[];
+  /** The visit a visit-event trigger is about — the snow merge tags read that stop. */
+  visitId?: string;
 }): void {
   fetch("/api/automations/fire-trigger", {
     method: "POST",

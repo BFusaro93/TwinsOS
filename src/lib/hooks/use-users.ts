@@ -141,7 +141,7 @@ export function useCreateCrewAccount() {
       if (!res.ok || !body.success) {
         throw new Error((body as { error?: string }).error ?? "Failed to create crew account");
       }
-      return body as { success: true; loginEmail: string; crew: "created" | "linked" | "failed" };
+      return body as { success: true; loginEmail: string; crew: "created" | "linked" | "failed"; confirmationSent?: boolean };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });

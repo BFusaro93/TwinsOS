@@ -28,3 +28,11 @@ export async function resolveDefaultInvoicePdfTemplate(
     .limit(1);
   return data?.[0] ?? null;
 }
+
+/** The template an invoice is pinned to (its crm_invoice_pdf_templates embed, which must
+ *  select deleted_at) — or null when it has since been deleted, so the caller falls back
+ *  to resolveDefaultInvoicePdfTemplate instead of rendering a deleted layout. */
+export function livePinnedTemplate<T extends { deleted_at?: string | null }>(embed: T | null | undefined): T | null {
+  if (!embed || embed.deleted_at != null) return null;
+  return embed;
+}

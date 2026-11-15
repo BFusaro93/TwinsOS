@@ -18,6 +18,7 @@ import { stopClockOutCap } from "@/lib/crew/visit-pause";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { PAYROLL_LOCKED_PREFIX, isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
+import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
 
 const log = logger.child("crew/stops/clock-out");
 
@@ -406,7 +407,7 @@ export async function POST(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: currentRows } = await (supabase as any)
       .from("crm_job_visits")
-      .select()
+      .select(JOB_VISIT_READ_COLUMNS)
       .in("id", openIds);
     return NextResponse.json({ visitIds: openIds, visits: currentRows, alreadyClockedOut: true });
   }
@@ -497,8 +498,10 @@ export async function POST(
     const earlierIds = stopRows.filter((r) => !openIdSet.has(r.id)).map((r) => r.id);
     let alreadyAllocatedCents = 0;
     if (earlierIds.length > 0) {
+      // Service role: labor cost isn't readable from a user session
+      // (20270106000390). earlierIds are this stop's rows, proven above.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: earlier } = await (supabase as any)
+      const { data: earlier } = await (visitWriter as any)
         .from("crm_job_visits")
         .select("actual_labor_cost_cents")
         .in("id", earlierIds);
@@ -575,7 +578,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: finalRows } = await (supabase as any)
     .from("crm_job_visits")
-    .select()
+    .select(JOB_VISIT_READ_COLUMNS)
     .in("id", openIds);
 
   return NextResponse.json({ visitIds: openIds, visits: finalRows });
