@@ -199,7 +199,7 @@ export function SnowGuide() {
           <strong>Per Event</strong> job, Adding a push asks whether it is <em>No charge</em> (the
           default — recorded only, $0, never in Snow Invoicing) or <em>Bill it</em> (its own
           charge, the job&apos;s flat rate again — use this when a second crew salts again). A
-          push&apos;s <em>Billed</em> / <em>No charge</em> tag can be clicked to flip it until it
+          push&apos;s <em>Charge</em> / <em>No charge</em> tag can be clicked to flip it until it
           is invoiced. Pushes the crew adds from the crew app start as No charge.
         </p>
         <p>
