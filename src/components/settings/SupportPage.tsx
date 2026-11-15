@@ -351,10 +351,10 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                     <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       <a
                         href="mailto:support@landscapt.com"
-                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                        className="flex items-start gap-3 rounded-lg border border-[#e6e6e0] dark:border-border bg-card py-5 pl-3 pr-4 shadow-sm transition-shadow hover:shadow-md"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
-                          <Mail className="h-5 w-5 text-[#60ab45]" />
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
+                          <Mail className="h-[18px] w-[18px] text-[#60ab45]" />
                         </div>
                         <div className="min-w-0 [overflow-wrap:anywhere]">
                           <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a] dark:text-neutral-100">Email Support</p>
@@ -364,10 +364,10 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                       </a>
                       <a
                         href={docsHref}
-                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                        className="flex items-start gap-3 rounded-lg border border-[#e6e6e0] dark:border-border bg-card py-5 pl-3 pr-4 shadow-sm transition-shadow hover:shadow-md"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
-                          <BookOpen className="h-5 w-5 text-[#60ab45]" />
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
+                          <BookOpen className="h-[18px] w-[18px] text-[#60ab45]" />
                         </div>
                         <div className="min-w-0 [overflow-wrap:anywhere]">
                           <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a] dark:text-neutral-100">Advanced Guides</p>
@@ -379,10 +379,10 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                         href="https://stats.uptimerobot.com/taTmWtuTlT"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                        className="flex items-start gap-3 rounded-lg border border-[#e6e6e0] dark:border-border bg-card py-5 pl-3 pr-4 shadow-sm transition-shadow hover:shadow-md"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
-                          <Activity className="h-5 w-5 text-[#60ab45]" />
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
+                          <Activity className="h-[18px] w-[18px] text-[#60ab45]" />
                         </div>
                         <div className="min-w-0 [overflow-wrap:anywhere]">
                           <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a] dark:text-neutral-100">System Status</p>
