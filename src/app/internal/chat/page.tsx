@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle } from "lucide-react";
+import { ArrowLeft, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCurrentUserStore } from "@/stores";
 import {
@@ -40,6 +40,9 @@ export default function StaffChatPage() {
   const { data: conversations = [], isLoading } = useStaffConversationList(true);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("active");
+  // Below lg only one pane fits: the list, or the open thread. Desktop still
+  // auto-opens the first conversation (see `selected`).
+  const [threadOpen, setThreadOpen] = useState(false);
 
   useSupportMessagesRealtime(null);
 
@@ -51,7 +54,7 @@ export default function StaffChatPage() {
 
   return (
     <div className="flex h-full gap-4">
-      <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
+      <div className={cn("flex w-full shrink-0 flex-col overflow-hidden rounded-lg border bg-card lg:w-72", threadOpen && "hidden lg:flex")}>
         <div className="flex flex-wrap gap-1 border-b p-2">
           {FILTERS.map((f) => (
             <button
@@ -77,7 +80,10 @@ export default function StaffChatPage() {
             visible.map((c) => (
               <button
                 key={threadKey(c)}
-                onClick={() => setSelectedKey(threadKey(c))}
+                onClick={() => {
+                  setSelectedKey(threadKey(c));
+                  setThreadOpen(true);
+                }}
                 className={cn(
                   "flex w-full flex-col gap-0.5 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-muted/40",
                   selected && threadKey(c) === threadKey(selected) && "bg-brand-50 dark:bg-brand-900/30"
@@ -95,7 +101,7 @@ export default function StaffChatPage() {
         </div>
       </div>
 
-      <div className="flex-1 rounded-lg border bg-card">
+      <div className={cn("min-w-0 flex-1 rounded-lg border bg-card", !threadOpen && "hidden lg:block")}>
         {selected ? (
           <ConversationPane
             key={threadKey(selected)}
@@ -105,6 +111,7 @@ export default function StaffChatPage() {
             staffName={currentUser.name}
             staffId={currentUser.id}
             status={selected.status}
+            onBack={() => setThreadOpen(false)}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-400 dark:text-neutral-500">
@@ -117,7 +124,7 @@ export default function StaffChatPage() {
   );
 }
 
-function ConversationPane({ thread, orgName, personName, staffName, staffId, status }: { thread: ThreadRef; orgName: string; personName: string; staffName: string; staffId: string; status: ConversationStatus }) {
+function ConversationPane({ thread, orgName, personName, staffName, staffId, status, onBack }: { thread: ThreadRef; orgName: string; personName: string; staffName: string; staffId: string; status: ConversationStatus; onBack: () => void }) {
   const { data: messages = [], isLoading } = useThreadConversation(thread);
   const sendMessage = useSendSupportMessage();
   const setStatus = useSetConversationStatus();
@@ -152,9 +159,14 @@ function ConversationPane({ thread, orgName, personName, staffName, staffId, sta
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <span className="font-medium text-slate-800 dark:text-neutral-100">{orgName}{personName ? ` · ${personName}` : ""}</span>
-        <div className="flex gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 lg:gap-3 lg:px-4 lg:py-3">
+        <div className="flex min-w-0 items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={onBack} className="-ml-1 h-9 w-9 shrink-0 lg:hidden" aria-label="Back to conversations">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-0 truncate font-medium text-slate-800 dark:text-neutral-100">{orgName}{personName ? ` · ${personName}` : ""}</span>
+        </div>
+        <div className="flex flex-wrap gap-1">
           {(["open", "in_progress", "resolved"] as ConversationStatus[]).map((st) => (
             <button
               key={st}
@@ -164,7 +176,7 @@ function ConversationPane({ thread, orgName, personName, staffName, staffId, sta
                 { onError: () => toast.error("Couldn't change the status.") }
               )}
               className={cn(
-                "flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors lg:py-0.5",
                 st === status ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400" : "text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
               )}
             >

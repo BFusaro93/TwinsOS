@@ -59,8 +59,8 @@ function FeedbackCard({ item }: { item: StaffFeedbackItem }) {
         </span>
         <Badge variant="outline" className="ml-auto">{STATUS_LABELS[item.status]}</Badge>
       </div>
-      <p className="mt-3 whitespace-pre-wrap text-sm text-slate-800 dark:text-neutral-100">{item.message}</p>
-      {item.pageUrl && <p className="mt-2 font-mono text-xs text-slate-400 dark:text-neutral-500">{item.pageUrl}</p>}
+      <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-800 dark:text-neutral-100">{item.message}</p>
+      {item.pageUrl && <p className="mt-2 break-all font-mono text-xs text-slate-400 dark:text-neutral-500">{item.pageUrl}</p>}
       {item.screenshotPath && <div className="mt-3"><Screenshot path={item.screenshotPath} /></div>}
       <div className="mt-3 flex flex-wrap gap-2">
         {(["new", "reviewed", "closed"] as const)
@@ -94,7 +94,7 @@ export default function StaffFeedbackPage() {
         <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Bug reports &amp; ideas</h1>
         <p className="text-sm text-muted-foreground">Submitted from the feedback button in every org. {newCount} new.</p>
       </div>
-      <div className="flex gap-1">
+      <div className="flex flex-wrap gap-1">
         {FILTERS.map((f) => (
           <button
             key={f.value}

@@ -77,7 +77,7 @@ function QuestionCard({ item }: { item: StaffAskAIQuestion }) {
         )}
       </div>
 
-      <p className="mt-3 whitespace-pre-wrap text-sm font-medium text-slate-900 dark:text-neutral-100">{item.question}</p>
+      <p className="mt-3 whitespace-pre-wrap break-words text-sm font-medium text-slate-900 dark:text-neutral-100">{item.question}</p>
 
       {item.answer && (
         <div className="mt-2">
@@ -89,7 +89,7 @@ function QuestionCard({ item }: { item: StaffAskAIQuestion }) {
             {showReply ? "Hide" : "Show"} what Ask AI replied
           </button>
           {showReply && (
-            <p className="mt-1 whitespace-pre-wrap rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm text-slate-700 dark:text-neutral-300">{item.answer}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm text-slate-700 dark:text-neutral-300">{item.answer}</p>
           )}
         </div>
       )}

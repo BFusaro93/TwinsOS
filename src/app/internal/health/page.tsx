@@ -79,7 +79,7 @@ export default function Page() {
       )}
 
       {data && (
-        <div className="flex items-center gap-3 rounded-lg border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-card p-4 shadow-sm">
           <span className={cn("h-3 w-3 rounded-full", STATUS_META[worst].dot)} />
           <span className="font-semibold text-slate-900 dark:text-neutral-100">
             {worst === "ok" ? "All connected services healthy" : worst === "degraded" ? "Some services degraded" : "One or more services down"}
@@ -106,34 +106,36 @@ export default function Page() {
               const isOpen = expanded.has(c.id);
               return (
                 <li key={c.id}>
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />
+                  <div className="flex items-start gap-3 px-4 py-3 sm:items-center">
+                    <span className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full sm:mt-0", meta.dot)} />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">{c.name}</p>
                       {failures.length > 0 ? (
                         <button
                           type="button"
                           onClick={() => toggle(c.id)}
-                          className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground"
+                          className="flex items-start gap-0.5 text-left text-xs text-muted-foreground hover:text-foreground"
                           aria-expanded={isOpen}
                         >
-                          <ChevronRight className={cn("h-3 w-3 transition-transform", isOpen && "rotate-90")} />
+                          <ChevronRight className={cn("mt-0.5 h-3 w-3 shrink-0 transition-transform", isOpen && "rotate-90")} />
                           {c.detail} — {isOpen ? "hide" : "show"} details
                         </button>
                       ) : (
-                        <p className="truncate text-xs text-muted-foreground">
+                        <p className="break-words text-xs text-muted-foreground sm:truncate">
                           {c.detail}
                           {c.checkedAt && ` · checked ${new Date(c.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
                         </p>
                       )}
                     </div>
-                    {c.latencyMs !== null && <span className="text-xs tabular-nums text-muted-foreground">{c.latencyMs} ms</span>}
-                    <span className={cn("w-28 text-right text-xs font-medium", meta.text)}>{meta.label}</span>
+                    <div className="flex shrink-0 flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                      {c.latencyMs !== null && <span className="text-xs tabular-nums text-muted-foreground">{c.latencyMs} ms</span>}
+                      <span className={cn("text-right text-xs font-medium sm:w-28", meta.text)}>{meta.label}</span>
+                    </div>
                   </div>
                   {isOpen && failures.length > 0 && (
-                    <ul className="border-t bg-muted/40 px-4 py-2 pl-10">
+                    <ul className="border-t bg-muted/40 px-4 py-2 pl-6 sm:pl-10">
                       {failures.map((f) => (
-                        <li key={f.label} className="flex items-baseline justify-between gap-4 py-1 text-xs">
+                        <li key={f.label} className="flex flex-col gap-0.5 py-1.5 text-xs sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
                           {f.href ? (
                             <a
                               href={f.href}
@@ -146,7 +148,7 @@ export default function Page() {
                           ) : (
                             <span className="font-medium text-slate-800 dark:text-neutral-200">{f.label}</span>
                           )}
-                          <span className="text-muted-foreground">{f.detail}</span>
+                          <span className="break-words text-muted-foreground">{f.detail}</span>
                         </li>
                       ))}
                     </ul>
@@ -159,7 +161,7 @@ export default function Page() {
       </section>
 
       <section className="rounded-lg border bg-card shadow-sm">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Uptime monitors (last 30 days)</h2>
           <a
             href={UPTIME_ROBOT_URL}
@@ -175,12 +177,12 @@ export default function Page() {
         ) : (
           <ul className="divide-y">
             {(data?.uptime ?? []).map((m) => (
-              <li key={m.name} className="flex items-center gap-4 px-4 py-3">
-                <span className="w-44 shrink-0 truncate text-sm text-slate-900 dark:text-neutral-100">{m.name}</span>
+              <li key={m.name} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:flex-nowrap sm:gap-4">
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-900 dark:text-neutral-100 sm:w-44 sm:flex-none">{m.name}</span>
                 <span className="w-16 shrink-0 text-xs tabular-nums text-muted-foreground">
                   {m.ratio30d === null ? "—" : `${m.ratio30d.toFixed(2)}%`}
                 </span>
-                <div className="flex h-5 flex-1 gap-px">
+                <div className="order-last flex h-5 w-full gap-px sm:order-none sm:w-auto sm:flex-1">
                   {m.days.map((d) => (
                     <span
                       key={d.date}
