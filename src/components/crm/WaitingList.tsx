@@ -141,14 +141,16 @@ function extraColCellText(key: string, job: CRMJob): string {
 
 const NO_SALES_REP = "__none__";
 
-type ColFilterKey = "client" | "city" | "zip" | "crew";
+type ColFilterKey = "client";
 
+// Only free-text filters live here; City, Zip, Crew, Service and Sales Rep are
+// multi-select checklists rendered next to these tabs.
 const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
   { key: "client", label: "Client" },
-  { key: "city", label: "City" },
-  { key: "zip", label: "Zip" },
-  { key: "crew", label: "Crew" },
 ];
+
+// Sentinel in crewFilters for jobs with no crew.
+const NO_CREW = "none";
 
 const PRIORITY_FILTER_JOB_OPTIONS = [
   { value: "job_high",   label: "High priority" },
@@ -586,6 +588,8 @@ export function WaitingList() {
   // Sales rep is multi-select too ("__none__" = jobs with no sales rep).
   const [repFilters, setRepFilters] = useState<string[]>([]);
   const [crewFilters, setCrewFilters] = useState<string[]>([]);
+  const [cityFilters, setCityFilters] = useState<string[]>([]);
+  const [zipFilters, setZipFilters] = useState<string[]>([]);
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
   // SA-style view: hide steps/jobs that aren't ready yet (Min Days spacing not
@@ -631,6 +635,15 @@ export function WaitingList() {
     return Array.from(names).sort();
   }, [all]);
 
+  const allCities = useMemo(
+    () => Array.from(new Set(all.map((j) => (j.serviceCity ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [all]
+  );
+  const allZips = useMemo(
+    () => Array.from(new Set(all.map((j) => (j.serviceZip ?? "").trim()).filter(Boolean))).sort(),
+    [all]
+  );
+
   const allReps = useMemo(() => {
     const names = new Set<string>();
     for (const job of all) if (job.salesRepName) names.add(job.salesRepName);
@@ -641,7 +654,13 @@ export function WaitingList() {
     let list = all;
 
     if (crewFilters.length > 0) {
-      list = list.filter((job) => job.crewId && crewFilters.includes(job.crewId));
+      list = list.filter((job) => crewFilters.includes(job.crewId ?? NO_CREW));
+    }
+    if (cityFilters.length > 0) {
+      list = list.filter((job) => cityFilters.includes((job.serviceCity ?? "").trim()));
+    }
+    if (zipFilters.length > 0) {
+      list = list.filter((job) => zipFilters.includes((job.serviceZip ?? "").trim()));
     }
     if (tagFilters.length > 0) {
       list = list.filter((job) => (job.clientTags ?? []).some((t) => tagFilters.includes(t)));
@@ -674,10 +693,6 @@ export function WaitingList() {
       list = list.filter((job) => {
         switch (activeColFilter) {
           case "client":  return (job.clientName ?? "").toLowerCase().includes(v);
-          case "city":    return (job.serviceCity ?? "").toLowerCase().includes(v);
-          case "zip":     return (job.serviceZip ?? "").toLowerCase().includes(v);
-          // The value is a crew id picked from the list ("none" = no crew).
-          case "crew":    return colFilterValue === "none" ? !job.crewId : job.crewId === colFilterValue;
           default:        return true;
         }
       });
@@ -701,7 +716,7 @@ export function WaitingList() {
     }
 
     return list;
-  }, [all, filterEntries, search, crewFilters, tagFilters, priorityFilters, serviceFilters, repFilters, crewCodeById]);
+  }, [all, filterEntries, search, crewFilters, cityFilters, zipFilters, tagFilters, priorityFilters, serviceFilters, repFilters, crewCodeById]);
 
   // Package jobs carry one crm_job_services row per visit, each with its own
   // date window — expand those into one row per visit so each can be scheduled
@@ -863,7 +878,20 @@ export function WaitingList() {
             </button>
           ))}
 
-          {/* Service + Sales Rep: multi-select checklists (stack with every other filter). */}
+          {/* City, Zip, Crew, Service + Sales Rep: multi-select checklists (stack with every other filter).
+              Crew shares crewFilters with the dark bar's "All Crews" menu. */}
+          <MultiSelectFilterTab label="City" title="Cities" options={allCities.map((n) => ({ value: n, label: n }))} selected={cityFilters} onChange={setCityFilters} />
+          <MultiSelectFilterTab label="Zip" title="Zips" options={allZips.map((n) => ({ value: n, label: n }))} selected={zipFilters} onChange={setZipFilters} />
+          <MultiSelectFilterTab
+            label="Crew"
+            title="Crews"
+            options={[
+              { value: NO_CREW, label: "Unassigned" },
+              ...(crews ?? []).filter((c) => c.isActive !== false).map((c) => ({ value: c.id, label: `${c.name}${c.code ? ` (${c.code})` : ""}` })),
+            ]}
+            selected={crewFilters}
+            onChange={setCrewFilters}
+          />
           <MultiSelectFilterTab label="Service" title="Services" options={allServices.map((n) => ({ value: n, label: n }))} selected={serviceFilters} onChange={setServiceFilters} />
           <MultiSelectFilterTab
             label="Sales Rep"
@@ -875,21 +903,7 @@ export function WaitingList() {
 
           {activeColFilter && (
             <>
-              {activeColFilter === "crew" ? (
-                <select
-                  autoFocus
-                  value={colFilterValue}
-                  onChange={(e) => setColFilterValue(e.target.value)}
-                  aria-label="Filter by Crew"
-                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
-                >
-                  <option value="">Select a crew…</option>
-                  <option value="none">Unassigned</option>
-                  {(crews ?? []).filter((c) => c.isActive !== false).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.code ? ` (${c.code})` : ""}</option>
-                  ))}
-                </select>
-              ) : (
+              {(
                 <Input
                   autoFocus
                   value={colFilterValue}
@@ -983,6 +997,12 @@ export function WaitingList() {
             <PopoverContent className="w-48 p-1" align="start">
               <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>
                 All Crews
+              </FilterOptionRow>
+              <FilterOptionRow
+                checked={crewFilters.includes(NO_CREW)}
+                onToggle={() => setCrewFilters((prev) => prev.includes(NO_CREW) ? prev.filter((x) => x !== NO_CREW) : [...prev, NO_CREW])}
+              >
+                Unassigned
               </FilterOptionRow>
               {(crews ?? []).map((c) => (
                 <FilterOptionRow

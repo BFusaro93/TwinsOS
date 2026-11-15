@@ -4418,6 +4418,9 @@ export function DispatchBoard() {
   // Per-filter text values so Client + Date + City + Zip (and the multi-select
   // Service / Crew filters) all stack; colFilterKey only picks which input shows.
   const [colFilters,      setColFilters]      = useState<Record<string, string>>({});
+  // City and Zip are checklists (exact values), like Service and Crew.
+  const [cityFilters,     setCityFilters]     = useState<string[]>([]);
+  const [zipFilters,      setZipFilters]      = useState<string[]>([]);
   const setColFilter = (key: string, value: string) => setColFilters((prev) => ({ ...prev, [key]: value }));
   // Service filter is multi-select (unlike the other Select-a-Filter text
   // filters), so it gets its own array instead of sharing colFilterValue.
@@ -4844,7 +4847,7 @@ export function DispatchBoard() {
   function captureViewFilters(): DispatchViewFilters {
     return {
       serviceFilters, crewFilters, tagFilters, priorityFilters, statusFilter, search,
-      colFilterKey: null, colFilterValue: "", colFilters, visibleKeys, dateMode,
+      colFilterKey: null, colFilterValue: "", colFilters, cityFilters, zipFilters, visibleKeys, dateMode,
     };
   }
 
@@ -4875,13 +4878,18 @@ export function DispatchBoard() {
     setStatusFilter(FILTER_TABS.some((t) => t.value === f.statusFilter) ? (f.statusFilter as FilterTab) : "all");
     setSearch(f.search ?? "");
     setColFilterKey(null);
-    if (f.colFilters) {
-      setColFilters(f.colFilters);
-    } else if (f.colFilterKey && f.colFilterValue && f.colFilterKey !== "crew") {
-      setColFilters({ [f.colFilterKey]: f.colFilterValue }); // older single-filter view
-    } else {
-      setColFilters({});
-    }
+    let nextCols: Record<string, string> = {};
+    if (f.colFilters) nextCols = { ...f.colFilters };
+    else if (f.colFilterKey && f.colFilterValue && f.colFilterKey !== "crew") nextCols = { [f.colFilterKey]: f.colFilterValue }; // older single-filter view
+    // Older views kept City / Zip as free text; they are checklists now, so turn
+    // the text into the matching values on the board (none match → dropped).
+    const legacyCity = (nextCols.city ?? "").toLowerCase();
+    const legacyZip = (nextCols.zip ?? "").toLowerCase();
+    delete nextCols.city;
+    delete nextCols.zip;
+    setColFilters(nextCols);
+    setCityFilters(f.cityFilters ?? (legacyCity ? cityFilterOptions.filter((c) => c.toLowerCase().includes(legacyCity)) : []));
+    setZipFilters(f.zipFilters ?? (legacyZip ? zipFilterOptions.filter((z) => z.toLowerCase().includes(legacyZip)) : []));
     // Older views stored one crew id in the Crew column filter.
     const legacyCrew = f.colFilterValue;
     if (f.colFilterKey === "crew" && legacyCrew && !f.colFilters) {
@@ -4954,6 +4962,9 @@ export function DispatchBoard() {
   /** See effectiveCrewId at the top of this file. */
   const effectiveCrewIdOf = effectiveCrewId;
 
+  const cityFilterOptions = Array.from(new Set(allVisits.map((v) => (v.job?.serviceCity ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const zipFilterOptions = Array.from(new Set(allVisits.map((v) => (v.job?.serviceZip ?? "").trim()).filter(Boolean))).sort();
+
   const filtered = allVisits.filter((v) => {
     // Effective crew, not the raw column — a visit that inherits its crew from
     // the job would otherwise never match its own crew's filter chip.
@@ -5010,10 +5021,10 @@ export function DispatchBoard() {
       switch (key) {
         case "client":  if (!(v.clientName ?? "").toLowerCase().includes(q)) return false; break;
         case "date":    if ((v.scheduledDate ?? "") !== val) return false; break;
-        case "city":    if (!(v.job?.serviceCity ?? "").toLowerCase().includes(q)) return false; break;
-        case "zip":     if (!(v.job?.serviceZip ?? "").includes(q)) return false; break;
       }
     }
+    if (cityFilters.length > 0 && !cityFilters.includes((v.job?.serviceCity ?? "").trim())) return false;
+    if (zipFilters.length > 0 && !zipFilters.includes((v.job?.serviceZip ?? "").trim())) return false;
     return true;
   });
 
@@ -5663,6 +5674,19 @@ export function DispatchBoard() {
                   options={(allServices ?? []).map((svc) => ({ value: svc.name, label: svc.name }))}
                   selected={serviceFilters}
                   onChange={setServiceFilters}
+                />
+              );
+            }
+            if (key === "city" || key === "zip") {
+              return (
+                <MultiSelectFilterTab
+                  key={key}
+                  className="max-lg:py-2"
+                  label={label}
+                  title={key === "city" ? "Cities" : "Zips"}
+                  options={(key === "city" ? cityFilterOptions : zipFilterOptions).map((n) => ({ value: n, label: n }))}
+                  selected={key === "city" ? cityFilters : zipFilters}
+                  onChange={key === "city" ? setCityFilters : setZipFilters}
                 />
               );
             }
@@ -6477,7 +6501,7 @@ export function DispatchBoard() {
               <tr>
                 <td colSpan={20} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search || crewFilters.length > 0 || statusFilter !== "all" || tagFilters.length > 0 ||
-                    priorityFilters.length > 0 || serviceFilters.length > 0 || Object.values(colFilters).some(Boolean)
+                    priorityFilters.length > 0 || serviceFilters.length > 0 || cityFilters.length > 0 || zipFilters.length > 0 || Object.values(colFilters).some(Boolean)
                     ? "No visits match the current filters"
                     : "No visits scheduled for this date"}
                 </td>
