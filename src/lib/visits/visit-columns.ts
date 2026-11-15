@@ -1,17 +1,19 @@
 /**
- * Every crm_job_visits column an end-user session may read: all of them except
- * actual_labor_cost_cents. That column's direct SELECT is revoked from
- * `authenticated` (migration 20270106000390) — a one-person crew's visit labor
- * cost divided by its hours is that person's pay rate. Labor cost is read
- * through rpt_job_visits (masked unless the caller may see labor cost) and
- * written only by the service role (recomputeStopLabor / clock-out).
+ * The crm_job_visits columns the app reads for a visit: all of them except
+ * actual_labor_cost_cents. A one-person crew's visit labor cost divided by its
+ * hours is that person's pay rate, so crew responses and visit lists leave it
+ * out; reports read labor cost through rpt_job_visits (masked unless the caller
+ * may see labor cost). It is written only by the service role
+ * (recomputeStopLabor / clock-out).
  *
- * Use this instead of `*` / a bare `.select()` on crm_job_visits from a user
- * session (a `*` there fails once the column is revoked), and on service-role
- * writes whose returned row goes back to the browser.
+ * The column itself is NOT revoked from `authenticated`: the crew app's
+ * crew_job(crm_job_visits) computed relationship passes the whole visit row,
+ * and Postgres refuses a whole-row reference when any column is ungranted, so
+ * a column revoke breaks the crew schedule (tried in round 14 and dropped).
  *
- * !! A new crm_job_visits column must be added here AND granted to
- *    `authenticated` (re-run the DO block in 20270106000390).
+ * Use this instead of `*` / a bare `.select()` on crm_job_visits, and on
+ * service-role writes whose returned row goes back to the browser. Add new
+ * crm_job_visits columns here when the app needs them.
  */
 export const JOB_VISIT_READ_COLUMNS =
   "id, org_id, job_id, client_id, crew_id, scheduled_date, start_time, end_time, status, completion_notes, " +

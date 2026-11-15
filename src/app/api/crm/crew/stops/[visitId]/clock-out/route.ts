@@ -498,8 +498,8 @@ export async function POST(
     const earlierIds = stopRows.filter((r) => !openIdSet.has(r.id)).map((r) => r.id);
     let alreadyAllocatedCents = 0;
     if (earlierIds.length > 0) {
-      // Service role: labor cost isn't readable from a user session
-      // (20270106000390). earlierIds are this stop's rows, proven above.
+      // Service role: labor cost is kept out of crew-session reads (see
+      // visit-columns.ts). earlierIds are this stop's rows, proven above.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: earlier } = await (visitWriter as any)
         .from("crm_job_visits")
