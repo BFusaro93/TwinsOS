@@ -13,7 +13,7 @@ export interface HealthCheckResult {
   latencyMs: number | null;
   detail: string;
   /** Per-org problems behind a degraded/down row (staff-only data). */
-  failures?: { label: string; detail: string }[];
+  failures?: { label: string; detail: string; href?: string }[];
   /** ISO time of the underlying check when the row is served from a long cache; the page formats it in the viewer's timezone. */
   checkedAt?: string;
 }
@@ -578,6 +578,80 @@ function checkEnvConfig(): HealthCheckResult {
   };
 }
 
+interface SentryIssue {
+  title: string;
+  shortId: string;
+  permalink: string;
+  count: string;
+  userCount: number;
+  firstSeen: string;
+  substatus?: string;
+  assignedTo?: unknown;
+}
+
+const SENTRY_NAME = "Sentry — untriaged errors";
+
+function ageLabel(iso: string): string {
+  const hours = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3_600_000);
+  return hours < 48 ? `${Math.round(hours)}h` : `${Math.round(hours / 24)}d`;
+}
+
+/**
+ * Production errors nobody has acted on in Sentry. Needs SENTRY_API_TOKEN (a
+ * read-only internal integration token — SENTRY_AUTH_TOKEN is the build-time
+ * source-map token and is deliberately not reused) plus SENTRY_ORG /
+ * SENTRY_PROJECT. Deliberately state-based, not time-based: an issue stays
+ * flagged however old it is until someone resolves, archives or assigns it
+ * (a weekend error must still be there Monday). Regressed/escalating issues
+ * count even if assigned, since the earlier triage no longer holds.
+ */
+function checkSentry(): Promise<HealthCheckResult> {
+  const token = process.env.SENTRY_API_TOKEN;
+  const org = process.env.SENTRY_ORG;
+  const project = process.env.SENTRY_PROJECT;
+  if (!token) return Promise.resolve(notConfigured("sentry", SENTRY_NAME, "SENTRY_API_TOKEN"));
+  if (!org || !project) return Promise.resolve(notConfigured("sentry", SENTRY_NAME, "SENTRY_ORG / SENTRY_PROJECT"));
+
+  return timed("sentry", SENTRY_NAME, async (signal) => {
+    const base = process.env.SENTRY_API_URL ?? "https://us.sentry.io";
+    // is:unresolved already excludes resolved and archived/ignored issues.
+    // 90d is Sentry's maximum stats window; without it older issues drop out.
+    const params = new URLSearchParams({
+      query: "is:unresolved environment:production",
+      statsPeriod: "90d",
+      sort: "date",
+      limit: "100",
+    });
+    const res = await fetch(
+      `${base}/api/0/projects/${encodeURIComponent(org)}/${encodeURIComponent(project)}/issues/?${params}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal }
+    );
+    if (res.status === 401 || res.status === 403) throw new Error(`Sentry rejected the API token (${res.status})`);
+    if (!res.ok) throw new Error(`Sentry responded ${res.status}`);
+    const issues = (await res.json()) as SentryIssue[];
+
+    const untriaged = issues.filter((i) => !i.assignedTo || i.substatus === "regressed" || i.substatus === "escalating");
+    const assigned = issues.length - untriaged.length;
+    const tail = assigned > 0 ? ` · ${assigned} assigned, in progress` : "";
+    if (untriaged.length === 0) {
+      return { detail: `Nothing untriaged${tail}` };
+    }
+    const more = untriaged.length > 10 ? ` (showing 10 most affected)` : "";
+    return {
+      status: "degraded",
+      detail: `${untriaged.length} untriaged error${untriaged.length === 1 ? "" : "s"}${more}${tail}`,
+      failures: [...untriaged]
+        .sort((x, y) => y.userCount - x.userCount || Number(y.count) - Number(x.count))
+        .slice(0, 10)
+        .map((i) => ({
+          label: `${i.shortId} · ${i.title.slice(0, 90)}`,
+          detail: `${i.substatus === "regressed" || i.substatus === "escalating" ? `${i.substatus} · ` : ""}first seen ${ageLabel(i.firstSeen)} ago · ${i.count} events · ${i.userCount} user${i.userCount === 1 ? "" : "s"}`,
+          href: i.permalink,
+        })),
+    };
+  });
+}
+
 /** Samsara's own outages are covered by the UptimeRobot monitor, not here. */
 function checkSamsara(): Promise<HealthCheckResult> {
   return checkOrgIntegration("samsara", "samsara", "Samsara (telematics)");
@@ -600,6 +674,7 @@ export async function runHealthChecks(): Promise<HealthCheckResult[]> {
     checkAnthropic(),
     checkQuickBooks(),
     checkSamsara(),
+    checkSentry(),
   ]);
   return [...results, checkEnvConfig()];
 }

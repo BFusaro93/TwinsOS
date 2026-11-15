@@ -89,7 +89,7 @@ Legend: **Required** = the app is broken or a core feature is off without it. **
 ## Other
 
 - **Turnstile:** `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`. Unset = forms submit with no widget.
-- **Sentry:** `NEXT_PUBLIC_SENTRY_DSN`; optional source-map upload via `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. Unset = disabled.
+- **Sentry:** `NEXT_PUBLIC_SENTRY_DSN`; optional source-map upload via `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. Unset = disabled. The staff Health page's "Sentry — untriaged errors" row (amber until each unresolved production issue is assigned, resolved or archived in Sentry) additionally needs `SENTRY_API_TOKEN` (read-only internal-integration token: Project Read + Issue & Event Read; separate from the build-time `SENTRY_AUTH_TOKEN`) and optionally `SENTRY_API_URL` (default `https://us.sentry.io`). Unset = row shows "Not configured".
 - **Samsara:** daily sync at `/api/integrations/samsara/sync`; confirm credentials storage with the owner (not in `.env.local.example`).
 - **Zapier:** customer-facing, handled through API keys and `/api/integrations/zapier/*`; see [zapier-integration.md](zapier-integration.md). The `API_ACCESS` add-on gates API keys.
 - **Work-requests webhook:** `WORK_REQUESTS_WEBHOOK_SECRET` secures `/api/public/work-requests`.

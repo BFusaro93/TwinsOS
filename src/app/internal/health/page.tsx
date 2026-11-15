@@ -118,7 +118,7 @@ export default function Page() {
                           aria-expanded={isOpen}
                         >
                           <ChevronRight className={cn("h-3 w-3 transition-transform", isOpen && "rotate-90")} />
-                          {c.detail} — {isOpen ? "hide" : "show"} orgs
+                          {c.detail} — {isOpen ? "hide" : "show"} details
                         </button>
                       ) : (
                         <p className="truncate text-xs text-muted-foreground">
@@ -134,7 +134,18 @@ export default function Page() {
                     <ul className="border-t bg-muted/40 px-4 py-2 pl-10">
                       {failures.map((f) => (
                         <li key={f.label} className="flex items-baseline justify-between gap-4 py-1 text-xs">
-                          <span className="font-medium text-slate-800 dark:text-neutral-200">{f.label}</span>
+                          {f.href ? (
+                            <a
+                              href={f.href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 font-medium text-brand-600 hover:underline dark:text-brand-400"
+                            >
+                              {f.label} <ExternalLink className="h-3 w-3 shrink-0" />
+                            </a>
+                          ) : (
+                            <span className="font-medium text-slate-800 dark:text-neutral-200">{f.label}</span>
+                          )}
                           <span className="text-muted-foreground">{f.detail}</span>
                         </li>
                       ))}
