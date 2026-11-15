@@ -83,7 +83,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn, formatCurrency } from "@/lib/utils";
 import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
-import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, ChevronUp, GripVertical, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff, Link2Off } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, ChevronUp, GripVertical, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff, Link2Off, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -1262,6 +1262,22 @@ export function InvoiceDetail({
       {/* Top action bar */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b bg-card px-4 py-3 shadow-sm md:px-8">
         <div className="flex flex-wrap items-center gap-3">
+          {/* Full-page view only (the slide-overs pass onClose and have their own X): go back to
+              wherever the user came from — the board, estimate, project, My Day — or the invoice
+              list when the page was opened directly with no history. */}
+          {!onClose && (
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) router.back();
+                else router.push("/crm/accounting/invoices");
+              }}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back
+            </button>
+          )}
           <div>
             <h1 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
               {invoice.invoiceNumber != null ? `Invoice #${invoice.invoiceNumber}` : "Draft Invoice"}
