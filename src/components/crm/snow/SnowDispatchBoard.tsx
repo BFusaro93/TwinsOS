@@ -1489,16 +1489,29 @@ export function SnowDispatchBoard() {
   const visitIdsKey = useMemo(() => visits.map((v) => v.id), [visits]);
   const { data: invoiceLinksByVisit } = useVisitInvoiceLinks(visitIdsKey);
 
-  // Client-name sort for the table. Only reorders what's shown: stop numbers stay the route order.
-  const [nameSort, setNameSort] = useState<"asc" | "desc" | null>(null);
+  // Table sort: null = route order (the # column). Only reorders what's shown — stop numbers stay the
+  // route order. Crew sorts by crew name and keeps route order within each crew.
+  type BoardSort = { key: "client" | "crew"; dir: "asc" | "desc" } | null;
+  const [sort, setSort] = useState<BoardSort>(null);
+  const cycleSort = (key: "client" | "crew") =>
+    setSort((s) => (!s || s.key !== key ? { key, dir: "asc" } : s.dir === "asc" ? { key, dir: "desc" } : null));
   const displayVisits = useMemo(() => {
-    if (!nameSort) return filteredVisits;
-    const dir = nameSort === "asc" ? 1 : -1;
-    return [...filteredVisits].sort(
-      (a, b) => dir * (a.clientName ?? "").localeCompare(b.clientName ?? "", undefined, { sensitivity: "base" })
-        || (a.pushNumber ?? 1) - (b.pushNumber ?? 1)
-    );
-  }, [filteredVisits, nameSort]);
+    if (!sort) return filteredVisits;
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const label = (v: CRMJobVisit) => (sort.key === "client"
+      ? v.clientName ?? ""
+      : (effectiveCrewIdOf(v) ? crewNameById.get(effectiveCrewIdOf(v)!) ?? "" : ""));
+    // Stops with no crew stay at the bottom whichever way the crews sort.
+    const unassigned = (v: CRMJobVisit) => (sort.key === "crew" && !effectiveCrewIdOf(v) ? 1 : 0);
+    return filteredVisits
+      .map((v, i) => ({ v, i }))
+      .sort((a, b) => unassigned(a.v) - unassigned(b.v) || dir * label(a.v).localeCompare(label(b.v), undefined, { sensitivity: "base" }) || a.i - b.i)
+      .map((x) => x.v);
+  }, [filteredVisits, sort, crewNameById]);
+  const sortIcon = (key: "client" | "crew") =>
+    sort?.key === key ? (sort.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />;
+  const sortTitle = (key: "client" | "crew", noun: string) =>
+    sort?.key !== key ? `Sort by ${noun}` : sort.dir === "asc" ? `Sorted A–Z — click for Z–A` : `Sorted Z–A — click to restore route order`;
 
   // Stop number within the crew's route, following order_num.
   const stopNumberById = useMemo(() => {
@@ -2254,18 +2267,27 @@ export function SnowDispatchBoard() {
                     className="h-3.5 w-3.5"
                   />
                 </th>
-                <th className="w-12 px-2 py-2.5">#</th>
+                <th className="w-12 px-2 py-2.5">
+                  <button
+                    type="button"
+                    className={cn("inline-flex items-center gap-0.5 hover:text-slate-600 dark:hover:text-neutral-300", !sort && "text-slate-700 dark:text-neutral-200")}
+                    onClick={() => setSort(null)}
+                    title={sort ? "Back to route order" : "Showing route order"}
+                    aria-label="Sort by route order"
+                  >
+                    # {!sort && <ArrowDown className="h-3 w-3" />}
+                  </button>
+                </th>
                 <th className="w-8 px-2 py-2.5">St</th>
                 <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 uppercase hover:text-slate-600 dark:hover:text-neutral-300"
-                    onClick={() => setNameSort((s) => (s === null ? "asc" : s === "asc" ? "desc" : null))}
-                    title={nameSort === "asc" ? "Sorted A–Z — click for Z–A" : nameSort === "desc" ? "Sorted Z–A — click to restore route order" : "Sort by client name"}
+                    onClick={() => cycleSort("client")}
+                    title={sortTitle("client", "client name")}
                     aria-label="Sort by client name"
                   >
-                    Client
-                    {nameSort === "asc" ? <ArrowUp className="h-3 w-3" /> : nameSort === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                    Client {sortIcon("client")}
                   </button>
                 </th>
                 {isVisible("date") && <th className="px-2 py-2.5">Date</th>}
@@ -2276,7 +2298,19 @@ export function SnowDispatchBoard() {
                 {isVisible("zip") && <th className="px-2 py-2.5">Zip</th>}
                 {isVisible("priority") && <th className="px-2 py-2.5">Priority</th>}
                 {isVisible("trigger") && <th className="px-2 py-2.5">Trigger</th>}
-                {isVisible("crew") && <th className="px-2 py-2.5">Crew</th>}
+                {isVisible("crew") && (
+                  <th className="px-2 py-2.5">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 uppercase hover:text-slate-600 dark:hover:text-neutral-300"
+                      onClick={() => cycleSort("crew")}
+                      title={sortTitle("crew", "crew")}
+                      aria-label="Sort by crew"
+                    >
+                      Crew {sortIcon("crew")}
+                    </button>
+                  </th>
+                )}
                 {isVisible("depth") && <th className="px-2 py-2.5 text-right">Depth</th>}
                 {isVisible("temp") && <th className="px-2 py-2.5 text-right">Temp</th>}
                 {isVisible("notes") && <th className="px-2 py-2.5">Notes to Crew</th>}
