@@ -71,7 +71,7 @@ import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDial
 import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
-import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
+import { billingGroupKey, useVisitInvoiceLinks } from "@/lib/hooks/use-snow-invoicing";
 import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
 import { useSnowCapJobFlags } from "@/lib/hooks/use-snow-caps";
 import { computeGroupAmountCents, hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, splitGroupAmountByVisit, type SnowBillableVisit } from "@/lib/snow-billing";
@@ -79,7 +79,7 @@ import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
   Calendar, Smartphone, CalendarCheck, CheckCircle2, XCircle, CornerDownRight,
-  ListChecks, ThermometerSnowflake, Ruler, HelpCircle, MapPin, ArrowUp, ArrowDown, Route as RouteIcon, Search, Tag, Mail, MessageSquare, Download, BarChart3, SkipForward, Undo2, Eraser,
+  ListChecks, ThermometerSnowflake, Ruler, HelpCircle, MapPin, ArrowUp, ArrowDown, Route as RouteIcon, Search, Tag, Mail, ArrowUpDown, MessageSquare, Download, BarChart3, SkipForward, Undo2, Eraser,
 } from "lucide-react";
 import type { CRMJobVisit, VisitStatus, StormEventStatus } from "@/types/crm-jobs";
 
@@ -1185,8 +1185,9 @@ function SnowLegendDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const tag = (text: string, cls: string) => <span className={cn("rounded border px-1.5 py-0 text-[9px]", cls)}>{text}</span>;
   const badgeRows: { icon: React.ReactNode; label: string }[] = [
     { icon: tag("Push 2", "bg-muted border-transparent"), label: "A return trip to the same site on this storm (Push 2, 3…)" },
-    { icon: tag("No charge", "text-muted-foreground"), label: "A return trip on a flat Per Event job that isn't billed (click to bill it)" },
-    { icon: tag("Billed", "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"), label: "A return trip billed as its own charge" },
+    { icon: tag("No charge", "text-muted-foreground"), label: "A return trip on a flat Per Event job that isn't charged (click to charge it)" },
+    { icon: tag("Charge", "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"), label: "A return trip charged as its own job (a separate line in Snow Invoicing)" },
+    { icon: tag("Invoiced #123", "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-400"), label: "This stop is already on an invoice — click to open it" },
     { icon: tag("Lead", ""), label: "Stop with more than one crew — this crew bills the stop" },
     { icon: tag("Extra crew", ""), label: "Another crew on the stop — its own hours; billed only on Hourly jobs" },
     { icon: tag("Handed off from …", "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400"), label: "The crew app handed this stop off from a crew that couldn't make it" },
@@ -1424,7 +1425,7 @@ export function SnowDispatchBoard() {
     if (stormComplete) return;
     try {
       const n = await addStormPush({ source: v, billable });
-      toast.success(`Push ${n} added for ${v.clientName ?? "this job"}${billable ? " — billed as its own charge" : ""}`);
+      toast.success(`Push ${n} added for ${v.clientName ?? "this job"}${billable ? " — charged as its own job" : ""}`);
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Failed to add a push");
     }
@@ -1483,6 +1484,21 @@ export function SnowDispatchBoard() {
       return next;
     });
   }
+
+  // Invoices already issued for these stops (the "Invoiced" marker beside the client name).
+  const visitIdsKey = useMemo(() => visits.map((v) => v.id), [visits]);
+  const { data: invoiceLinksByVisit } = useVisitInvoiceLinks(visitIdsKey);
+
+  // Client-name sort for the table. Only reorders what's shown: stop numbers stay the route order.
+  const [nameSort, setNameSort] = useState<"asc" | "desc" | null>(null);
+  const displayVisits = useMemo(() => {
+    if (!nameSort) return filteredVisits;
+    const dir = nameSort === "asc" ? 1 : -1;
+    return [...filteredVisits].sort(
+      (a, b) => dir * (a.clientName ?? "").localeCompare(b.clientName ?? "", undefined, { sensitivity: "base" })
+        || (a.pushNumber ?? 1) - (b.pushNumber ?? 1)
+    );
+  }, [filteredVisits, nameSort]);
 
   // Stop number within the crew's route, following order_num.
   const stopNumberById = useMemo(() => {
@@ -2240,7 +2256,18 @@ export function SnowDispatchBoard() {
                 </th>
                 <th className="w-12 px-2 py-2.5">#</th>
                 <th className="w-8 px-2 py-2.5">St</th>
-                <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
+                <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 uppercase hover:text-slate-600 dark:hover:text-neutral-300"
+                    onClick={() => setNameSort((s) => (s === null ? "asc" : s === "asc" ? "desc" : null))}
+                    title={nameSort === "asc" ? "Sorted A–Z — click for Z–A" : nameSort === "desc" ? "Sorted Z–A — click to restore route order" : "Sort by client name"}
+                    aria-label="Sort by client name"
+                  >
+                    Client
+                    {nameSort === "asc" ? <ArrowUp className="h-3 w-3" /> : nameSort === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                  </button>
+                </th>
                 {isVisible("date") && <th className="px-2 py-2.5">Date</th>}
                 {isVisible("service") && <th className="px-2 py-2.5">Service</th>}
                 {isVisible("address") && <th className="px-2 py-2.5">Address</th>}
@@ -2275,7 +2302,7 @@ export function SnowDispatchBoard() {
                       <td className="px-2 py-1.5 text-right">{(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) > 0 ? formatCurrency(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) : "—"}</td>
                     )}
                   </tr>
-                  {filteredVisits.map((v) => (
+                  {displayVisits.map((v) => (
                     <tr
                       key={v.id}
                       className="border-b border-slate-100 dark:border-neutral-800 bg-card hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
@@ -2312,6 +2339,16 @@ export function SnowDispatchBoard() {
                         {(v.pushNumber ?? 1) > 1 && (
                           <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
                         )}
+                        {(invoiceLinksByVisit?.get(v.id) ?? []).slice(0, 1).map((inv) => (
+                          <Link
+                            key={inv.invoiceId}
+                            href={`/crm/accounting/invoices/${inv.invoiceId}`}
+                            className="ml-1.5 inline-flex rounded border border-blue-300 px-1.5 py-0 text-[9px] text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                            title={`Billed on invoice #${inv.invoiceNumber ?? "—"} (${inv.status.replace(/_/g, " ")}) — click to open it`}
+                          >
+                            Invoiced #{inv.invoiceNumber ?? "—"}
+                          </Link>
+                        ))}
                         {capFlags?.get(v.jobId)?.over && v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled" && (
                           <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`${capFlags.get(v.jobId)!.label} — this stop bills as overage, not under the contract price`}>
                             Overage
@@ -2366,10 +2403,10 @@ export function SnowDispatchBoard() {
                             type="button"
                             disabled={!canManage}
                             onClick={() => void updateVisitMutation({ id: v.id, updates: { bill_push: !v.billPush }, jobId: v.jobId }).catch(() => toast.error("Failed to change billing"))}
-                            title={v.billPush ? "Billed as its own charge — click to make it no charge" : "No charge (the storm's first push carries the price) — click to bill it"}
+                            title={v.billPush ? "Charged as its own job — click to make it no charge" : "No charge (the storm's first push carries the price) — click to charge it"}
                             className={cn("ml-1.5 rounded border px-1.5 py-0 text-[9px] disabled:opacity-60", v.billPush ? "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400" : "text-muted-foreground")}
                           >
-                            {v.billPush ? "Billed" : "No charge"}
+                            {v.billPush ? "Charge" : "No charge"}
                           </button>
                         )}
                       </td>
