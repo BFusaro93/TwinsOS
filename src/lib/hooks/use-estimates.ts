@@ -197,7 +197,7 @@ export function useEstimates(clientId?: string) {
       const supabase = createClient() as any;
       let q = supabase
         .from("estimates")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since), sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, primary_email, client_since), sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name), estimate_line_items(service_name, deleted_at)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
         // Tiebreaker: range paging needs a total order.
@@ -213,7 +213,17 @@ export function useEstimates(clientId?: string) {
         rows.push(...(data ?? []));
         if (!data || data.length < pageSize) break;
       }
-      return rows.map(mapEstimate) as Estimate[];
+      // The embedded line items only carry service names (for the Service
+      // filter) — keep them out of lineItems, which expects full rows.
+      return rows.map((r) => ({
+        ...mapEstimate({ ...r, estimate_line_items: [] }),
+        serviceNames: Array.from(new Set(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ((r.estimate_line_items ?? []) as any[])
+            .filter((li) => !li.deleted_at && li.service_name)
+            .map((li) => li.service_name as string)
+        )),
+      })) as Estimate[];
     },
   });
 }

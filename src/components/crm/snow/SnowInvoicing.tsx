@@ -7,6 +7,7 @@ import { useStormEvents } from "@/lib/hooks/use-snow-dispatch";
 import {
   useUninvoicedSnowVisits,
   useGenerateSnowInvoices,
+  useInvoicedSnowVisits,
   billingGroupKey,
 } from "@/lib/hooks/use-snow-invoicing";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
@@ -86,6 +87,16 @@ export function SnowInvoicing() {
   const { data: visits = [], isLoading, refetch } = useUninvoicedSnowVisits({
     stormEventId: stormEventId || undefined,
   });
+  const [tab, setTab] = useState<"queue" | "invoiced">("queue");
+  const { data: invoicedRows = [], isLoading: invoicedLoading } = useInvoicedSnowVisits(stormEventId || undefined);
+  const invoicedByClient = useMemo(() => {
+    const groups = new Map<string, { clientName: string; rows: typeof invoicedRows }>();
+    for (const r of invoicedRows) {
+      if (!groups.has(r.clientId)) groups.set(r.clientId, { clientName: r.clientName ?? "—", rows: [] });
+      groups.get(r.clientId)!.rows.push(r);
+    }
+    return [...groups.entries()].sort((a, b) => a[1].clientName.localeCompare(b[1].clientName));
+  }, [invoicedRows]);
   const generateInvoices = useGenerateSnowInvoices();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirm, confirmDialog] = useConfirm();
@@ -287,7 +298,26 @@ export function SnowInvoicing() {
           </SelectContent>
         </Select>
 
-        {selectedIds.size > 0 && (
+        <div className="flex rounded-md border p-0.5 text-xs" role="tablist" aria-label="Snow invoicing view">
+          {([["queue", "To invoice"], ["invoiced", "Invoiced"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={cn(
+                "rounded px-3 py-1 font-medium transition-colors",
+                tab === key ? "bg-brand-500 text-white" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {label}
+              {key === "invoiced" && invoicedRows.length > 0 && <span className="ml-1.5 opacity-80">{invoicedRows.length}</span>}
+            </button>
+          ))}
+        </div>
+
+        {tab === "queue" && selectedIds.size > 0 && (
           <div className="ml-auto flex items-center gap-3">
             {tiersError && (
               <span className="text-xs font-medium text-red-600 dark:text-red-400">
@@ -313,6 +343,58 @@ export function SnowInvoicing() {
         )}
       </div>
 
+      {tab === "invoiced" ? (
+        <div className="flex-1 overflow-auto bg-card mx-4 rounded-lg border shadow-sm">
+          {invoicedLoading ? (
+            <div className="p-5 space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+            </div>
+          ) : invoicedRows.length === 0 ? (
+            <p className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
+              {stormEventId ? "No visits from this storm have been invoiced yet." : "No snow visits have been invoiced yet."}
+            </p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
+                <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                  <th className="min-w-[140px] px-2 py-2.5">Client</th>
+                  <th className="px-2 py-2.5">Date</th>
+                  <th className="px-2 py-2.5">Service</th>
+                  <th className="px-2 py-2.5">Invoice</th>
+                  <th className="px-2 py-2.5 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoicedByClient.map(([clientId, group]) => (
+                  <Fragment key={clientId}>
+                    {group.rows.map((r) => (
+                      <tr key={`${r.visitId}-${r.invoice.invoiceId}`} className="border-b border-slate-100 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-muted/40">
+                        <td className="px-2 py-2">
+                          <Link href={`/crm/clients/${clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{r.clientName ?? "—"}</Link>
+                          {r.pushNumber > 1 && <span className="ml-1.5 rounded bg-secondary px-1.5 py-0 text-[9px]">Push {r.pushNumber}</span>}
+                        </td>
+                        <td className="px-2 py-2 text-muted-foreground">{r.scheduledDate}</td>
+                        <td className="px-2 py-2 text-muted-foreground">{r.serviceName ?? "Snow Service"}</td>
+                        <td className="px-2 py-2">
+                          <Link href={`/crm/accounting/invoices/${r.invoice.invoiceId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+                            #{r.invoice.invoiceNumber ?? "—"}
+                          </Link>
+                          <span className="ml-2 text-[10px] capitalize text-muted-foreground">{r.invoice.status.replace(/_/g, " ")}</span>
+                        </td>
+                        <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(r.invoice.amountCents)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-50 dark:bg-muted/40 text-[10px] font-semibold text-muted-foreground">
+                      <td colSpan={4} className="px-2 py-1 text-right">{group.clientName} subtotal</td>
+                      <td className="px-2 py-1 text-right">{formatCurrency(group.rows.reduce((s, r) => s + r.invoice.amountCents, 0))}</td>
+                    </tr>
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ) : (
       <div className="flex-1 overflow-auto bg-card mx-4 rounded-lg border shadow-sm">
         {isLoading ? (
           <div className="p-5 space-y-2">
@@ -379,6 +461,15 @@ export function SnowInvoicing() {
                         {visit.billingWarning && (
                           <span className="mt-1 block text-[10px] text-amber-700 dark:text-amber-400">{visit.billingWarning}</span>
                         )}
+                        {/* A depth was recorded but no range / rate covers it — otherwise a silent $0 that
+                            only surfaces as a toast at generate time. */}
+                        {amountCents === 0 &&
+                          (visit.job?.invoiceType === "per_event_per_inch" || visit.job?.invoiceType === "per_push_per_inch") &&
+                          visit.snowDepthInches != null && visit.snowDepthInches > 0 && (
+                            <span className="mt-1 block text-[10px] text-amber-700 dark:text-amber-400">
+                              {visit.snowDepthInches}&quot; isn&apos;t covered by any depth range or rate per inch on this job — add one to bill it.
+                            </span>
+                          )}
                         {(visit.job?.invoiceType === "per_event_per_inch" || visit.job?.invoiceType === "per_push_per_inch") &&
                           (visit.snowDepthInches == null || visit.snowDepthInches <= 0) && (
                             <SnowDepthInput visit={visit} onSaved={() => void refetch()} />
@@ -411,6 +502,7 @@ export function SnowInvoicing() {
           </table>
         )}
       </div>
+      )}
       {confirmDialog}
     </div>
   );

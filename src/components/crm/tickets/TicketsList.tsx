@@ -1,5 +1,9 @@
 "use client";
 
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
+
+import { useStackedFilters } from "@/lib/hooks/use-stacked-filters";
+
 import { DEFAULT_TICKET_CATEGORIES } from "@/lib/crm/ticket-categories";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -407,7 +411,7 @@ type ColFilterKey = "subject" | "client" | "category" | "assigned" | "priority" 
 
 const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
   { key: "subject",  label: "Subject" },
-  { key: "client",   label: "Account" },
+  { key: "client",   label: "Client" },
   { key: "category", label: "Category" },
   { key: "assigned", label: "Assignment" },
   { key: "priority", label: "Priority" },
@@ -453,17 +457,23 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
-  const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
-  const [colFilterValue, setColFilterValue] = useState("");
+  const {
+    activeKey: activeColFilter, filterValue: colFilterValue, setFilterValue: setColFilterValue, toggleKey, clearActive, isSet,
+    values: filterValues, entries: filterEntries,
+  } = useStackedFilters<ColFilterKey>();
   const { toISODate } = useOrgDates();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // Category, Assignment and Priority are multi-select (stack with every other filter).
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
+  const [assignedFilters, setAssignedFilters] = useState<string[]>([]);
+  const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // A selection belongs to the tab + search + filters it was made under: once
   // any of them changes, rows that are no longer shown must not stay selected
   // (a bulk Close / Reassign / Delete would otherwise act on tickets the user
   // can't see). Same rule as the Clients and Leads lists.
-  const selectionScope = JSON.stringify([statusFilter, priorityFilter, categoryFilter, search, activeColFilter, colFilterValue]);
+  const selectionScope = JSON.stringify([statusFilter, priorityFilter, categoryFilter, search, filterValues, categoryFilters, assignedFilters, priorityFilters]);
   const [selectionScopeSeen, setSelectionScopeSeen] = useState(selectionScope);
   if (selectionScopeSeen !== selectionScope) {
     setSelectionScopeSeen(selectionScope);
@@ -486,6 +496,21 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   const activeAll = tickets ?? [];
   // The "Deleted" view lists soft-deleted tickets; every other view excludes them.
   const all = isDeletedView ? (deletedTickets ?? []) : activeAll;
+  const ticketMulti: Partial<Record<ColFilterKey, { options: { value: string; label: string }[]; selected: string[]; set: (v: string[]) => void }>> = {
+    // Org categories plus any a ticket still carries from a retired one.
+    category: {
+      options: Array.from(new Set([...categories, ...all.map((t) => t.category).filter((c): c is string => !!c)])).map((c) => ({ value: c, label: c })),
+      selected: categoryFilters, set: setCategoryFilters,
+    },
+    assigned: {
+      options: [{ value: "unassigned", label: "Unassigned" }, ...users.map((u) => ({ value: u.id, label: u.name }))],
+      selected: assignedFilters, set: setAssignedFilters,
+    },
+    priority: {
+      options: PRIORITY_OPTIONS.filter((o) => o.value !== "all").map((o) => ({ value: o.value, label: o.label })),
+      selected: priorityFilters, set: setPriorityFilters,
+    },
+  };
   const selectedTicket = selectedTicketId ? all.find((t) => t.id === selectedTicketId) ?? null : null;
 
   // Deep-link support: /crm/tickets?open=<ticketId> auto-opens the ticket's
@@ -543,16 +568,13 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     if (priorityFilter !== "all") list = list.filter((t) => t.priority === priorityFilter);
     if (categoryFilter !== "all") list = list.filter((t) => t.category === categoryFilter);
 
-    if (activeColFilter && colFilterValue.trim()) {
+    // Every filter with a value applies at once.
+    for (const [activeColFilter, colFilterValue] of filterEntries) {
       const fv = colFilterValue.toLowerCase();
       list = list.filter((t) => {
         switch (activeColFilter) {
           case "subject":  return (t.subject ?? "").toLowerCase().includes(fv);
           case "client":   return (t.clientName ?? "").toLowerCase().includes(fv);
-          // Category, Assignment and Priority are picked from a list (exact match).
-          case "category": return (t.category ?? "") === colFilterValue;
-          case "assigned": return colFilterValue === "unassigned" ? !t.assignedToId : t.assignedToId === colFilterValue;
-          case "priority": return t.priority === colFilterValue;
           // created_at is a UTC instant — compare its org-local day so an evening ticket lands on the day staff saw.
           case "created":  return inDateRange(t.createdAt ? toISODate(new Date(t.createdAt)) : null, colFilterValue);
           case "due":      return inDateRange(t.dueDate, colFilterValue);
@@ -560,6 +582,12 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
         }
       });
     }
+
+    if (categoryFilters.length > 0) list = list.filter((t) => categoryFilters.includes(t.category ?? ""));
+    if (assignedFilters.length > 0) {
+      list = list.filter((t) => (t.assignedToId ? assignedFilters.includes(t.assignedToId) : assignedFilters.includes("unassigned")));
+    }
+    if (priorityFilters.length > 0) list = list.filter((t) => priorityFilters.includes(t.priority));
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -570,7 +598,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     }
 
     return list;
-  }, [all, statusFilter, priorityFilter, categoryFilter, activeColFilter, colFilterValue, search, toISODate]);
+  }, [all, statusFilter, priorityFilter, categoryFilter, filterEntries, categoryFilters, assignedFilters, priorityFilters, search, toISODate]);
 
   const colCount = clientId ? 9 : 10; // +1 for checkbox
 
@@ -756,16 +784,21 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
         <span className="shrink-0 text-xs font-medium text-muted-foreground mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-          {COL_FILTERS.map(({ key, label }) => (
+          {COL_FILTERS.map(({ key, label }) => ticketMulti[key] ? (
+            <MultiSelectFilterTab
+              key={key}
+              label={label}
+              options={ticketMulti[key]!.options}
+              selected={ticketMulti[key]!.selected}
+              onChange={ticketMulti[key]!.set}
+            />
+          ) : (
             <button
               key={key}
-              onClick={() => {
-                if (activeColFilter === key) { setActiveColFilter(null); setColFilterValue(""); }
-                else { setActiveColFilter(key); setColFilterValue(""); }
-              }}
+              onClick={() => toggleKey(key)}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                activeColFilter === key
+                activeColFilter === key || isSet(key)
                   ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
                   : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
@@ -775,28 +808,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
           ))}
           {activeColFilter && (
             <>
-              {activeColFilter === "category" || activeColFilter === "assigned" || activeColFilter === "priority" ? (
-                <select
-                  autoFocus
-                  value={colFilterValue}
-                  onChange={(e) => setColFilterValue(e.target.value)}
-                  aria-label={`Filter by ${COL_FILTERS.find((f) => f.key === activeColFilter)?.label}`}
-                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
-                >
-                  <option value="">Select…</option>
-                  {/* Org categories plus any a ticket still carries from a retired one. */}
-                  {activeColFilter === "category" && Array.from(new Set([...categories, ...all.map((t) => t.category).filter((c): c is string => !!c)])).map((c) => <option key={c} value={c}>{c}</option>)}
-                  {activeColFilter === "assigned" && (
-                    <>
-                      <option value="unassigned">Unassigned</option>
-                      {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                    </>
-                  )}
-                  {activeColFilter === "priority" && PRIORITY_OPTIONS.filter((o) => o.value !== "all").map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              ) : activeColFilter === "created" || activeColFilter === "due" ? (
+              {activeColFilter === "created" || activeColFilter === "due" ? (
                 <DateRangeFilter
                   value={colFilterValue}
                   onChange={setColFilterValue}
@@ -812,7 +824,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 />
               )}
               <button
-                onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
+                title="Clear this filter" onClick={clearActive}
                 className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               >
                 <X className="h-3.5 w-3.5" />
@@ -963,7 +975,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               <th className="px-4 py-3">{listTypeLabel} #</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Priority</th>
-              {!clientId && <th className="px-4 py-3">Account</th>}
+              {!clientId && <th className="px-4 py-3">Client</th>}
               <th className="px-4 py-3">Subject</th>
               <th className="px-4 py-3">Category</th>
               <th className="px-4 py-3">Assignment</th>

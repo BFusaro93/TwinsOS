@@ -13584,6 +13584,7 @@ export type Database = {
           enabled: boolean
           id: string
           last_sync_at: string | null
+          last_sync_error: string | null
           last_sync_status: string | null
           org_id: string
           provider: string
@@ -13598,6 +13599,7 @@ export type Database = {
           enabled?: boolean
           id?: string
           last_sync_at?: string | null
+          last_sync_error?: string | null
           last_sync_status?: string | null
           org_id: string
           provider: string
@@ -13612,6 +13614,7 @@ export type Database = {
           enabled?: boolean
           id?: string
           last_sync_at?: string | null
+          last_sync_error?: string | null
           last_sync_status?: string | null
           org_id?: string
           provider?: string

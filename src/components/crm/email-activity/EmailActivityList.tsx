@@ -1,5 +1,7 @@
 "use client";
 
+import { useStackedFilters } from "@/lib/hooks/use-stacked-filters";
+
 import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
 import { inDateRange } from "@/lib/utils/column-filters";
 import { isoInZone } from "@/lib/time/zone";
@@ -144,8 +146,10 @@ export function EmailActivityList() {
   const { data: emails = [] as EmailActivity[], isLoading, refetch } = useEmailActivity();
   const orgTimeZone = useOrgTimeZone();
   const [search, setSearch] = useState("");
-  const [activeColumnFilter, setActiveColumnFilter] = useState<ColumnFilterKey | null>(null);
-  const [filterValue, setFilterValue] = useState("");
+  const {
+    activeKey: activeColumnFilter, filterValue: filterValue, setFilterValue: setFilterValue, toggleKey, clearActive, isSet,
+    entries: filterEntries,
+  } = useStackedFilters<ColumnFilterKey>();
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewing, setViewing] = useState<SentEmailSummary | null>(null);
@@ -171,7 +175,8 @@ export function EmailActivityList() {
     if (quickFilter === "not_delivered") list = list.filter((e: EmailActivity) => e.deliveredAt === null);
 
     // column filter
-    if (activeColumnFilter && filterValue.trim()) {
+    // Every filter with a value applies at once.
+    for (const [activeColumnFilter, filterValue] of filterEntries) {
       const fv = filterValue.toLowerCase();
       list = list.filter((e: EmailActivity) => {
         switch (activeColumnFilter) {
@@ -197,7 +202,7 @@ export function EmailActivityList() {
     }
 
     return list;
-  }, [emails, quickFilter, activeColumnFilter, filterValue, search, orgTimeZone]);
+  }, [emails, quickFilter, filterEntries, search, orgTimeZone]);
 
   const allSelected = filtered.length > 0 && filtered.every((e: EmailActivity) => selectedIds.has(e.id));
   const someSelected = selectedIds.size > 0;
@@ -307,13 +312,10 @@ export function EmailActivityList() {
           {COLUMN_FILTERS.map(({ key, label }) => (
             <button
               key={key}
-              onClick={() => {
-                if (activeColumnFilter === key) { setActiveColumnFilter(null); setFilterValue(""); }
-                else { setActiveColumnFilter(key); setFilterValue(""); }
-              }}
+              onClick={() => toggleKey(key)}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                activeColumnFilter === key
+                activeColumnFilter === key || isSet(key)
                   ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
                   : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
@@ -335,7 +337,7 @@ export function EmailActivityList() {
                 />
               )}
               <button
-                onClick={() => { setActiveColumnFilter(null); setFilterValue(""); }}
+                title="Clear this filter" onClick={clearActive}
                 className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               >
                 <X className="h-3.5 w-3.5" />

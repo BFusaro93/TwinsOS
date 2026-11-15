@@ -221,6 +221,8 @@ export interface Estimate {
   clientSince?: string | null;
   salesRepName?: string;
   lineItems?: EstimateLineItem[];
+  /** Service names on the estimate's live line items — filled on the list query for the Service filter. */
+  serviceNames?: string[];
   directCosts?: EstimateDirectCost[];
 }
 

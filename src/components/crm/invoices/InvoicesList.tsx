@@ -1,5 +1,8 @@
 "use client";
 
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
+
+import { useStackedFilters } from "@/lib/hooks/use-stacked-filters";
 import { useMemo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -330,8 +333,13 @@ export function InvoicesList({ clientId }: Props) {
     return (QUICK_FILTERS.some((q) => q.key === f) ? f : "all") as QuickFilter;
   });
   const [search, setSearch] = useState("");
-  const [activeFilterKey, setActiveFilterKey] = useState<ActiveFilterKey | null>(null);
-  const [filterValue, setFilterValue] = useState("");
+  const {
+    activeKey: activeFilterKey, filterValue, setFilterValue, toggleKey, clearActive, isSet,
+    values: filterValues, entries: filterEntries,
+  } = useStackedFilters<ActiveFilterKey>();
+  // Status and Payment Method are multi-select (stack with every other filter).
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [methodFilters, setMethodFilters] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [otherChargeOpen, setOtherChargeOpen] = useState(false);
@@ -352,7 +360,7 @@ export function InvoicesList({ clientId }: Props) {
   // any of them changes, rows that are no longer shown must not stay selected
   // (bulk Void / Email / Charge would otherwise act on invoices the user can't
   // see). Same rule as the Clients and Leads lists.
-  const selectionScope = JSON.stringify([effectiveClientId ?? null, quickFilter, searchParams.get("ids"), search, activeFilterKey, filterValue]);
+  const selectionScope = JSON.stringify([effectiveClientId ?? null, quickFilter, searchParams.get("ids"), search, filterValues, statusFilters, methodFilters]);
   const [selectionScopeSeen, setSelectionScopeSeen] = useState(selectionScope);
   if (selectionScopeSeen !== selectionScope) {
     setSelectionScopeSeen(selectionScope);
@@ -408,20 +416,21 @@ export function InvoicesList({ clientId }: Props) {
           (i.clientName ?? "").toLowerCase().includes(q)
       );
     }
-    if (activeFilterKey && filterValue.trim()) {
+    // Every filter with a value applies at once.
+    for (const [activeFilterKey, filterValue] of filterEntries) {
       const fv = filterValue.toLowerCase();
       list = list.filter((i) => {
         switch (activeFilterKey) {
           case "invoice_number": return String(i.invoiceNumber).includes(fv);
           case "date":           return inDateRange(i.invoiceDate, filterValue);
           case "client":         return (i.clientName ?? "").toLowerCase().includes(fv);
-          case "payment_method": return paymentTypeLabel(i).toLowerCase() === fv;
-          case "status":         return effectiveStatus(i, todayYmd) === fv;
           case "balance":        return matchesAmount(i.balanceCents, filterValue);
           default:               return true;
         }
       });
     }
+    if (statusFilters.length > 0) list = list.filter((i) => statusFilters.includes(effectiveStatus(i, todayYmd)));
+    if (methodFilters.length > 0) list = list.filter((i) => methodFilters.includes(paymentTypeLabel(i)));
     // Sort
     list = [...list].sort((a, b) => {
       let av: number | string = 0, bv: number | string = 0;
@@ -456,7 +465,7 @@ export function InvoicesList({ clientId }: Props) {
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     return list;
-  }, [allInvoices, idsFilter, quickFilter, search, activeFilterKey, filterValue, sortKey, sortDir, accountBalanceByClient, todayYmd]);
+  }, [allInvoices, idsFilter, quickFilter, search, filterEntries, statusFilters, methodFilters, sortKey, sortDir, accountBalanceByClient, todayYmd]);
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -821,16 +830,21 @@ export function InvoicesList({ clientId }: Props) {
       <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
         <span className="shrink-0 text-xs text-muted-foreground font-medium mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-          {FILTER_BUTTONS.map(({ key, label }) => (
+          {FILTER_BUTTONS.map(({ key, label }) => key === "status" || key === "payment_method" ? (
+            <MultiSelectFilterTab
+              key={key}
+              label={label}
+              options={(key === "status" ? STATUS_FILTER_OPTIONS : paymentTypeOptions).map((o) => ({ value: o, label: o.charAt(0).toUpperCase() + o.slice(1) }))}
+              selected={key === "status" ? statusFilters : methodFilters}
+              onChange={key === "status" ? setStatusFilters : setMethodFilters}
+            />
+          ) : (
             <button
               key={key}
-              onClick={() => {
-                if (activeFilterKey === key) { setActiveFilterKey(null); setFilterValue(""); }
-                else { setActiveFilterKey(key); setFilterValue(""); }
-              }}
+              onClick={() => toggleKey(key)}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                activeFilterKey === key
+                activeFilterKey === key || isSet(key)
                   ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
                   : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
@@ -840,20 +854,7 @@ export function InvoicesList({ clientId }: Props) {
           ))}
           {activeFilterKey && (
             <>
-              {activeFilterKey === "status" || activeFilterKey === "payment_method" ? (
-                <select
-                  autoFocus
-                  value={filterValue}
-                  onChange={(e) => setFilterValue(e.target.value)}
-                  aria-label={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}`}
-                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs capitalize"
-                >
-                  <option value="">Select…</option>
-                  {(activeFilterKey === "status" ? STATUS_FILTER_OPTIONS : paymentTypeOptions).map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-              ) : activeFilterKey === "date" ? (
+              {activeFilterKey === "date" ? (
                 <DateRangeFilter value={filterValue} onChange={setFilterValue} label="Invoice date" />
               ) : activeFilterKey === "balance" ? (
                 <AmountFilter value={filterValue} onChange={setFilterValue} label="Balance" />
@@ -866,7 +867,7 @@ export function InvoicesList({ clientId }: Props) {
                   className="ml-2 h-6 w-48 text-xs"
                 />
               )}
-              <button onClick={() => { setActiveFilterKey(null); setFilterValue(""); }} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
+              <button title="Clear this filter" onClick={clearActive} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
                 <X className="h-3.5 w-3.5" />
               </button>
             </>

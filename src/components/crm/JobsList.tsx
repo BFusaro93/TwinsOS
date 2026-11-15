@@ -42,11 +42,13 @@ interface JobSummary {
   jobServiceId: string | null;
   visitCount: number;
   completedCount: number;
+  /** Pending visits dated before today (never completed, skipped or cancelled). */
+  overdueCount: number;
 }
 
 const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
 
-function summarizeJob(job: CRMJob): JobSummary {
+function summarizeJob(job: CRMJob, window?: { from: string; to: string }, today?: string): JobSummary {
   const visits = job.visits ?? [];
   if (visits.length === 0) {
     return {
@@ -58,6 +60,7 @@ function summarizeJob(job: CRMJob): JobSummary {
       jobServiceId: null,
       visitCount: 0,
       completedCount: 0,
+      overdueCount: 0,
     };
   }
   const sorted = [...visits].sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
@@ -69,7 +72,18 @@ function summarizeJob(job: CRMJob): JobSummary {
   // job). A job whose every visit was skipped or cancelled was never done — it
   // is flagged Needs Attention, not counted as Completed. A cancelled or
   // on-hold JOB always shows its own status, whatever its visits say.
-  const rep = pending[0] ?? sorted[sorted.length - 1];
+  // Prefer the earliest pending visit INSIDE the list's date window. Using the
+  // earliest pending visit overall let one stale, never-completed visit from
+  // months ago pull the whole job out of the window, so a recurring job with
+  // visits scheduled next week vanished from the Active list and its stats.
+  const inWindow = window
+    ? pending.find((v) => (!window.from || v.scheduledDate >= window.from) && (!window.to || v.scheduledDate <= window.to))
+    : undefined;
+  // Missed work stays visible on the row even when the job is listed for a later visit.
+  const overdueCount = today && job.status !== "cancelled" && job.status !== "hold"
+    ? pending.filter((v) => v.scheduledDate < today).length
+    : 0;
+  const rep = inWindow ?? pending[0] ?? sorted[sorted.length - 1];
   const status =
     job.status === "cancelled" || job.status === "hold"
       ? job.status
@@ -87,6 +101,7 @@ function summarizeJob(job: CRMJob): JobSummary {
     jobServiceId: rep.jobServiceId,
     visitCount: sorted.length,
     completedCount,
+    overdueCount,
   };
 }
 
@@ -167,7 +182,10 @@ export function JobsList() {
     jobType: typeFilter !== "all" ? typeFilter : undefined,
   });
 
-  const summaries = useMemo(() => jobs.map(summarizeJob), [jobs]);
+  const summaries = useMemo(
+    () => jobs.map((j) => summarizeJob(j, { from: fromDate, to: toDate }, todayInZone(orgTimeZone))),
+    [jobs, fromDate, toDate, orgTimeZone]
+  );
 
   const viewFiltered = summaries.filter((o) => {
     if (viewMode === "unscheduled") return o.date === null;
@@ -176,12 +194,11 @@ export function JobsList() {
     if (o.date === null) return false;
     if (o.status === "completed" || o.status === "cancelled") return false;
     // RULE: the Active tab's From/To window applies to every row, keyed on
-    // the job's representative date (its earliest still-pending visit — see
-    // summarizeJob). Overdue jobs (that date is in the past) are NOT exempt:
-    // an earlier version let them bypass the window so stale recurring jobs
-    // would "surface", which in practice made the default 30-day window look
-    // ignored (March/July jobs listed under 09/05–10/05). To see overdue
-    // work, widen From — the filter now means exactly what it shows.
+    // the job's representative date (its earliest still-pending visit inside
+    // the window — see summarizeJob). A job with ONLY overdue pending visits is
+    // NOT exempt: letting it bypass the window made stale March/July jobs
+    // list under 09/05–10/05. But an overdue visit no longer hides a job that
+    // also has visits in the window. To see overdue-only work, widen From.
     if (fromDate && o.date < fromDate) return false;
     if (toDate && o.date > toDate) return false;
     return true;
@@ -417,7 +434,7 @@ export function JobsList() {
 }
 
 function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () => void }) {
-  const { job, status, crewName, jobServiceId, visitCount, completedCount } = occurrence;
+  const { job, status, crewName, jobServiceId, visitCount, completedCount, overdueCount } = occurrence;
   // Package jobs carry every step (e.g. all 5 Fert applications) on job.services,
   // but this occurrence is only for the ONE step its visit is linked to — show
   // just that, not every step on the whole package (same fix as Waiting List
@@ -455,6 +472,15 @@ function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () =
         <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[status] ?? "bg-muted text-muted-foreground")}>
           {STATUS_LABEL[status] ?? status}
         </Badge>
+        {overdueCount > 0 && (
+          <Badge
+            variant="outline"
+            className="ml-1 text-[10px] border-transparent bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"
+            title={`${overdueCount} earlier visit${overdueCount > 1 ? "s were" : " was"} never completed, skipped or cancelled`}
+          >
+            {overdueCount} overdue
+          </Badge>
+        )}
         {visitCount > 1 && (
           <p className="mt-0.5 text-[10px] text-slate-400 dark:text-neutral-500">{completedCount}/{visitCount} visits</p>
         )}

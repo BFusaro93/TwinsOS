@@ -865,3 +865,117 @@ export function useGenerateSnowInvoices() {
     },
   });
 }
+
+// ── invoices already created for storm visits ────────────────────────────────
+
+/** A live (not void, not deleted) invoice line that bills one storm visit. */
+export interface VisitInvoiceLink {
+  invoiceId: string;
+  invoiceNumber: number | null;
+  status: string;
+  /** What this visit's own line billed, in cents. */
+  amountCents: number;
+}
+
+/**
+ * Live invoice lines by visit. Read as its own query keyed on visit_id: the
+ * line items table also points at visits through released_visit_id, so
+ * embedding visits from lines would be an ambiguous PostgREST relationship.
+ */
+async function loadVisitInvoiceLinks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  visitIds: string[]
+): Promise<Map<string, VisitInvoiceLink[]>> {
+  const out = new Map<string, VisitInvoiceLink[]>();
+  for (const chunk of chunkIds(visitIds)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await fetchAllRows<any>(() =>
+      supabase
+        .from("crm_invoice_line_items")
+        .select("id, visit_id, total_cents, crm_invoices!inner(id, invoice_number, status, deleted_at)")
+        .in("visit_id", chunk)
+        .is("crm_invoices.deleted_at", null)
+        .neq("crm_invoices.status", "void")
+        .order("id", { ascending: true })
+    );
+    for (const row of data) {
+      const inv = Array.isArray(row.crm_invoices) ? row.crm_invoices[0] : row.crm_invoices;
+      if (!row.visit_id || !inv) continue;
+      const list = out.get(row.visit_id) ?? [];
+      list.push({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoice_number ?? null,
+        status: inv.status,
+        amountCents: Number(row.total_cents) || 0,
+      });
+      out.set(row.visit_id, list);
+    }
+  }
+  return out;
+}
+
+/** The invoice each of these storm visits is billed on, if any (dispatch board marker). */
+export function useVisitInvoiceLinks(visitIds: string[]) {
+  const key = [...visitIds].sort().join(",");
+  return useQuery({
+    queryKey: ["crm-invoices", "snow-visit-links", key],
+    queryFn: async () => loadVisitInvoiceLinks(createClient(), visitIds),
+    enabled: visitIds.length > 0,
+  });
+}
+
+export interface InvoicedSnowVisitRow {
+  visitId: string;
+  clientId: string;
+  clientName: string | null;
+  scheduledDate: string;
+  pushNumber: number;
+  serviceName: string | null;
+  invoice: VisitInvoiceLink;
+}
+
+/** Every snow visit on a storm (or on any storm) that has been invoiced — the "Invoiced" tab. */
+export function useInvoicedSnowVisits(stormEventId?: string) {
+  return useQuery({
+    queryKey: ["crm-invoices", "snow-invoiced-visits", stormEventId ?? "all"],
+    queryFn: async (): Promise<InvoicedSnowVisitRow[]> => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const visits = await fetchAllRows<any>(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (supabase as any)
+          .from("crm_job_visits")
+          .select("id, client_id, scheduled_date, push_number, clients(display_name), crm_jobs!inner(job_type, crm_job_services(service_name, sort_order))")
+          .eq("crm_jobs.job_type", "snow")
+          .not("storm_event_id", "is", null)
+          .is("deleted_at", null);
+        q = stormEventId ? q.eq("storm_event_id", stormEventId) : q;
+        return q.order("scheduled_date", { ascending: true }).order("id", { ascending: true });
+      });
+      const links = await loadVisitInvoiceLinks(supabase, visits.map((v) => v.id as string));
+      const rows: InvoicedSnowVisitRow[] = [];
+      for (const v of visits) {
+        const list = links.get(v.id);
+        if (!list) continue;
+        const job = Array.isArray(v.crm_jobs) ? v.crm_jobs[0] : v.crm_jobs;
+        const services = ((job?.crm_job_services ?? []) as { service_name: string; sort_order: number | null }[])
+          .slice()
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+        const client = Array.isArray(v.clients) ? v.clients[0] : v.clients;
+        for (const invoice of list) {
+          rows.push({
+            visitId: v.id,
+            clientId: v.client_id,
+            clientName: client?.display_name ?? null,
+            scheduledDate: v.scheduled_date,
+            pushNumber: Number(v.push_number ?? 1) || 1,
+            serviceName: services[0]?.service_name ?? null,
+            invoice,
+          });
+        }
+      }
+      return rows;
+    },
+  });
+}

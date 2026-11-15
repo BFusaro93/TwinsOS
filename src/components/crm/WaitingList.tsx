@@ -1,5 +1,7 @@
 "use client";
 
+import { useStackedFilters } from "@/lib/hooks/use-stacked-filters";
+
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { useMemo, useState } from "react";
@@ -57,6 +59,7 @@ import { useOrgTags } from "@/lib/hooks/use-clients";
 import { Flame, Tag, Users } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
+import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
 import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
 import { packageStepEligibility } from "@/lib/package-step-eligibility";
 import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
@@ -136,14 +139,18 @@ function extraColCellText(key: string, job: CRMJob): string {
   }
 }
 
-type ColFilterKey = "client" | "city" | "zip" | "crew";
+const NO_SALES_REP = "__none__";
 
+type ColFilterKey = "client";
+
+// Only free-text filters live here; City, Zip, Crew, Service and Sales Rep are
+// multi-select checklists rendered next to these tabs.
 const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
   { key: "client", label: "Client" },
-  { key: "city", label: "City" },
-  { key: "zip", label: "Zip" },
-  { key: "crew", label: "Crew" },
 ];
+
+// Sentinel in crewFilters for jobs with no crew.
+const NO_CREW = "none";
 
 const PRIORITY_FILTER_JOB_OPTIONS = [
   { value: "job_high",   label: "High priority" },
@@ -571,12 +578,18 @@ export function WaitingList() {
     setSavedRange({ preset: "custom", start, end });
   }
   const [search, setSearch] = useState("");
-  const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
-  const [colFilterValue, setColFilterValue] = useState("");
+  const {
+    activeKey: activeColFilter, filterValue: colFilterValue, setFilterValue: setColFilterValue, toggleKey, clearActive, isSet,
+    entries: filterEntries,
+  } = useStackedFilters<ColFilterKey>();
   // Service is multi-select (can filter to more than one at once), same as
   // the Dispatch Board's Service filter.
   const [serviceFilters, setServiceFilters] = useState<string[]>([]);
+  // Sales rep is multi-select too ("__none__" = jobs with no sales rep).
+  const [repFilters, setRepFilters] = useState<string[]>([]);
   const [crewFilters, setCrewFilters] = useState<string[]>([]);
+  const [cityFilters, setCityFilters] = useState<string[]>([]);
+  const [zipFilters, setZipFilters] = useState<string[]>([]);
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
   // SA-style view: hide steps/jobs that aren't ready yet (Min Days spacing not
@@ -622,11 +635,32 @@ export function WaitingList() {
     return Array.from(names).sort();
   }, [all]);
 
+  const allCities = useMemo(
+    () => Array.from(new Set(all.map((j) => (j.serviceCity ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [all]
+  );
+  const allZips = useMemo(
+    () => Array.from(new Set(all.map((j) => (j.serviceZip ?? "").trim()).filter(Boolean))).sort(),
+    [all]
+  );
+
+  const allReps = useMemo(() => {
+    const names = new Set<string>();
+    for (const job of all) if (job.salesRepName) names.add(job.salesRepName);
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [all]);
+
   const filtered = useMemo(() => {
     let list = all;
 
     if (crewFilters.length > 0) {
-      list = list.filter((job) => job.crewId && crewFilters.includes(job.crewId));
+      list = list.filter((job) => crewFilters.includes(job.crewId ?? NO_CREW));
+    }
+    if (cityFilters.length > 0) {
+      list = list.filter((job) => cityFilters.includes((job.serviceCity ?? "").trim()));
+    }
+    if (zipFilters.length > 0) {
+      list = list.filter((job) => zipFilters.includes((job.serviceZip ?? "").trim()));
     }
     if (tagFilters.length > 0) {
       list = list.filter((job) => (job.clientTags ?? []).some((t) => tagFilters.includes(t)));
@@ -647,16 +681,18 @@ export function WaitingList() {
     if (serviceFilters.length > 0) {
       list = list.filter((job) => (job.services ?? []).some((s) => serviceFilters.includes(s.serviceName)));
     }
+    if (repFilters.length > 0) {
+      list = list.filter((job) =>
+        job.salesRepName ? repFilters.includes(job.salesRepName) : repFilters.includes(NO_SALES_REP)
+      );
+    }
 
-    if (activeColFilter && colFilterValue.trim()) {
+    // Every filter with a value applies at once.
+    for (const [activeColFilter, colFilterValue] of filterEntries) {
       const v = colFilterValue.toLowerCase();
       list = list.filter((job) => {
         switch (activeColFilter) {
           case "client":  return (job.clientName ?? "").toLowerCase().includes(v);
-          case "city":    return (job.serviceCity ?? "").toLowerCase().includes(v);
-          case "zip":     return (job.serviceZip ?? "").toLowerCase().includes(v);
-          // The value is a crew id picked from the list ("none" = no crew).
-          case "crew":    return colFilterValue === "none" ? !job.crewId : job.crewId === colFilterValue;
           default:        return true;
         }
       });
@@ -680,7 +716,7 @@ export function WaitingList() {
     }
 
     return list;
-  }, [all, activeColFilter, colFilterValue, search, crewFilters, tagFilters, priorityFilters, serviceFilters, crewCodeById]);
+  }, [all, filterEntries, search, crewFilters, cityFilters, zipFilters, tagFilters, priorityFilters, serviceFilters, repFilters, crewCodeById]);
 
   // Package jobs carry one crm_job_services row per visit, each with its own
   // date window — expand those into one row per visit so each can be scheduled
@@ -784,6 +820,8 @@ export function WaitingList() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-4 py-2.5 shadow-sm">
         <ListOrdered className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
         <span className="text-sm font-medium text-slate-700 dark:text-neutral-300">Date Window</span>
+        {/* appearance-none + our own chevron: the native arrow ignores padding in Chrome/macOS and sits against the border. */}
+        <div className="relative">
         <select
           value={savedRange.preset}
           onChange={(e) => {
@@ -792,13 +830,15 @@ export function WaitingList() {
             else setSavedRange({ preset: v });
           }}
           aria-label="Date window preset"
-          className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="appearance-none rounded border border-border bg-slate-50 dark:bg-muted/40 pl-2 pr-8 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
         >
           {RANGE_PRESETS.map((p) => (
             <option key={p.value} value={p.value}>{p.label}</option>
           ))}
           <option value="custom">Custom range</option>
         </select>
+        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500 dark:text-neutral-400" />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
@@ -826,13 +866,10 @@ export function WaitingList() {
           {COL_FILTERS.map(({ key, label }) => (
             <button
               key={key}
-              onClick={() => {
-                if (activeColFilter === key) { setActiveColFilter(null); setColFilterValue(""); }
-                else { setActiveColFilter(key); setColFilterValue(""); }
-              }}
+              onClick={() => toggleKey(key)}
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                activeColFilter === key
+                activeColFilter === key || isSet(key)
                   ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
                   : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
@@ -841,70 +878,32 @@ export function WaitingList() {
             </button>
           ))}
 
-          {/* Service: multi-select popover, same as the Dispatch Board. Placed
-              right after the tab buttons and before the text-filter Input
-              below, so that Input always docks at the end of the row no
-              matter which tab is active — matching the Dispatch Board,
-              where every "Select a Filter" tab lives in one group before
-              the shared Input. */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
-                  serviceFilters.length > 0 ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium" : "hover:bg-muted text-slate-600 dark:text-neutral-400"
-                )}
-              >
-                Service{serviceFilters.length > 0 && ` · ${serviceFilters.length}`}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-1" align="start">
-              <p className="px-2 py-1 text-[10px] font-semibold uppercase text-slate-400 dark:text-neutral-500 tracking-wide">Services</p>
-              {allServices.length === 0 && (
-                <p className="px-2 py-2 text-xs text-slate-400 dark:text-neutral-500 italic">No services found</p>
-              )}
-              {allServices.map((name) => (
-                <FilterOptionRow
-                  key={name}
-                  checked={serviceFilters.includes(name)}
-                  onToggle={() => setServiceFilters((prev) =>
-                    prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]
-                  )}
-                  className={serviceFilters.includes(name) ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : undefined}
-                >
-                  {name}
-                </FilterOptionRow>
-              ))}
-              {serviceFilters.length > 0 && (
-                <div className="border-t mt-1 pt-1">
-                  <button
-                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:bg-muted"
-                    onClick={() => setServiceFilters([])}
-                  >
-                    <X className="h-3 w-3" /> Clear filter
-                  </button>
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
+          {/* City, Zip, Crew, Service + Sales Rep: multi-select checklists (stack with every other filter).
+              Crew shares crewFilters with the dark bar's "All Crews" menu. */}
+          <MultiSelectFilterTab label="City" title="Cities" options={allCities.map((n) => ({ value: n, label: n }))} selected={cityFilters} onChange={setCityFilters} />
+          <MultiSelectFilterTab label="Zip" title="Zips" options={allZips.map((n) => ({ value: n, label: n }))} selected={zipFilters} onChange={setZipFilters} />
+          <MultiSelectFilterTab
+            label="Crew"
+            title="Crews"
+            options={[
+              { value: NO_CREW, label: "Unassigned" },
+              ...(crews ?? []).filter((c) => c.isActive !== false).map((c) => ({ value: c.id, label: `${c.name}${c.code ? ` (${c.code})` : ""}` })),
+            ]}
+            selected={crewFilters}
+            onChange={setCrewFilters}
+          />
+          <MultiSelectFilterTab label="Service" title="Services" options={allServices.map((n) => ({ value: n, label: n }))} selected={serviceFilters} onChange={setServiceFilters} />
+          <MultiSelectFilterTab
+            label="Sales Rep"
+            title="Sales Reps"
+            options={[{ value: NO_SALES_REP, label: "Unassigned" }, ...allReps.map((n) => ({ value: n, label: n }))]}
+            selected={repFilters}
+            onChange={setRepFilters}
+          />
 
           {activeColFilter && (
             <>
-              {activeColFilter === "crew" ? (
-                <select
-                  autoFocus
-                  value={colFilterValue}
-                  onChange={(e) => setColFilterValue(e.target.value)}
-                  aria-label="Filter by Crew"
-                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
-                >
-                  <option value="">Select a crew…</option>
-                  <option value="none">Unassigned</option>
-                  {(crews ?? []).filter((c) => c.isActive !== false).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.code ? ` (${c.code})` : ""}</option>
-                  ))}
-                </select>
-              ) : (
+              {(
                 <Input
                   autoFocus
                   value={colFilterValue}
@@ -914,7 +913,7 @@ export function WaitingList() {
                 />
               )}
               <button
-                onClick={() => { setActiveColFilter(null); setColFilterValue(""); }}
+                title="Clear this filter" onClick={clearActive}
                 className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               >
                 <X className="h-3.5 w-3.5" />
@@ -998,6 +997,12 @@ export function WaitingList() {
             <PopoverContent className="w-48 p-1" align="start">
               <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>
                 All Crews
+              </FilterOptionRow>
+              <FilterOptionRow
+                checked={crewFilters.includes(NO_CREW)}
+                onToggle={() => setCrewFilters((prev) => prev.includes(NO_CREW) ? prev.filter((x) => x !== NO_CREW) : [...prev, NO_CREW])}
+              >
+                Unassigned
               </FilterOptionRow>
               {(crews ?? []).map((c) => (
                 <FilterOptionRow
@@ -1153,7 +1158,7 @@ export function WaitingList() {
             ) : visitRows.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
-                  {search || activeColFilter
+                  {search || filterEntries.length > 0
                     ? "No jobs match your filters"
                     : "No jobs on the waiting list for this date range"}
                 </td>
