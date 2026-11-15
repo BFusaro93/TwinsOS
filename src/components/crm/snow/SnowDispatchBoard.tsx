@@ -71,6 +71,7 @@ import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDial
 import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
+import { InvoiceDetailSheet } from "@/components/crm/invoices/InvoiceDetailSheet";
 import { billingGroupKey, useVisitInvoiceLinks } from "@/lib/hooks/use-snow-invoicing";
 import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
 import { useSnowCapJobFlags } from "@/lib/hooks/use-snow-caps";
@@ -1288,6 +1289,9 @@ export function SnowDispatchBoard() {
   const [optimizing, setOptimizing] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  // The blue "Invoiced #" badge opens the invoice in a slide-over (same as the Invoices list), so
+  // you stay on the board instead of landing on a full page with no way back.
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const [routesOpen, setRoutesOpen] = useState(false);
   const { data: orgSettings } = useOrgSettings();
   // Minutes to ARRIVE at each stop (from the previous stop, or the shop for a crew's first stop).
@@ -1495,19 +1499,6 @@ export function SnowDispatchBoard() {
   const [sort, setSort] = useState<BoardSort>(null);
   const cycleSort = (key: "client" | "crew") =>
     setSort((s) => (!s || s.key !== key ? { key, dir: "asc" } : s.dir === "asc" ? { key, dir: "desc" } : null));
-  const displayVisits = useMemo(() => {
-    if (!sort) return filteredVisits;
-    const dir = sort.dir === "asc" ? 1 : -1;
-    const label = (v: CRMJobVisit) => (sort.key === "client"
-      ? v.clientName ?? ""
-      : (effectiveCrewIdOf(v) ? crewNameById.get(effectiveCrewIdOf(v)!) ?? "" : ""));
-    // Stops with no crew stay at the bottom whichever way the crews sort.
-    const unassigned = (v: CRMJobVisit) => (sort.key === "crew" && !effectiveCrewIdOf(v) ? 1 : 0);
-    return filteredVisits
-      .map((v, i) => ({ v, i }))
-      .sort((a, b) => unassigned(a.v) - unassigned(b.v) || dir * label(a.v).localeCompare(label(b.v), undefined, { sensitivity: "base" }) || a.i - b.i)
-      .map((x) => x.v);
-  }, [filteredVisits, sort, crewNameById]);
   const sortIcon = (key: "client" | "crew") =>
     sort?.key === key ? (sort.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-50" />;
   const sortTitle = (key: "client" | "crew", noun: string) =>
@@ -1526,6 +1517,30 @@ export function SnowDispatchBoard() {
     }
     return result;
   }, [visits]);
+
+  // Row order. Stop numbers are per crew (and per day), so "route order" is crew by crew: crew name,
+  // then day, then stop # — not the raw query order, which interleaves crews and made the # column
+  // look unsorted. Clicking Client or Crew sorts by that column first and keeps this order within it.
+  const displayVisits = useMemo(() => {
+    const crewLabel = (v: CRMJobVisit) => (effectiveCrewIdOf(v) ? crewNameById.get(effectiveCrewIdOf(v)!) ?? "" : "");
+    const noCrew = (v: CRMJobVisit) => (effectiveCrewIdOf(v) ? 0 : 1);
+    const cmp = (x: string, y: string) => x.localeCompare(y, undefined, { sensitivity: "base" });
+    const routeCmp = (a: CRMJobVisit, b: CRMJobVisit) =>
+      noCrew(a) - noCrew(b) ||
+      cmp(crewLabel(a), crewLabel(b)) ||
+      (a.scheduledDate ?? "").localeCompare(b.scheduledDate ?? "") ||
+      (stopNumberById.get(a.id) ?? 0) - (stopNumberById.get(b.id) ?? 0);
+    const dir = sort?.dir === "desc" ? -1 : 1;
+    return filteredVisits
+      .map((v, i) => ({ v, i }))
+      .sort((a, b) => {
+        if (sort?.key === "client") return dir * cmp(a.v.clientName ?? "", b.v.clientName ?? "") || routeCmp(a.v, b.v) || a.i - b.i;
+        // Crew sort flips crew order only; stops with no crew stay at the bottom either way.
+        if (sort?.key === "crew") return noCrew(a.v) - noCrew(b.v) || dir * cmp(crewLabel(a.v), crewLabel(b.v)) || routeCmp(a.v, b.v) || a.i - b.i;
+        return routeCmp(a.v, b.v) || a.i - b.i;
+      })
+      .map((x) => x.v);
+  }, [filteredVisits, sort, crewNameById, stopNumberById]);
 
   const filteredTotalAmt = useMemo(
     () => filteredVisits.reduce((s, v) => s + (amountByVisitId.get(v.id) ?? 0), 0),
@@ -2272,7 +2287,7 @@ export function SnowDispatchBoard() {
                     type="button"
                     className={cn("inline-flex items-center gap-0.5 hover:text-slate-600 dark:hover:text-neutral-300", !sort && "text-slate-700 dark:text-neutral-200")}
                     onClick={() => setSort(null)}
-                    title={sort ? "Back to route order" : "Showing route order"}
+                    title={sort ? "Back to route order (crew, then stop #)" : "Route order: crew, then stop #"}
                     aria-label="Sort by route order"
                   >
                     # {!sort && <ArrowDown className="h-3 w-3" />}
@@ -2374,14 +2389,15 @@ export function SnowDispatchBoard() {
                           <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
                         )}
                         {(invoiceLinksByVisit?.get(v.id) ?? []).slice(0, 1).map((inv) => (
-                          <Link
+                          <button
                             key={inv.invoiceId}
-                            href={`/crm/accounting/invoices/${inv.invoiceId}`}
+                            type="button"
+                            onClick={() => setOpenInvoiceId(inv.invoiceId)}
                             className="ml-1.5 inline-flex rounded border border-blue-300 px-1.5 py-0 text-[9px] text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/30"
                             title={`Billed on invoice #${inv.invoiceNumber ?? "—"} (${inv.status.replace(/_/g, " ")}) — click to open it`}
                           >
                             Invoiced #{inv.invoiceNumber ?? "—"}
-                          </Link>
+                          </button>
                         ))}
                         {capFlags?.get(v.jobId)?.over && v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled" && (
                           <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`${capFlags.get(v.jobId)!.label} — this stop bills as overage, not under the contract price`}>
@@ -2504,6 +2520,7 @@ export function SnowDispatchBoard() {
             onDone={() => void refetchVisits()}
           />
           <SnowLegendDialog open={legendOpen} onOpenChange={setLegendOpen} />
+          <InvoiceDetailSheet invoiceId={openInvoiceId} onOpenChange={(open) => { if (!open) setOpenInvoiceId(null); }} />
           <BulkMultiCrewDialog
             key={multiCrewOpen ? "open" : "closed"}
             open={multiCrewOpen}
