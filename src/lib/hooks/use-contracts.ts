@@ -1279,8 +1279,9 @@ export function useResyncContractLastBilled() {
         .from("crm_invoices")
         .select("invoice_date, catch_up_period_end")
         .eq("contract_id", contractId)
-        .is("deleted_at", null)
-        .neq("status", "void")
+        // A source voided by Consolidate Invoices still counts as billed (its charge lives on the
+        // consolidated invoice), exactly as the cycle checks elsewhere treat it.
+        .or("and(deleted_at.is.null,status.neq.void),consolidated_into_id.not.is.null")
         .is("proration_period_start", null);
       if (error) throw error;
       let latest: string | null = null;

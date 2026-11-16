@@ -61,7 +61,7 @@ export function resolveJobProperty(explicit: any, clientProperties: any): any {
   if (explicit) return explicit;
   if (!Array.isArray(clientProperties)) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const live = clientProperties.filter((p: any) => p && !p.deleted_at);
+  const live = clientProperties.filter((p: any) => p && !p.deleted_at && !p.archived_at);
   return live.length === 1 ? live[0] : null;
 }
 
@@ -333,7 +333,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           .from("crm_jobs")
           .select(`
             *,
-            clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
+            clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, archived_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
             crm_crews(name),
             sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
             client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
@@ -943,7 +943,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         .from('crm_job_visits')
         .select(`
           ${JOB_VISIT_READ_COLUMNS},
-          clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
+          clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, archived_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
           crm_crews!crm_job_visits_crew_id_fkey(name),
           crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)
