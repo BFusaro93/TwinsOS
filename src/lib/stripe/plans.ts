@@ -71,6 +71,9 @@ export function getPlanForPriceId(priceId: string): BillablePlan | null {
   return entry?.plan ?? null;
 }
 
+/** Modules a plan unlocks. Keep in step with public.org_has_module() in the
+ *  database (20270106000170_plan_module_write_gate.sql), which blocks writes
+ *  to the other product's tables server-side. */
 /** Modules a plan unlocks. Trial orgs (plan === "trial") and anything unrecognized get full access — see AskUserQuestion decision: trial is full-featured for the 30-day window. A "canceled" org keeps both modules too, but read-only (enforced by RLS; see useTrialStatus for the 90-day lockout). */
 export function getModulesForPlan(plan: string): PlatformModule[] {
   if (isBillablePlan(plan)) return getPlanConfig(plan).modules;

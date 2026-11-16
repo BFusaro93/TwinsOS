@@ -27,6 +27,7 @@ interface PublicInvoice {
   discountCents: number;
   totalCents: number;
   amountPaidCents: number;
+  creditAvailableCents?: number;
   balanceCents: number;
   clientName: string | null;
   lineItems: { name: string | null; description: string; qty: number; rateCents: number; totalCents: number; discountCents?: number }[];
@@ -283,6 +284,11 @@ export default function PublicInvoicePage() {
           >
             <span>Balance Due</span><span>{cents(invoice.balanceCents)}</span>
           </div>
+          {(invoice.creditAvailableCents ?? 0) > 0 && invoice.balanceCents > 0 && (
+            <p className="text-xs text-slate-500">
+              You have {cents(invoice.creditAvailableCents ?? 0)} of credit on your account. Contact us to apply it to this invoice.
+            </p>
+          )}
         </div>
 
         {invoice.photos && invoice.photos.length > 0 && (

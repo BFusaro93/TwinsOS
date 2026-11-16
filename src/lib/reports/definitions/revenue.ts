@@ -15,6 +15,7 @@ import {
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { zoneDateParts } from "@/lib/time/zone";
+import { fetchCashRefunds, REFUNDS_OWN_DATE_NOTE } from "@/lib/reports/refunds";
 
 // ============================================================
 // Revenue section — pre-built reports.
@@ -149,11 +150,28 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
             unused_cents: 0,
             total_cents: 0,
           };
-        const amount = netPaymentCents(r);
+        const amount = r.amount_cents ?? 0;
         totals[paymentBucket(r.method)] += amount;
         totals.unused_cents += r.unused_amount_cents ?? 0;
         totals.total_cents += amount;
         byDate.set(date, totals);
+      }
+      // Refunds come off the day they were issued, in the payment's method column.
+      for (const refund of await fetchCashRefunds(supabase, from, to)) {
+        const totals =
+          byDate.get(refund.refundDate) ?? {
+            cash: 0,
+            check: 0,
+            credit_card: 0,
+            autopay: 0,
+            ach: 0,
+            other: 0,
+            unused_cents: 0,
+            total_cents: 0,
+          };
+        totals[paymentBucket(refund.method)] -= refund.amountCents;
+        totals.total_cents -= refund.amountCents;
+        byDate.set(refund.refundDate, totals);
       }
 
       const rows = [...byDate.entries()]
@@ -173,7 +191,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("total_cents", "Total", "money"),
         ],
         rows,
-        ["Cash only: excludes account credits and AR write-offs; amounts are net of refunds."]
+        ["Cash only: excludes account credits and AR write-offs.", REFUNDS_OWN_DATE_NOTE]
       );
     },
   },
@@ -213,13 +231,32 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         processing_fee_cents: number | null;
         clients: { display_name: string | null } | null;
       };
-      const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+      const rows: {
+        payment_date: string | null;
+        client_name: string;
+        method: string | null;
+        amount_cents: number;
+        processing_fee_cents: number;
+      }[] = ((data ?? []) as unknown as Row[]).map((r) => ({
         payment_date: r.payment_date,
         client_name: r.clients?.display_name ?? "(unknown)",
         method: r.method,
-        amount_cents: netPaymentCents(r),
+        amount_cents: r.amount_cents ?? 0,
         processing_fee_cents: r.processing_fee_cents ?? 0,
       }));
+      // A refund gives back its share of the fee, on the day it was issued:
+      // over a payment's life its fee nets to fee - round(fee x refunded / amount).
+      const feeRefunds = await fetchCashRefunds(supabase, from, to, { cardFeesOnly: true });
+      for (const refund of feeRefunds) {
+        rows.push({
+          payment_date: refund.refundDate,
+          client_name: refund.clientName ?? "(unknown)",
+          method: refund.amountCents < 0 ? "Dispute reinstated" : "Refund",
+          amount_cents: -refund.amountCents,
+          processing_fee_cents: -refund.feeCents,
+        });
+      }
+      rows.sort((a, b) => (b.payment_date ?? "").localeCompare(a.payment_date ?? ""));
 
       const totalFeeCents = rows.reduce((sum, r) => sum + r.processing_fee_cents, 0);
 
@@ -233,8 +270,9 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         [
-          `Total processing fees collected in this period: $${(totalFeeCents / 100).toFixed(2)}`,
-          "Cash only: excludes account credits and AR write-offs; Payment Amount is net of refunds.",
+          `Total processing fees collected in this period, net of refunds: $${(totalFeeCents / 100).toFixed(2)}`,
+          "Cash only: excludes account credits and AR write-offs.",
+          "A refund of a card payment gives back its share of the fee: it shows as a Refund row (negative amounts) on the day it was issued.",
         ]
       );
     },
@@ -498,7 +536,11 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       const collectedMonths = new Array<number>(12).fill(0);
       for (const r of (payData ?? []) as unknown as PaymentRow[]) {
         const idx = parseInt((r.payment_date ?? "").slice(5, 7), 10) - 1;
-        if (idx >= 0 && idx < 12) collectedMonths[idx] += netPaymentCents(r);
+        if (idx >= 0 && idx < 12) collectedMonths[idx] += r.amount_cents ?? 0;
+      }
+      for (const refund of await fetchCashRefunds(supabase, from, to)) {
+        const idx = parseInt(refund.refundDate.slice(5, 7), 10) - 1;
+        if (idx >= 0 && idx < 12) collectedMonths[idx] -= refund.amountCents;
       }
 
       const rows = [
@@ -523,7 +565,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         [
-          "Invoiced reflects the invoice date, excludes draft and void invoices, and includes sales tax so it compares like-for-like with cash collected. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs; net of refunds.",
+          "Invoiced reflects the invoice date, excludes draft and void invoices, and includes sales tax so it compares like-for-like with cash collected. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs. " + REFUNDS_OWN_DATE_NOTE,
           ...(yearNote ? [yearNote] : []),
         ]
       );
@@ -684,9 +726,16 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         const year = parseInt(r.payment_date.slice(0, 4), 10);
         const monthIndex = parseInt(r.payment_date.slice(5, 7), 10) - 1;
         if (monthIndex < 0 || monthIndex > 11) continue;
-        const net = netPaymentCents(r);
-        if (year === thisYear) curTotals[monthIndex] += net;
-        else if (year === lastYear) prevTotals[monthIndex] += net;
+        const amount = r.amount_cents ?? 0;
+        if (year === thisYear) curTotals[monthIndex] += amount;
+        else if (year === lastYear) prevTotals[monthIndex] += amount;
+      }
+      for (const refund of await fetchCashRefunds(supabase, `${lastYear}-01-01`, `${thisYear}-12-31`)) {
+        const year = parseInt(refund.refundDate.slice(0, 4), 10);
+        const monthIndex = parseInt(refund.refundDate.slice(5, 7), 10) - 1;
+        if (monthIndex < 0 || monthIndex > 11) continue;
+        if (year === thisYear) curTotals[monthIndex] -= refund.amountCents;
+        else if (year === lastYear) prevTotals[monthIndex] -= refund.amountCents;
       }
 
       const rows = MONTH_KEYS.map((_, i) => ({
@@ -702,7 +751,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("last_year_paid", `${lastYear} Paid`, "money"),
         ],
         rows,
-        ["Cash only: excludes account credits and AR write-offs; net of refunds."]
+        ["Cash only: excludes account credits and AR write-offs.", REFUNDS_OWN_DATE_NOTE]
       );
     },
   },

@@ -8,6 +8,9 @@ const log = logger.child("automations/fire-visit-triggers");
 
 /** A visit whose status or date just changed, with what's needed to scope the trigger. */
 export type ChangedVisit = {
+  /** The visit — stored on the enrollment when it is the client's only visit in the batch,
+   *  so snow merge tags read that stop (snow-extras). */
+  id?: string | null;
   client_id: string | null;
   job_id: string | null;
   job_service_id: string | null;
@@ -38,9 +41,11 @@ export async function fireVisitTriggers(
 
     // Service ids per visit (a specific job_service_id, else every service on the job).
     const byClient = new Map<string, Set<string>>();
+    const visitIdsByClient = new Map<string, Set<string>>();
     const jobServiceCache = new Map<string, string[]>();
     for (const v of params.visits) {
       if (!v.client_id) continue;
+      if (v.id) visitIdsByClient.set(v.client_id, (visitIdsByClient.get(v.client_id) ?? new Set<string>()).add(v.id));
       const set = byClient.get(v.client_id) ?? new Set<string>();
       byClient.set(v.client_id, set);
       let ids: string[] = [];
@@ -75,6 +80,8 @@ export async function fireVisitTriggers(
               clientId,
               triggerType,
               matchValues: serviceIds.size > 0 ? [...serviceIds] : undefined,
+              // One visit for this client in the batch → it is the stop this run is about.
+              visitId: visitIdsByClient.get(clientId)?.size === 1 ? [...visitIdsByClient.get(clientId)!][0] : null,
             }))
           );
         } catch (err) {

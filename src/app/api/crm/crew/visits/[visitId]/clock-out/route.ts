@@ -16,6 +16,7 @@ import { instantToZoneWallClock, isoInZone } from "@/lib/time/zone";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
+import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
 
 const log = logger.child("crew/clock-out");
 
@@ -153,7 +154,7 @@ export async function POST(
     .eq("id", visitId)
     .is("clocked_out_at", null)
     .not("status", "in", "(cancelled,skipped)")
-    .select()
+    .select(JOB_VISIT_READ_COLUMNS)
     .maybeSingle();
 
   if (isChemicalGateError(error?.message)) {

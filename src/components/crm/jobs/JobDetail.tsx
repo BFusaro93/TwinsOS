@@ -101,6 +101,7 @@ import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import { RichNotes } from "@/components/shared/RichNotes";
 import { isBlankRich } from "@/lib/utils/visit-note";
 import { propagateVisitNotes, serviceNoteMap } from "@/lib/visits/visit-note-propagation";
+import { findVisitsOverLimit, removeVisitsOverLimit } from "@/lib/visits/visit-limit";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { SendClientEmailDialog } from "@/components/crm/SendClientEmailDialog";
@@ -647,6 +648,46 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     setSvcTreatedArea(s.treatedArea != null ? String(s.treatedArea) : "");
   }
 
+  /** A lowered visit limit only stops NEW visits — ones already scheduled past it stay
+   *  and bill when completed. Offer to take the newest untouched future ones off. */
+  async function offerToRemoveVisitsOverLimit(jobId: string, jobServiceId: string, maxVisits: number) {
+    try {
+      const supabase = createClient();
+      const excess = await findVisitsOverLimit(supabase, { jobId, jobServiceId, maxVisits, today: orgToday() });
+      if (excess.over === 0) return;
+      const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+      if (excess.removableStops === 0) {
+        toast.warning(
+          `This service has ${plural(excess.used, "visit")} against a limit of ${maxVisits}. None of the extra ${excess.over} can be removed automatically (already started, dispatched, invoiced or past) — they will still be billed when completed unless you skip or delete them on the Visits tab.`,
+          { duration: 10000 }
+        );
+        return;
+      }
+      const ok = await confirm({
+        title: `Remove ${plural(excess.removableStops, "scheduled visit")} over the new limit?`,
+        description:
+          `This service now has ${plural(excess.used, "visit")} against a limit of ${maxVisits}. ` +
+          `Remove the ${excess.removableStops === 1 ? "newest untouched future visit" : `${excess.removableStops} newest untouched future visits`}?` +
+          (excess.removableStops < excess.over
+            ? ` ${plural(excess.over - excess.removableStops, "other visit")} over the limit ${excess.over - excess.removableStops === 1 ? "has" : "have"} already been started, dispatched or invoiced and will stay.`
+            : "") +
+          " If you keep them, they stay scheduled and are billed when completed.",
+        confirmLabel: "Remove visits",
+        cancelLabel: "Keep them",
+        destructive: true,
+      });
+      if (!ok) {
+        toast.warning(`${plural(excess.over, "visit")} over the limit stay scheduled and will still be billed when completed.`);
+        return;
+      }
+      const removed = await removeVisitsOverLimit(supabase, excess.removableIds);
+      await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      toast.success(`Removed ${plural(removed, "visit")} over the limit`);
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Couldn't check the visits over the new limit — review the Visits tab"));
+    }
+  }
+
   async function saveEditSvc() {
     if (!editingSvcId) return;
     try {
@@ -701,12 +742,19 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }
+      const editedSvcId = editingSvcId;
       setEditingSvcId(null);
       const raisedLimit =
         nextMaxVisits !== undefined &&
         (prevSvc?.maxVisits ?? null) !== nextMaxVisits &&
         (nextMaxVisits === null || (prevSvc?.maxVisits ?? 0) < nextMaxVisits);
+      const loweredLimit =
+        nextMaxVisits != null &&
+        ((prevSvc?.maxVisits ?? null) === null || (prevSvc?.maxVisits ?? 0) > nextMaxVisits);
       toast.success(raisedLimit ? "Service updated — press Generate Visits on the Visits tab to schedule the added visits" : "Service updated");
+      if (job && loweredLimit && nextMaxVisits != null) {
+        await offerToRemoveVisitsOverLimit(job.id, editedSvcId, nextMaxVisits);
+      }
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Failed to update service"));
     }

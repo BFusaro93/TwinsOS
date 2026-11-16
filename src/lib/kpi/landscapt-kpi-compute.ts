@@ -571,6 +571,8 @@ async function computeVisits(supabase: Client, w: YearWindow): Promise<Values> {
 
 interface TimesheetRow {
   member_name: string | null;
+  employee_id: string | null;
+  crew_member_id: string | null;
   work_date: string | null;
   hours: number | null;
 }
@@ -589,7 +591,7 @@ async function computeTimesheets(supabase: Client, w: YearWindow): Promise<Value
   const rows = await fetchAll<TimesheetRow>((from, to) =>
     supabase
       .from("rpt_timesheets")
-      .select("member_name, work_date, hours")
+      .select("member_name, employee_id, crew_member_id, work_date, hours")
       .gte("work_date", w.from)
       .lte("work_date", w.to)
       .not("hours", "is", null)
@@ -609,9 +611,12 @@ async function computeTimesheets(supabase: Client, w: YearWindow): Promise<Value
   let totalHours = 0;
   for (const r of rows) {
     if (!r.work_date || !r.hours) continue;
-    const key = `${r.member_name ?? "?"}|${weekKey(r.work_date)}`;
+    // One person = their employee record (someone on two crews, or moved
+    // between crews, has one threshold), else the crew membership.
+    const person = r.employee_id ?? r.crew_member_id ?? r.member_name ?? "?";
+    const key = `${person}|${weekKey(r.work_date)}`;
     weekly.set(key, (weekly.get(key) ?? 0) + r.hours);
-    const dayKey = `${r.member_name ?? "?"}|${r.work_date}`;
+    const dayKey = `${person}|${r.work_date}`;
     daily.set(dayKey, (daily.get(dayKey) ?? 0) + r.hours);
     totalHours += r.hours;
   }

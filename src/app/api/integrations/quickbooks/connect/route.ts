@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { isQuickBooksConfigured, getAuthorizeUrl, generateState, resolveQuickBooksEnvironment } from "@/lib/integrations/quickbooks";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const STATE_COOKIE = "qbo_oauth_state";
 
@@ -16,6 +17,11 @@ export async function GET(request: Request) {
   const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Only admins can connect QuickBooks" }, { status: 403 });
+  }
+
+  // Tokens are stored on profiles.org_id (the staff member's HOME org).
+  if (await rejectIfImpersonating(supabase, user.id, "connecting QuickBooks")) {
+    return NextResponse.redirect(`${new URL(request.url).origin}/crm/settings?tab=accounting&quickbooks=impersonating`);
   }
 
   if (!isQuickBooksConfigured(profile.org_id)) {

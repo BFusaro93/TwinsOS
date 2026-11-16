@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { AWAITING_APPROVAL_CLIENT_MESSAGE, estimateAwaitingApproval } from "@/lib/estimates/approval-gate";
 import { Resend } from "resend";
 import { recalcEstimateTotals } from "@/lib/estimate-calc";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
@@ -165,6 +166,12 @@ export async function POST(
       { error: "This proposal was updated after it was sent to you. We'll send you the latest version shortly." },
       { status: 409 }
     );
+  }
+  // Internal approval is still outstanding (edited past what was approved,
+  // or the approval was withdrawn): the database refuses the accept too.
+  if (await estimateAwaitingApproval(supabase, shareToken.estimate_id)) {
+    await notifyStaffOfUnacceptedDeposit(supabase, shareToken.org_id, shareToken.estimate_id);
+    return NextResponse.json({ error: AWAITING_APPROVAL_CLIENT_MESSAGE }, { status: 409 });
   }
 
   // The deposit block is anyone-with-the-link input and had no validation at

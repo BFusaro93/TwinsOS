@@ -19,12 +19,17 @@ import { useTrialStatus } from "@/lib/hooks/use-trial-status";
  *               draft (plus line items);
  *               can't submit for approval; may comment/attach on their own
  *               records; everything else read-only.
+ *               Sees no Equipt costs: work-order parts / labor / vendor
+ *               charges, parts inventory, PM parts, purchase orders and
+ *               receiving are hidden from them by RLS (requestor_no_costs).
  *   purchaser — work orders (parts, labor, vendor charges, status) are
  *               read-only; maintenance requests follow the requestor rule
  *               (own, while Open); everything else unchanged.
+ *   crew      — no Equipt access at all (the Equipt shell sends them home;
+ *               RLS crew_no_access); they can only file repair requests from
+ *               the field page and read asset / vehicle names for it.
  *
- * Admin / manager / technician / crew are unrestricted here, except that crew
- * can't generate work orders from a PM schedule.
+ * Admin / manager / technician are unrestricted here.
  *
  * While the profile is still loading the store holds a placeholder "viewer"
  * user; every capability reports TRUE until `currentUserLoaded`, so full-access
@@ -71,6 +76,9 @@ export interface RoleCapabilities {
   /** Generate work orders from a PM schedule. canEditWorkOrders minus crew
    * logins — /api/pm-schedules/[id]/generate-wo refuses crew. */
   canGeneratePMWorkOrders: boolean;
+  /** Equipt money: work-order costs, part costs, PO prices, vendor charges.
+   * False for requestor (the database hides those rows from them). */
+  canSeeCosts: boolean;
   canCreatePO: boolean;
   canReceive: boolean;
   canManageInventory: boolean;
@@ -123,6 +131,7 @@ export function useRoleCapabilities(): RoleCapabilities {
     canWriteEquipt,
     canEditWorkOrders,
     canGeneratePMWorkOrders: canEditWorkOrders && role !== "crew",
+    canSeeCosts: !isRequestor,
     canCreatePO: canWriteEquipt,
     canReceive: canWriteEquipt,
     canManageInventory: canWriteEquipt,

@@ -87,6 +87,14 @@ export function FormsGuide() {
           <code>/forms/[slug]</code> — no login required. That page is what a visitor actually
           sees and fills out.
         </p>
+        <p>
+          Who can do what: <strong>View/Submit Forms</strong> lets someone open forms, read
+          submissions, mark them read or unread and use the internal test submit.{" "}
+          <strong>Edit Forms</strong> is needed to build, publish, copy or delete a form, change its
+          fields and rules, and change a submission&apos;s status or delete it. Admins can do
+          everything. Equipt-only logins and crew logins can&apos;t see or change forms or submissions
+          at all. These rules are enforced by the server, not just the page.
+        </p>
       </Section>
 
       <Section id="building-a-form" title="Building a form">
@@ -440,6 +448,9 @@ export function FormsGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Leads from forms.</strong> A lead created from a form gets the submitted address as both its service and billing address, so it can be scheduled and routed once converted, and it fires the Lead created automation trigger.
+          </li>
+          <li>
+            <strong>Deleted submissions are kept.</strong> Deleting a submission hides it from the Responses tab; it is never permanently erased.
           </li>
         </ul>
       </Section>

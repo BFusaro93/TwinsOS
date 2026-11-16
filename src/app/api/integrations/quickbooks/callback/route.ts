@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { exchangeCodeForTokens, resolveQuickBooksEnvironment, clearQuickBooksLinks } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const log = logger.child("quickbooks-callback");
 const STATE_COOKIE = "qbo_oauth_state";
@@ -31,6 +32,11 @@ export async function GET(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
   if (!profile || profile.role !== "admin" || profile.status === "inactive") return NextResponse.redirect(`${settingsUrl}&quickbooks=error`);
+  // Tokens (and clearQuickBooksLinks) act on profiles.org_id — the staff
+  // member's HOME org — so refuse while impersonating another tenant.
+  if (await rejectIfImpersonating(supabase, user.id, "connecting QuickBooks")) {
+    return NextResponse.redirect(`${settingsUrl}&quickbooks=impersonating`);
+  }
 
   try {
     const environment = resolveQuickBooksEnvironment(profile.org_id);

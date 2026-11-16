@@ -37,6 +37,8 @@ interface Invoice {
   created_at: string;
   /** Set when the invoice is on one of the login's sub-accounts. */
   accountName?: string | null;
+  /** Unapplied credit on the account that could pay this invoice. */
+  creditAvailableCents?: number;
 }
 
 /**
@@ -391,6 +393,9 @@ function InvoiceRow({
         <div className="text-right">
           {!isPaid && inv.balance_cents > 0 && inv.balance_cents < inv.total_cents && (
             <p className="text-xs text-slate-400">Balance {fmt(inv.balance_cents)}</p>
+          )}
+          {outstanding && (inv.creditAvailableCents ?? 0) > 0 && (
+            <p className="text-xs text-emerald-600">Credit available {fmt(inv.creditAvailableCents ?? 0)}</p>
           )}
           <p className="text-sm font-semibold text-slate-900">{fmt(inv.total_cents)}</p>
         </div>

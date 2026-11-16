@@ -1554,6 +1554,7 @@ function QuickBooksConnectSection() {
     const result = params.get("quickbooks");
     if (!result) return;
     if (result === "connected") toast.success("QuickBooks connected");
+    else if (result === "impersonating") toast.error("End your impersonation session first. QuickBooks would be connected to your own organization, not the one you are viewing.");
     else toast.error("Couldn't connect QuickBooks. Only an admin can connect it — please try again.");
     params.delete("quickbooks");
     const qs = params.toString();
@@ -1708,6 +1709,9 @@ function QuickBooksSyncStatusSection() {
 
 // ── AccountingTab ─────────────────────────────────────────────────────────────
 
+/** Matches organizations_cc_processing_fee_bps_check (0–400 bps) in the DB. */
+const MAX_CC_PROCESSING_FEE_PERCENT = 4;
+
 function AccountingTab() {
   const { data: connectStatusForImport } = useConnectStatus();
   const connectActive = connectStatusForImport?.chargesEnabled === true;
@@ -1776,7 +1780,11 @@ function AccountingTab() {
   async function saveProcessingFee() {
     const percent = parseFloat(feePercentDraft);
     const threshold = parseFloat(feeThresholdDraft);
-    if (isNaN(percent) || percent < 0 || percent > 100) { toast.error("Enter a valid fee percent"); return; }
+    if (isNaN(percent) || percent < 0) { toast.error("Enter a valid fee percent"); return; }
+    if (percent > MAX_CC_PROCESSING_FEE_PERCENT) {
+      toast.error(`The card processing fee can be at most ${MAX_CC_PROCESSING_FEE_PERCENT}%.`);
+      return;
+    }
     if (isNaN(threshold) || threshold < 0) { toast.error("Enter a valid threshold"); return; }
     setFeeSaving(true);
     try {
@@ -1895,7 +1903,7 @@ function AccountingTab() {
                 type="number"
                 step="0.1"
                 min="0"
-                max="100"
+                max={MAX_CC_PROCESSING_FEE_PERCENT}
                 placeholder="e.g. 3.00"
                 value={feePercentDraft}
                 onChange={(e) => setFeePercentDraft(e.target.value)}
@@ -1922,7 +1930,7 @@ function AccountingTab() {
             Staff can waive the fee, or override it with a custom amount, on an individual invoice when charging a card from the invoice detail view.
           </p>
           <p className="text-xs text-slate-400 dark:text-neutral-500">
-            Some card networks and states limit or ban card surcharges (the networks cap them at 3%). It&apos;s your responsibility to set a fee that is lawful where you operate.
+            The fee can be at most {MAX_CC_PROCESSING_FEE_PERCENT}%. Some card networks and states limit or ban card surcharges (the networks cap them at 3%). It&apos;s your responsibility to set a fee that is lawful where you operate.
           </p>
         </div>
       </AccordionSection>

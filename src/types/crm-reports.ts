@@ -404,6 +404,9 @@ export interface Dashboard {
   visibleToCrew: boolean;
   createdAt: string;
   updatedAt: string;
+  /** The org's goal per gauge panel id (crm_dashboard_gauge_targets), in the
+   *  gauge value's own unit. Only on the single-dashboard GET. */
+  gaugeTargets?: Record<string, number>;
 }
 
 // ---------- Report results (shared shape for every report) ----------

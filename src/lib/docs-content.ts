@@ -1992,6 +1992,34 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Maintenance & Work Orders",
     items: [
       {
+        q: "What happens to the parts when I delete a work order?",
+        a: "For an Open, On Hold, In Progress or Skipped work order, the parts it took from stock go back on hand automatically. For a Done work order you're asked whether the parts went back on the shelf: answer Yes to return them, or No to keep them counted as used.",
+      },
+      {
+        q: "Why is the Delete button greyed out on a completed work order?",
+        a: "It stays disabled until you answer \"Did the parts go back on the shelf?\", so stock is never changed by accident.",
+      },
+      {
+        q: "Does deleting a work order delete its sub work orders?",
+        a: "Yes. Every sub work order under it is deleted too, and the parts question covers any of them that are Done.",
+      },
+      {
+        q: "Can a crew login see work orders or parts in Equipt?",
+        a: "No. A crew login can only file repair requests from the field page. It sees your active asset and vehicle names to pick from, and the requests it filed itself.",
+      },
+      {
+        q: "Can a crew change the status of its repair request?",
+        a: "No. A crew's request always starts as Open, and the crew can only edit its own request while it's still Open.",
+      },
+      {
+        q: "Why can't my Requestor see work order costs or purchase orders?",
+        a: "Requestors don't see Equipt costs: work-order parts, labor and vendor charges, part costs, purchase orders and receiving are hidden from them. Viewers and Purchasers still see costs.",
+      },
+      {
+        q: "The part history says \"used 2 on WO-… (3 short)\". What does that mean?",
+        a: "The work order asked for 5 but only 2 were on hand. Stock stopped at 0, and the 3 short units are taken from the next delivery.",
+      },
+      {
         q: "What's the difference between \"Shelf count\" and \"Found / correction\" when I adjust a part's quantity?",
         a: "Choose Shelf count when you physically counted the part. Work orders that used it while it was out of stock are marked settled, so the next delivery won't deduct those parts again. Choose Found / correction when you found extra stock or are fixing a typo; work orders still waiting on the part are covered by the next delivery.",
       },
@@ -2148,6 +2176,114 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Landscapt (CRM)",
     items: [
+      {
+        q: "Why can't I add a maintenance part as a job material?",
+        a: "Maintenance parts are Equipt inventory and their stock comes from Parts Inventory. Use a Stocked or Project Material on Landscapt jobs.",
+      },
+      {
+        q: "We put two trucks on a lot during a storm billed by the hour. Do both bill?",
+        a: "Yes. Whenever a stop is billed by time (Hourly snow jobs, or Per Push / Per Event Per Inch jobs whose depth falls in an hourly range), every crew bills its own hours on site.",
+      },
+      {
+        q: "A crew went back after I'd already invoiced the storm. How do I bill the extra time?",
+        a: "On a Per Event, Per Inch storm in an hourly range, the return trip shows up in Snow Invoicing tagged \"Additional hours\", priced on its own hours only. Generate it like any other row. Hours already on the first invoice are never offered again.",
+      },
+      {
+        q: "Two crews tapped \"Add another push\" at the same time. Did we get two pushes?",
+        a: "No. Only one push can be open per stop. The second tablet is told a push is already open and it's on their list.",
+      },
+      {
+        q: "I lowered a service's Visits limit but the extra visits are still on the schedule.",
+        a: "When you save a lower limit, Landscapt shows how many visits are over it and offers to remove the newest ones nobody has started, dispatched or invoiced. If you keep them, they stay scheduled and bill when completed, so skip or delete them on the Visits tab.",
+      },
+      {
+        q: "Why does a hidden invoice line say \"Rolls into\"?",
+        a: "A hidden line's amount prints inside another visible line, normally the one above it. The note names that line so you can check it after reordering or merging invoices.",
+      },
+      {
+        q: "We use QuickBooks. Will customers see lines I hid?",
+        a: "QuickBooks still receives every line, hidden ones included. When you hide lines, send the invoice from Landscapt (email, print or the online invoice), not from QuickBooks.",
+      },
+      {
+        q: "I deleted the invoice template an invoice was set to use. What prints now?",
+        a: "The company's default invoice template.",
+      },
+      {
+        q: "My crew's tablet lost signal and the screen said part of the page couldn't load. Should they reload?",
+        a: "No. Their queued taps are kept on the open page. Tap Try again once there's signal; the app won't reload itself while offline or while taps are waiting.",
+      },
+      {
+        q: "Our snow automation message showed the wrong property's address.",
+        a: "Automations started by a visit event use that exact stop for the snow tags. Other triggers use the client's most recent storm stop.",
+      },
+      {
+        q: "Why can't I mark an estimate Accepted, convert it or invoice it?",
+        a: "It needs approval first: it's waiting, was rejected, grew past the approved amount, or hasn't been submitted. Click Send to submit it. An admin or the approver can go ahead. An estimate that's already Accepted isn't held back.",
+      },
+      {
+        q: "My client says they can't accept the proposal and it says it's \"being reviewed\".",
+        a: "The estimate changed after it was approved, or it still needs internal approval. Get it approved and send it again.",
+      },
+      {
+        q: "Why can't I change the discount or tax rate on this estimate?",
+        a: "Part of it is already on a job. Changing it would re-split the price between jobs already created and ones still to come. Change the price on the job instead.",
+      },
+      {
+        q: "Does the customer's deposit come off their invoice automatically?",
+        a: "Yes. When an invoice for that estimate is issued (sent, printed or emailed), the deposit is applied to it automatically, up to what the invoice owes. Any leftover stays reserved for the estimate's next invoice.",
+      },
+      {
+        q: "What does \"Credit available\" on an invoice mean?",
+        a: "The client has unapplied money, such as a prepayment or overpayment, that could pay it. It isn't subtracted until you click Apply to this invoice. Invoices fully covered by credit don't get past-due reminders.",
+      },
+      {
+        q: "Why won't these two invoices merge?",
+        a: "They use different tax rates, and a merge taxes everything at the kept invoice's rate. Set both to the same rate first.",
+      },
+      {
+        q: "How is tax calculated when an invoice has a discount and some lines aren't taxable?",
+        a: "The discount is split between taxable and non-taxable lines by their share of the subtotal, and tax is charged on the taxable share that's left. Invoices issued before this change keep their original figures.",
+      },
+      {
+        q: "Why does my estimate show \"—\" for margin and say \"Set your breakeven rate\"?",
+        a: "There's no cost on it yet. Set your Break-Even Labor Rate in Settings → Organization, or enter line costs, to see a real margin.",
+      },
+      {
+        q: "I duplicated a voided invoice. Are hidden lines still hidden?",
+        a: "Yes. Lines hidden on print stay hidden on the new draft.",
+      },
+      {
+        q: "Why is the labor cost column blank in my Job Visits report?",
+        a: "Labor cost is shown only to admins and roles with Job Costing, Job Cost Summary, Cost of Goods Sold, Show Wage & Labor Burden, or a Profit & Loss report permission.",
+      },
+      {
+        q: "Can someone see a crew member's pay rate from the reports?",
+        a: "No. Reports only use a crew's average labor rate, and only for people allowed to see labor cost. Crew logins never see pay, labor cost, product costs or service rates in reports.",
+      },
+      {
+        q: "Why did my January cash total stay the same after I refunded a January payment in March?",
+        a: "Cash reports subtract a refund on the day it was issued, so it shows in March and January stays as it was.",
+      },
+      {
+        q: "Do card processing fees come back off when I refund a card payment?",
+        a: "Yes. The refund's share of the fee shows as a negative row on the Credit Card Processing Fees report, and P&L Cash lists fees net of refunds.",
+      },
+      {
+        q: "How do I set the goal on a dashboard gauge?",
+        a: "The first time you open a built-in gauge it asks for your goal. Type it (in dollars for revenue) and click Save goal; use Edit goal to change it later. Admins and Manage Report Center roles can set goals on any plan.",
+      },
+      {
+        q: "My export says \"Partial: first 5,000 of …\" and has no totals. Why?",
+        a: "Reports return at most 5,000 rows, and a total of only those rows would be wrong. Narrow the date range or filters to get the full result.",
+      },
+      {
+        q: "Someone works on two crews. Will Payroll count their overtime correctly?",
+        a: "Yes. Overtime limits are per person, so hours on every crew count together, and the person is listed once.",
+      },
+      {
+        q: "Can crew logins see the change history?",
+        a: "No. Crew logins can't read audit trails or audit reports. Office users see the company-wide history.",
+      },
       {
         q: "Why is the payment link blank in my automation email?",
         a: "The invoice is still a draft. Drafts can't be viewed or paid online, so [viewinvoiceonline] and [paymentlink] stay blank until the invoice is sent or printed.",
@@ -3325,6 +3461,42 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "Why can't I set a card processing fee above 4%?",
+        a: "Landscapt caps the card surcharge at 4%. Card networks cap surcharges at 3% and some states ban them, so keep your rate lawful where you operate.",
+      },
+      {
+        q: "Our office admin can't change the tax rate or card fee anymore. Why?",
+        a: "Tax rate, card processing fee and ACH settings need the Accounting Settings permission. Give their role that permission, or have an Admin make the change. Company info and client defaults still work with Company Settings or CRM Settings.",
+      },
+      {
+        q: "I typed a real email for a crew login and the crew can't sign in.",
+        a: "A real email address has to be confirmed first: we send a confirmation email to it, and the login works once someone opens it and confirms. Leave the email blank to get an auto-generated crew address that works right away.",
+      },
+      {
+        q: "What happens to an admin's API keys when I change them to a different role?",
+        a: "Landscapt asks. The confirmation lists the API keys they created and the apps they connected, with revoke checked by default. Anything you keep keeps working until you revoke it under Settings → Integrations.",
+      },
+      {
+        q: "Why are phone numbers and addresses blank on the Employees page for some of my team?",
+        a: "Employee contact details show only to Admins and to roles with Edit Employee, Manage Employees or View Employee Information. Everyone sees names, and everyone sees their own details.",
+      },
+      {
+        q: "Who can see and manage form submissions?",
+        a: "You need View/Submit Forms to read submissions and mark them read, and Edit Forms to build forms, change a submission's status or delete it. Crew logins and Equipt-only logins can't see forms. Deleted submissions are hidden, never erased.",
+      },
+      {
+        q: "Do public forms on my website still work without a login?",
+        a: "Yes. Anyone with the link can fill out a published form; the permission rules only apply to your team inside the app.",
+      },
+      {
+        q: "We're on the Equipt plan. Why can't we add a client?",
+        a: "Each plan includes specific products. On the Equipt plan you can view Landscapt records but not create or change them, and on Starter the same applies to Equipt records. Vendors, products, requisitions, purchase orders and projects are shared and always editable. Growth and Enterprise include both.",
+      },
+      {
+        q: "Can I link a login from another company to one of my employees?",
+        a: "No. An employee record or crew can only be linked to a login in your own organization, and client portal logins can't be linked either.",
+      },
       {
         q: "Does PTO count toward overtime?",
         a: "No. On the Payroll tab, enter paid time off in the PTO column. It's paid and counted as Regular hours, but it never counts toward the overtime limit. Extra hours (shop time and other worked time) do count toward overtime.",

@@ -139,6 +139,8 @@ export async function resolveEmailStepContent(
     clientId: string;
     estimateId: string | null;
     invoiceId?: string | null;
+    /** The visit a visit-event trigger fired for — the snow merge tags read this stop. */
+    visitId?: string | null;
     meetingId?: string | null;
     subjectTemplate: string;
     bodyTemplate: string;
@@ -266,7 +268,7 @@ export async function resolveEmailStepContent(
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
   // Invoice tags (invoice-triggered enrollments) and last/next service tags.
-  Object.assign(extras, await buildSnowExtras(supabase, { orgId: params.orgId, clientId: params.clientId }));
+  Object.assign(extras, await buildSnowExtras(supabase, { orgId: params.orgId, clientId: params.clientId, visitId: params.visitId ?? null }));
   Object.assign(
     extras,
     await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: true }),

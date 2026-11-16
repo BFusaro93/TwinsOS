@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signPhotoPaths, type PhotoBucket } from "@/lib/invoices/photos";
 import { logger } from "@/lib/logger";
 import { orgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
+import { fetchInvoiceCreditAvailableCents } from "@/lib/invoices/credit-available";
 
 const log = logger.child("public-invoice");
 
@@ -127,6 +128,8 @@ export async function GET(
     totalCents: inv.total_cents,
     amountPaidCents: inv.amount_paid_cents,
     balanceCents: inv.balance_cents,
+    // Unapplied credit the client already holds (shown, not subtracted).
+    creditAvailableCents: await fetchInvoiceCreditAvailableCents(supabase, shareToken.invoice_id),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     clientName: (inv.clients as any)?.display_name ?? null,
     lineItems: visibleLineItems,

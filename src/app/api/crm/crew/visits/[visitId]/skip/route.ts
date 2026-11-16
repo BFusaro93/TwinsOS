@@ -10,6 +10,7 @@ import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { stopClockOutCap } from "@/lib/crew/visit-pause";
 import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
+import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
 
 const log = logger.child("crew/skip");
 
@@ -84,7 +85,7 @@ export async function POST(
     // Race-safe with the check above: a concurrent clock-out that won the
     // race leaves this matching 0 rows rather than overwriting its result.
     .in("status", ["scheduled", "dispatched", "in_progress"])
-    .select()
+    .select(JOB_VISIT_READ_COLUMNS)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -190,7 +191,7 @@ export async function POST(
   await fireVisitTriggers(createServiceClient(), {
     orgId: existing.org_id,
     triggerTypes: ["visit_skipped"],
-    visits: [{ client_id: existing.client_id, job_id: existing.job_id, job_service_id: existing.job_service_id ?? null }],
+    visits: [{ id: visitId, client_id: existing.client_id, job_id: existing.job_id, job_service_id: existing.job_service_id ?? null }],
   });
 
   return NextResponse.json(data);

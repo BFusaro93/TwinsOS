@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { bpsToPercent, isBreakevenCosted, tierBasis } from "@/lib/estimate-calc";
+import { bpsToPercent, getBreakevenRateCents, isBreakevenCosted, tierBasis } from "@/lib/estimate-calc";
+import { estimateCostBasisWarning } from "@/lib/estimate-warnings";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { useEstimateEquipmentCost } from "@/lib/hooks/use-equipment";
@@ -34,7 +36,12 @@ interface Props {
   estimate: Estimate;
   onRecalculate: (params: RecalcParams) => Promise<void>;
   recalcPending?: boolean;
+  /** A line of this estimate is already on a job: its discount and tax rate
+   *  are frozen (the database refuses the change too). */
+  priceFrozen?: boolean;
 }
+
+const PRICE_FROZEN_MESSAGE = "Already on a job — change the price on the job instead.";
 
 function PnlRow({
   label,
@@ -76,12 +83,16 @@ function RateRow({
   onChange,
   onBlur,
   suffix = "%",
+  disabled = false,
+  title,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   onBlur: () => void;
   suffix?: string;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <div className="flex items-center justify-between py-0.5">
@@ -94,7 +105,9 @@ function RateRow({
           onBlur={onBlur}
           step="0.1"
           min="0"
-          className="w-16 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none"
+          disabled={disabled}
+          title={title}
+          className="w-16 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
         <span className="text-xs text-slate-400 dark:text-neutral-500">{suffix}</span>
       </div>
@@ -102,7 +115,7 @@ function RateRow({
   );
 }
 
-export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }: Props) {
+export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending, priceFrozen = false }: Props) {
   // estimate.lineItems comes straight from the raw estimate_line_items
   // select with no filter — it includes every soft-deleted and "lost"
   // historical row ever created on this estimate. recalcEstimateTotals
@@ -289,6 +302,15 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     return rev > 0 ? Math.round((cents / rev) * 10000) : 0;
   }
 
+  const { data: orgSettings } = useOrgSettings();
+  // No cost basis at all: show why instead of a meaningless 100% margin.
+  const costBasisWarning = estimateCostBasisWarning({
+    revenueCents: rev,
+    totalCostCents,
+    breakevenRateCents: getBreakevenRateCents(orgSettings?.customizations),
+  });
+  const marginLabel = (bps: number) => (costBasisWarning ? "—" : bpsToPercent(bps));
+
   const grossBps = rev > 0
     ? Math.round((estimate.grossProfitCents / rev) * 10000)
     : 0;
@@ -316,6 +338,8 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
           value={taxRateStr}
           onChange={onTaxChange}
           onBlur={() => handleRecalc()}
+          disabled={priceFrozen}
+          title={priceFrozen ? PRICE_FROZEN_MESSAGE : undefined}
         />
         <RateRow
           label="Overhead Rate"
@@ -336,9 +360,11 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
               onChange={handleDiscountStrChange}
               onBlur={() => handleRecalc()}
               suffix="$"
+              disabled={priceFrozen}
+              title={priceFrozen ? PRICE_FROZEN_MESSAGE : undefined}
             />
           </div>
-          {(estimate.discountCents > 0 || (intendedFlatCents ?? 0) > 0 || appliedDiscountId) && (
+          {!priceFrozen && (estimate.discountCents > 0 || (intendedFlatCents ?? 0) > 0 || appliedDiscountId) && (
             <button
               type="button"
               onClick={clearDiscount}
@@ -357,6 +383,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
         {activeDiscounts.length > 0 && (
           <div className="mt-1.5">
             <Select
+              disabled={priceFrozen}
               value={appliedDiscountId ?? "__none__"}
               onValueChange={(v) => (v === "__none__" ? clearDiscount() : applyNamedDiscount(v))}
             >
@@ -377,6 +404,11 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
               </SelectContent>
             </Select>
           </div>
+        )}
+        {priceFrozen && (
+          <p className="mt-1 text-[10px] leading-tight text-slate-400 dark:text-neutral-500">
+            {PRICE_FROZEN_MESSAGE} The discount and tax rate are locked.
+          </p>
         )}
         {recalcPending && (
           <p className="mt-1 text-[10px] text-brand-500 dark:text-brand-400 text-right">Recalculating…</p>
@@ -404,9 +436,14 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
         <PnlRow label="Asset/Equipment:"  cents={costByType.asset_equipment}  bps={pct(costByType.asset_equipment)} />
         <PnlRow label="Other:"            cents={costByType.other}            bps={pct(costByType.other)} />
         <Divider />
-        <PnlRow label="Est Gross Profit:" cents={estimate.grossProfitCents}   bps={grossBps} bold />
+        {costBasisWarning && (
+          <p className="mb-1 rounded bg-amber-50 dark:bg-amber-900/10 px-1.5 py-1 text-[10px] leading-tight text-amber-800 dark:text-amber-300">
+            {costBasisWarning}
+          </p>
+        )}
+        <PnlRow label="Est Gross Profit:" cents={estimate.grossProfitCents}   bps={costBasisWarning ? undefined : grossBps} bold />
         <PnlRow label="Overhead Cost:"    cents={estimate.overheadCostCents}  bps={pct(estimate.overheadCostCents)} />
-        <PnlRow label="Est Net Profit:"   cents={estimate.netProfitCents}     bps={netBps} bold />
+        <PnlRow label="Est Net Profit:"   cents={estimate.netProfitCents}     bps={costBasisWarning ? undefined : netBps} bold />
       </div>
 
       {/* Totals block */}
@@ -437,14 +474,14 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
         <Divider />
         <div className="flex justify-between py-0.5">
           <span className="text-slate-600 dark:text-neutral-400">Net Profit:</span>
-          <span className={`tabular-nums font-semibold ${netBps >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
-            {bpsToPercent(netBps)}
+          <span className={`tabular-nums font-semibold ${costBasisWarning ? "text-muted-foreground" : netBps >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+            {marginLabel(netBps)}
           </span>
         </div>
         <div className="flex justify-between py-0.5">
           <span className="text-slate-600 dark:text-neutral-400">Gross Margin:</span>
-          <span className={`tabular-nums font-semibold ${grossBps >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
-            {bpsToPercent(grossBps)}
+          <span className={`tabular-nums font-semibold ${costBasisWarning ? "text-muted-foreground" : grossBps >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+            {marginLabel(grossBps)}
           </span>
         </div>
         <Divider />

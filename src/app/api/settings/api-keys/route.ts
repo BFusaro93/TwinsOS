@@ -6,6 +6,7 @@ import { generateApiKey } from "@/lib/api/auth";
 import { isKnownScope } from "@/lib/api/scopes";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const log = logger.child("settings-api-keys");
 
@@ -79,6 +80,9 @@ export async function POST(request: Request) {
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+  // API keys belong to profiles.org_id (the staff member's HOME org).
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "managing API keys");
+  if (impersonating) return impersonating;
 
   if (!(await orgHasAddon(supabase, profile.org_id, "api_access"))) {
     return NextResponse.json(

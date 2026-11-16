@@ -558,7 +558,7 @@ export function useChemicalConfirmationWaived(visitId: string | undefined) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("crm_job_visits")
-        .select("*")
+        .select("chemical_confirmation_waived_at")
         .eq("id", visitId!)
         .maybeSingle();
       if (error) throw error;

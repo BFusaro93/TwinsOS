@@ -4,6 +4,7 @@ import { createClient as createServerClient, createServiceClient } from "@/lib/s
 import { orgHasPaidSmsAddon } from "@/lib/twilio/provisioning";
 import { requireSmsSetupAllowed } from "@/lib/twilio/sms-setup-gate";
 import { TWILIO_BUSINESS_INDUSTRIES } from "@/lib/twilio/industries";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 // Maps a Zod issue's dot-path to the label shown on the actual form field
 // (SmsOnboardingSettings.tsx), so a validation failure names the field the
@@ -76,6 +77,10 @@ async function requireOrgAdmin(supabase: Awaited<ReturnType<typeof createServerC
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return { error: NextResponse.json({ error: "Admin role required" }, { status: 403 }) } as const;
   }
+  // SMS registration lives on profiles.org_id (the staff member's HOME org) —
+  // refuse while impersonating another tenant rather than show/change our own.
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "managing SMS setup");
+  if (impersonating) return { error: impersonating } as const;
   return { userId: user.id, orgId: profile.org_id } as const;
 }
 

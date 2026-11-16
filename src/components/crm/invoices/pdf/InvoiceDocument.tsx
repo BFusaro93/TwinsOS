@@ -79,6 +79,9 @@ export interface InvoicePDFData {
   totalCents: number;
   amountPaidCents: number;
   balanceCents: number;
+  /** Unapplied credit the client holds that could pay this invoice
+   *  (crm_invoice_credit_available). Shown under Balance Due, never subtracted. */
+  creditAvailableCents?: number;
 
   lineItems: InvoicePDFLineItem[];
 
@@ -351,6 +354,12 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           <Text style={S.balanceDueLabel}>Balance Due</Text>
           <Text style={S.balanceDueValue}>{cents(invoice.balanceCents)}</Text>
         </View>
+        {(invoice.creditAvailableCents ?? 0) > 0 && invoice.balanceCents > 0 && (
+          <View style={S.totalsRow}>
+            <Text style={S.totalsLabel}>Credit available</Text>
+            <Text style={S.totalsValue}>{cents(invoice.creditAvailableCents ?? 0)}</Text>
+          </View>
+        )}
       </View>
 
       {/* ── advertisement ──────────────────────────────────────────── */}
@@ -526,6 +535,12 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           <Text style={SC.balanceLabel}>Balance Due</Text>
           <Text style={[SC.balanceValue, { color: accentColor }]}>{cents(invoice.balanceCents)}</Text>
         </View>
+        {(invoice.creditAvailableCents ?? 0) > 0 && invoice.balanceCents > 0 && (
+          <View style={SC.totalsRow}>
+            <Text style={SC.totalsLabel}>Credit available</Text>
+            <Text style={SC.totalsValue}>{cents(invoice.creditAvailableCents ?? 0)}</Text>
+          </View>
+        )}
       </View>
 
       {invoice.advertisementText ? (

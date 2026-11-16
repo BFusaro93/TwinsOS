@@ -3,7 +3,8 @@ import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { computeMergedInvoiceTotals } from "@/lib/invoice-merge";
+import { computeMergedInvoiceTotals, mixedTaxRateMergeError } from "@/lib/invoice-merge";
+import { resolveDiscountTaxBasis } from "@/lib/invoices/totals";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const MergeSchema = z
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
   // Load all invoices to validate same client and not voided
   const { data: invoices, error: fetchErr } = await supabase
     .from("crm_invoices")
-    .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents, discount_cents, locked, project_id, contract_id, estimate_id")
+    .select("id, client_id, status, tax_rate_bps, invoice_number, amount_paid_cents, discount_cents, locked, project_id, contract_id, estimate_id, discount_tax_basis")
     .in("id", allIds)
     .eq("org_id", orgId)
     .is("deleted_at", null);
@@ -77,6 +78,13 @@ export async function POST(request: Request) {
         { status: 422 }
       );
     }
+  }
+
+  // Tax is recomputed at the parent's rate only; mixed rates would silently
+  // drop or change tax already billed on a child (crm_merge_invoices re-checks).
+  const mixedRates = mixedTaxRateMergeError(inv.map((i) => i.tax_rate_bps as number | null));
+  if (mixedRates) {
+    return NextResponse.json({ error: mixedRates }, { status: 422 });
   }
 
   const voidedIds = inv.filter((i) => i.status === "void").map((i) => i.id);
@@ -128,7 +136,8 @@ export async function POST(request: Request) {
   } = computeMergedInvoiceTotals(
     items.map((li) => ({ totalCents: li.total_cents, discountCents: li.discount_cents, isTaxable: li.is_taxable })),
     inv.map((i) => ({ discountCents: i.discount_cents, amountPaidCents: i.amount_paid_cents })),
-    taxRateBps
+    taxRateBps,
+    resolveDiscountTaxBasis(parentInv?.discount_tax_basis, parentInv?.status)
   );
 
   // Every write — line items, parent totals, allocations, legacy payment

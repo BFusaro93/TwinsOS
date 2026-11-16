@@ -114,6 +114,9 @@ export interface CRMInvoice {
   discountValue: number | null;
   appliedDiscountId: string | null;
   taxRateBps: number;
+  /** How the document discount reduces the taxable base (resolved: pro_rata, or
+   *  taxable_first for invoices issued before the pro-rata rule). */
+  discountTaxBasis: "pro_rata" | "taxable_first";
   taxCents: number;
   totalCents: number;
   amountPaidCents: number;

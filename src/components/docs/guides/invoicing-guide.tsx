@@ -391,7 +391,9 @@ export function InvoicingGuide() {
             billed are linked to the new draft only if nothing else has billed them since; a material
             linked again goes back to Invoiced and its stock is used again. Anything already billed on
             another invoice stays there and its line is copied as a plain line, so delete it from the
-            draft if it isn&apos;t owed again. Merged (consolidated) invoices can&apos;t be duplicated:
+            draft if it isn&apos;t owed again. Lines that were hidden on print stay hidden, and a
+            period draft keeps collecting that period&apos;s later visits (unless another open draft
+            already holds the period). Merged (consolidated) invoices can&apos;t be duplicated:
             their lines already live on the invoice they were merged into.
           </li>
           <li>
@@ -477,14 +479,18 @@ export function InvoicingGuide() {
           <li>
             <strong>Hiding is presentation only.</strong> The line stays on the invoice with its
             own amount, tax and discount, keeps its visit and product links, and the invoice total
-            and any accounting sync don&apos;t change. Nothing about the job or visit is touched
+            and any accounting sync don&apos;t change. QuickBooks still receives every line,
+            hidden ones included &mdash; so when you hide lines, send the invoice to the customer
+            from Landscapt, not from QuickBooks. Nothing about the job or visit is touched
             &mdash; unlike deleting the line, which can leave a visit looking unbilled and send a
             product back to pending.
           </li>
           <li>
             <strong>Where it applies:</strong> the PDF (print and download), the emailed invoice
             (attachment and the invoice grid merge tag) and the online invoice page. Your own
-            invoice screen still shows every line, dimmed, with a crossed-eye icon.
+            invoice screen still shows every line, dimmed, with a crossed-eye icon, and under its
+            service a <strong>Rolls into:</strong> note naming the visible line its amount prints
+            inside (worth a glance after merging invoices or reordering lines).
           </li>
           <li>
             <strong>Order matters &mdash; and you control it.</strong> Drag a line by the grip on its
@@ -542,7 +548,10 @@ export function InvoicingGuide() {
           To change it on a job, open the job and click the <strong>On invoice / Not on invoice</strong> tag
           beside the sub-item under its service; it applies to invoices created from then on, not ones
           already built. On a recurring job every visit&apos;s invoice shows the sub-item&apos;s per-visit share
-          (its total &divide; the line&apos;s visits). Package jobs always bill a single service line.
+          (its total &divide; the line&apos;s visits) &mdash; whether the invoice is made automatically when the
+          visit is completed or with the <strong>Invoice</strong> button on the visit or job &mdash; using the
+          service&apos;s <strong>Visits</strong> count; a recurring service with no Visits count bills one service
+          line. Package jobs always bill a single service line.
         </p>
       </Section>
 
@@ -776,7 +785,10 @@ export function InvoicingGuide() {
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
             <strong>Same client (merge).</strong> You pick one invoice to keep; the others&apos; line
-            items move onto it and they&apos;re voided. Locked invoices can&apos;t be merged.
+            items move onto it and they&apos;re voided. Locked invoices can&apos;t be merged. Every
+            invoice must use the <strong>same tax rate</strong>: the merged invoice taxes all its lines
+            at the kept invoice&apos;s rate, so merging a 7% invoice into a 0% one would silently drop
+            tax already billed. The dialog names the two rates; change one invoice&apos;s rate first.
           </li>
           <li>
             <strong>Sub-accounts of one parent (consolidate).</strong> To bill a property manager for
@@ -939,7 +951,11 @@ export function InvoicingGuide() {
             <strong>Discount</strong> can&apos;t be negative and can&apos;t exceed the invoice
             subtotal. Anything higher is clamped to the subtotal when you leave the field, and if
             you remove lines after entering a discount the preview total never goes below zero.
-            Tax is calculated after the discount is taken off the taxable lines.
+            Tax is calculated after the discount, and the discount is split between taxable and
+            non-taxable lines by their share of the subtotal. For example, $1,000 of non-taxable
+            labor plus $200 of taxable materials with a $200 discount: $33.33 of the discount comes
+            off the materials, so tax is charged on $166.67. Invoices issued before this rule keep the
+            figures they were issued with, even if you edit them later.
           </li>
           <li>
             <strong>Tax rate</strong> is limited to 0%&ndash;100%.

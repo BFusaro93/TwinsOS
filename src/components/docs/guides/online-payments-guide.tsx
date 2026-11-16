@@ -137,10 +137,11 @@ export function OnlinePaymentsGuide() {
           card-processing rate:
         </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li>Off by default for new companies. When you turn it on you set the rate (3% is the starting value) and the threshold above which it applies — for example 3% on card payments over $500.</li>
+          <li>Off by default for new companies. When you turn it on you set the rate (3% is the starting value, 4% is the most allowed) and the threshold above which it applies — for example 3% on card payments over $500.</li>
+          <li>Changing the fee, the fee mode, the default tax rate or the ACH switch needs the <strong>Accounting Settings</strong> permission (Admins always have it). A role with only Company or CRM Settings can still change company info and client defaults, but not these.</li>
           <li>Choose <strong>Flat percent</strong> or <strong>Cover the card fee exactly</strong>. Stripe&apos;s fee is taken from the whole charge, including the surcharge, so a flat percent can leave you slightly short; the cover-the-fee mode grosses the charge up so you receive the full invoice amount. The cover-the-fee surcharge is capped at 4% of the balance, so on a very small balance you net slightly less than the invoice.</li>
           <li><strong>Refunds return the surcharge too.</strong> A full refund returns the processing fee the client paid; a partial refund returns the fee&apos;s matching share. Your books still show the refund against the invoice amount.</li>
-          <li>Card networks cap surcharges (at 3%) and some states ban them. A flat rate is whatever you set, so keep it lawful where you operate. Cover the card fee mode is capped at 4%, which can still exceed the 3% network cap on small invoices, so use a flat rate of 3% or less if you are in doubt. Surcharges apply to credit cards only, never debit or prepaid cards. Payments are authorized first and captured with the fee; if the payment_intent.amount_capturable_updated webhook event isn&apos;t subscribed in Stripe, a surcharged payment can take 5–7 minutes to record instead of seconds.</li>
+          <li>Card networks cap surcharges (at 3%) and some states ban them. A flat rate can be at most 4%; Settings refuses a higher number. Within that, keep it lawful where you operate. Cover the card fee mode is capped at 4%, which can still exceed the 3% network cap on small invoices, so use a flat rate of 3% or less if you are in doubt. Surcharges apply to credit cards only, never debit or prepaid cards. Payments are authorized first and captured with the fee; if the payment_intent.amount_capturable_updated webhook event isn&apos;t subscribed in Stripe, a surcharged payment can take 5–7 minutes to record instead of seconds.</li>
           <li>Applies to card payments on invoices <em>and</em> to a deposit paid by card when a client accepts a proposal, on the same threshold.</li>
           <li>Never applied to Bank Transfer/ACH payments — ACH is fee-free by design.</li>
           <li>
@@ -282,6 +283,14 @@ export function OnlinePaymentsGuide() {
             (that estimate&apos;s job, project or contract) unless you release it to general credit
             from the estimate. Credit is applied only after every other check passes, so a charge that
             is refused (no saved method, a debit still settling) never changes the invoice.
+          </li>
+          <li>
+            <strong>A proposal deposit is applied as soon as its invoice is issued.</strong> You
+            don&apos;t have to wait for a charge: when an invoice for the deposit&apos;s estimate leaves
+            Draft, the deposit pays as much of it as it can, so a client paying by check is never asked
+            for money they already put down. Other credit the client holds shows as{" "}
+            <em>Credit available</em> on the invoice, the PDF, the pay page and the portal, and invoices
+            that credit fully covers are left out of past-due reminders.
           </li>
           <li>
             <strong>A failed bank payment leaves a trace.</strong> When a client&apos;s bank returns an

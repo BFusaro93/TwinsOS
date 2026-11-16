@@ -34,7 +34,9 @@ export function buildTotalsRow<T>(
   formatCell: (value: unknown, type: ReportFieldType) => T,
   label = TOTALS_LABEL
 ): (T | string)[] | null {
-  if (!result.totals) return null;
+  // A result cut off at the row cap would total only the rows it returned —
+  // exports leave the totals off and say it's partial (partialExportRow).
+  if (!result.totals || result.truncated) return null;
   const labelIdx = totalsLabelIndex(result.columns, result.sectionColumn);
   return result.columns.map((col, i) => {
     const total = result.totals?.[col.key];
@@ -46,9 +48,30 @@ export function buildTotalsRow<T>(
   });
 }
 
+/** "Partial: first 5,000 of 12,345 rows …" for a result the engine cut off at
+ *  its row cap, else null. Same wording on CSV, Excel and PDF exports, and the
+ *  scheduled-report emails (run-scheduled.ts). */
+export function partialExportNotice(result: Pick<ReportResult, "truncated" | "rowCount" | "totalCount">): string | null {
+  if (!result.truncated) return null;
+  return (
+    `Partial: first ${result.rowCount.toLocaleString("en-US")}` +
+    (result.totalCount !== undefined ? ` of ${result.totalCount.toLocaleString("en-US")}` : "") +
+    " rows. Totals are left off because they would cover only these rows — narrow the date range or filters for the full result."
+  );
+}
+
+/** The partial notice as one export row (text in the first cell), or null. */
+export function partialExportRow(result: ReportResult): string[] | null {
+  const notice = partialExportNotice(result);
+  if (!notice) return null;
+  return result.columns.map((_, i) => (i === 0 ? notice : ""));
+}
+
 /** Rows for a flat (non-grouped) spreadsheet/PDF export: every data row
  *  formatted with `formatCell`, followed by the totals row when there is
- *  one — the same thing the on-screen table shows in its footer. */
+ *  one — the same thing the on-screen table shows in its footer. A result
+ *  cut off at the row cap gets no totals row and ends with the partial
+ *  notice instead. */
 export function exportRowsWithTotals<T>(
   result: ReportResult,
   formatCell: (value: unknown, type: ReportFieldType) => T
@@ -58,5 +81,7 @@ export function exportRowsWithTotals<T>(
   );
   const totals = buildTotalsRow(result, formatCell);
   if (totals) rows.push(totals);
+  const partial = partialExportRow(result);
+  if (partial) rows.push(partial);
   return rows;
 }

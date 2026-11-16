@@ -1,5 +1,5 @@
 import { mondayOfYmd, shiftYmd } from "@/lib/time/zone";
-import type { PayrollRow } from "@/lib/payroll/compute";
+import { payrollPersonKey, type PayrollRow } from "@/lib/payroll/compute";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
@@ -72,37 +72,37 @@ export function overtimeComputeRange(rule: OvertimeRule, from: string, to: strin
 
 /**
  * Splits each row's totalHours into regularHours + overtimeHours (in place).
- * Weekly: per member and workweek, days are taken in date order and the hours
+ * Thresholds are per PERSON (payrollPersonKey — the employee, so someone on two
+ * crews, or moved between crews, has all their hours counted together).
+ * Weekly: per person and workweek, days are taken in date order and the hours
  * past the threshold are overtime on the day they happen. Daily: each day's
- * hours past the threshold. `rows` must cover whole weeks for a weekly rule
- * (overtimeComputeRange).
+ * hours past the threshold (a person's rows on the same day share it).
+ * `rows` must cover whole weeks for a weekly rule (overtimeComputeRange).
  */
 export function applyOvertime(rows: PayrollRow[], rule: OvertimeRule): PayrollRow[] {
   // PTO is paid but never overtime: split only the worked part, then add PTO to Regular.
   const pto = (r: PayrollRow) => Math.max(0, r.ptoHours ?? 0);
   const workedOf = (r: PayrollRow) => Math.max(0, r.totalHours - pto(r));
-  if (rule.mode === "daily") {
-    for (const r of rows) {
-      const worked = workedOf(r);
-      const regularWorked = Math.min(worked, rule.dailyHours);
-      r.regularHours = r2(regularWorked + pto(r));
-      r.overtimeHours = r2(worked - regularWorked);
-    }
-    return rows;
-  }
-  const byWeek = new Map<string, PayrollRow[]>();
+  const threshold = rule.mode === "daily" ? rule.dailyHours : rule.weeklyHours;
+  const groups = new Map<string, PayrollRow[]>();
   for (const r of rows) {
-    const k = `${r.crewMemberId}|${mondayOfYmd(r.workDate)}`;
-    const list = byWeek.get(k) ?? [];
+    const period = rule.mode === "daily" ? r.workDate : mondayOfYmd(r.workDate);
+    const k = `${payrollPersonKey(r)}|${period}`;
+    const list = groups.get(k) ?? [];
     list.push(r);
-    byWeek.set(k, list);
+    groups.set(k, list);
   }
-  for (const days of byWeek.values()) {
-    days.sort((a, b) => a.workDate.localeCompare(b.workDate));
+  for (const days of groups.values()) {
+    // Date order, then (same day on two memberships) the earlier start first.
+    days.sort((a, b) =>
+      a.workDate.localeCompare(b.workDate)
+      || (a.shiftStart ?? "").localeCompare(b.shiftStart ?? "")
+      || a.crewMemberId.localeCompare(b.crewMemberId)
+    );
     let worked = 0;
     for (const r of days) {
       const dayWorked = workedOf(r);
-      const regular = Math.min(dayWorked, Math.max(0, rule.weeklyHours - worked));
+      const regular = Math.min(dayWorked, Math.max(0, threshold - worked));
       r.regularHours = r2(regular + pto(r));
       r.overtimeHours = r2(dayWorked - regular);
       worked += dayWorked;

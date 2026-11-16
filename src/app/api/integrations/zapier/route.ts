@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient, generateZapierApiKey } from "@/lib/integrations/zapier";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 /**
  * POST /api/integrations/zapier — (re)generates the org's Zapier API key.
@@ -27,6 +28,11 @@ export async function POST() {
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // Service-role writes below target profiles.org_id (the staff member's HOME
+  // org) — refuse while impersonating another tenant.
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "changing the Zapier key");
+  if (impersonating) return impersonating;
 
   const { key: apiKey, keyHash, keyPrefix } = generateZapierApiKey();
   const db = adminClient();

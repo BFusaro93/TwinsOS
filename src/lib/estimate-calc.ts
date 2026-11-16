@@ -3,6 +3,7 @@ import type { CRMService } from "@/types/crm-jobs";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { productionRateAppliesToUnit } from "@/lib/estimates/units";
 import { resolvePercentMilestoneAmounts } from "@/lib/utils/milestone-amounts";
+import { invoiceTaxableBaseCents } from "@/lib/invoices/totals";
 
 // Duplicated from use-overhead-settings.ts rather than imported — that module
 // is "use client" and pulls in @tanstack/react-query + the browser Supabase
@@ -644,7 +645,11 @@ export function estimateTotalsForSubtotal(
   subtotalCents: number,
 ): { subtotalCents: number; discountCents: number; taxCents: number; totalCents: number } {
   const discountCents = Math.max(0, Math.min(intendedEstimateDiscountCents(est, subtotalCents), subtotalCents));
-  const taxCents = Math.round(((subtotalCents - discountCents) * (est.taxRateBps ?? 0)) / 10000);
+  // Estimate lines carry no taxability — the whole subtotal is taxable — so
+  // the invoices' pro-rata split of the document discount (invoiceTaxableBaseCents)
+  // takes all of it off the taxable base, exactly as here.
+  const taxableBaseCents = invoiceTaxableBaseCents({ taxableNetCents: subtotalCents, subtotalCents, discountCents, basis: "pro_rata" });
+  const taxCents = Math.round((taxableBaseCents * (est.taxRateBps ?? 0)) / 10000);
   return { subtotalCents, discountCents, taxCents, totalCents: subtotalCents - discountCents + taxCents };
 }
 
@@ -752,7 +757,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // have no status of their own to filter on.
   const { data: rawSubitems, error: siError } = await supabase
     .from("estimate_line_item_subitems")
-    .select("line_item_id, type, total_cents, cost_cents, qty, estimate_line_items!inner(estimate_id, status, deleted_at)")
+    .select("line_item_id, type, total_cents, cost_cents, qty, visits, estimate_line_items!inner(estimate_id, status, deleted_at)")
     .eq("estimate_line_items.estimate_id", estimateId)
     .not("estimate_line_items.status", "in", "(lost,draft)")
     .is("estimate_line_items.deleted_at", null)
@@ -827,6 +832,9 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const lineItemSubtotalCents = lineItems.reduce((s: number, li: any) => s + Math.max(0, li.total_cents - (li.discount_cents ?? 0)), 0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const subitemRevenueCents = subitems.reduce((s: number, si: any) => s + (si.total_cents ?? 0), 0);
+  // A sub-item's cost is per visit (its revenue, total_cents, already counts
+  // every visit), so `visits` has to be in the select above — without it every
+  // sub-item was costed for one visit and stored profit read too high.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const subitemCost = (si: any) => Math.round((si.cost_cents ?? 0) * (si.qty ?? 1) * (si.visits ?? 1));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
