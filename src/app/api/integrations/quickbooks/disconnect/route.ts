@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { revokeToken, resolveQuickBooksEnvironment, type QuickBooksEnvironment } from "@/lib/integrations/quickbooks";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 /**
  * POST /api/integrations/quickbooks/disconnect — admin-only. Revokes the token and turns the
@@ -21,6 +22,11 @@ export async function POST() {
   if (profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Only admins can disconnect QuickBooks" }, { status: 403 });
   }
+
+  // Service-role writes below target profiles.org_id (the staff member's HOME
+  // org) — refuse while impersonating another tenant.
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "disconnecting QuickBooks");
+  if (impersonating) return impersonating;
 
   const { data: row } = await supabase
     .from("integrations")

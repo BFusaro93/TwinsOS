@@ -84,7 +84,20 @@ export async function GET(
     if (!hasAdvancedReporting) return advancedReportingRequiredResponse();
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json({ dashboard: mapRow(data as DashboardRow) });
+  // The org's goals for this dashboard's gauges (crm_dashboard_gauge_targets),
+  // keyed by panel id — set from the gauge itself, on every plan.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: targetRows } = await (supabase as any)
+    .from("crm_dashboard_gauge_targets")
+    .select("panel_id, target")
+    .eq("dashboard_id", id)
+    .is("deleted_at", null);
+  const gaugeTargets: Record<string, number> = {};
+  for (const t of (targetRows ?? []) as { panel_id: string; target: number | string }[]) {
+    const n = Number(t.target);
+    if (Number.isFinite(n) && n > 0) gaugeTargets[t.panel_id] = n;
+  }
+  return NextResponse.json({ dashboard: { ...mapRow(data as DashboardRow), gaugeTargets } });
 }
 
 export async function PATCH(

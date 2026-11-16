@@ -111,7 +111,12 @@ export function CrewAppGuide() {
           recorded at the moment it was tapped, not when the phone reconnects &mdash; so a lunch pause
           that syncs hours later still subtracts the right minutes, and a 7:00 Start Day that syncs at
           9:30 still pays from 7:00. Taps older than 48 hours, or from a clearly wrong phone clock,
-          fall back to the sync time.
+          fall back to the sync time. Queued taps are held by the open page, so keep it open until
+          the banner clears. When Landscapt is updated while a tablet is open, the app normally
+          reloads itself to pick up the new version &mdash; but never while the phone is offline or
+          has taps still waiting to send. If part of a page can&apos;t load without signal, the app
+          says so and keeps your queued taps; tap <strong>Try again</strong> once you have signal
+          rather than reloading.
         </p>
         <Callout>
           <strong>The login belongs to the crew, not to a person.</strong> When you create a crew
@@ -529,15 +534,18 @@ export function CrewAppGuide() {
           <em>Push 3</em>…) to your list as its own stop, with its own Start Job, Stop Job, hours and
           photos, so every trip to the property is on record. Whether a return trip bills depends on
           the job (the office decides and can change it): it can be part of the storm&apos;s one
-          charge, no charge, or billed on its own. Pushes you add start as no charge until the office
-          says otherwise.
+          charge, no charge, or billed on its own (on a job billed by the hour your hours on site
+          bill). Pushes you add start as no charge until the office says otherwise. Only one push
+          can be open at a time: if another crew on the stop adds one first, you&apos;re told a push
+          is already open and it&apos;s on the list.
         </p>
         <p>
           <strong>Need help? Call in another crew.</strong> On a stop that isn&apos;t finished, tap
           this and pick the crew you want. The stop appears on that crew&apos;s tablet straight away
           (even if you have already started it), as in <em>When another crew is on your stop</em>
-          above: you each clock your own hours, and the lead crew&apos;s stop carries the charge (on
-          Hourly snow jobs each crew bills its own hours).
+          above: you each clock your own hours, and the lead crew&apos;s stop carries the charge
+          (where the stop is billed by the hour &mdash; Hourly snow jobs, or a depth in an hourly
+          range &mdash; each crew bills its own hours).
         </p>
         <p>
           <strong>Can&apos;t make it? Hand off to another crew.</strong> Before you tap Start Job, if

@@ -269,7 +269,14 @@ export function PartsInventoryGuide() {
           Every part is linked to a Products catalog entry. When a receipt updates a part’s unit cost,
           the linked product’s cost updates automatically — and the reverse holds too, so a manual
           edit on either side stays in sync. The price shown in CMMS Parts and in Purchasing Products
-          should always match for a given part/product pair.
+          should always match for a given part/product pair. Quantity on hand follows the same way:
+          every stock movement on a part (work orders, shelf counts, corrections, receipts) is
+          copied onto its product in the same save.
+        </p>
+        <p>
+          Parts Inventory is hidden from users with the <strong>Requestor</strong> role, and they
+          don&apos;t see part costs; crew logins have no access to parts or stock at all. Parts and
+          their history are never removed outright — a deleted part disappears from lists but its history stays.
         </p>
         <p>
           How that landed cost is actually calculated — most recent price, weighted average, or

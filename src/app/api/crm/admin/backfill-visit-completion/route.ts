@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 /**
  * One-off repair for visits that were marked completed WITHOUT the completion
@@ -38,6 +39,11 @@ export async function POST(request: Request) {
   if (!orgId || profile?.role !== "admin") {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
+
+  // Service-role writes below target profiles.org_id (the staff member's HOME
+  // org) — refuse while impersonating another tenant.
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "backfilling visit completions");
+  if (impersonating) return impersonating;
 
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

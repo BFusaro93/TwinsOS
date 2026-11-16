@@ -246,6 +246,11 @@ export function ApprovalFlowsGuide() {
           here.
         </p>
         <p>
+          An estimate that needs approval can&apos;t be sent, accepted (by your office or by the
+          client), converted to a job or invoiced until it&apos;s approved. An admin, or whoever can
+          approve every step still pending, can go ahead without waiting.
+        </p>
+        <p>
           See{" "}
           <GuideLink href="/settings/support/estimating-guide" className="text-[#60ab45] hover:underline">
             the Estimating guide

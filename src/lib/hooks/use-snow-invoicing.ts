@@ -13,7 +13,9 @@ import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidatio
 import { contractCoversServiceDay } from "@/lib/contract-billing";
 import { loadSnowCapStatuses } from "@/lib/snow-cap-loader";
 import { capOverageWarning } from "@/lib/snow-caps";
-import { hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, productLineTotalCents, snowBillableHours, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
+import { hourlyRangeTierFor, hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, productLineTotalCents, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
+import { loadSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
+import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -181,7 +183,7 @@ export function useUninvoicedSnowVisits(filters: {
         let q = (supabase as any)
           .from("crm_job_visits")
           .select(`
-            *,
+            ${JOB_VISIT_READ_COLUMNS},
             clients(display_name, primary_phone),
             crm_crews!crm_job_visits_crew_id_fkey(name),
             crm_jobs!inner(*, crm_crews(name), crm_job_services(*, crm_services(invoice_time_on_lines)))
@@ -198,6 +200,42 @@ export function useUninvoicedSnowVisits(filters: {
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await fetchAllRows<any>(buildVisitsQuery);
+      // With a date range set, a once-per-storm job's other visits on the same storm can
+      // sit OUTSIDE it (a storm spanning midnight, a return trip the next day). They are
+      // part of the same charge — the "already invoiced" check, the deepest reading and
+      // an hourly range's crew-hours all need them — so pull the whole storm in.
+      if (filters.fromDate || filters.toDate) {
+        const have = new Set(data.map((r) => r.id as string));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mappedNow = data.map(mapVisit) as CRMJobVisit[];
+        const wantedKeys = new Set(mappedNow.filter((v) => isPerEventBilling(v.job?.invoiceType ?? "per_event")).map((v) => billingGroupKey(v)));
+        const perEventJobIds = [...new Set(mappedNow.filter((v) => isPerEventBilling(v.job?.invoiceType ?? "per_event")).map((v) => v.jobId))];
+        for (const jobIds of chunkIds(perEventJobIds)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const whole = await fetchAllRows<any>(() =>
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (supabase as any)
+              .from("crm_job_visits")
+              .select(`
+                ${JOB_VISIT_READ_COLUMNS},
+                clients(display_name, primary_phone),
+                crm_crews!crm_job_visits_crew_id_fkey(name),
+                crm_jobs!inner(*, crm_crews(name), crm_job_services(*, crm_services(invoice_time_on_lines)))
+              `)
+              .eq("status", "completed")
+              .eq("crm_jobs.job_type", "snow")
+              .in("job_id", jobIds)
+              .is("deleted_at", null)
+              .order("id", { ascending: true })
+          );
+          for (const r of whole) {
+            if (have.has(r.id)) continue;
+            if (!wantedKeys.has(billingGroupKey(mapVisit(r) as CRMJobVisit))) continue;
+            have.add(r.id);
+            data.push(r);
+          }
+        }
+      }
       // contract_id is filtered at the DB level, but invoice_type is filtered
       // here client-side (a plain .neq() would silently drop jobs where
       // invoice_type is NULL, per SQL's three-valued NULL comparison logic —
@@ -234,29 +272,15 @@ export function useUninvoicedSnowVisits(filters: {
       const candidates = liftStormDepths((data.map(mapVisit)) as CRMJobVisit[])
         .filter((v) => v.job?.invoiceType !== "monthly_flat_rate" || !!v.job?.contractId)
         .filter((v) => !v.job?.contractId || contractEnded(v) || !!capOverageOf(v));
-      // Extra crews and return trips on a once-per-storm job are on the
+      // Depth ranges decide whether a storm bills TIME (an hourly range) — then every
+      // crew and every return trip bills its own on-site hours (crew-hours).
+      const tiersByJobId = await loadSnowRateTiersForJobs(
+        supabase,
+        [...new Set(candidates.filter((v) => v.job?.invoiceType === "per_event_per_inch" || v.job?.invoiceType === "per_push_per_inch").map((v) => v.jobId))]
+      );
+      // Otherwise extra crews and return trips on a once-per-storm job are on the
       // record only; the lead's first push carries the charge.
-      const visits = candidates.filter((v) => !isUnbilledSnowVisit(v));
-      // …but a Per Event Per Inch job in an HOURLY depth range bills the on-site hours of
-      // the whole storm, so the hours those unbilled visits worked ride on the first billed
-      // visit of the storm (computeGroupAmountCents adds them in).
-      const extraHoursByStorm = new Map<string, number>();
-      for (const v of candidates) {
-        if (v.job?.invoiceType !== "per_event_per_inch" || !v.stormEventId) continue;
-        if (!isUnbilledSnowVisit(v) || v.status === "skipped" || v.status === "cancelled") continue;
-        const key = `${v.jobId}::${v.stormEventId}`;
-        extraHoursByStorm.set(key, (extraHoursByStorm.get(key) ?? 0) + snowBillableHours(v));
-      }
-      const extraHoursClaimed = new Set<string>();
-      for (let i = 0; i < visits.length; i++) {
-        const v = visits[i];
-        if (v.job?.invoiceType !== "per_event_per_inch" || !v.stormEventId) continue;
-        const key = `${v.jobId}::${v.stormEventId}`;
-        const extra = extraHoursByStorm.get(key);
-        if (!extra || extraHoursClaimed.has(key)) continue;
-        extraHoursClaimed.add(key);
-        visits[i] = { ...v, stormExtraHours: extra } as typeof v;
-      }
+      const visits = candidates.filter((v) => !isUnbilledSnowVisit(v, tiersByJobId));
 
       if (visits.length === 0) return [];
 
@@ -265,13 +289,13 @@ export function useUninvoicedSnowVisits(filters: {
       // items have no deleted_at of their own — deletion happens via the parent
       // invoice.
       // Chunked — one .in() over thousands of visit ids overflows the URL.
-      const invoicedVisitIds = new Set<string>();
+      const invoicedAtByVisitId = new Map<string, string>();
       for (const ids of chunkIds(visits.map((v) => v.id))) {
-        const lines = await fetchAllRows<{ visit_id: string | null }>(() =>
+        const lines = await fetchAllRows<{ visit_id: string | null; created_at: string }>(() =>
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any)
             .from("crm_invoice_line_items")
-            .select("id, visit_id, crm_invoices!inner(deleted_at)")
+            .select("id, visit_id, created_at, crm_invoices!inner(deleted_at)")
             .in("visit_id", ids)
             .is("crm_invoices.deleted_at", null)
             // A voided invoice is a correction, not a decision that the work is
@@ -280,7 +304,7 @@ export function useUninvoicedSnowVisits(filters: {
             .neq("crm_invoices.status", "void")
             .order("id", { ascending: true })
         );
-        for (const l of lines) if (l.visit_id) invoicedVisitIds.add(l.visit_id);
+        for (const l of lines) if (l.visit_id) invoicedAtByVisitId.set(l.visit_id, l.created_at);
       }
 
       // Per-event billing groups (one charge per job+storm) must not be
@@ -288,56 +312,34 @@ export function useUninvoicedSnowVisits(filters: {
       // and the afternoon push completes later, the afternoon push would
       // otherwise appear ALONE in the queue and get priced as a brand new
       // group — charging the full event price a second time. Once any
-      // member of a group has been invoiced, exclude the whole group rather
-      // than just the already-invoiced visit. (Per-visit billing types are
-      // unaffected — their group key is just their own visit id.)
-      const groupsWithExistingInvoice = new Set(
-        visits.filter((v) => invoicedVisitIds.has(v.id)).map((v) => billingGroupKey(v))
-      );
-
-      // With a date range set, the group's other members can sit OUTSIDE it (a
-      // per-event storm spanning midnight: yesterday's push already invoiced, today's
-      // push in range), so the check above can't see them and the storm would be
-      // priced twice. Re-run the "already invoiced" group check without the date
-      // filter for the jobs in play.
-      if (filters.fromDate || filters.toDate) {
-        const perEventJobIds = [...new Set(visits.filter((v) => isPerEventBilling(v.job?.invoiceType ?? "per_event")).map((v) => v.jobId))];
-        for (const jobIds of chunkIds(perEventJobIds)) {
-          const allVisits = await fetchAllRows<{ id: string }>(() =>
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (supabase as any)
-              .from("crm_job_visits")
-              .select("*, crm_jobs!inner(job_type, invoice_type)")
-              .eq("status", "completed")
-              .eq("crm_jobs.job_type", "snow")
-              .in("job_id", jobIds)
-              .is("deleted_at", null)
-              .order("id", { ascending: true })
-          );
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const mapped = (allVisits as any[]).map((r) => ({ ...mapVisit({ ...r, crm_jobs: { ...r.crm_jobs } }) }));
-          const wantedKeys = new Set(visits.map((v) => billingGroupKey(v)));
-          const checkIds = mapped.filter((v) => wantedKeys.has(billingGroupKey(v)) && !invoicedVisitIds.has(v.id)).map((v) => v.id);
-          for (const ids of chunkIds(checkIds)) {
-            const lines = await fetchAllRows<{ visit_id: string | null }>(() =>
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (supabase as any)
-                .from("crm_invoice_line_items")
-                .select("id, visit_id, crm_invoices!inner(deleted_at)")
-                .in("visit_id", ids)
-                .is("crm_invoices.deleted_at", null)
-                .neq("crm_invoices.status", "void")
-                .order("id", { ascending: true })
-            );
-            const hit = new Set(lines.map((l) => l.visit_id).filter((x): x is string => !!x));
-            for (const v of mapped) if (hit.has(v.id)) groupsWithExistingInvoice.add(billingGroupKey(v));
-          }
-        }
+      // member of a group has been invoiced, the group leaves the queue.
+      // (Per-visit billing types are unaffected — their group key is just
+      // their own visit id. With a date range set, the whole storm was pulled
+      // in above, so members outside the range are seen here too.)
+      const groupInvoicedAtMs = new Map<string, number>();
+      for (const v of visits) {
+        const at = invoicedAtByVisitId.get(v.id);
+        if (!at) continue;
+        const key = billingGroupKey(v);
+        const ms = new Date(at).getTime();
+        groupInvoicedAtMs.set(key, Math.min(groupInvoicedAtMs.get(key) ?? Infinity, ms));
       }
 
-      const queue = visits.filter(
-        (v) => !invoicedVisitIds.has(v.id) && !groupsWithExistingInvoice.has(billingGroupKey(v))
-      );
+      // EXCEPT a Per Event Per Inch storm in an hourly range: it bills time, so a crew
+      // that finished AFTER the storm was invoiced (a return trip, a second truck) adds
+      // hours that are billed nowhere else. Those visits come back as "additional hours"
+      // rows priced on their own hours only. A visit finished before the invoice was
+      // made is never re-offered — its hours are already on that invoice.
+      const queue: SnowBillableVisit[] = [];
+      for (const v of visits) {
+        if (invoicedAtByVisitId.has(v.id)) continue;
+        const invoicedAtMs = groupInvoicedAtMs.get(billingGroupKey(v));
+        if (invoicedAtMs == null) { queue.push(v); continue; }
+        if (v.job?.invoiceType !== "per_event_per_inch" || !hourlyRangeTierFor(v, tiersByJobId)) continue;
+        const finished = v.completedAt ?? v.clockedOutAt ?? null;
+        if (!finished || new Date(finished).getTime() <= invoicedAtMs) continue;
+        queue.push({ ...v, addedAfterInvoice: true });
+      }
       if (queue.length === 0) return [];
 
       // An invoice made by hand (or via the API) for a snow push has no

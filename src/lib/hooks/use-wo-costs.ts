@@ -31,6 +31,8 @@ async function getCurrentOrgId(supabase: ReturnType<typeof createClient>): Promi
  * so a later edit/delete credits back only that, never the full quantity.
  * An untracked part (not an inventory item) moves no stock at all — the RPC
  * reports a zero request for it, so it never warns or notifies as short.
+ * The linked product's stock follows in the same transaction (DB trigger
+ * sync_part_stock_to_product), so no client-side mirror is needed.
  */
 async function syncWOPartStock(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,8 +113,15 @@ export function useWOParts(workOrderId: string) {
 }
 
 /**
- * After adjust_part_quantity updates parts.quantity_on_hand, mirror the new
- * value to the linked product_items row so the Products page stays in sync.
+ * Copies a part's quantity_on_hand onto its linked product_items row.
+ *
+ * Work-order stock moves do NOT need this: every parts.quantity_on_hand change
+ * is mirrored onto the product in the same transaction by the DB trigger
+ * sync_part_stock_to_product, and a client read-then-write here could
+ * overwrite a newer value. The one remaining caller is goods receiving
+ * (ReceiveGoodsDialog), which adds the product's cost layer AFTER the part
+ * receipt (raising the product a second time) and then needs the part's
+ * netted quantity copied back.
  */
 export async function syncPartQtyToProduct(
   supabase: ReturnType<typeof createClient>,
@@ -242,7 +251,6 @@ export function useAddWOPart() {
           // bypasses entirely (was silently skipping the inventory deduction
           // and its audit_log entry).
           await syncWOPartStock(supabase, restored.id, input.quantity);
-          await syncPartQtyToProduct(supabase, input.partId);
           await linkPartToAssetFromWO(supabase, input.workOrderId, input.partId, input.partName, input.partNumber);
 
           return mapWOPart(restored);
@@ -269,7 +277,6 @@ export function useAddWOPart() {
       // Deduct from inventory when a linked part is added to a WO
       if (input.partId) {
         await syncWOPartStock(supabase, data.id, input.quantity);
-        await syncPartQtyToProduct(supabase, input.partId);
         await linkPartToAssetFromWO(supabase, input.workOrderId, input.partId, input.partName, input.partNumber);
       }
 
@@ -332,7 +339,6 @@ export function useUpdateWOPart() {
         typeof existing?.quantity_deducted === "number" && existing.quantity_deducted > quantity;
       if (existing?.part_id && (qtyChanged || overDeducted)) {
         await syncWOPartStock(supabase, id, quantity);
-        await syncPartQtyToProduct(supabase, existing.part_id);
       }
     },
     onSuccess: (_, { workOrderId }) => {
@@ -372,10 +378,6 @@ export function useDeleteWOPart() {
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
-
-      if (partId) {
-        await syncPartQtyToProduct(supabase, partId);
-      }
 
       return workOrderId;
     },

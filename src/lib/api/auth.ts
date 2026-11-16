@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
+import { planIncludesModule, type PlatformModule } from "@/lib/stripe/plans";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -219,5 +220,50 @@ export async function authenticateApiRequest(
     return { ok: false, status: 403, error: `Missing required scope: ${requiredScope}` };
   }
 
+  const moduleDenied = await rejectWriteOutsidePlan(db, result.orgId, requiredScope);
+  if (moduleDenied) return moduleDenied;
+
   return result;
+}
+
+/** Resources that belong to one product. Shared ones (vendors, products,
+ *  requisitions, purchase orders, projects) are not listed: every plan may
+ *  write them. Mirrors the plan_module_write_* RLS policies
+ *  (20270106000170_plan_module_write_gate.sql). */
+const RESOURCE_MODULE: Record<string, PlatformModule> = {
+  work_orders: "equipt",
+  parts: "equipt",
+  assets: "equipt",
+  pm_schedules: "equipt",
+  clients: "landscapt",
+  estimates: "landscapt",
+  contracts: "landscapt",
+  jobs: "landscapt",
+  invoices: "landscapt",
+};
+
+/** Writes to another product's resources are refused when the org's plan
+ *  doesn't include that product (reads stay open). The service-role client
+ *  used by /api/v1 bypasses RLS, so this is the API's copy of the DB gate. */
+async function rejectWriteOutsidePlan(
+  db: AdminClient,
+  orgId: string,
+  requiredScope: string
+): Promise<ApiAuthResult | null> {
+  const [resource, access] = requiredScope.split(":");
+  const productModule = RESOURCE_MODULE[resource];
+  if (!productModule || access !== "write") return null;
+  const { data, error } = await db.from("organizations").select("plan").eq("id", orgId).maybeSingle();
+  if (error) {
+    log.error("plan lookup failed", { error: error.message });
+    return { ok: false, status: 503, error: "Could not verify your plan. Try again." };
+  }
+  const plan = (data as { plan?: string | null } | null)?.plan ?? "";
+  if (planIncludesModule(plan, productModule)) return null;
+  const label = productModule === "equipt" ? "Equipt" : "Landscapt";
+  return {
+    ok: false,
+    status: 403,
+    error: `Your plan doesn't include ${label}, so ${resource.replace(/_/g, " ")} are read-only through the API.`,
+  };
 }

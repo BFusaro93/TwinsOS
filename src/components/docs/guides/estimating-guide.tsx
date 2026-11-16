@@ -171,6 +171,16 @@ export function EstimatingGuide() {
           because the client can accept any of them; once the client picks a tier, it&rsquo;s that
           tier&rsquo;s total.
         </p>
+        <p>
+          <strong>Approval also holds back Accept, Convert to Job and Invoice.</strong> While an estimate
+          needs approval and isn&apos;t approved &mdash; it&apos;s Pending or Rejected, it grew past the
+          approved amount, or it was never submitted and your approval flow covers its amount &mdash; it
+          can&apos;t be marked Accepted, converted to a job or invoiced. The buttons are greyed out with
+          the reason on hover, and an amber bar under the header says what&apos;s needed. The client
+          can&apos;t accept it either: the proposal link and portal tell them it&apos;s being reviewed.
+          Someone who could approve it themselves (an admin, or the approver on every step still
+          pending) can go ahead. To submit it, click <strong>Send</strong> as before.
+        </p>
         <Callout>
           <strong>The trap.</strong> An estimate can show stage &ldquo;Sent&rdquo; while its
           approval status is still &ldquo;Pending.&rdquo; Stage reflects where the estimate is in
@@ -391,8 +401,15 @@ export function EstimatingGuide() {
         <p>
           Both the breakeven labor rate and the per-cost-type overhead percentages are org-wide
           settings, not per-estimate &mdash; the breakeven rate is set from Equipt&rsquo;s Job
-          Costing bid-rate calculator (&ldquo;Set as project rates&rdquo;), and overhead percentages
-          live in the org&rsquo;s overhead settings.
+          Costing bid-rate calculator (&ldquo;Set as project rates&rdquo;) or typed in Settings &rarr;
+          Organization &rarr; <strong>Break-Even Labor Rate</strong>, and overhead percentages live in
+          the org&rsquo;s overhead settings.
+        </p>
+        <p>
+          <strong>No costs, no margin.</strong> If an estimate has revenue but no cost at all &mdash;
+          typically a new account that hasn&apos;t set a breakeven rate yet, with no costs typed on the
+          lines &mdash; the summary panel shows a &ldquo;Set your breakeven rate&rdquo; note and the
+          margin and net profit percentages read &ldquo;&mdash;&rdquo; instead of a misleading 100%.
         </p>
       </Section>
 
@@ -575,7 +592,12 @@ export function EstimatingGuide() {
           Status, Visits, Qty, Calc, Rate, Adj Rate, discount, complexity and sub-items can&apos;t be changed
           on the estimate, and the line can&apos;t be deleted &mdash; hover a locked cell to see
           &ldquo;Already converted to a job &mdash; change it on the job&rdquo;. Budgeted hours, cost,
-          equipment and notes stay editable. Copying values down a package skips its converted visits. A <strong>+$</strong> rate increase raises each line&apos;s total by that amount per
+          equipment and notes stay editable. A converted line also can&apos;t be moved to Lost or Draft
+          (the job would keep billing it while the estimate stopped counting it), and its sub-items
+          can&apos;t be added, changed or removed. Once any line is on a job the estimate&apos;s own{" "}
+          <strong>Discount</strong> and <strong>Tax Rate</strong> are locked too: changing them would
+          re-split the price between jobs already converted and ones still to come, so the jobs would add
+          up to neither price. Change the price on the job instead. Copying values down a package skips its converted visits. A <strong>+$</strong> rate increase raises each line&apos;s total by that amount per
           visit, whatever its unit; on a per-unit line too small to carry the amount in whole cents, use
           a percentage instead.
         </p>
@@ -838,30 +860,36 @@ export function EstimatingGuide() {
           invoices.
         </Callout>
         <p>
-          <strong>Using it on the first invoice is a manual step</strong> &mdash; nothing is applied
-          for you, because a converted job invoices its <strong>full</strong> amount with the deposit
-          not deducted. The invoice tells you when there&rsquo;s money waiting:
+          <strong>The deposit is applied for you when the invoice is issued.</strong> The moment an
+          invoice for the estimate leaves Draft &mdash; you save it as sent, print it or email it &mdash;
+          the estimate&rsquo;s reserved deposit is applied to it, oldest deposit first, up to what the
+          invoice owes. The balance drops (to zero if the deposit covers it, and the invoice is marked
+          Paid) and the payment&rsquo;s unapplied amount drops by the same figure. Nobody needs payment
+          permissions for this to happen. It waits if a card or bank charge for the invoice is still
+          processing or a payment on it is disputed.
         </p>
-        <ol className="list-decimal space-y-2 pl-5">
+        <ul className="list-disc space-y-2 pl-5">
           <li>
-            Open the invoice. If the client has unapplied money, a blue bar reads{" "}
-            &ldquo;<em>$2,000.00 of unapplied payments on this client (including a deposit) &mdash;
-            $2,000.00 can go to this invoice</em>&rdquo;.
+            A deposit larger than the first invoice keeps the rest reserved for the estimate&rsquo;s next
+            invoice, which takes it when that one is issued.
           </li>
           <li>
-            Click <strong>Apply to this invoice</strong>. It uses the oldest money first, so a
-            deposit is consumed before a later overpayment, and never applies more than the invoice
-            still owes.
+            Other money the client holds (a prepayment, an overpayment, a deposit you released to general
+            credit) is not applied automatically. The invoice shows it as{" "}
+            &ldquo;<em>Credit available: $X</em>&rdquo;, with an <strong>Apply to this invoice</strong>{" "}
+            button that uses the oldest money first. The PDF, the online pay page and the client portal
+            show the same &ldquo;Credit available&rdquo; line, and an invoice that credit fully covers
+            doesn&rsquo;t get past-due reminders.
           </li>
           <li>
-            The balance drops and the unapplied figure drops to match. Anything left over stays
-            available for the next invoice. You can still do it the long way &mdash; open the payment
-            and edit its allocation &mdash; if you want to split it differently.
+            You can still split money differently by opening the payment and editing its allocation.
           </li>
-        </ol>
+        </ul>
         <Callout>
-          Apply the deposit <em>before</em> you send the invoice. Nothing stops an invoice going out
-          at its full amount with a deposit sitting unused against the client.
+          An invoice you email while it&rsquo;s still a draft is issued as it goes out, so the PDF the
+          client receives shows the deposit as <em>Credit available</em> and the balance drops right
+          after. To send a PDF that already shows the deposit as paid, mark the invoice sent (or print
+          it) first, then email it.
         </Callout>
         <Callout>
           <strong>A bank transfer doesn&rsquo;t hold up acceptance.</strong> ACH takes a few business

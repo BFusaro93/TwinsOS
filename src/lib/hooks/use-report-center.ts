@@ -368,6 +368,39 @@ export function useUpdateDashboard() {
   });
 }
 
+/** Saves the org's goal for one gauge panel (no Advanced Reporting needed).
+ *  Optimistic: the gauge redraws against the new goal right away. */
+export function useSetGaugeTarget(dashboardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { panelId: string; target: number }, { previous?: Dashboard }>({
+    mutationFn: async (input) => {
+      const res = await fetch(`/api/crm/dashboards/${dashboardId}/gauge-targets`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+    },
+    onMutate: async ({ panelId, target }) => {
+      await queryClient.cancelQueries({ queryKey: ["dashboards", dashboardId] });
+      const previous = queryClient.getQueryData<Dashboard>(["dashboards", dashboardId]);
+      if (previous) {
+        queryClient.setQueryData<Dashboard>(["dashboards", dashboardId], {
+          ...previous,
+          gaugeTargets: { ...(previous.gaugeTargets ?? {}), [panelId]: target },
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["dashboards", dashboardId], ctx.previous);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["dashboards", dashboardId] });
+    },
+  });
+}
+
 export function useDeleteDashboard() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, string>({

@@ -264,7 +264,7 @@ const SECTIONS: ReportSection[] = [
         name: "Payment Audit Summary",
         description: "Shows payments received per day, broken out by payment method.",
         filters: "Payment Date",
-        notes: ["Cash only: excludes account credits and AR write-offs; amounts are net of refunds. Payments from a client that has since been deleted still count (the client shows as \"(deleted)\" in custom analyses of payments), so cash-received and P&L totals keep money that was really collected. Custom analyses built on invoices and invoice line items likewise keep a deleted client's billed revenue."],
+        notes: ["Cash only: excludes account credits and AR write-offs. Refunds are subtracted on the day they were issued (a refund of an earlier month's payment shows in the month it was refunded). Payments from a client that has since been deleted still count (the client shows as \"(deleted)\" in custom analyses of payments), so cash-received and P&L totals keep money that was really collected. Custom analyses built on invoices and invoice line items likewise keep a deleted client's billed revenue."],
       },
       {
         name: "Credit Card Processing Fees",
@@ -273,7 +273,8 @@ const SECTIONS: ReportSection[] = [
         notes: [
           "Only card payments carry a fee — ACH payments are always fee-free by design.",
           "A fee of $0 on a card payment means the fee was waived or the balance was under the settings threshold.",
-          "Cash only: excludes account credits and AR write-offs; Payment Amount is net of refunds.",
+          "Cash only: excludes account credits and AR write-offs.",
+          "A refund of a card payment gives back its share of the fee: it shows as a Refund row (negative amounts) on the day it was issued, so the period's fee total is net of refunds.",
         ],
       },
       {
@@ -331,7 +332,7 @@ const SECTIONS: ReportSection[] = [
         name: "Invoices and Payments",
         description: "Compares invoiced revenue to payments collected, month by month.",
         filters: "Date Range",
-        notes: ["Invoiced reflects the invoice date, excludes draft and void invoices, and includes sales tax so it compares like-for-like with cash collected. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs; net of refunds."],
+        notes: ["Invoiced reflects the invoice date, excludes draft and void invoices, and includes sales tax so it compares like-for-like with cash collected. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs. Refunds are subtracted on the day they were issued (a refund of an earlier month's payment shows in the month it was refunded)."],
       },
       {
         name: "Credit Card Charges",
@@ -345,6 +346,7 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Sales Comparison Chart (Paid)",
         description: "Compares cash collected this year to last year, month by month.",
+        notes: ["Cash only: excludes account credits and AR write-offs. Refunds are subtracted on the day they were issued (a refund of an earlier month's payment shows in the month it was refunded)."],
       },
       {
         name: "Avg. Gross Revenue per Year per Client",
@@ -507,7 +509,8 @@ const SECTIONS: ReportSection[] = [
         description: "Income by payments received (cash basis) less job material and field labor costs.",
         filters: "Date Range",
         notes: [
-          "Cash basis: income is counted when payment is received, not when work is invoiced. Cash only: excludes account credits and AR write-offs; net of refunds.",
+          "Cash basis: income is counted when payment is received, not when work is invoiced. Cash only: excludes account credits and AR write-offs.",
+          "Income lines: Payments received (full amount, on the payment date), Refunds issued (on the day each refund was issued), and Credit card processing fees net of the share given back by refunds. A note shows how much of the payments received is still unapplied (prepayments / account credit).",
           "Credit card processing fees are the surcharge collected from clients on card payments (never on ACH) — separate from the invoice amount itself.",
           "Expenses include job material costs and catalog products recorded as used on jobs (by the date they were logged) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
         ],
@@ -522,6 +525,7 @@ const SECTIONS: ReportSection[] = [
         name: "Financials",
         description: "Invoiced totals and cash collected for a date range, alongside current receivables aging.",
         filters: "Invoice Date",
+        notes: ["Cash collected: payments in the range less refunds issued in the range (each refund on the day it was issued)."],
       },
     ],
   },

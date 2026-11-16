@@ -116,9 +116,12 @@ export function ReportCenterGuide() {
           emails aren&apos;t sent. The three <strong>built-in</strong> dashboards (Sales Overview,
           A/R Overview and Operations Dashboard) stay on the Custom Dashboards tab on every plan,
           but changing or copying one needs the add-on, and a built-in you changed while you had
-          it locks like a custom dashboard. Everything else on this page &mdash; every pre-built
+          it locks like a custom dashboard. Setting the <strong>goal</strong> on a gauge is not an
+          edit: it works on every plan (see Dashboards below). Everything else on this page &mdash; every pre-built
           report, the Dashboard tab, Payroll, the KPI Scorecard, the Company Report and the job
-          costing reports &mdash; is on every plan. Nothing you built is deleted: it all comes back, and
+          costing reports &mdash; is on every plan. These rules are enforced by Landscapt itself,
+          not just hidden in the menus, so they also apply to anyone querying reports through the
+          API. Nothing you built is deleted: it all comes back, and
           schedules start sending again, once the add-on is added.
         </Callout>
       </Section>
@@ -179,7 +182,12 @@ export function ReportCenterGuide() {
             clock-out or &mdash; when nobody clocked out &mdash; an estimate of man-hours × the
             crew&apos;s labor burden rate (marked with a dagger, †); materials are the job
             materials logged against the visit; and a visit with several services is split across
-            them by each service&apos;s share of the man-hours.
+            them by each service&apos;s share of the man-hours. <strong>Labor cost is only shown to
+            admins and roles with a job-costing or payroll-cost permission</strong> (Job Costing,
+            Job Cost Summary, Cost of Goods Sold, Show Wage &amp; Labor Burden, or either Profit
+            &amp; Loss report). Everyone else sees the hours and revenue with the labor cost
+            blank, and a crew&apos;s labor rate is only ever shown as the crew&apos;s average,
+            never per person.
           </li>
         </ul>
         <p>
@@ -332,7 +340,11 @@ export function ReportCenterGuide() {
             <strong>Payments</strong> — <strong>Cash Received (not credit/write-off)</strong>{" "}
             (&quot;Is Cash&quot;), <strong>Account Credit</strong> (&quot;Is Credit&quot;),{" "}
             <strong>Net Amount (after refunds)</strong>, and <strong>Processing Fee</strong>. A
-            &quot;Collected&quot; number should filter Is Cash = true and sum Net Amount.
+            &quot;Collected&quot; number should filter Is Cash = true and sum Net Amount. Note that
+            Net Amount takes a refund off the payment&apos;s own date; the pre-built cash reports
+            (Profit / Loss — Cash Basis, Payment Audit Summary, Credit Card Processing Fees,
+            Invoices and Payments, Sales Comparison Chart (Paid), Financials, KPI Week over Week
+            and the Company Report) instead take each refund off on the day it was issued.
           </li>
         </ul>
         <p>Beyond plain columns, the builder supports:</p>
@@ -375,6 +387,12 @@ export function ReportCenterGuide() {
           already loaded, and the totals row follows them.
         </p>
         <p>
+          <strong>Partial results.</strong> A report or analysis returns at most 5,000 rows. When a
+          result is cut off there, its CSV, Excel and PDF downloads leave the Totals row off (it
+          would only add up the rows included) and end with a line such as &quot;Partial: first
+          5,000 of 12,345 rows&quot;. Narrow the date range or filters to get the whole result.
+        </p>
+        <p>
           Saving or running a custom analysis requires the <strong>View Report Center</strong>{" "}
           permission, and some datasets additionally require a report permission — see{" "}
           <a href="#permissions" className="font-semibold underline">Permissions and gating</a>.
@@ -411,6 +429,18 @@ export function ReportCenterGuide() {
           keeps meaning an annual target.
         </p>
         <p>
+          <strong>Gauge goals.</strong> A gauge measures progress toward your company&apos;s goal.
+          The first time someone opens a built-in dashboard gauge that has no goal yet, the gauge
+          shows the current number and asks <em>&quot;What&apos;s your goal for this
+          gauge?&quot;</em> &mdash; enter it (in dollars for revenue gauges) and click{" "}
+          <strong>Save goal</strong>. Change it any time with <strong>Edit goal</strong> in the
+          gauge&apos;s corner. Goals are saved for your whole company, work on every plan (no
+          Advanced Reporting add-on needed), and can be set by admins and roles with{" "}
+          <strong>Manage Report Center</strong>; everyone else sees &quot;No goal set yet&quot;
+          until one is. A gauge you built yourself starts from the maximum you gave it in the
+          builder, and Edit goal overrides it.
+        </p>
+        <p>
           A panel whose dataset the signed-in user isn&apos;t allowed to query shows &quot;You
           don&apos;t have permission to view this panel&quot; in place of the chart — see{" "}
           <a href="#permissions" className="font-semibold underline">Permissions and gating</a>.
@@ -441,14 +471,17 @@ export function ReportCenterGuide() {
             affects days ended after the change and never re-prices a past or locked pay period. A
             job&apos;s pause comes off a person only up to the time they were on that job, never more.
             A punch after midnight on a shift that started the evening before (storm work) counts
-            on the day the shift started. The <strong>On jobs</strong> column
+            on the day the shift started &mdash; and so does its Work Date in the Report
+            Center&apos;s Timesheets data and the KPI Scorecard. The <strong>On jobs</strong> column
             is the part of that day spent on stops &mdash; the same punches Job Costing uses &mdash; so
             the gap is drive and shop time. If nobody tapped Start Day for a person, their job punches
             are used instead and the day is flagged.
           </li>
           <li>
             <strong>Totals by person.</strong> One row per employee with Day hours, On jobs, Extra, PTO,
-            Total, <strong>Regular</strong> and <strong>OT</strong>. Click a row to open the day-by-day
+            Total, <strong>Regular</strong> and <strong>OT</strong>. Someone who moved crews during the
+            period, or works on two crews, is listed once with all their hours (the Crew column
+            names each crew they worked on). Click a row to open the day-by-day
             detail, which shows each day&apos;s regular and overtime hours too.
           </li>
           <li>
@@ -460,8 +493,9 @@ export function ReportCenterGuide() {
             toward the limit: day hours (or your override) plus Extra hours. <strong>PTO</strong> hours are
             paid and always counted as Regular &mdash; they never push anyone into overtime. With the weekly rule, days earlier in the
             same week count toward the limit even when your period starts mid-week, and the overtime
-            lands on the day the limit is passed. Overtime hours are reported, not priced: apply the
-            overtime pay rate in your payroll system.
+            lands on the day the limit is passed. The limit is per <strong>person</strong>: hours on
+            every crew they worked that week (or day) count together. Overtime hours are reported,
+            not priced: apply the overtime pay rate in your payroll system.
           </li>
           <li>
             <strong>Correct any day.</strong> In the detail, change the <strong>clock-in and
@@ -799,6 +833,14 @@ export function ReportCenterGuide() {
           record type — useful for spotting an unexpected burst of edits).
         </p>
         <p>
+          <strong>Who can read the history.</strong> Office users see the change history for the
+          whole company (changes to users, roles, employees and credentials stay limited to
+          admins, managers and the audit-report permissions). <strong>Crew logins can&apos;t read
+          the change history at all</strong> &mdash; no Audit Trail tab data and no audit
+          reports &mdash; since a shared field login would otherwise see client, invoice and pay
+          changes it has no other access to.
+        </p>
+        <p>
           <strong>What an entry captures.</strong> Every field that changed in a save is recorded
           &mdash; a save that changed both the status and the price shows both. Money is shown in
           dollars. Some events read as a plain-language decision rather than a list of fields —
@@ -932,7 +974,9 @@ export function ReportCenterGuide() {
             <strong>Crew logins</strong> &mdash; crews don&apos;t see the KPI Scorecard, Company
             Report, Financial or the office dashboards, and opening their web address directly is
             blocked too. They only see dashboards marked visible to crews (and reports built on
-            jobs and visits return no data to them, because those include prices).
+            jobs and visits return no data to them, because those include prices). A crew login
+            never sees product costs, service rates or anyone&apos;s pay or labor cost, and can
+            only query the data behind the visual panels of crew-visible dashboards.
           </li>
           <li>
             <strong>Per-dashboard View permissions</strong> — each built-in dashboard also has a{" "}
@@ -990,7 +1034,16 @@ export function ReportCenterGuide() {
             </ul>
             Every other dataset (clients, contacts, client timeline, address verification, jobs,
             services, products, vendors, chemicals, field upsells, tickets, sales-rep month,
-            contract usage) needs only View Report Center.
+            contract usage) needs only View Report Center. A joined dataset (for example Client
+            fields added to an Invoices analysis) needs its own permission too.
+          </li>
+          <li>
+            <strong>Labor cost and pay rates.</strong> Even inside a dataset you can query, the
+            labor cost columns (Job Visits labor cost, the WIP Schedule&apos;s labor cost) are
+            blank unless you&apos;re an admin or your role has Job Costing, Job Cost Summary, Cost
+            of Goods Sold, Show Wage &amp; Labor Burden, or a Profit &amp; Loss report permission.
+            Crew labor rates are only ever used as a crew&apos;s average &mdash; no report shows one
+            person&apos;s rate unless your role can see wages.
           </li>
           <li>
             A dashboard panel the signed-in user can&apos;t query is not an error — it shows

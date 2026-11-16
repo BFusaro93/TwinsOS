@@ -34,28 +34,37 @@ function mapTier(row: any): SnowRateTier {
   };
 }
 
+/** Plain (non-hook) batch load of many jobs' tiers, keyed by job id. Chunked so a
+ *  long job list can't overflow the request URL. */
+export async function loadSnowRateTiersForJobs(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  jobIds: string[]
+): Promise<Map<string, SnowRateTier[]>> {
+  const ids = [...new Set(jobIds)];
+  const byJob = new Map<string, SnowRateTier[]>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase
+      .from("crm_snow_rate_tiers")
+      .select("*")
+      .in("job_id", ids.slice(i, i + 200))
+      .order("sort_order", { ascending: true });
+    if (error) throw error;
+    for (const row of ((data ?? []) as unknown[]).map(mapTier)) {
+      if (!byJob.has(row.jobId)) byJob.set(row.jobId, []);
+      byJob.get(row.jobId)!.push(row);
+    }
+  }
+  return byJob;
+}
+
 /** Batch-loads tiers for many jobs at once (e.g. every "per_event_per_inch"
  *  job showing up in the Snow Invoicing queue) instead of one query per job. */
 export function useSnowRateTiersForJobs(jobIds: string[]) {
   const key = [...new Set(jobIds)].sort().join(",");
   return useQuery({
     queryKey: ["snow-rate-tiers", "by-jobs", key],
-    queryFn: async (): Promise<Map<string, SnowRateTier[]>> => {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_snow_rate_tiers")
-        .select("*")
-        .in("job_id", [...new Set(jobIds)])
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      const byJob = new Map<string, SnowRateTier[]>();
-      for (const row of (data as unknown[]).map(mapTier)) {
-        if (!byJob.has(row.jobId)) byJob.set(row.jobId, []);
-        byJob.get(row.jobId)!.push(row);
-      }
-      return byJob;
-    },
+    queryFn: async (): Promise<Map<string, SnowRateTier[]>> => loadSnowRateTiersForJobs(createClient(), jobIds),
     enabled: jobIds.length > 0,
   });
 }

@@ -13,6 +13,12 @@ type AnySupabase = any;
 
 export interface PayrollRow {
   crewMemberId: string;
+  /**
+   * The person behind the crew membership (crm_crew_members.employee_id). One
+   * employee can hold more than one membership (moved crews, or on two crews),
+   * so overtime and per-person totals key on payrollPersonKey, not crewMemberId.
+   */
+  employeeId: string | null;
   memberName: string;
   crewName: string | null;
   workDate: string;
@@ -75,6 +81,10 @@ export interface PayrollBreakGap {
   to: string;
   minutes: number;
 }
+
+/** One person: their employee record, else (no linked employee) the crew membership. */
+export const payrollPersonKey = (r: Pick<PayrollRow, "employeeId" | "crewMemberId">): string =>
+  r.employeeId ?? r.crewMemberId;
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const hoursBetween = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000;
@@ -149,7 +159,7 @@ export async function computePayroll(
   // The date-ranged lists are paged: the Report Center's Resource Time
   // Utilization runs this over up to a year, past PostgREST's 1000-row cap.
   const [{ data: members }, { data: crews }, overrides, adjustments, absences] = await Promise.all([
-    supabase.from("crm_crew_members").select("id, name, crew_id").eq("org_id", orgId),
+    supabase.from("crm_crew_members").select("id, name, crew_id, employee_id").eq("org_id", orgId),
     supabase.from("crm_crews").select("id, name").eq("org_id", orgId),
     fetchAllRows<unknown>(() => supabase.from("crm_crew_daily_members").select("member_id, crew_id, work_date").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
     fetchAllRows<unknown>(() => supabase.from("crm_payroll_adjustments").select("crew_member_id, work_date, hours_override, extra_hours, pto_hours, note, start_override, end_override, break_override").eq("org_id", orgId).is("deleted_at", null).gte("work_date", from).lte("work_date", to)),
@@ -158,8 +168,11 @@ export async function computePayroll(
     fetchAllRows<unknown>(() => supabase.from("crm_crew_day_absences").select("crew_member_id, work_date, created_at, deleted_at").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
   ]);
 
-  const memberById = new Map<string, { name: string; crewId: string | null }>(
-    ((members ?? []) as { id: string; name: string; crew_id: string | null }[]).map((m) => [m.id, { name: m.name, crewId: m.crew_id }])
+  const memberById = new Map<string, { name: string; crewId: string | null; employeeId: string | null }>(
+    ((members ?? []) as { id: string; name: string; crew_id: string | null; employee_id: string | null }[]).map((m) => [
+      m.id,
+      { name: m.name, crewId: m.crew_id, employeeId: m.employee_id ?? null },
+    ])
   );
   const crewName = new Map<string, string>(((crews ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
   const overrideByDay = new Map<string, string>(
@@ -263,6 +276,7 @@ export async function computePayroll(
 
     rows.push({
       crewMemberId: memberId,
+      employeeId: member.employeeId,
       memberName: member.name,
       crewName: dayCrewId ? crewName.get(dayCrewId) ?? null : null,
       workDate,

@@ -7,6 +7,7 @@ import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { summarizePMCompliance } from "@/lib/utils/pm-compliance";
 import { formatWarrantyCountdown, getWarrantyStatus } from "@/lib/utils/warranty";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
 const WINDOWS: { value: number; label: string }[] = [
   { value: 30, label: "30 days" },
@@ -112,6 +113,9 @@ function MetricsGrid({ m, windowLabel, warranty, warrantyEndDate, purchasePrice 
     overdue: m.pmOverdue,
     notGenerated: m.pmNotGenerated,
   });
+  // Requestors don't see Equipt costs (the work-order cost rows are hidden
+  // from them in the database, so these would read $0).
+  const { canSeeCosts } = useRoleCapabilities();
   const repair12 = m.cost12moCents - m.pmCost12moCents;
   const pctOfPrice = purchasePrice && purchasePrice > 0
     ? Math.round((100 * m.costLifetimeCents) / purchasePrice)
@@ -132,6 +136,7 @@ function MetricsGrid({ m, windowLabel, warranty, warrantyEndDate, purchasePrice 
               : `${hours(m.downtimeHours)} down · ${m.downtimeEvents} event${m.downtimeEvents === 1 ? "" : "s"}`
         }
       />
+      {canSeeCosts && (<>
       <MetricCard
         label="Maint. cost · 12 mo"
         value={formatCurrency(m.cost12moCents)}
@@ -145,6 +150,7 @@ function MetricsGrid({ m, windowLabel, warranty, warrantyEndDate, purchasePrice 
         title="All-time work order cost. Compared with the purchase price as a repair-vs-replace signal."
         sub={pctOfPrice !== null ? `${pctOfPrice}% of purchase price` : "No purchase price on file"}
       />
+      </>)}
       <MetricCard
         label={`PM compliance · ${windowLabel}`}
         value={pm.compliancePct === null ? "—" : `${pm.compliancePct}%`}

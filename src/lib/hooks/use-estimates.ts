@@ -571,6 +571,18 @@ export function useUpdateEstimateStage() {
       // while crews are scheduled / the client is billed against it).
       // 'invoiced' (forward) and 'accepted' (no-op) are always allowed.
       const fromStage = (existing as { stage?: string } | null)?.stage;
+      // Approval gate (estimate_approval_gate — the database refuses the stage
+      // change too). Checked BEFORE the tier lines below are marked won/lost,
+      // so a refused accept can't leave the lines half-moved.
+      if (stage === "accepted" && fromStage !== "accepted") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: gate, error: gateErr } = await (supabase as any).rpc("estimate_approval_gate", { p_estimate_id: id });
+        if (gateErr) throw gateErr;
+        const g = (gate ?? {}) as { blocked?: boolean; reason?: string | null; can_override?: boolean };
+        if (g.blocked && !g.can_override) {
+          throw new Error(`${g.reason ?? "This estimate needs approval."} It can't be accepted until it's approved.`);
+        }
+      }
       const leavingAccepted = fromStage === "accepted" && stage !== "accepted" && stage !== "invoiced";
       if (stage === "lost" || leavingAccepted) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1326,6 +1338,32 @@ export function useResolveChangeRequest() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimate-change-requests", vars.estimateId] });
+    },
+  });
+}
+
+/**
+ * Whether Accept / Convert to Job / Invoice are held back by approval
+ * (estimate_approval_gate, the same rule the database enforces on those
+ * writes): `blocked` while the estimate needs approval and isn't approved,
+ * `canOverride` when the signed-in user could approve it themselves (an admin,
+ * or the approver of every pending step), and the reason to show.
+ */
+export function useEstimateApprovalGate(estimateId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["estimates", "approval-gate", estimateId],
+    enabled: !!estimateId,
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("estimate_approval_gate", { p_estimate_id: estimateId });
+      if (error) throw error;
+      const gate = (data ?? {}) as { blocked?: boolean; reason?: string | null; can_override?: boolean };
+      return {
+        blocked: !!gate.blocked,
+        reason: gate.reason ?? null,
+        canOverride: !!gate.can_override,
+      };
     },
   });
 }

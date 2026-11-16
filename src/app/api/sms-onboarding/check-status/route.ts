@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { pollPendingRegistration } from "@/lib/twilio/provisioning";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 /**
  * POST /api/sms-onboarding/check-status — lets an org admin manually poll
@@ -19,6 +20,11 @@ export async function POST() {
   if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // Service-role writes below target profiles.org_id (the staff member's HOME
+  // org) — refuse while impersonating another tenant.
+  const impersonating = await rejectIfImpersonating(authed, user.id, "managing SMS setup");
+  if (impersonating) return impersonating;
 
   const supabase = createServiceClient();
   try {

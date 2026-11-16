@@ -1380,7 +1380,8 @@ export function SnowDispatchBoard() {
       // they get no amount (their row shows "—") and stay out of the totals and crew stats.
       if (v.status === "skipped" || v.status === "cancelled") continue;
       // An extra crew, or a return trip on a once-per-storm job, is recorded but bills $0.
-      if (isUnbilledSnowVisit(v)) { zeroIds.push(v.id); continue; }
+      // (On a storm in an hourly depth range every crew and return trip bills its own hours.)
+      if (isUnbilledSnowVisit(v, tiersByJobId)) { zeroIds.push(v.id); continue; }
       const key = billingGroupKey(v);
       if (!byGroup.has(key)) byGroup.set(key, []);
       byGroup.get(key)!.push(v);
@@ -1389,7 +1390,7 @@ export function SnowDispatchBoard() {
     for (const id of zeroIds) result.set(id, 0);
     for (const groupVisits of byGroup.values()) {
       const total = computeGroupAmountCents(groupVisits, tiersByJobId);
-      for (const [visitId, amount] of splitGroupAmountByVisit(groupVisits, total)) {
+      for (const [visitId, amount] of splitGroupAmountByVisit(groupVisits, total, tiersByJobId)) {
         result.set(visitId, amount);
       }
     }

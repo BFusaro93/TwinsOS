@@ -763,7 +763,23 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
   const { woCategories } = useSettingsStore();
   const { mutate: updateWO, isPending: isUpdatingWO } = useUpdateWorkOrder();
   const { mutateAsync: updateWOStatus } = useUpdateWorkOrderStatus();
-  const { canEditWorkOrders } = useRoleCapabilities();
+  const { canEditWorkOrders, canSeeCosts } = useRoleCapabilities();
+  // Deleting a Done work order asks whether its parts went back on the shelf
+  // (the delete_work_order RPC refuses to guess). Open / on-hold / in-progress
+  // / skipped work orders always return their parts without asking.
+  const [partsReturned, setPartsReturned] = useState<boolean | null>(null);
+  const askPartsReturned = useMemo(() => {
+    if (status === "done" && woParts.some((p) => p.partId)) return true;
+    // Sub-WOs (any depth) that are Done also go with this delete.
+    const seen = new Set<string>([workOrder.id]);
+    for (let frontier = [workOrder.id]; frontier.length > 0; ) {
+      const next = allWorkOrders.filter((wo) => wo.parentWorkOrderId && frontier.includes(wo.parentWorkOrderId) && !seen.has(wo.id));
+      if (next.some((wo) => wo.status === "done")) return true;
+      next.forEach((wo) => seen.add(wo.id));
+      frontier = next.map((wo) => wo.id);
+    }
+    return false;
+  }, [status, woParts, allWorkOrders, workOrder.id]);
   const linkedAsset =
     workOrder.assetId && workOrder.linkedEntityType !== "vehicle"
       ? (assets.find((a) => a.id === workOrder.assetId) ?? null)
@@ -808,7 +824,10 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
-            onClick={() => setDeleteConfirmOpen(true)}
+            onClick={() => {
+              setPartsReturned(null);
+              setDeleteConfirmOpen(true);
+            }}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -824,19 +843,57 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
               Are you sure you want to delete <strong>{workOrder.workOrderNumber}</strong>? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {askPartsReturned && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">
+                Did the parts go back on the shelf?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                This work order is Done. Choose Yes only if the parts used on it were never fitted and are back in stock.
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant={partsReturned === true ? "default" : "outline"}
+                  aria-pressed={partsReturned === true}
+                  onClick={() => setPartsReturned(true)}
+                >
+                  Yes, return them to stock
+                </Button>
+                <Button
+                  type="button"
+                  variant={partsReturned === false ? "default" : "outline"}
+                  aria-pressed={partsReturned === false}
+                  onClick={() => setPartsReturned(false)}
+                >
+                  No, they were used
+                </Button>
+              </div>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
-              disabled={deleting}
-              onClick={() =>
-                deleteWO(workOrder.id, {
-                  onSuccess: () => {
-                    setDeleteConfirmOpen(false);
-                    setSelectedWorkOrderId(null);
-                  },
-                })
-              }
+              disabled={deleting || (askPartsReturned && partsReturned === null)}
+              onClick={(e) => {
+                // Keep the dialog open until the delete settles (errors show here).
+                e.preventDefault();
+                deleteWO(
+                  { id: workOrder.id, partsReturned: askPartsReturned ? (partsReturned ?? undefined) : undefined },
+                  {
+                    onSuccess: () => {
+                      setDeleteConfirmOpen(false);
+                      setSelectedWorkOrderId(null);
+                    },
+                    onError: (err: unknown) => {
+                      // Supabase errors are plain objects with a message, not Error instances.
+                      const message = (err as { message?: unknown } | null)?.message;
+                      toast.error(typeof message === "string" && message ? message : "Couldn't delete the work order.");
+                    },
+                  }
+                );
+              }}
             >
               {deleting ? "Deleting\u2026" : "Delete"}
             </AlertDialogAction>
@@ -897,17 +954,20 @@ export function WorkOrderDetailPanel({ workOrder }: WorkOrderDetailPanelProps) {
               />
             ),
           },
-          {
-            value: "costs",
-            label: "Costs",
-            content: (
-              <WOCostsTab
-                workOrderId={workOrder.id}
-                workOrderNumber={workOrder.workOrderNumber}
-                workOrderTitle={workOrder.title}
-              />
-            ),
-          },
+          // Requestors don't see Equipt costs (the database hides the rows too).
+          ...(canSeeCosts
+            ? [{
+                value: "costs",
+                label: "Costs",
+                content: (
+                  <WOCostsTab
+                    workOrderId={workOrder.id}
+                    workOrderNumber={workOrder.workOrderNumber}
+                    workOrderTitle={workOrder.title}
+                  />
+                ),
+              }]
+            : []),
           {
             value: "history",
             label: "Comments & History",

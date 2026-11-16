@@ -1006,10 +1006,10 @@ export async function applyVisitCompletionSideEffects(
 
         const newEnrollmentIds: string[] = [];
         if (serviceIds.length > 0) {
-          newEnrollmentIds.push(...await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: visit.client_id, serviceIds }));
+          newEnrollmentIds.push(...await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: visit.client_id, serviceIds, visitId: visit.id }));
         }
         newEnrollmentIds.push(
-          ...await fireSimpleTrigger(supabase, { orgId, clientId: visit.client_id, triggerType: "visit_completed", matchValues: serviceIds })
+          ...await fireSimpleTrigger(supabase, { orgId, clientId: visit.client_id, triggerType: "visit_completed", matchValues: serviceIds, visitId: visit.id })
         );
 
         // Drive each new enrollment through any steps due right now (e.g. an

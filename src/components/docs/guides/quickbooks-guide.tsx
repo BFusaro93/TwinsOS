@@ -162,6 +162,9 @@ export function QuickBooksGuide() {
               <td className={CELL}>
                 A line whose name matches one of your services uses a dedicated QuickBooks item for that service
                 (created the first time it&apos;s needed). Any other line goes under a shared &quot;Services&quot; item.
+                Lines you <strong>hide</strong> on the Landscapt invoice (the eye icon) still go to QuickBooks as their
+                own lines, so QuickBooks shows every line. If you hide lines, send the customer&apos;s invoice from
+                Landscapt (email, print or the online invoice), not from QuickBooks.
               </td>
             </tr>
             <tr className={ROW}>

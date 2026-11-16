@@ -3,8 +3,6 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapWorkOrder } from "@/lib/supabase/mappers";
 import type { WorkOrder, WorkOrderStatus } from "@/types/cmms";
-import { setWOPartStock } from "@/lib/inventory/part-stock";
-import { syncPartQtyToProduct } from "@/lib/hooks/use-wo-costs";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 
@@ -448,58 +446,34 @@ export function useSubWorkOrders(parentWorkOrderId: string | null) {
   });
 }
 
+export interface DeleteWorkOrderInput {
+  id: string;
+  /**
+   * Only asked when the work order (or a sub-WO under it) is Done: did the
+   * parts used on it go back on the shelf? true returns them to stock, false
+   * keeps them as used. Leave undefined for a WO tree with nothing Done —
+   * open / on-hold / in-progress / skipped WOs always return their parts.
+   */
+  partsReturned?: boolean;
+}
+
+/**
+ * Deletes a work order and every sub-WO under it in one transaction
+ * (delete_work_order RPC). Parts each line actually took from stock go back,
+ * except on Done work orders whose parts the user says stayed used. The
+ * database refuses the delete of a Done WO with parts until that question is
+ * answered, and refuses soft-deleting a work order any other way.
+ */
 export function useDeleteWorkOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, partsReturned }: DeleteWorkOrderInput) => {
       const supabase = createClient();
-
-      // The dialog says the delete can't be undone, so sub-WOs (PM batches,
-      // split jobs) go with their parent rather than being left orphaned
-      // under a parent nobody can open. Collect the whole tree first.
-      const ids: string[] = [id];
-      for (let frontier = [id]; frontier.length > 0; ) {
-        const { data: children, error: childErr } = await supabase
-          .from("work_orders")
-          .select("id")
-          .in("parent_work_order_id", frontier)
-          .is("deleted_at", null);
-        if (childErr) throw childErr;
-        frontier = (children ?? []).map((c) => c.id as string).filter((cid) => !ids.includes(cid));
-        ids.push(...frontier);
-      }
-
-      // Parts used on these WOs go back to stock — only what each line
-      // actually deducted (set_wo_part_stock), same as removing the line.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: woParts, error: partsErr } = await (supabase as any)
-        .from("wo_parts")
-        .select("id, part_id")
-        .in("work_order_id", ids)
-        .is("deleted_at", null)
-        .not("part_id", "is", null);
-      if (partsErr) throw partsErr;
-      const touchedParts = new Set<string>();
-      for (const wp of (woParts ?? []) as { id: string; part_id: string }[]) {
-        await setWOPartStock(supabase, wp.id, 0);
-        touchedParts.add(wp.part_id);
-      }
-      for (const partId of touchedParts) {
-        await syncPartQtyToProduct(supabase, partId);
-      }
-
-      const now = new Date().toISOString();
-      // Children first, so a failure part-way never leaves a live child
-      // under a deleted parent.
-      const childIds = ids.filter((wid) => wid !== id);
-      if (childIds.length > 0) {
-        const { error: childDelErr } = await supabase
-          .from("work_orders")
-          .update({ deleted_at: now })
-          .in("id", childIds);
-        if (childDelErr) throw childDelErr;
-      }
-      const { error } = await supabase.from("work_orders").update({ deleted_at: now }).eq("id", id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC added after the generated types
+      const { error } = await (supabase.rpc as any)("delete_work_order", {
+        p_work_order_id: id,
+        p_parts_returned: partsReturned ?? null,
+      });
       if (error) throw error;
     },
     onSuccess: () => {

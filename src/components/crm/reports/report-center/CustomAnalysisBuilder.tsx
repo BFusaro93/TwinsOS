@@ -34,6 +34,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
+import { partialExportRow } from "@/lib/reports/export-rows";
 import { resultCellColors } from "@/lib/reports/cell-colors";
 import { aggregateExportRows, type ViewAggregateFn } from "@/lib/reports/table-view";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
@@ -292,6 +293,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
       [
         ...result.rows.map((row) => result.columns.map((c) => csvCellValue(row[c.key], c.type))),
         ...aggregateExportRows(result.columns, result.rows, tableAggregates, csvCellValue),
+        ...(partialExportRow(result) ? [partialExportRow(result) as string[]] : []),
       ]
     );
   };
@@ -307,6 +309,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           rows: [
             ...result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
             ...aggregateExportRows(result.columns, result.rows, tableAggregates, exportCellValue),
+            ...(partialExportRow(result) ? [partialExportRow(result) as string[]] : []),
           ],
           cellColors: resultCellColors(result, formatRules, colorSpectrumColumns),
         },
@@ -335,7 +338,10 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
             columns: result.columns.map((c) => c.label),
             rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
             cellColors: resultCellColors(result, formatRules, colorSpectrumColumns),
-            footers: aggregateExportRows(result.columns, result.rows, tableAggregates, formatCellValue),
+            footers: [
+              ...aggregateExportRows(result.columns, result.rows, tableAggregates, formatCellValue),
+              ...(partialExportRow(result) ? [partialExportRow(result) as string[]] : []),
+            ],
           },
         ],
         charts.length > 0 ? charts : undefined

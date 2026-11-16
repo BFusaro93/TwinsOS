@@ -136,7 +136,12 @@ export function JobsPackagesGuide() {
             in the season, within the job&apos;s End Date. You can also set a cap by hand: in Add Job,
             each service on a recurring job has a <strong>Visits</strong> box (blank means no limit,
             repeat until the End Date), and the same field is on the service&apos;s Edit row in the job
-            detail. It must be a whole number of 1 or more.
+            detail. It must be a whole number of 1 or more. <strong>Lowering</strong> the cap below
+            the visits already scheduled offers to remove the extras: you&apos;re shown how many visits
+            are over the new limit and can remove the newest future visits nobody has touched yet
+            (not dispatched, started or invoiced; a multi-crew stop comes off whole). If you keep
+            them, they stay on the schedule and are billed when completed &mdash; skip or delete them
+            on the Visits tab instead.
           </li>
           <li>
             <strong>Schedules need to be set up first.</strong> A recurring job&apos;s schedule is picked from

@@ -1,5 +1,5 @@
 import { format, parseISO } from "date-fns";
-import type { PayrollRow } from "@/lib/payroll/compute";
+import { payrollPersonKey, type PayrollRow } from "@/lib/payroll/compute";
 
 /** A day with more than this much time off the clock gets flagged so a long gap can't pass quietly. */
 export const LONG_BREAK_MINUTES = 120;
@@ -7,6 +7,9 @@ export const LONG_BREAK_MINUTES = 120;
 export const isLongBreak = (d: Pick<PayrollRow, "breakMinutes">) => d.breakMinutes > LONG_BREAK_MINUTES;
 
 export interface PayrollMemberTotals {
+  /** The person's key (payrollPersonKey): their employee id, else the crew membership id. */
+  personKey: string;
+  /** The first crew membership seen for this person (adjustments are still saved per day row). */
   crewMemberId: string;
   memberName: string;
   crewName: string | null;
@@ -27,11 +30,21 @@ export interface PayrollMemberTotals {
   longBreakDays: number;
 }
 
+/**
+ * One entry per PERSON (payrollPersonKey), so someone who moved crews or sits on
+ * two crews is listed — and exported — once with all their hours. Their crew
+ * column lists every crew they worked on in the period.
+ */
 export function groupPayrollByMember(rows: PayrollRow[]): PayrollMemberTotals[] {
   const map = new Map<string, PayrollMemberTotals>();
   for (const r of rows) {
-    const m = map.get(r.crewMemberId) ?? {
-      crewMemberId: r.crewMemberId, memberName: r.memberName, crewName: r.crewName,
+    const key = payrollPersonKey(r);
+    const existing = map.get(key);
+    if (existing && r.crewName && !(existing.crewName ?? "").split(", ").includes(r.crewName)) {
+      existing.crewName = existing.crewName ? `${existing.crewName}, ${r.crewName}` : r.crewName;
+    }
+    const m = existing ?? {
+      personKey: key, crewMemberId: r.crewMemberId, memberName: r.memberName, crewName: r.crewName,
       days: [], shiftHours: 0, jobHours: 0, extra: 0, pto: 0, total: 0, regular: 0, overtime: 0,
       openPunches: 0, openShifts: 0, adjustedDays: 0, noShiftDays: 0, longBreakDays: 0,
     };
@@ -48,9 +61,13 @@ export function groupPayrollByMember(rows: PayrollRow[]): PayrollMemberTotals[] 
     if (r.adjusted) m.adjustedDays += 1;
     if (r.noShift) m.noShiftDays += 1;
     if (isLongBreak(r)) m.longBreakDays += 1;
-    map.set(r.crewMemberId, m);
+    map.set(key, m);
   }
-  return [...map.values()];
+  const people = [...map.values()];
+  for (const m of people) {
+    m.days.sort((a, b) => a.workDate.localeCompare(b.workDate) || (a.shiftStart ?? "").localeCompare(b.shiftStart ?? ""));
+  }
+  return people;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;

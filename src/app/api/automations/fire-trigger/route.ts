@@ -129,6 +129,7 @@ export async function POST(req: NextRequest) {
     ticketId?: string;
     invoiceId?: string;
     matchValues?: string[];
+    visitId?: string;
   };
   if (!body.triggerType || !ALLOWED_TRIGGER_TYPES.has(body.triggerType as TriggerType)) {
     return NextResponse.json({ error: "unsupported triggerType" }, { status: 400 });
@@ -185,6 +186,16 @@ export async function POST(req: NextRequest) {
     if (!invoice || invoice.org_id !== orgId || (invoice.client_id && invoice.client_id !== body.clientId)) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
+  }
+
+  // The visit a visit-event trigger is about: kept only when it is this client's, in this org.
+  let visitId: string | null = null;
+  if (typeof body.visitId === "string" && body.visitId && body.triggerType.startsWith("visit_")) {
+    const { data: visit } = await db.from("crm_job_visits").select("org_id, client_id").eq("id", body.visitId).maybeSingle();
+    if (!visit || visit.org_id !== orgId || visit.client_id !== body.clientId) {
+      return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+    }
+    visitId = body.visitId;
   }
 
   // Server-side check that the event actually happened, for the triggers
@@ -245,6 +256,7 @@ export async function POST(req: NextRequest) {
     invoiceId: body.invoiceId ?? null,
     triggerType: body.triggerType as TriggerType,
     matchValues: Array.isArray(body.matchValues) ? body.matchValues.filter((v) => typeof v === "string") : undefined,
+    visitId,
   });
 
   // Send any step that's due right now (an email with no wait in front of
