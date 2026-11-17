@@ -394,6 +394,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   }, [selectedPackage?.id, packageTemplateStart, orgTodayStr]);
   const convertiblePackageIds = [...new Set(convertibleLines.filter((li) => isQuoted(li)).map((li) => li.packageId).filter((x): x is string => !!x))];
   const recurring = effectiveJobType === "recurring";
+  // Recurring jobs get their dates from the Schedule (the generator starts from today), so only one-time needs one.
+  const needsScheduledDate = effectiveJobType === "one_time";
   // Recurring and package lines are priced per visit: a package line with N
   // included visits becomes N steps on the job (one visit each), each billed
   // at the per-visit share of the line.
@@ -444,6 +446,13 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     }
     if (effectiveJobType === "recurring" && !schedule) {
       toast.error("Schedule is required for recurring jobs");
+      return;
+    }
+    // Without a date a one-time job has no visit to dispatch, and the
+    // hook parks it on 'hold' — off the dispatch board and the Waiting List, where
+    // crews and schedulers never see it. Make the user pick a date (or Waiting List).
+    if (needsScheduledDate && !scheduledDate) {
+      toast.error("Pick a Scheduled Date — or convert it as a Waiting List job if it has no date yet");
       return;
     }
     if (rf.isRequired("crew") && !crewId) {
@@ -737,9 +746,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           <div className="flex flex-col gap-1">
             <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">
               <CalendarDays className="inline h-3.5 w-3.5 mr-1" />
-              {hasPackageSel ? "Program Start Date" : "Scheduled Date"}
+              {hasPackageSel ? "Program Start Date" : effectiveJobType === "recurring" ? "Start Date" : "Scheduled Date"}
               <span className="ml-1 text-slate-400 dark:text-neutral-500 font-normal">
-                {hasPackageSel ? "(optional — shifts every step window)" : "(optional)"}
+                {hasPackageSel ? "(optional — shifts every step window)" : needsScheduledDate ? "(required)" : "(optional)"}
               </span>
             </Label>
             <Input
@@ -748,6 +757,12 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               onChange={(e) => setScheduledDate(e.target.value)}
               className="text-sm"
             />
+            {effectiveJobType === "recurring" && (
+              <p className="text-xs text-slate-500 dark:text-neutral-400">
+                Optional. Visits follow the Schedule, so leave this blank to start with its next day. Set a date to
+                hold the first visit until then. Visits begin on the first Schedule day on or after it, so it doesn&apos;t add an extra visit.
+              </p>
+            )}
             {packagePlan && packageStepDates.length > 0 && (
               <div className="mt-1 rounded border bg-muted/40 px-2 py-1.5 text-xs">
                 <p className="mb-1 font-medium text-slate-600 dark:text-neutral-400">Planned visits</p>
