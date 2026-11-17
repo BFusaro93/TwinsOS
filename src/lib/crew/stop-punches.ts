@@ -71,14 +71,14 @@ export async function stopPunchOwnerVisitId(supabase: AnySupabase, visitId: stri
  */
 export async function stopSiblingVisitIds(supabase: AnySupabase, visitId: string): Promise<string[]> {
   const { data: visit } = await supabase
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(STOP_VISIT_SELECT)
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!visit) return [visitId];
   const row = visit as StopVisitRow;
-  const query = supabase.from("crm_job_visits").select(STOP_VISIT_SELECT);
+  const query = supabase.from("crm_crew_job_visits").select(STOP_VISIT_SELECT);
   const { data: candidates } = await (row.client_id ? query.eq("client_id", row.client_id) : query.is("client_id", null))
     .eq("scheduled_date", row.scheduled_date)
     .is("deleted_at", null);

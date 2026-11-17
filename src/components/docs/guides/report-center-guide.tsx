@@ -1043,7 +1043,9 @@ export function ReportCenterGuide() {
             blank unless you&apos;re an admin or your role has Job Costing, Job Cost Summary, Cost
             of Goods Sold, Show Wage &amp; Labor Burden, or a Profit &amp; Loss report permission.
             Crew labor rates are only ever used as a crew&apos;s average &mdash; no report shows one
-            person&apos;s rate unless your role can see wages.
+            person&apos;s rate unless your role can see wages. Outside these reports, the labor cost
+            stored on each job and visit can&apos;t be read by any login at all, admins included:
+            for a one-person crew it would reveal that person&apos;s pay rate.
           </li>
           <li>
             A dashboard panel the signed-in user can&apos;t query is not an error — it shows

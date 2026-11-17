@@ -405,7 +405,7 @@ export function useVisitDetail(visitId: string) {
       const { supabase, hidePricing } = await getAuthContext();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
-        .from("crm_job_visits")
+        .from("crm_crew_job_visits")
         .select(crewVisitSelect(hidePricing))
         .eq("id", visitId)
         .is("deleted_at", null)
@@ -442,7 +442,7 @@ export function useStopDetail(anchorVisitId: string) {
       // as assertCallerOwnsVisit() on the server.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: anchorRow, error: anchorErr } = await (supabase as any)
-        .from("crm_job_visits")
+        .from("crm_crew_job_visits")
         .select(select)
         .eq("id", anchorVisitId)
         .is("deleted_at", null)

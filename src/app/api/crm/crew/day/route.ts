@@ -183,7 +183,7 @@ export async function POST(request: Request) {
     // The stop's punches may hang off a sibling of the visit the app sent.
     let punchVisitId: string | null = null;
     if (visitId) {
-      const { data: visit } = await db.from("crm_job_visits")
+      const { data: visit } = await db.from("crm_crew_job_visits")
         .select("id, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, crm_jobs:crew_job(crew_id)")
         .eq("id", visitId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });

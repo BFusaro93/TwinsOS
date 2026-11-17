@@ -15,7 +15,7 @@ import { loadSnowCapStatuses } from "@/lib/snow-cap-loader";
 import { capOverageWarning } from "@/lib/snow-caps";
 import { hourlyRangeTierFor, hourlyStopShares, isUnbilledSnowVisit, liftStormDepths, productLineTotalCents, type SnowBillableVisit, type SnowVisitProduct } from "@/lib/snow-billing";
 import { loadSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { JOB_READ_COLUMNS, JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -186,7 +186,7 @@ export function useUninvoicedSnowVisits(filters: {
             ${JOB_VISIT_READ_COLUMNS},
             clients(display_name, primary_phone),
             crm_crews!crm_job_visits_crew_id_fkey(name),
-            crm_jobs!inner(*, crm_crews(name), crm_job_services(*, crm_services(invoice_time_on_lines)))
+            crm_jobs!inner(${JOB_READ_COLUMNS}, crm_crews(name), crm_job_services(*, crm_services(invoice_time_on_lines)))
           `)
           .eq("status", "completed")
           .eq("crm_jobs.job_type", "snow")
@@ -220,7 +220,7 @@ export function useUninvoicedSnowVisits(filters: {
                 ${JOB_VISIT_READ_COLUMNS},
                 clients(display_name, primary_phone),
                 crm_crews!crm_job_visits_crew_id_fkey(name),
-                crm_jobs!inner(*, crm_crews(name), crm_job_services(*, crm_services(invoice_time_on_lines)))
+                crm_jobs!inner(${JOB_READ_COLUMNS}, crm_crews(name), crm_job_services(*, crm_services(invoice_time_on_lines)))
               `)
               .eq("status", "completed")
               .eq("crm_jobs.job_type", "snow")

@@ -53,7 +53,7 @@ export async function POST(
   // also surfaces as the same conflict rather than clobbering their data.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select("clocked_in_at, clocked_out_at, org_id, crew_id, crew_unassigned, status, paused_at, break_minutes, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
