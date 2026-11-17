@@ -392,7 +392,7 @@ export function EstimatesList({ clientId }: Props) {
       {!clientId && (
         <PageHeader
           title="Estimates"
-          description={!isLoading ? `${allEstimates.length} estimates${totalIncome > 0 ? ` · ${formatCurrency(totalIncome)} income · ${bpsToPercent(avgMarginBps)} avg margin` : ""}` : undefined}
+          description={!isLoading ? `${filtered.length === allEstimates.length ? `${allEstimates.length} estimates` : `${filtered.length} of ${allEstimates.length} estimates`}${totalIncome > 0 ? ` · ${formatCurrency(totalIncome)} income · ${bpsToPercent(avgMarginBps)} avg margin` : ""}` : undefined}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <ImportExportMenu

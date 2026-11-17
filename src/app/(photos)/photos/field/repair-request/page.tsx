@@ -30,6 +30,10 @@ export default async function FieldRepairRequestPage() {
   const { data: orgId } = await supabase.rpc("my_org_id");
   if (!orgId) redirect("/login");
 
+  // A repair request becomes an Equipt work request; orgs on a Landscapt-only plan can't write one.
+  const { data: hasEquipt } = await supabase.rpc("org_has_module", { p_module: "equipt" });
+  if (hasEquipt === false) redirect("/photos/jobs");
+
   const { data: org } = await supabase
     .from("organizations")
     .select("name, slug, brand_color, portal_enabled, customizations")

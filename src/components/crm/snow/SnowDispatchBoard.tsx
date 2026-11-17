@@ -1304,6 +1304,14 @@ export function SnowDispatchBoard() {
   const [showInactiveEvents, setShowInactiveEvents] = useState(false);
   const inactiveEventCount = events.filter((e) => !e.isActive).length;
   const activeEvent = events.find((e) => e.id === selectedEventId) ?? events.find((e) => e.isActive) ?? events[0] ?? null;
+
+  // Client / Date choices are lists of THIS storm's stops: carried to another storm they match
+  // nothing, and the stale ids aren't in the new checklist so they couldn't be unticked.
+  const activeEventId = activeEvent?.id ?? null;
+  useEffect(() => {
+    setClientFilters([]);
+    setDateFilters([]);
+  }, [activeEventId]);
   // Adding a visit to a Complete storm puts it back to Working (DB trigger);
   // the board doesn't offer it at all until someone does that on purpose.
   const stormComplete = activeEvent?.dispatchStatus === "complete";

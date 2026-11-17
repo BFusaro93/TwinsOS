@@ -326,6 +326,12 @@ export function SnowGuide() {
             stop above for the rest).
           </li>
           <li>
+            <strong>Invoiced badge.</strong> A stop that is already on an invoice shows a blue{" "}
+            <strong>Invoiced #</strong> badge beside the client name. Click it to open that invoice
+            in a slide-over without leaving the board; close the slide-over to land back where you
+            were. Hover the badge to see the invoice&apos;s status.
+          </li>
+          <li>
             <strong>Actions menu.</strong> <em>Dispatch Selected</em> (or <em>Dispatch All
             Assigned</em> when nothing is selected), <em>Close Out Selected</em>, <em>Skip
             Selected</em> and <em>Cancel Selected</em>, Team Assign, Optimize Routes, Show Crew

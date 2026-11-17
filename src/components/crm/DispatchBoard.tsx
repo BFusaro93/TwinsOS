@@ -4864,7 +4864,7 @@ export function DispatchBoard() {
     const savedCrews = f.crewFilters ?? [];
     const savedTags = f.tagFilters ?? [];
     const nextServices = knownServiceNames ? savedServices.filter((n) => knownServiceNames.has(n)) : savedServices;
-    const nextCrews = knownCrewIds ? savedCrews.filter((id) => knownCrewIds.has(id)) : savedCrews;
+    const nextCrews = knownCrewIds ? savedCrews.filter((id) => id === NO_CREW || knownCrewIds.has(id)) : savedCrews;
     const nextTags = knownTags ? savedTags.filter((t) => knownTags.has(t)) : savedTags;
     const dropped =
       (savedServices.length - nextServices.length) + (savedCrews.length - nextCrews.length) + (savedTags.length - nextTags.length);

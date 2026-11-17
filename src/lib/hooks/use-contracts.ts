@@ -1279,8 +1279,9 @@ export function useResyncContractLastBilled() {
         .from("crm_invoices")
         .select("invoice_date, catch_up_period_end")
         .eq("contract_id", contractId)
-        .is("deleted_at", null)
-        .neq("status", "void")
+        // A source voided by Consolidate Invoices still counts as billed (its charge lives on the
+        // consolidated invoice), exactly as the cycle checks elsewhere treat it.
+        .or("and(deleted_at.is.null,status.neq.void),consolidated_into_id.not.is.null")
         .is("proration_period_start", null);
       if (error) throw error;
       let latest: string | null = null;
@@ -1316,10 +1317,21 @@ export function useReleaseHeldContractVisits() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (contractId: string): Promise<ReleaseHeldVisitsResult> => {
-      const res = await fetch(`/api/crm/contracts/${contractId}/release-held-visits`, { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as Partial<ReleaseHeldVisitsResult> & { error?: string };
-      if (!res.ok) throw new Error(body.error ?? "Couldn't bill the visits held for this contract");
-      return { visits: body.visits ?? 0, invoiced: body.invoiced ?? 0 };
+      // The route handles a bounded batch per call; follow its cursor until the backlog is done.
+      let visits = 0;
+      let invoiced = 0;
+      let after: string | null = null;
+      for (let page = 0; page < 50; page += 1) {
+        const qs = after ? `?after=${encodeURIComponent(after)}` : "";
+        const res = await fetch(`/api/crm/contracts/${contractId}/release-held-visits${qs}`, { method: "POST" });
+        const body = (await res.json().catch(() => ({}))) as Partial<ReleaseHeldVisitsResult> & { error?: string; next?: string | null };
+        if (!res.ok) throw new Error(body.error ?? "Couldn't bill the visits held for this contract");
+        visits += body.visits ?? 0;
+        invoiced += body.invoiced ?? 0;
+        after = body.next ?? null;
+        if (!after) break;
+      }
+      return { visits, invoiced };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });

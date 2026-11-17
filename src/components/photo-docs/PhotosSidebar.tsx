@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { Camera, FileImage, ArrowLeft, Leaf, Briefcase, Wrench, CalendarDays, ClipboardList, ShieldAlert, HeartPulse } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -15,6 +16,8 @@ interface PhotoNavItem {
   icon: LucideIcon;
   requiresPoAccess?: boolean;
   internalOnly?: boolean;
+  /** Needs the Equipt module (a repair request becomes an Equipt work request). */
+  requiresEquipt?: boolean;
 }
 
 export const PHOTOS_NAV: PhotoNavItem[] = [
@@ -25,7 +28,7 @@ export const PHOTOS_NAV: PhotoNavItem[] = [
 export const FIELD_NAV: PhotoNavItem[] = [
   { label: "Morning Checklist",  href: "/photos/field/crew-checklist",  icon: ClipboardList, internalOnly: true },
   { label: "Time Off Request",   href: "/photos/field/time-off",        icon: CalendarDays,  internalOnly: true },
-  { label: "Repair Request",     href: "/photos/field/repair-request",  icon: Wrench },
+  { label: "Repair Request",     href: "/photos/field/repair-request",  icon: Wrench,        requiresEquipt: true },
   { label: "Damage Report",      href: "/photos/field/damage-report",   icon: ShieldAlert },
   { label: "Injury / Near Miss", href: "/photos/field/injury-report",   icon: HeartPulse },
 ];
@@ -40,6 +43,7 @@ export function PhotosSidebar() {
   const { currentUser } = useCurrentUserStore();
   const canSeeProjects = PO_ROLES.has(currentUser.role);
   const { isInternalOrg } = useIsInternalOrg();
+  const { allowed: hasEquipt } = useModuleAccess("equipt");
 
   return (
     <aside
@@ -107,7 +111,7 @@ export function PhotosSidebar() {
               Field
             </p>
           )}
-          {FIELD_NAV.filter((item) => !item.internalOnly || isInternalOrg).map((item) => {
+          {FIELD_NAV.filter((item) => (!item.internalOnly || isInternalOrg) && (!item.requiresEquipt || hasEquipt)).map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             const Icon = item.icon;
             return (

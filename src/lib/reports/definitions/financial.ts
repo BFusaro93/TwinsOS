@@ -12,6 +12,7 @@ import {
   orgDayRangeBounds,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { invoiceTaxableBaseCents, resolveDiscountTaxBasis } from "@/lib/invoices/totals";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { todayInZone } from "@/lib/time/zone";
 import { invoiceDaysPastDue } from "@/lib/invoice-status";
@@ -311,7 +312,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       const data = await fetchAllRows<unknown>(() => {
         let query = supabase
           .from("crm_invoices")
-          .select("id, invoice_date, subtotal_cents, discount_cents, tax_cents, total_cents")
+          .select("id, invoice_date, status, discount_tax_basis, subtotal_cents, discount_cents, tax_cents, total_cents")
           .is("deleted_at", null)
           .in("status", ISSUED_INVOICE_STATUSES);
         if (from) query = query.gte("invoice_date", from);
@@ -322,6 +323,8 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       type Row = {
         id: string;
         invoice_date: string | null;
+        status: string | null;
+        discount_tax_basis: string | null;
         subtotal_cents: number | null;
         discount_cents: number | null;
         tax_cents: number | null;
@@ -377,7 +380,16 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         let taxable: number;
         if (invoicesWithLines.has(r.id)) {
           const taxableNet = taxableNetByInvoice.get(r.id) ?? 0;
-          taxable = taxableNet > 0 ? Math.min(netSales, Math.max(0, taxableNet - discount)) : 0;
+          // The invoice's own discount rule (pro-rata by default since round 14; older issued
+          // invoices keep taxable-first) — the same helper the invoice totals use.
+          taxable = taxableNet > 0
+            ? Math.min(netSales, invoiceTaxableBaseCents({
+                taxableNetCents: taxableNet,
+                subtotalCents: subtotal,
+                discountCents: discount,
+                basis: resolveDiscountTaxBasis(r.discount_tax_basis, r.status),
+              }))
+            : 0;
         } else {
           // Legacy header-only invoice: no line detail to work from.
           taxable = tax > 0 ? netSales : 0;
@@ -410,7 +422,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         rows,
         [
           "Tax is reported on invoice date (accrual). Excludes draft and void invoices.",
-          "Taxable Sales is the actual tax base: taxable line items net of their line discounts, less the invoice-level discount — so Taxable Sales × the tax rate = Tax Collected. Non-Taxable Sales is the rest of net sales (subtotal − discounts); Total Sales includes tax.",
+          "Taxable Sales is the actual tax base: taxable line items net of their line discounts, less their share of the invoice-level discount (all of it for invoices issued before the pro-rata rule) — so Taxable Sales × the tax rate = Tax Collected. Non-Taxable Sales is the rest of net sales (subtotal − discounts); Total Sales includes tax.",
         ]
       );
     },

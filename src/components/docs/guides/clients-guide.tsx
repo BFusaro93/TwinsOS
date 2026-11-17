@@ -561,7 +561,9 @@ export function ClientsGuide() {
           <strong>Opted in to text messages</strong> box &mdash; tick it only after that person has
           confirmed they want texts. An automation text step set to send to <em>All contacts</em>{" "}
           texts a contact&apos;s main phone only when that contact has opted in; the client&apos;s
-          own primary and billing phones go by the client&apos;s own opt-in. A STOP (or a carrier
+          own primary and billing phones go by the client&apos;s own opt-in, except that a contact who has
+          opted in is still texted on their own number when it is also on the client record. Contacts
+          that existed before this box was added are not opted in until you tick it. A STOP (or a carrier
           block) from any of a contact&apos;s numbers turns that contact&apos;s box off, and a START
           from their main phone turns it back on. Changing a contact&apos;s main phone number turns
           the box off too, because consent was given for the old number &mdash; tick it again in the

@@ -219,25 +219,6 @@ function DetailsTab({
           currentIndex={PO_STATUS_INDEX[status] ?? 0}
           isTerminalError={isError}
         />
-        {/* Submit for approval */}
-        {status === "requested" && canSubmitForApproval && (
-          <div className="mt-3">
-            <Button
-              size="sm"
-              disabled={submitting}
-              onClick={() => {
-                submitForApproval(
-                  { entityId: po.id, entityType: "purchase_order", grandTotalCents: grandTotalForSubmit },
-                  // The hook updates the DB status — only update local state here
-                  { onSuccess: (res) => onStatusChange(res.autoApproved ? "approved" : "pending") }
-                );
-              }}
-            >
-              {submitting ? "Submitting…" : "Submit for Approval"}
-            </Button>
-          </div>
-        )}
-
         {/* Approval chain */}
         {(status === "pending" || status === "approved" || status === "rejected") && (
           <div className="mt-4">
@@ -251,19 +232,35 @@ function DetailsTab({
           </div>
         )}
 
-        {canWriteEquipt && (
+        {(canWriteEquipt || (status === "requested" && canSubmitForApproval)) && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {status === "approved" && (<>
+          {/* Submit for approval — in the same row as Cancel PO, like Send to Receiving */}
+          {status === "requested" && canSubmitForApproval && (
+            <Button
+              size="sm"
+              disabled={submitting}
+              onClick={() => {
+                submitForApproval(
+                  { entityId: po.id, entityType: "purchase_order", grandTotalCents: grandTotalForSubmit },
+                  // The hook updates the DB status — only update local state here
+                  { onSuccess: (res) => onStatusChange(res.autoApproved ? "approved" : "pending") }
+                );
+              }}
+            >
+              {submitting ? "Submitting…" : "Submit for Approval"}
+            </Button>
+          )}
+          {canWriteEquipt && status === "approved" && (<>
             <Button size="sm" onClick={() => handleStatusChange("ordered")}>Mark as Ordered</Button>
           </>)}
-          {(status === "ordered" || status === "partially_fulfilled") && (<>
+          {canWriteEquipt && (status === "ordered" || status === "partially_fulfilled") && (<>
             <Button size="sm" onClick={onSendToReceiving}>Send to Receiving</Button>
             <Button size="sm" variant="outline" onClick={handleMarkComplete}>Mark Complete</Button>
           </>)}
-          {(status === "rejected" || status === "canceled" || status === "pending") && (
+          {canWriteEquipt && (status === "rejected" || status === "canceled" || status === "pending") && (
             <Button size="sm" variant="outline" onClick={() => handleStatusChange("requested")}>Reset to Requested</Button>
           )}
-          {canCancel && (
+          {canWriteEquipt && canCancel && (
             <Button
               size="sm"
               variant="outline"
