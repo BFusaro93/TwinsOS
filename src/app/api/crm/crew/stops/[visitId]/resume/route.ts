@@ -61,7 +61,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: anchorRow, error: anchorErr } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(VISIT_SELECT)
     .eq("id", anchorVisitId)
     .is("deleted_at", null)
@@ -79,7 +79,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidateQuery = (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(VISIT_SELECT);
   // .eq(col, null) matches nothing in PostgREST: a client-less visit could be started
   // (clock-in handles this) but never clocked out, paused or resumed.

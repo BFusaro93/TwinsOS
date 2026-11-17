@@ -76,7 +76,7 @@ export async function PATCH(
   const { visitId } = await params;
   // Org scoping is RLS's job (my_org_id() honours staff impersonation).
   const { data: anchorRow, error: anchorErr } = await db
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(VISIT_SELECT)
     .eq("id", visitId)
     .is("deleted_at", null)
@@ -86,7 +86,7 @@ export async function PATCH(
   const anchor = anchorRow as VisitRow;
 
   const { data: candidates, error: candErr } = await db
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(VISIT_SELECT)
     .eq("client_id", anchor.client_id)
     .eq("scheduled_date", anchor.scheduled_date)

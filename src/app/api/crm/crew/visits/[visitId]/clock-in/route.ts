@@ -40,7 +40,7 @@ export async function POST(
   // shorten the visit's duration.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(`
       clocked_in_at, org_id, crew_id, crew_unassigned, status, scheduled_date,
       notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,

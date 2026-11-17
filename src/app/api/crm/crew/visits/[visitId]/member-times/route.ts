@@ -124,7 +124,7 @@ async function authorizeVisit(
   }
 
   const { data: visit, error } = await db
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(VISIT_SELECT)
     .eq("id", visitId)
     // Org scoping is RLS's job here (my_org_id(), which honours staff
@@ -146,7 +146,7 @@ async function authorizeVisit(
   const ownerId = await stopPunchOwnerVisitId(supabase, visit.id);
   if (ownerId !== visit.id) {
     const { data: owner } = await db
-      .from("crm_job_visits")
+      .from("crm_crew_job_visits")
       .select(VISIT_SELECT)
       .eq("id", ownerId)
       .is("deleted_at", null)
