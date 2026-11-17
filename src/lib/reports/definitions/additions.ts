@@ -357,8 +357,9 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
           supabase
             .from("rpt_invoice_link_billing")
             .select("contract_id, revenue_ex_tax_cents")
-            .in("contract_id", chunk)
-            .order("invoice_id")
+            .in("contract_id", chunk),
+          // No `id` column; the view has one row per invoice, so page on that.
+          { orderBy: "invoice_id" }
         );
         for (const b of billed) {
           if (!b.contract_id) continue;
