@@ -23,7 +23,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background print:h-auto print:overflow-visible print:block">
-      <RealtimeSync />
+      <RealtimeSync scope="shared" />
       <SettingsLoader />
 
       <div className="hidden h-full lg:flex print:hidden">

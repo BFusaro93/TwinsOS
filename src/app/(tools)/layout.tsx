@@ -26,7 +26,7 @@ export default function ToolsLayout({ children }: { children: React.ReactNode })
   return (
     <TrialLockGate>
     <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background">
-      <RealtimeSync />
+      <RealtimeSync scope="shared" />
       <SettingsLoader />
 
       <div className="hidden h-full lg:flex">
