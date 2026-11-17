@@ -1121,7 +1121,7 @@ export function WaitingList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
+      <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full min-w-[900px] text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
             <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
