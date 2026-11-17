@@ -37,7 +37,9 @@ function isPortalSession(user: User | null | undefined): boolean {
  * account or its RLS access.
  */
 function isTransientNetworkError(error: { message?: string; code?: string }): boolean {
-  return !error.code && /load failed|failed to fetch|networkerror|network request failed/i.test(error.message ?? "");
+  // "upstream request timeout" is the Supabase gateway's 504 body (no PostgREST code): it
+  // appears when the database is overloaded and clears on its own, so it is not a profile problem.
+  return !error.code && /load failed|failed to fetch|networkerror|network request failed|upstream request timeout|gateway time-?out/i.test(error.message ?? "");
 }
 
 /**
