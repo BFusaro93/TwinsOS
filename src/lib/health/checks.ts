@@ -615,10 +615,12 @@ function checkSentry(): Promise<HealthCheckResult> {
   return timed("sentry", SENTRY_NAME, async (signal) => {
     const base = process.env.SENTRY_API_URL ?? "https://us.sentry.io";
     // is:unresolved already excludes resolved and archived/ignored issues.
-    // 90d is Sentry's maximum stats window; without it older issues drop out.
+    // On this project-issues endpoint statsPeriod only sizes the per-issue
+    // sparkline (it accepts just "24h" or "14d" — anything else is a 400); it is
+    // not an age filter, so old unresolved issues are still returned.
     const params = new URLSearchParams({
       query: "is:unresolved environment:production",
-      statsPeriod: "90d",
+      statsPeriod: "14d",
       sort: "date",
       limit: "100",
     });
@@ -627,7 +629,12 @@ function checkSentry(): Promise<HealthCheckResult> {
       { headers: { Authorization: `Bearer ${token}` }, signal }
     );
     if (res.status === 401 || res.status === 403) throw new Error(`Sentry rejected the API token (${res.status})`);
-    if (!res.ok) throw new Error(`Sentry responded ${res.status}`);
+    if (!res.ok) {
+      // Sentry's error body is a short {"detail": "..."} message (no secrets); surface it so a 4xx is self-explanatory.
+      const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+      const detail = typeof body?.detail === "string" ? `: ${body.detail.slice(0, 120)}` : "";
+      throw new Error(`Sentry responded ${res.status}${detail}`);
+    }
     const issues = (await res.json()) as SentryIssue[];
 
     const untriaged = issues.filter((i) => !i.assignedTo || i.substatus === "regressed" || i.substatus === "escalating");
