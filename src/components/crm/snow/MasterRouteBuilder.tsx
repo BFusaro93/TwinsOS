@@ -171,7 +171,7 @@ export function MasterRouteBuilder() {
       <div className="flex flex-wrap items-center gap-2">
         <RouteIcon className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
         <Select value={routeId} onValueChange={setRouteId}>
-          <SelectTrigger className="h-9 w-64 max-w-full text-sm"><SelectValue placeholder={routes.length ? "Pick a route" : "No routes yet"} /></SelectTrigger>
+          <SelectTrigger className="h-9 w-96 max-w-full text-sm"><SelectValue placeholder={routes.length ? "Pick a route" : "No routes yet"} /></SelectTrigger>
           <SelectContent>
             {routes.map((r) => (
               <SelectItem key={r.id} value={r.id}>
@@ -187,7 +187,7 @@ export function MasterRouteBuilder() {
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void handleCreate(); }}
               placeholder="New route, e.g. Snow Plow Team 1"
-              className="h-9 w-56 max-w-full text-sm"
+              className="h-9 w-80 max-w-full text-sm"
             />
             <Button size="sm" className="h-9" onClick={handleCreate} disabled={!newName.trim() || createRoute.isPending}>
               <Plus className="mr-1 h-3.5 w-3.5" />Add Route
@@ -209,14 +209,14 @@ export function MasterRouteBuilder() {
               onBlur={commitName}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
               aria-label="Route name"
-              className="h-8 w-56 max-w-full text-sm"
+              className="h-8 w-96 max-w-full text-sm"
             />
             <Select
               value={route.defaultCrewId ?? "none"}
               disabled={!canManage}
               onValueChange={(v) => updateRoute.mutate({ id: route.id, patch: { default_crew_id: v === "none" ? null : v } })}
             >
-              <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Default crew" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-56 max-w-full text-xs"><SelectValue placeholder="Default crew" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No default crew</SelectItem>
                 {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
