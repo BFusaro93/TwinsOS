@@ -24,8 +24,8 @@ import { RealScreenshot } from "@/components/marketing/RealScreenshot";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Equipt | Asset Management & Maintenance",
-  description: "Equipt is the CMMS side of the platform — work orders, preventive maintenance, asset registry, parts inventory, and purchasing in one procurement backbone.",
+  title: "Equipt CMMS | Asset Management & Maintenance Software",
+  description: "Equipt is a CMMS for fleets and equipment: work orders, preventive maintenance, asset registry, parts inventory, and purchasing in one system. Part of Landscapt & Equipt.",
   path: "/features/equipt",
   image: "/screenshots/equipt-dashboard.png",
 });
