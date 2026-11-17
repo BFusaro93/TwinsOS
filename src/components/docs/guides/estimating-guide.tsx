@@ -1043,7 +1043,9 @@ export function EstimatingGuide() {
             Void the invoice first if you really want a regular job.
           </li>
           <li>
-            Set the scheduled date, assign a crew, and enter a <strong>Crew Size (men)</strong>. The
+            Set the scheduled date (required for One Time; for Recurring it is an optional Start
+            Date, since the Schedule drives the visits; use Waiting List when there is no date yet),
+            assign a crew, and enter a <strong>Crew Size (men)</strong>. The
             crew size is written onto the job and its first visit, so the Dispatch Board&rsquo;s Men
             column is right from day one instead of reading 0.
           </li>

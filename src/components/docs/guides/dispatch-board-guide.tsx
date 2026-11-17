@@ -632,13 +632,40 @@ export function DispatchBoardGuide() {
             you choose a crew instead of typing its name or code.
           </li>
           <li>
-            <strong>Map</strong> — the <strong>Map</strong> button next to Stats opens a map above
-            the list with every stop in view, numbered in route order and coloured by crew; click a
-            pin for the client, address, crew and status. It follows the filters and any new order
-            or optimize result. Stops with no resolvable address are left off, and the panel says
-            how many are missing. While the map is open, the map, the count bar and the visit table
-            scroll together as one area, so you can still reach every row. It uses the Google Maps key
-            under Settings &gt; Integrations.
+            <strong>Map</strong> — the <strong>Map</strong> button next to Stats opens a working map
+            above the list with every stop in view, numbered in route order and coloured by crew. It
+            is the same map the Snow Jobs board uses. It follows the filters and any new order or
+            optimize result. Stops with no resolvable address are left off, and the panel says how
+            many are missing. While the map is open, the map, the count bar and the visit table
+            scroll together as one area under the page header, so you can still reach every row. It
+            uses the Google Maps key under Settings &gt; Integrations. The panel beside the map has
+            three modes:
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>
+                <strong>Select</strong> — click stops to select or unselect them (the table follows).
+                With stops selected the panel offers <em>Assign to crew…</em> then <em>Update</em>,
+                <em> Move to date</em>, <em>Assign crews…</em> (several crews on one stop) and{" "}
+                <em>Dispatch</em>. These follow the same rules as the table&apos;s Actions menu:
+                completed visits keep their crew, a visit a crew has clocked into can&apos;t be
+                re-crewed or moved to another day, and package Min Days and invoiced-visit locks
+                still apply.
+              </li>
+              <li>
+                <strong>Route order</strong> — left-click a stop to move it later in its crew&apos;s
+                route, right-click to move it earlier. It swaps with the neighbouring stop of the same
+                crew and shows as a draft (&ldquo;Order changed — not yet saved&rdquo;) until you click{" "}
+                <strong>Save Order</strong>; <strong>Clear Order</strong> discards it. Saving also
+                remembers the order for that crew on that weekday.
+              </li>
+              <li>
+                <strong>Draw area</strong> — click points to outline a shape, then{" "}
+                <em>Select inside</em> to select exactly the stops in it, or <em>Add to selection</em>{" "}
+                to keep your current picks.
+              </li>
+            </ul>
+            <em>Show route lines</em> draws each crew&apos;s path, and{" "}
+            <em>Show only selected stops</em> on the map or in the table narrows either to your
+            selection. Click a crew in the legend to hide or show it.
           </li>
           <li>
             <strong>Weather</strong> — a chip in the count bar shows the National Weather Service
@@ -674,9 +701,9 @@ export function DispatchBoardGuide() {
           </li>
         </ul>
         <p>
-          There&apos;s no live map view on the board — routing is handled by the crew stop order,
-          the <strong>Optimize Route</strong> action, and the printed route sheets. See the next
-          section for how all three fit together.
+          Routing is handled by the crew stop order (which you can also change from the map&apos;s
+          Route order mode), the <strong>Optimize Route</strong> action, and the printed route
+          sheets. See the next section for how they fit together.
         </p>
       </Section>
 
@@ -1065,7 +1092,8 @@ export function DispatchBoardGuide() {
         </p>
         <p>
           <strong>Saved views and your columns.</strong> Applying a saved view replaces your current
-          visible columns with the ones the view stored. <strong>Dragging a stop to another
+          visible columns with the ones the view stored. A view saved with the crew filter set to{" "}
+          <strong>Unassigned</strong> keeps that filter when you apply it. <strong>Dragging a stop to another
           crew</strong> on the board is refused with &ldquo;Use Team Assign to move a stop between
           crews&rdquo;; open Team Assignment to move it.
         </p>

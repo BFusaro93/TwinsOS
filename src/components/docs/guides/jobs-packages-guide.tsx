@@ -126,7 +126,17 @@ export function JobsPackagesGuide() {
             be changed later on the job&apos;s Job Settings (Edit): like a schedule change, you&apos;re
             shown how many untouched upcoming visits the new dates drop, those are removed, and the
             new dates are filled in. A recurring job has no separate Scheduled Date to edit — its Start
-            Date is what the schedule runs from.
+            Date is what the schedule runs from. When you convert an estimate, a recurring job only
+            needs its Schedule: the date is labeled <strong>Start Date</strong> and is optional (leave
+            it blank to begin on the Schedule&apos;s next day; visits begin on the first Schedule day
+            on or after a date you set, with no extra hand-placed visit). Scheduled recurring jobs are
+            created Scheduled, not on hold.
+          </li>
+          <li>
+            <strong>One Time needs a date when converted from an estimate.</strong> The Scheduled Date
+            is required, because a one-time job with no date has no visit to dispatch and used to be
+            created on hold, invisible to the Dispatch Board and Waiting List. If the work has no date
+            yet, convert it as a <strong>Waiting List</strong> job instead.
           </li>
           <li>
             <strong>Visit caps and skipped visits.</strong> A service converted from an estimate line

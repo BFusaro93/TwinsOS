@@ -735,7 +735,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Converting an estimate to a job",
             detail:
-              "Click 'Convert Estimate to Job', choose which line items to include, and pick a Job Type: One Time, Recurring, Project, or Waiting List. Package and Snow jobs are created directly rather than converted from an estimate. Set the scheduled date and assign a crew before confirming. Once a line is converted, its price, quantity and visits are locked on the estimate (change them on the job); budgeted hours, cost, equipment and notes stay editable.",
+              "Click 'Convert Estimate to Job', choose which line items to include, and pick a Job Type: One Time, Recurring, Project, or Waiting List. Package and Snow jobs are created directly rather than converted from an estimate. Set the date and assign a crew before confirming. A One Time job needs a Scheduled Date (if it has no date yet, convert it as a Waiting List job instead, since a dateless one-time job would have no visit to dispatch). A Recurring job only needs its Schedule: the date is labeled Start Date and is optional, so leave it blank to begin on the Schedule's next day, or set it to hold the first visit until then (visits start on the first Schedule day on or after it, with no extra hand-placed visit). Waiting List and scheduled recurring jobs are created Scheduled, not on hold. Once a line is converted, its price, quantity and visits are locked on the estimate (change them on the job); budgeted hours, cost, equipment and notes stay editable.",
           },
           {
             step: "Full guide",
@@ -786,6 +786,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Optimize Route",
             detail:
               "Reorders the stops in view by real driving time, anchored at the crew's starting address (Team > Crews) rather than at whichever stop happens to be listed first. The dropdown beside the button picks the direction: 'Nearest first' takes the closest stop each time (shortest total drive), 'Furthest first' drives out to the far end and works back in so the crew finishes near the yard. Anchoring only applies when every stop in view belongs to one crew — filter to a single crew first. An optimized order isn't saved until you click Save Order. Needs a Google Maps API key with the Distance Matrix API enabled, under Landscapt Settings > Integrations.",
+          },
+          {
+            step: "Map: select and schedule from the map",
+            detail:
+              "Click Map on the Dispatch Board to open a working map above the list (the same one the Snow Jobs board uses). Stops are numbered in each crew's route order and coloured by crew; the legend shows and hides crews. Pick a mode in the panel: Select (click stops to select them, which selects them in the table too), Route order (left-click a stop to move it later in its crew's route, right-click to move it earlier) or Draw area (click points to outline a shape, then Select inside, or Add to selection to keep your current picks). With stops selected the panel offers Assign to crew... then Update, Move to date, Assign crews... (several crews on one stop) and Dispatch, which follow the same rules as the table's Actions menu: completed visits keep their crew, a visit a crew has clocked into can't be re-crewed or moved, and package Min Days and invoiced-visit locks still apply. Route order changes are a draft until you click Save Order (Clear Order discards them); Save Order also remembers the order for that crew and weekday. Show route lines draws each crew's path, and 'Show only selected stops' narrows the map or the table to your selection.",
           },
           {
             step: "Full guides",
@@ -963,6 +968,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Master Routes",
             detail:
               "Click Master Routes on the Snow Jobs board (the same editor is in Settings > Services > Snow Routes). Pick a route or add one (name, default crew, Active). 'Find jobs for this route' searches snow jobs by client or address, service, zip code(s) and distance (1 to 25 miles of an address or of one of the route's stops), with 'Not already on a route' ticked by default; tick the results and Add to route. A job can be on only one route. Snow jobs added since the routes were built are listed at the top with a NEW flag. Order stops by dragging, typing a position or the arrows; Group Stops orders every stop by driving time from the crew's shop, Optimize Route keeps stop 1 and routes onward from it. Add Jobs can then bring in a whole route, and Actions > Save Order to Master Routes writes a storm's order back onto the routes.",
+          },
+          {
+            step: "Assigning crews: this storm only, or Permanent",
+            detail:
+              "Pick a crew from the selection bar's Assign crew... (or the map panel's Assign to crew...) and the change applies to this storm's stops only; next storm they come back on whichever crew their Master Route has. Tick Permanent beside the picker to also save the crew onto the Master Routes: the picker then lists each crew's active Master Routes (a crew with several shows as 'Crew name - Route name', for example 'Maintenance 1 - Plowing' and 'Maintenance 1 - Salting'), so you choose the crew and the route in one step. A crew can have several routes (for example one for plowing and one for salting, so a salt-only storm loads only the salt route); a job already on the route you pick keeps its place, others go on the end. If the crew has no route yet, one is created and named after the crew. Choosing Unassigned with Permanent ticked also takes the stops off their Master Routes. A route can only belong to the crew it is set up for.",
           },
           {
             step: "Contract caps and overage (inches, salts, events, pushes)",
@@ -1668,7 +1678,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Cost layers, and what never changes",
             detail:
-              "Each goods receipt adds a 'cost layer' (quantity + unit cost + date + PO reference) to the part/product record. Cost layers only affect the pre-fill on new lines — historical Requisition, PO, and Work Order line items keep whatever cost was recorded at the time and are never retroactively changed.",
+              "Each goods receipt adds a 'cost layer' (quantity + unit cost + date + PO reference) to the part/product record. A $0 layer (for example from stock returned while the part's catalog cost was still $0) is ignored by WAC and FIFO, and a Work Order return costed at $0 falls back to the part's catalog cost, so a pre-fill never comes up as $0 just because of one. Cost layers only affect the pre-fill on new lines — historical Requisition, PO, and Work Order line items keep whatever cost was recorded at the time and are never retroactively changed.",
           },
           {
             step: "Parts and Products always agree",
@@ -1897,6 +1907,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "I edited a line on an approved PO and it went back to Pending. Why?",
         a: "An approval only covers exactly what the approver saw. Any change to lines (item, quantity, price, taxable, project) or the vendor sends it back for approval, and approvals that no longer match are asked again.",
+      },
+      {
+        q: "Add Part (or a PO line) pre-filled a $0 cost even though the part has a cost. Why?",
+        a: "Stock returned while the catalog cost was $0 could leave a $0 cost layer that WAC and FIFO then averaged in. $0 layers are now ignored and the pre-fill falls back to the part's catalog unit cost, and a Work Order return costed at $0 also uses the catalog cost. Check that the part's Unit Cost is set; lines already saved keep the cost they recorded.",
       },
       {
         q: "My requisition was rejected. Do I keep the approvals I already had?",
@@ -2587,6 +2601,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "The storm runs several days. How do I put stops on different days?",
         a: "Every stop has its own Date. In Add Jobs, tick the jobs for one day, pick the date and click Set date; repeat for each day. On the board click a stop's date, or tick several and use Move to date. Completed and cancelled stops don't move, and a stop a crew has clocked into can't change day. Filter by the Dates filter to work on one day; route order and Optimize Routes work per crew per day.",
+      },
+      {
+        q: "I changed a snow stop's crew, but next storm it's back on the old crew. How do I make it stick?",
+        a: "A plain crew change only applies to that storm. Tick Permanent beside the crew picker (selection bar or map panel) to also save the crew onto the Master Routes; the picker then lists each crew's routes, so you choose the crew and the route (for example Plowing or Salting) together. Next storm's Add Jobs then brings those stops in on that crew.",
+      },
+      {
+        q: "Can I use the map on the Dispatch Board to select stops and change crews, dates or order?",
+        a: "Yes. Click Map on the Dispatch Board: Select mode picks stops (the table follows) and offers Assign to crew, Move to date, Assign crews and Dispatch; Route order moves a stop later (left-click) or earlier (right-click) in its crew's route and needs Save Order; Draw area selects every stop inside a shape you outline. The same rules as the table's Actions menu apply.",
+      },
+      {
+        q: "Why can't I convert an estimate to a one-time job without a date?",
+        a: "A one-time job with no date has no visit to dispatch, so it would sit on hold where crews and schedulers never see it. Pick a Scheduled Date, or convert it as a Waiting List job if it has no date yet. A recurring job only needs its Schedule; its date is an optional Start Date.",
       },
       {
         q: "How do I select every snow stop in an area?",
