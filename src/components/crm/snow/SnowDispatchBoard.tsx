@@ -19,6 +19,11 @@ import {
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/use-crm-jobs";
+import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
+
+/** Max per-stop writes in flight from one bulk board action. A storm has hundreds of stops, and
+ *  firing them all at once (Promise.all) saturated the database for every user on 2026-11-17. */
+const BULK_WRITE_CONCURRENCY = 6;
 import { printSnowRouteSheets } from "@/lib/print";
 import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -1582,11 +1587,11 @@ export function SnowDispatchBoard() {
       return;
     }
     try {
-      await Promise.all(targets.map((v) => updateVisitMutation({
+      await mapWithConcurrency(targets, BULK_WRITE_CONCURRENCY, (v) => updateVisitMutation({
         id: v.id,
         updates: { status: "dispatched", dispatched_at: new Date().toISOString() },
         jobId: v.jobId,
-      })));
+      }));
       toast.success(`${targets.length} stop${targets.length !== 1 ? "s" : ""} dispatched`);
     } catch {
       toast.error("Dispatch failed");
@@ -1603,14 +1608,14 @@ export function SnowDispatchBoard() {
       return;
     }
     try {
-      await Promise.all(cancellable.map((v) => updateVisitMutation({
+      await mapWithConcurrency(cancellable, BULK_WRITE_CONCURRENCY, (v) => updateVisitMutation({
         id: v.id,
         updates: { status: "scheduled", dispatched_at: null },
         jobId: v.jobId,
         // Re-checked against the database, not this board's cached rows: a crew may have
         // clocked in since the last refresh.
         onlyIfNotStarted: true,
-      })));
+      }));
       const skipped = started.length + notDispatched.length;
       toast.success(
         `${cancellable.length} stop${cancellable.length !== 1 ? "s" : ""} back to scheduled` +
@@ -1637,10 +1642,10 @@ export function SnowDispatchBoard() {
     if (!outcomeDialog) return;
     const { ids, status } = outcomeDialog;
     try {
-      await Promise.all(ids.map((id) => {
+      await mapWithConcurrency(ids, BULK_WRITE_CONCURRENCY, (id) => {
         const v = visits.find((x) => x.id === id);
         return updateVisitStatus({ id, status, reason, jobId: v?.jobId, jobType: v?.job?.jobType });
-      }));
+      });
       toast.success(`${ids.length} stop${ids.length !== 1 ? "s" : ""} ${status === "skipped" ? "skipped" : "cancelled"}`);
       setSelectedVisitIds(new Set());
       setOutcomeDialog(null);
@@ -1657,7 +1662,7 @@ export function SnowDispatchBoard() {
     const changes = orderedIds
       .map((id, i) => ({ id, i, v: byId.get(id) }))
       .filter((x) => x.v && x.v.orderNum !== x.i);
-    await Promise.all(changes.map((x) => updateVisitMutation({ id: x.id, updates: { order_num: x.i }, jobId: x.v!.jobId })));
+    await mapWithConcurrency(changes, BULK_WRITE_CONCURRENCY, (x) => updateVisitMutation({ id: x.id, updates: { order_num: x.i }, jobId: x.v!.jobId }));
   }
 
   async function saveOrderToMasterRoutes() {
@@ -1695,7 +1700,13 @@ export function SnowDispatchBoard() {
     const targets = visitIds
       .map((id) => visits.find((x) => x.id === id))
       .filter((v): v is CRMJobVisit => !!v && v.status !== "completed" && v.status !== "cancelled" && v.scheduledDate !== date);
-    const results = await Promise.allSettled(targets.map((v) => updateVisitMutation({ id: v.id, updates: { scheduled_date: date }, jobId: v.jobId })));
+    // Each write is settled on its own so one refused stop (e.g. a crew is clocked in) doesn't stop the rest.
+    const results = await mapWithConcurrency(targets, BULK_WRITE_CONCURRENCY, (v) =>
+      updateVisitMutation({ id: v.id, updates: { scheduled_date: date }, jobId: v.jobId }).then(
+        (value): PromiseSettledResult<unknown> => ({ status: "fulfilled", value }),
+        (reason): PromiseSettledResult<unknown> => ({ status: "rejected", reason }),
+      ),
+    );
     const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
     setDriveMins(new Map());
     return {
@@ -1721,7 +1732,7 @@ export function SnowDispatchBoard() {
 
   async function changeCrew(visitIds: string[], crewId: string | null) {
     try {
-      await Promise.all(visitIds.map((id) => {
+      await mapWithConcurrency(visitIds, BULK_WRITE_CONCURRENCY, (id) => {
         const v = visits.find((x) => x.id === id);
         return updateVisitMutation({
           id,
@@ -1729,7 +1740,7 @@ export function SnowDispatchBoard() {
           updates: crewId ? { crew_id: crewId, crew_unassigned: false } : { crew_id: null, crew_unassigned: true },
           jobId: v?.jobId,
         });
-      }));
+      });
       setDriveMins(new Map());
     } catch {
       toast.error("Failed to change crew");

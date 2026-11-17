@@ -1,7 +1,7 @@
 "use client";
 
 import { isBlankRich, composeVisitNote } from "@/lib/utils/visit-note";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -1444,6 +1444,61 @@ export function useUpdateVisitStatus() {
   });
 }
 
+// A bulk board action (dispatch all, change crew on 500 stops, reorder) runs one
+// useUpdateVisit per stop, and each used to invalidate the visit/job/client lists on
+// success. Every invalidation refetches the board's full list (hundreds of rows with
+// embedded job, services and client data), so 500 stops meant hundreds of heavy
+// refetches in a few seconds: on 2026-11-17 that saturated the database and slowed the
+// whole app for 10+ minutes. Leading + trailing throttle: a single edit still refreshes
+// immediately; a burst collapses to one refresh now and one more once it settles.
+const VISIT_INVALIDATE_THROTTLE_MS = 2000;
+let lastVisitListInvalidate = 0;
+let visitListInvalidateTimer: ReturnType<typeof setTimeout> | null = null;
+function invalidateVisitListsThrottled(qc: QueryClient) {
+  const run = () => {
+    lastVisitListInvalidate = Date.now();
+    qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+    qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    qc.invalidateQueries({ queryKey: ['clients'] });
+  };
+  const wait = lastVisitListInvalidate + VISIT_INVALIDATE_THROTTLE_MS - Date.now();
+  if (wait <= 0) {
+    run();
+  } else if (!visitListInvalidateTimer) {
+    visitListInvalidateTimer = setTimeout(() => {
+      visitListInvalidateTimer = null;
+      run();
+    }, wait);
+  }
+}
+
+// Crew push notifications are fire-and-forget, but each one is a server round trip (auth,
+// permission, rate-limit and visit lookups). Re-crewing 500 stops fired 500 of them at once;
+// this queue keeps at most a few in flight, in order, and still never blocks the write.
+const VISIT_NOTIFY_CONCURRENCY = 3;
+const visitNotifyQueue: { id: string; kind: 'assigned' | 'note' }[] = [];
+let visitNotifyInFlight = 0;
+function enqueueVisitNotify(id: string, kind: 'assigned' | 'note') {
+  visitNotifyQueue.push({ id, kind });
+  pumpVisitNotifyQueue();
+}
+function pumpVisitNotifyQueue() {
+  while (visitNotifyInFlight < VISIT_NOTIFY_CONCURRENCY && visitNotifyQueue.length > 0) {
+    const next = visitNotifyQueue.shift()!;
+    visitNotifyInFlight++;
+    fetch(`/api/crm/visits/${next.id}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: next.kind }),
+    })
+      .catch(() => {})
+      .finally(() => {
+        visitNotifyInFlight--;
+        pumpVisitNotifyQueue();
+      });
+  }
+}
+
 export function useUpdateVisit() {
   const qc = useQueryClient();
   return useMutation({
@@ -1703,18 +1758,10 @@ export function useUpdateVisit() {
       // included) on each Save, which used to re-send "assigned" to the same
       // crew every time anything on the visit was edited.
       if (updates.crew_id && updates.crew_id !== (before?.crew_id ?? null)) {
-        fetch(`/api/crm/visits/${id}/notify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind: 'assigned' }),
-        }).catch(() => {});
+        enqueueVisitNotify(id, 'assigned');
       }
       if (updates.notes_to_crew && updates.notes_to_crew !== (before?.notes_to_crew ?? null)) {
-        fetch(`/api/crm/visits/${id}/notify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind: 'note' }),
-        }).catch(() => {});
+        enqueueVisitNotify(id, 'note');
       }
 
       return {
@@ -1725,8 +1772,7 @@ export function useUpdateVisit() {
       };
     },
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
-      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      invalidateVisitListsThrottled(qc);
       const clientId = data?.clientId;
       if (clientId) {
         qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
@@ -1734,7 +1780,6 @@ export function useUpdateVisit() {
         qc.invalidateQueries({ queryKey: ['crm-invoices'] });
       }
       if (data?.activityClientId) qc.invalidateQueries({ queryKey: ['clients', data.activityClientId, 'activity'] });
-      qc.invalidateQueries({ queryKey: ['clients'] });
       if (data?.statusTrigger && data.statusTriggerClientId) {
         fireAutomationTrigger({
           triggerType: data.statusTrigger,

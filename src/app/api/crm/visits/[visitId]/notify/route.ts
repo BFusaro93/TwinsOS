@@ -7,6 +7,10 @@ import { rejectWithoutSchedulingPermission } from "@/lib/auth/scheduling-permiss
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
+// Fire-and-forget from the client. Without a limit a call stuck on a saturated database held a
+// function for the 300s default (143 such timeouts since 2026-08); fail fast instead.
+export const maxDuration = 30;
+
 const Body = z.object({ kind: z.enum(["assigned", "note"]) });
 
 /** How recent the visit's last write must be for there to be anything to send. */
