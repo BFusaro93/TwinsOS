@@ -269,7 +269,7 @@ export function useJobsForDate(date: string) {
       const { data, error } = await (supabase as any)
         .from("crm_jobs")
         .select(`
-          *,
+          ${JOB_READ_COLUMNS},
           clients(display_name, primary_phone),
           crm_crews(name),
           sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
@@ -332,7 +332,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         let q = (supabase as any)
           .from("crm_jobs")
           .select(`
-            *,
+            ${JOB_READ_COLUMNS},
             clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
             crm_crews(name),
             sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
@@ -715,7 +715,7 @@ export function useClientJobs(clientId?: string) {
         // crm_job_visits is a lightweight aggregate (no crew join) so the
         // client's Jobs card can show the actual next/last visit date instead
         // of crm_jobs.scheduled_date, which is only the original start date.
-        .select('*, crm_job_services(*), clients(display_name, primary_phone), sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name), crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id)')
+        .select(`${JOB_READ_COLUMNS}, crm_job_services(*), clients(display_name, primary_phone), sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name), crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id)`)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
       if (clientId) q = q.eq('client_id', clientId);
@@ -735,7 +735,7 @@ export function useJobsByContract(contractId?: string) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from('crm_jobs')
-        .select('*, crm_job_services(*), clients(display_name, primary_phone), sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name)')
+        .select(`${JOB_READ_COLUMNS}, crm_job_services(*), clients(display_name, primary_phone), sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name)`)
         .eq('contract_id', contractId as string)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
@@ -945,7 +945,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
           ${JOB_VISIT_READ_COLUMNS},
           clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
           crm_crews!crm_job_visits_crew_id_fkey(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
+          crm_jobs(${JOB_READ_COLUMNS}, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)
         .is('deleted_at', null)
         .order('priority', { ascending: true })
@@ -1090,7 +1090,7 @@ export function useCreateVisit() {
               }
             : {}),
         })
-        .select()
+        .select(JOB_VISIT_READ_COLUMNS)
         .single();
       if (error) throw error;
 
@@ -1851,7 +1851,7 @@ export function useCreateClientJob() {
           invoice_description: values.invoiceDescription?.trim() || null,
           budgeted_hours: roundHours(values.services.reduce((sum, s) => sum + (s.budgetedHours || 0) * (s.teamSize || 1), 0)) || null,
         })
-        .select()
+        .select(JOB_READ_COLUMNS)
         .single();
       if (error) throw error;
 
@@ -2332,7 +2332,7 @@ export function useJobsList(filters?: {
         let q = (supabase as any)
           .from("crm_jobs")
           .select(`
-            *,
+            ${JOB_READ_COLUMNS},
             clients(display_name, primary_phone),
             crm_crews(name),
             crm_job_services(*),
@@ -2769,7 +2769,7 @@ export function useCreateJobsFromEstimate() {
           is_complete: false,
           invoice_separately: false,
         })
-        .select()
+        .select(JOB_READ_COLUMNS)
         .single();
       if (error) throw error;
 
@@ -3192,7 +3192,7 @@ export function useJobDetail(id: string) {
       const { data, error } = await (supabase as any)
         .from('crm_jobs')
         .select(`
-          *,
+          ${JOB_READ_COLUMNS},
           clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, client_since),
           crm_crews(name),
           crm_job_services(*, crm_services(invoice_description), crm_job_service_subitems(id, type, name, qty, sort_order, rate_cents, print_on_invoice, deleted_at), crm_job_service_office_notes(note))
@@ -3272,7 +3272,7 @@ export function useUpdateJob() {
 // ── schedules ─────────────────────────────────────────────────────────────────
 
 import type { CRMSchedule } from '@/types/crm-jobs';
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { JOB_READ_COLUMNS, JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSchedule(row: any): CRMSchedule {

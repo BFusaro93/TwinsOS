@@ -119,7 +119,7 @@ export async function POST(request: Request) {
   // punches, which need not be the one the app sent (same as crew/day).
   let punchVisitId: string | null = null;
   if (visitId && absent) {
-    const { data: visit } = await db.from("crm_job_visits")
+    const { data: visit } = await db.from("crm_crew_job_visits")
       .select("id, org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id)")
       .eq("id", visitId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
     if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });

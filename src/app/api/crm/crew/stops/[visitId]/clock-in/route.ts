@@ -14,6 +14,7 @@ import { logger } from "@/lib/logger";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { autoStopOtherRunningStops } from "@/lib/crew/auto-stop";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
+import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
 
 const log = logger.child("crew/stops/clock-in");
 
@@ -116,7 +117,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: anchorRow, error: anchorErr } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(VISIT_SELECT)
     .eq("id", anchorVisitId)
     .is("deleted_at", null)
@@ -150,7 +151,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidateQuery = (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select(VISIT_SELECT);
   // .eq(col, null) matches nothing in PostgREST, which left a client-less
   // visit with no stop to start.
@@ -257,7 +258,7 @@ export async function POST(
     // And not moved to a later day since the check above: the dispatcher's date move can commit
     // between our read and this write, which stranded a clocked-in visit on tomorrow's date.
     .lte("scheduled_date", orgToday)
-    .select();
+    .select(JOB_VISIT_READ_COLUMNS);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

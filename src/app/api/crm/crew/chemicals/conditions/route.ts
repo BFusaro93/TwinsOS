@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select("id, org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id, lat, lng, client_properties(lat, lng))")
     .eq("id", visitId)
     .is("deleted_at", null)

@@ -29,7 +29,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: source } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select("org_id, job_id, client_id, crew_id, crew_unassigned, men_count, notes_to_crew, storm_event_id, push_number, scheduled_date, status, crm_jobs:crew_job(crew_id, job_type)")
     .eq("id", visitId)
     .is("deleted_at", null)

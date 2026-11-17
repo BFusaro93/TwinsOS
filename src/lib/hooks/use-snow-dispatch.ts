@@ -10,7 +10,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { loadContractsById, isSnowContractClosedForDispatch } from "./use-snow-invoicing";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { JOB_READ_COLUMNS, JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ export function useSnowJobs(dispatchDate?: string) {
         (supabase as any)
           .from("crm_jobs")
           .select(`
-            *,
+            ${JOB_READ_COLUMNS},
             clients(display_name, status, deleted_at, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
             client_properties(address, city, state, zip),
             crm_crews(name),
@@ -406,7 +406,7 @@ export function useStormEventVisits(stormEventId: string) {
             ${JOB_VISIT_READ_COLUMNS},
             clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, client_tags(tag)),
             crm_crews!crm_job_visits_crew_id_fkey(name),
-            crm_jobs(*, crm_crews(name), crm_job_services(*), client_properties(address, city, state, zip))
+            crm_jobs(${JOB_READ_COLUMNS}, crm_crews(name), crm_job_services(*), client_properties(address, city, state, zip))
           `)
           .eq("storm_event_id", stormEventId)
           .is("deleted_at", null)

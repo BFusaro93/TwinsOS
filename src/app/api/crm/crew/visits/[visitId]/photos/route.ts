@@ -38,7 +38,7 @@ export async function POST(
   // Get the visit to validate and get job_id
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select("job_id, org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
@@ -168,7 +168,7 @@ export async function GET(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select("org_id, crew_id, crew_unassigned, crm_jobs:crew_job(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)

@@ -2515,6 +2515,13 @@ export type Database = {
             foreignKeyName: "crm_chemical_application_emails_visit_id_fkey"
             columns: ["visit_id"]
             isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_application_emails_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
           },
@@ -2889,6 +2896,13 @@ export type Database = {
             columns: ["unit_of_measure_id"]
             isOneToOne: false
             referencedRelation: "crm_chemical_lookup_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_chemical_applications_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
             referencedColumns: ["id"]
           },
           {
@@ -4428,6 +4442,13 @@ export type Database = {
             columns: ["crew_member_id"]
             isOneToOne: false
             referencedRelation: "crm_crew_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crew_member_times_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
             referencedColumns: ["id"]
           },
           {
@@ -6124,6 +6145,13 @@ export type Database = {
             foreignKeyName: "crm_invoice_line_items_released_visit_id_fkey"
             columns: ["released_visit_id"]
             isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoice_line_items_released_visit_id_fkey"
+            columns: ["released_visit_id"]
+            isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
           },
@@ -6153,6 +6181,13 @@ export type Database = {
             columns: ["service_id"]
             isOneToOne: false
             referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoice_line_items_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: true
+            referencedRelation: "crm_crew_job_visits"
             referencedColumns: ["id"]
           },
           {
@@ -6725,6 +6760,13 @@ export type Database = {
             foreignKeyName: "crm_job_materials_visit_id_fkey"
             columns: ["visit_id"]
             isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_materials_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
           },
@@ -6910,6 +6952,13 @@ export type Database = {
             columns: ["template_job_product_id"]
             isOneToOne: false
             referencedRelation: "crm_job_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
             referencedColumns: ["id"]
           },
           {
@@ -9638,6 +9687,13 @@ export type Database = {
             foreignKeyName: "crm_sequence_enrollments_visit_id_fkey"
             columns: ["visit_id"]
             isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
           },
@@ -11042,6 +11098,13 @@ export type Database = {
             foreignKeyName: "crm_tickets_upsell_visit_id_fkey"
             columns: ["upsell_visit_id"]
             isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tickets_upsell_visit_id_fkey"
+            columns: ["upsell_visit_id"]
+            isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
           },
@@ -11125,6 +11188,13 @@ export type Database = {
             foreignKeyName: "crm_visit_photos_visit_id_fkey"
             columns: ["visit_id"]
             isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_visit_photos_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
             referencedRelation: "crm_job_visits"
             referencedColumns: ["id"]
           },
@@ -11182,6 +11252,13 @@ export type Database = {
             columns: ["subitem_id"]
             isOneToOne: false
             referencedRelation: "crm_job_service_subitems"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_visit_subitem_checks_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crew_job_visits"
             referencedColumns: ["id"]
           },
           {
@@ -18524,6 +18601,326 @@ export type Database = {
           },
         ]
       }
+      crm_crew_job_visits: {
+        Row: {
+          acknowledged_notes_at: string | null
+          actual_hours: number | null
+          asset_type: string | null
+          assigned_employee_id: string | null
+          bill_push: boolean | null
+          break_minutes: number | null
+          break_paid: boolean | null
+          budgeted_hours: number | null
+          chemical_confirmation_waived_at: string | null
+          chemical_confirmation_waived_by: string | null
+          client_id: string | null
+          clocked_in_at: string | null
+          clocked_out_at: string | null
+          completed_at: string | null
+          completion_notes: string | null
+          created_at: string | null
+          created_by: string | null
+          crew_group_id: string | null
+          crew_group_secondary: boolean | null
+          crew_id: string | null
+          crew_unassigned: boolean | null
+          deleted_at: string | null
+          dispatched_at: string | null
+          end_time: string | null
+          handed_off_from_crew_id: string | null
+          id: string | null
+          invoice_description: string | null
+          is_high_priority: boolean | null
+          job_comments: Json | null
+          job_id: string | null
+          job_service_id: string | null
+          materials_used: Json | null
+          men_count: number | null
+          notes_to_client: string | null
+          notes_to_crew: string | null
+          notes_to_crew_updated_at: string | null
+          occurrence_date: string | null
+          order_num: number | null
+          org_id: string | null
+          paused_at: string | null
+          priority: number | null
+          push_number: number | null
+          qty: number | null
+          rate_cents: number | null
+          scheduled_date: string | null
+          skip_reason: string | null
+          snow_depth_inches: number | null
+          start_time: string | null
+          status: string | null
+          storm_event_id: string | null
+          sub_status: string | null
+          temperature: number | null
+          updated_at: string | null
+          crew_job: {
+            actual_hours: number | null
+            arrival_window_hours: number | null
+            asset_type: string | null
+            budgeted_hours: number | null
+            call_ahead: boolean | null
+            client_id: string | null
+            completion_notes: string | null
+            contract_id: string | null
+            created_at: string | null
+            crew_id: string | null
+            deleted_at: string | null
+            end_date_window: string | null
+            end_time: string | null
+            id: string | null
+            inch_trigger: number | null
+            is_complete: boolean | null
+            is_high_priority: boolean | null
+            job_number: number | null
+            job_type: string | null
+            last_service_date: string | null
+            lat: number | null
+            lng: number | null
+            man_count: number | null
+            map_code: string | null
+            notes_to_crew: string | null
+            notes_to_crew_updated_at: string | null
+            org_id: string | null
+            package_id: string | null
+            package_name: string | null
+            package_step: number | null
+            package_total_steps: number | null
+            priority: number | null
+            project_id: string | null
+            property_id: string | null
+            recurrence_end: string | null
+            recurrence_rule: string | null
+            recurrence_start: string | null
+            schedule: string | null
+            schedule_days: string[] | null
+            scheduled_date: string | null
+            service_address: string | null
+            service_city: string | null
+            service_state: string | null
+            service_zip: string | null
+            start_date_window: string | null
+            start_time: string | null
+            status: string | null
+            sub_status: string | null
+            updated_at: string | null
+            waiting_list_end: string | null
+            waiting_list_start: string | null
+          } | null
+        }
+        Insert: {
+          acknowledged_notes_at?: string | null
+          actual_hours?: number | null
+          asset_type?: string | null
+          assigned_employee_id?: string | null
+          bill_push?: boolean | null
+          break_minutes?: number | null
+          break_paid?: boolean | null
+          budgeted_hours?: number | null
+          chemical_confirmation_waived_at?: string | null
+          chemical_confirmation_waived_by?: string | null
+          client_id?: string | null
+          clocked_in_at?: string | null
+          clocked_out_at?: string | null
+          completed_at?: string | null
+          completion_notes?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          crew_group_id?: string | null
+          crew_group_secondary?: boolean | null
+          crew_id?: string | null
+          crew_unassigned?: boolean | null
+          deleted_at?: string | null
+          dispatched_at?: string | null
+          end_time?: string | null
+          handed_off_from_crew_id?: string | null
+          id?: string | null
+          invoice_description?: string | null
+          is_high_priority?: boolean | null
+          job_comments?: Json | null
+          job_id?: string | null
+          job_service_id?: string | null
+          materials_used?: Json | null
+          men_count?: number | null
+          notes_to_client?: string | null
+          notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
+          occurrence_date?: string | null
+          order_num?: number | null
+          org_id?: string | null
+          paused_at?: string | null
+          priority?: number | null
+          push_number?: number | null
+          qty?: number | null
+          rate_cents?: number | null
+          scheduled_date?: string | null
+          skip_reason?: string | null
+          snow_depth_inches?: number | null
+          start_time?: string | null
+          status?: string | null
+          storm_event_id?: string | null
+          sub_status?: string | null
+          temperature?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          acknowledged_notes_at?: string | null
+          actual_hours?: number | null
+          asset_type?: string | null
+          assigned_employee_id?: string | null
+          bill_push?: boolean | null
+          break_minutes?: number | null
+          break_paid?: boolean | null
+          budgeted_hours?: number | null
+          chemical_confirmation_waived_at?: string | null
+          chemical_confirmation_waived_by?: string | null
+          client_id?: string | null
+          clocked_in_at?: string | null
+          clocked_out_at?: string | null
+          completed_at?: string | null
+          completion_notes?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          crew_group_id?: string | null
+          crew_group_secondary?: boolean | null
+          crew_id?: string | null
+          crew_unassigned?: boolean | null
+          deleted_at?: string | null
+          dispatched_at?: string | null
+          end_time?: string | null
+          handed_off_from_crew_id?: string | null
+          id?: string | null
+          invoice_description?: string | null
+          is_high_priority?: boolean | null
+          job_comments?: Json | null
+          job_id?: string | null
+          job_service_id?: string | null
+          materials_used?: Json | null
+          men_count?: number | null
+          notes_to_client?: string | null
+          notes_to_crew?: string | null
+          notes_to_crew_updated_at?: string | null
+          occurrence_date?: string | null
+          order_num?: number | null
+          org_id?: string | null
+          paused_at?: string | null
+          priority?: number | null
+          push_number?: number | null
+          qty?: number | null
+          rate_cents?: number | null
+          scheduled_date?: string | null
+          skip_reason?: string | null
+          snow_depth_inches?: number | null
+          start_time?: string | null
+          status?: string | null
+          storm_event_id?: string | null
+          sub_status?: string | null
+          temperature?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_crew_id_fkey"
+            columns: ["crew_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crew_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crew_job_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["job_service_id"]
+          },
+          {
+            foreignKeyName: "crm_job_visits_storm_event_id_fkey"
+            columns: ["storm_event_id"]
+            isOneToOne: false
+            referencedRelation: "crm_storm_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_crew_jobs: {
         Row: {
           actual_hours: number | null
@@ -19937,6 +20334,10 @@ export type Database = {
         Args: { p_keep_qbo_ids: string[]; p_payment_id: string }
         Returns: undefined
       }
+      _crm_readable_column_list: {
+        Args: { p_alias: string; p_table: unknown }
+        Returns: string
+      }
       _equipt_org_mismatch: { Args: { p_org: string }; Returns: boolean }
       _estimate_approval_block_reason: {
         Args: { p_estimate_id: string }
@@ -20223,68 +20624,133 @@ export type Database = {
         Args: { p_member: string; p_work_date: string }
         Returns: boolean
       }
-      crew_job: {
-        Args: { "": Database["public"]["Tables"]["crm_job_visits"]["Row"] }
-        Returns: {
-          actual_hours: number | null
-          arrival_window_hours: number | null
-          asset_type: string | null
-          budgeted_hours: number | null
-          call_ahead: boolean | null
-          client_id: string | null
-          completion_notes: string | null
-          contract_id: string | null
-          created_at: string | null
-          crew_id: string | null
-          deleted_at: string | null
-          end_date_window: string | null
-          end_time: string | null
-          id: string | null
-          inch_trigger: number | null
-          is_complete: boolean | null
-          is_high_priority: boolean | null
-          job_number: number | null
-          job_type: string | null
-          last_service_date: string | null
-          lat: number | null
-          lng: number | null
-          man_count: number | null
-          map_code: string | null
-          notes_to_crew: string | null
-          notes_to_crew_updated_at: string | null
-          org_id: string | null
-          package_id: string | null
-          package_name: string | null
-          package_step: number | null
-          package_total_steps: number | null
-          priority: number | null
-          project_id: string | null
-          property_id: string | null
-          recurrence_end: string | null
-          recurrence_rule: string | null
-          recurrence_start: string | null
-          schedule: string | null
-          schedule_days: string[] | null
-          scheduled_date: string | null
-          service_address: string | null
-          service_city: string | null
-          service_state: string | null
-          service_zip: string | null
-          start_date_window: string | null
-          start_time: string | null
-          status: string | null
-          sub_status: string | null
-          updated_at: string | null
-          waiting_list_end: string | null
-          waiting_list_start: string | null
-        }
-        SetofOptions: {
-          from: "crm_job_visits"
-          to: "crm_crew_jobs"
-          isOneToOne: true
-          isSetofReturn: true
-        }
-      }
+      crew_job:
+        | {
+            Args: {
+              "": Database["public"]["Views"]["crm_crew_job_visits"]["Row"]
+            }
+            Returns: {
+              actual_hours: number | null
+              arrival_window_hours: number | null
+              asset_type: string | null
+              budgeted_hours: number | null
+              call_ahead: boolean | null
+              client_id: string | null
+              completion_notes: string | null
+              contract_id: string | null
+              created_at: string | null
+              crew_id: string | null
+              deleted_at: string | null
+              end_date_window: string | null
+              end_time: string | null
+              id: string | null
+              inch_trigger: number | null
+              is_complete: boolean | null
+              is_high_priority: boolean | null
+              job_number: number | null
+              job_type: string | null
+              last_service_date: string | null
+              lat: number | null
+              lng: number | null
+              man_count: number | null
+              map_code: string | null
+              notes_to_crew: string | null
+              notes_to_crew_updated_at: string | null
+              org_id: string | null
+              package_id: string | null
+              package_name: string | null
+              package_step: number | null
+              package_total_steps: number | null
+              priority: number | null
+              project_id: string | null
+              property_id: string | null
+              recurrence_end: string | null
+              recurrence_rule: string | null
+              recurrence_start: string | null
+              schedule: string | null
+              schedule_days: string[] | null
+              scheduled_date: string | null
+              service_address: string | null
+              service_city: string | null
+              service_state: string | null
+              service_zip: string | null
+              start_date_window: string | null
+              start_time: string | null
+              status: string | null
+              sub_status: string | null
+              updated_at: string | null
+              waiting_list_end: string | null
+              waiting_list_start: string | null
+            }
+            SetofOptions: {
+              from: "crm_crew_job_visits"
+              to: "crm_crew_jobs"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: { "": Database["public"]["Tables"]["crm_job_visits"]["Row"] }
+            Returns: {
+              actual_hours: number | null
+              arrival_window_hours: number | null
+              asset_type: string | null
+              budgeted_hours: number | null
+              call_ahead: boolean | null
+              client_id: string | null
+              completion_notes: string | null
+              contract_id: string | null
+              created_at: string | null
+              crew_id: string | null
+              deleted_at: string | null
+              end_date_window: string | null
+              end_time: string | null
+              id: string | null
+              inch_trigger: number | null
+              is_complete: boolean | null
+              is_high_priority: boolean | null
+              job_number: number | null
+              job_type: string | null
+              last_service_date: string | null
+              lat: number | null
+              lng: number | null
+              man_count: number | null
+              map_code: string | null
+              notes_to_crew: string | null
+              notes_to_crew_updated_at: string | null
+              org_id: string | null
+              package_id: string | null
+              package_name: string | null
+              package_step: number | null
+              package_total_steps: number | null
+              priority: number | null
+              project_id: string | null
+              property_id: string | null
+              recurrence_end: string | null
+              recurrence_rule: string | null
+              recurrence_start: string | null
+              schedule: string | null
+              schedule_days: string[] | null
+              scheduled_date: string | null
+              service_address: string | null
+              service_city: string | null
+              service_state: string | null
+              service_zip: string | null
+              start_date_window: string | null
+              start_time: string | null
+              status: string | null
+              sub_status: string | null
+              updated_at: string | null
+              waiting_list_end: string | null
+              waiting_list_start: string | null
+            }
+            SetofOptions: {
+              from: "crm_job_visits"
+              to: "crm_crew_jobs"
+              isOneToOne: true
+              isSetofReturn: true
+            }
+          }
       crew_job_services: {
         Args: { "": Database["public"]["Views"]["crm_crew_jobs"]["Row"] }
         Returns: {

@@ -120,7 +120,7 @@ export async function POST(request: Request) {
   const visitIds = [...new Set((rows as { visit_id: string | null }[]).map((r) => r.visit_id).filter((v): v is string => !!v))];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits } = await (supabase as any)
-    .from("crm_job_visits")
+    .from("crm_crew_job_visits")
     .select("id, org_id, status, crew_id, crew_unassigned, clocked_in_at, crm_jobs:crew_job(crew_id)")
     .in("id", visitIds)
     .is("deleted_at", null);
