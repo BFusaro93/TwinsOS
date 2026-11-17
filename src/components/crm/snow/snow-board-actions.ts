@@ -1,4 +1,4 @@
-import type { CRMJobVisit } from "@/types/crm-jobs";
+import type { CRMJobVisit, SnowRoute } from "@/types/crm-jobs";
 
 /** Stops whose dispatch can be undone: dispatched and not yet started by the crew. */
 export function splitCancelDispatchTargets(visits: CRMJobVisit[]): { cancellable: CRMJobVisit[]; started: CRMJobVisit[]; notDispatched: CRMJobVisit[] } {
@@ -63,4 +63,48 @@ export function downloadCsv(filename: string, csv: string): void {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/** One choice in the crew picker when "Permanent" is on: a crew and the Master Route to save its stops to. */
+export interface PermanentAssignTarget {
+  /** `crewId|routeId` (routeId empty when the crew has no route yet), see parseAssignTarget. */
+  value: string;
+  label: string;
+  crewId: string;
+  routeId: string | null;
+}
+
+/**
+ * A crew can have several Master Routes (e.g. one for plowing and one for salting, since some
+ * storms only salt), so a permanent assignment has to name the route. One entry per route; a crew
+ * with several routes shows "Crew - Route", a crew with one shows just its name, and a crew with
+ * none is a single entry that creates its route.
+ */
+export function buildPermanentAssignTargets(crews: { id: string; name: string }[], routes: SnowRoute[]): PermanentAssignTarget[] {
+  const out: PermanentAssignTarget[] = [];
+  for (const crew of crews) {
+    const own = routes
+      .filter((r) => r.isActive && r.defaultCrewId === crew.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (own.length === 0) {
+      out.push({ value: `${crew.id}|`, label: crew.name, crewId: crew.id, routeId: null });
+      continue;
+    }
+    for (const r of own) {
+      out.push({
+        value: `${crew.id}|${r.id}`,
+        label: own.length === 1 ? crew.name : `${crew.name} - ${r.name}`,
+        crewId: crew.id,
+        routeId: r.id,
+      });
+    }
+  }
+  return out;
+}
+
+/** Reads a crew picker value: "none" is Unassigned, otherwise `crewId` or `crewId|routeId`. */
+export function parseAssignTarget(value: string): { crewId: string | null; routeId: string | null } {
+  if (value === "none" || !value) return { crewId: null, routeId: null };
+  const [crewId, routeId] = value.split("|");
+  return { crewId: crewId || null, routeId: routeId || null };
 }

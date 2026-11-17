@@ -11,6 +11,7 @@ import {
   useSnowRouteStops,
   useMasterRouteSlots,
   useSaveStormOrderToRoutes,
+  useAssignJobsToRouteCrew,
   useSnowJobs,
   useStormEventVisits,
   useAddJobsToStormEvent,
@@ -70,7 +71,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
-import { buildSnowStopsCsv, downloadCsv, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
+import { buildPermanentAssignTargets, buildSnowStopsCsv, downloadCsv, parseAssignTarget, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDialog";
 import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
@@ -1303,6 +1304,12 @@ export function SnowDispatchBoard() {
   const [driveMins, setDriveMins] = useState<Map<string, { mins: number; fromShop: boolean }>>(new Map());
   const { mutateAsync: updateVisitMutation } = useUpdateVisit();
   const { mutateAsync: saveOrderToRoutes, isPending: savingOrder } = useSaveStormOrderToRoutes();
+  const { mutateAsync: assignJobsToRouteCrew } = useAssignJobsToRouteCrew();
+  const { data: snowRoutes = [] } = useSnowRoutes();
+  // "Permanent" checkbox beside the crew pickers: also save the crew onto the Master Routes.
+  const [permanentCrew, setPermanentCrew] = useState(false);
+  // With Permanent on, the picker lists each crew's Master Routes (a crew may have a plow and a salt route).
+  const permanentTargets = useMemo(() => buildPermanentAssignTargets(crews, snowRoutes), [crews, snowRoutes]);
   const { mutateAsync: addStormPush, isPending: addingPush } = useAddStormPush();
 
   // Inactive storms are hidden from the picker unless asked for (or currently open).
@@ -1730,7 +1737,9 @@ export function SnowDispatchBoard() {
     if (r.error) { toast.error(r.error); throw new Error(r.error); }
   }
 
-  async function changeCrew(visitIds: string[], crewId: string | null) {
+  /** `permanent` also moves the stops' jobs onto the crew's Master Route (or off their routes when
+   *  unassigning), so later storms start with this crew; without it only this storm changes. */
+  async function changeCrew(visitIds: string[], crewId: string | null, permanent = false, routeId: string | null = null) {
     try {
       await mapWithConcurrency(visitIds, BULK_WRITE_CONCURRENCY, (id) => {
         const v = visits.find((x) => x.id === id);
@@ -1744,6 +1753,21 @@ export function SnowDispatchBoard() {
       setDriveMins(new Map());
     } catch {
       toast.error("Failed to change crew");
+      return;
+    }
+    if (!permanent) return;
+    try {
+      const jobIds = [...new Set(visitIds.map((id) => visits.find((x) => x.id === id)?.jobId).filter((j): j is string => !!j))];
+      const n = await assignJobsToRouteCrew({ jobIds, crewId, routeId });
+      const crewName = crewId ? crews.find((c) => c.id === crewId)?.name ?? "the crew" : null;
+      const routeName = routeId ? snowRoutes.find((r) => r.id === routeId)?.name : null;
+      toast.success(
+        crewName
+          ? `${n} job${n === 1 ? "" : "s"} saved to ${routeName ? `the ${routeName} Master Route` : `${crewName}'s Master Route`}. Future storms will assign them to ${crewName}.`
+          : `${n} job${n === 1 ? "" : "s"} removed from their Master Routes. Future storms won't pre-assign them.`,
+      );
+    } catch {
+      toast.error("The crew changed for this storm, but saving it to the Master Routes failed");
     }
   }
 
@@ -1833,7 +1857,10 @@ export function SnowDispatchBoard() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    // With the map open the header, stats and map (600px) already fill the screen and the stop
+    // table was squeezed to nothing with no way to reach it, since the app shell clips overflow.
+    // Let the whole board scroll then, and keep the table tall enough to use once scrolled to.
+    <div className={cn("flex h-full flex-col gap-4", mapOpen && "overflow-y-auto pb-4")}>
       <PageHeader title="Snow Jobs" description="Storm-based scheduling and service entry" />
 
       {activeEvent && visits.length > 0 && (
@@ -2233,7 +2260,8 @@ export function SnowDispatchBoard() {
               onSelectOnly={(ids) => setSelectedVisitIds(new Set(ids))}
               onClearSelection={() => { setSelectedVisitIds(new Set()); setTableOnlySelected(false); }}
               onMoveStop={(id, dir) => { const v = visits.find((x) => x.id === id); if (v) void moveStop(v, dir); }}
-              onAssignCrew={changeCrew}
+              permanentTargets={permanentTargets}
+              onAssignCrew={(ids, crewId, permanent, routeId) => changeCrew(ids, crewId, permanent, routeId)}
               onDispatch={(ids) => dispatchVisits(ids)}
               onOpenMultiCrew={() => setMultiCrewOpen(true)}
               onMoveToDate={moveToDate}
@@ -2254,13 +2282,29 @@ export function SnowDispatchBoard() {
           <span className="text-xs font-medium text-brand-700 dark:text-brand-400">{selectedVisitIds.size} selected</span>
           {canManage && (
             <>
-              <Select value="" onValueChange={(v) => void changeCrew([...selectedVisitIds], v === "none" ? null : v)}>
-                <SelectTrigger className="h-7 w-40 text-xs ml-2"><SelectValue placeholder="Assign crew…" /></SelectTrigger>
+              <Select
+                value=""
+                onValueChange={(v) => {
+                  if (!permanentCrew) { void changeCrew([...selectedVisitIds], v === "none" ? null : v); return; }
+                  const t = parseAssignTarget(v);
+                  void changeCrew([...selectedVisitIds], t.crewId, true, t.routeId);
+                }}
+              >
+                <SelectTrigger className="h-7 w-40 text-xs ml-2"><SelectValue placeholder={permanentCrew ? "Assign crew + route…" : "Assign crew…"} /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Unassigned</SelectItem>
-                  {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {permanentCrew
+                    ? permanentTargets.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
+                    : crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <label
+                className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+                title="Also save this crew onto the Master Routes, so future storms assign these jobs to it"
+              >
+                <Checkbox checked={permanentCrew} onCheckedChange={(c) => setPermanentCrew(c === true)} />
+                Permanent
+              </label>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMultiCrewOpen(true)}>
                 <Users className="mr-1 h-3 w-3" />Assign crews…
               </Button>
@@ -2284,7 +2328,7 @@ export function SnowDispatchBoard() {
       )}
 
       {/* Visit table */}
-      <div className="flex-1 overflow-auto overscroll-x-contain bg-card mx-4 rounded-lg border shadow-sm max-lg:min-h-[60dvh]">
+      <div className={cn("flex-1 overflow-auto overscroll-x-contain bg-card mx-4 rounded-lg border shadow-sm max-lg:min-h-[60dvh]", mapOpen && "min-h-[70dvh]")}>
         {!activeEvent ? (
           <p className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
             {eventsLoading ? "Loading…" : "No storm events yet — create one to start dispatching."}
