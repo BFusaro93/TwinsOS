@@ -6,7 +6,7 @@
 -- select("*") on the dispatch board, job detail and snow invoicing.
 --
 -- Pre-checks (both must hold):
---   * 20270107000100 and 20270107000200 are applied;
+--   * 20270108000100 and 20270108000200 are applied;
 --   * the deployed app reads crew visits from crm_crew_job_visits
 --     (src/lib/visits/visit-columns.ts → CREW_VISITS_VIEW).
 --
@@ -25,7 +25,7 @@
 -- .select() after insert/update, and any whole-row reference now fail; list
 -- columns instead (JOB_VISIT_READ_COLUMNS / JOB_READ_COLUMNS). New columns
 -- are granted automatically by the grant_new_readable_columns event trigger
--- (20270107000200).
+-- (20270108000200).
 --
 -- Rollback: `grant select on public.crm_jobs, public.crm_job_visits to
 -- authenticated;` restores the old access in one statement.

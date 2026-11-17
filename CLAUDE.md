@@ -228,6 +228,7 @@ Run `npx supabase gen types` after every schema migration and commit the updated
 - **Products catalog is the single source of truth for purchasable items.** Every `line_items` row must reference a `product_items.id`. Do not allow free-text item descriptions on POs — they must be catalog entries first.
 - **Project cost tracking:** `line_items.project_id` is nullable. Only `project_material` and `stocked_material` categories should have a `project_id`. Enforce this with a DB CHECK constraint or trigger.
 - **Vercel + Supabase connection pooling:** Use the pooled connection string (port 6543) for all server-side queries. Direct connection (port 5432) is only for migrations.
+- **Column-granted tables (pay-rate privacy):** `crm_jobs`, `crm_job_visits` and `crm_crew_members` have no table-level SELECT for `authenticated`; their labor cost / burden columns are unreadable by every login (reports read them masked via `rpt_*` views). From a user session never `select("*")`, embed `crm_jobs(*)` / `crm_job_visits(*)`, or end an insert/update with a bare `.select()` on them — use `JOB_READ_COLUMNS` / `JOB_VISIT_READ_COLUMNS` (`src/lib/visits/visit-columns.ts`). The crew `crm_jobs:crew_job(...)` embed must read from the `crm_crew_job_visits` view (`CREW_VISITS_VIEW`), never `crm_job_visits`. New columns are auto-granted by the `grant_new_readable_columns` event trigger.
 - **File uploads:** All attachments go to Supabase Storage. Store only the storage path in the DB, never a full signed URL (they expire). Generate signed URLs at read time.
 
 ---

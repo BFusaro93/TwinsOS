@@ -114,7 +114,7 @@ export async function selectEffectiveCrewVisits(
   const innerSelect = select.replace(jobEmbed, "$1$2!inner(");
   // crew_job hangs off crm_crew_job_visits (the visit without its labor cost):
   // PostgREST passes the whole row to it, and end users can't read
-  // crm_job_visits.actual_labor_cost_cents (20270107000300).
+  // crm_job_visits.actual_labor_cost_cents (20270108000300).
   const source = /crew_job\(/.test(select) ? CREW_VISITS_VIEW : "crm_job_visits";
 
   const [direct, inherited] = await Promise.all([

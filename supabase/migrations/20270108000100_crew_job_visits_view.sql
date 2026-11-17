@@ -3,7 +3,7 @@
 -- APPLY BEFORE THE DEPLOY. Nothing here removes access; old and new app code
 -- both keep working.
 --
--- Goal (step 3, 20270107000300): revoke SELECT on crm_job_visits.
+-- Goal (step 3, 20270108000300): revoke SELECT on crm_job_visits.
 -- actual_labor_cost_cents and crm_jobs.actual_labor_cost_cents from end users.
 -- For a one-person crew, visit labor cost ÷ hours = that person's pay rate.
 --
@@ -65,7 +65,7 @@ select
 from public.crm_job_visits v;
 
 comment on view public.crm_crew_job_visits is
-  'crm_job_visits without actual_labor_cost_cents, for crew surfaces and the crew_job() computed relationship (whose whole-row argument must not include an ungranted column). Follows crm_job_visits RLS. See 20270107000100.';
+  'crm_job_visits without actual_labor_cost_cents, for crew surfaces and the crew_job() computed relationship (whose whole-row argument must not include an ungranted column). Follows crm_job_visits RLS. See 20270108000100.';
 
 revoke all on public.crm_crew_job_visits from public, anon;
 grant select on public.crm_crew_job_visits to authenticated, service_role;

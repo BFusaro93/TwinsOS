@@ -2261,6 +2261,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "No. Reports only use a crew's average labor rate, and only for people allowed to see labor cost. Crew logins never see pay, labor cost, product costs or service rates in reports.",
       },
       {
+        q: "Can anyone read a job's or visit's labor cost outside the reports?",
+        a: "No. The labor cost stored on each job and visit can't be read directly by any login, admins included, because for a one-person crew it would reveal that person's pay rate. Labor cost appears only in the costing reports and the job's Job Costing tab, for admins and roles with a costing or wage permission.",
+      },
+      {
         q: "Why did my January cash total stay the same after I refunded a January payment in March?",
         a: "Cash reports subtract a refund on the day it was issued, so it shows in March and January stays as it was.",
       },

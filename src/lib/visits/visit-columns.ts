@@ -4,7 +4,7 @@
  * crm_job_visits.actual_labor_cost_cents and crm_jobs.actual_labor_cost_cents
  * hold what the crew's time cost. For a one-person crew, labor cost divided by
  * hours is that person's pay rate, so `authenticated` has no SELECT on either
- * column (20270107000300). Reports read labor cost through rpt_job_visits /
+ * column (20270108000300). Reports read labor cost through rpt_job_visits /
  * rpt_projects_wip, masked unless crm_can_see_labor_cost(). It is written only
  * by the service role (recomputeStopLabor / clock-out) and a definer trigger.
  *
@@ -19,7 +19,7 @@
  *    without its labor cost, not from crm_job_visits.
  *
  * New columns on either table are granted to `authenticated` automatically
- * (the grant_new_readable_columns event trigger, 20270107000200); add them to
+ * (the grant_new_readable_columns event trigger, 20270108000200); add them to
  * the lists below when the app needs them. CREW_VISITS_VIEW's column list is
  * fixed: a new visit column a crew surface needs must be added to the view.
  */
