@@ -39,6 +39,7 @@ import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { clearNotificationReadCache } from "@/lib/hooks/use-notification-reads";
+import { useModuleAccess } from "@/lib/hooks/use-module-access";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -205,6 +206,8 @@ function QuickAddMenu() {
   const { open: openQuickAdd } = useQuickAddStore();
   const { can } = usePermissions();
   const { canWriteEquipt, canEditWorkOrders, canCreateRequisition } = useRoleCapabilities();
+  // A repair request becomes an Equipt work request: orgs without the Equipt module can't file one.
+  const { allowed: hasEquipt } = useModuleAccess("equipt");
   const isCRM = pathname.startsWith("/crm");
 
   const items = (
@@ -214,6 +217,7 @@ function QuickAddMenu() {
         ? CRM_QUICK_ADD
         : EQUIPT_QUICK_ADD
   )
+    .filter((item) => item.href !== "/photos/field/repair-request" || hasEquipt)
     .filter((item) => item.quickAdd !== "client" || can("client_add"))
     .filter((item) => item.quickAdd !== "job" || can("job_add"))
     // Same keys the pages use; these dialogs have no gate of their own.

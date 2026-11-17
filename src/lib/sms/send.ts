@@ -32,10 +32,14 @@ function contactNumberKeys(contact: { phone: string | null; phones: unknown }): 
 }
 
 /**
- * Consent for texting THIS number for this client, or why not. The client's own
- * numbers (primary phone and its phone list) go by the client's consent; a number
- * that belongs only to one of its contacts goes by that contact's consent. Any
- * other number (not on file) falls back to the client's consent.
+ * Consent for texting THIS number for this client, or why not. A contact who has
+ * opted in themselves wins for their own number, even when the same number is also
+ * on the client record and the client has not opted in (the contact's own consent is
+ * the more specific one). Otherwise the client's own numbers (primary phone and its
+ * phone list) go by the client's consent, a number that belongs only to a contact
+ * goes by that contact's consent, and any other number (not on file) falls back to
+ * the client's consent. A STOP reply is a separate, absolute block (crm_sms_opt_outs,
+ * checked after this).
  */
 async function smsConsentRefusal(
   supabase: AnyClient,
@@ -58,7 +62,6 @@ async function smsConsentRefusal(
       .map((p) => phoneLast10(p))
       .filter((k): k is string => !!k),
   );
-  if (clientKeys.has(key)) return clientRefusal;
 
   const { data: contacts, error } = await supabase
     .from("client_contacts")
@@ -69,8 +72,11 @@ async function smsConsentRefusal(
   if (error) return { reason: "couldn't check the contact's text consent", permanent: false };
   const matching = ((contacts ?? []) as { phone: string | null; phones: unknown; sms_opt_in: boolean | null }[])
     .filter((c) => contactNumberKeys(c).includes(key));
+  // The contact's own opt-in wins for their number, even if it is also the client's number.
+  if (matching.some((c) => c.sms_opt_in === true)) return null;
+  if (clientKeys.has(key)) return clientRefusal;
   if (matching.length === 0) return clientRefusal;
-  return matching.some((c) => c.sms_opt_in === true) ? null : no("this contact has not opted in to SMS");
+  return no("this contact has not opted in to SMS");
 }
 
 /**

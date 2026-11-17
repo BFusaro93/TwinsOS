@@ -151,6 +151,11 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
                 </Label>
               </div>
             ))}
+            <p className="text-xs text-muted-foreground">
+              Contacts are only texted once their own <strong>Opted in to text messages</strong> box is
+              ticked on the client&apos;s Contacts card. Contacts added before that box existed are not
+              opted in until someone ticks it.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Switch
