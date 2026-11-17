@@ -70,7 +70,9 @@ export async function GET(request: Request) {
 
     // Paused schedules (off-season) owe nothing. paused_today is computed on the org's day.
     const paused = await fetchAllRows<{ pm_schedule_id: string }>(() =>
-      supabase.from("v_pm_schedule_pause_state").select("pm_schedule_id").eq("paused_today", true)
+      supabase.from("v_pm_schedule_pause_state").select("pm_schedule_id").eq("paused_today", true),
+      // The view is keyed by pm_schedule_id; it has no `id` column.
+      { orderBy: "pm_schedule_id" }
     );
     const pausedIds = new Set(paused.map((p) => p.pm_schedule_id));
 

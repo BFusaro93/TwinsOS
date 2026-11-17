@@ -187,8 +187,9 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
             supabase
               .from("rpt_invoice_link_billing")
               .select("estimate_id, revenue_ex_tax_cents")
-              .in("estimate_id", idChunk)
-              .order("invoice_id")
+              .in("estimate_id", idChunk),
+            // No `id` column; the view has one row per invoice, so page on that.
+            { orderBy: "invoice_id" }
           );
           for (const b of billed) {
             if (!b.estimate_id) continue;
