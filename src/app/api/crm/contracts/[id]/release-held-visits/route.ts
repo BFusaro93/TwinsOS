@@ -9,8 +9,10 @@ import { logger } from "@/lib/logger";
 const log = logger.child("contracts/release-held-visits");
 
 // Runs the visit billing once per visit, so keep a whole contract's backlog
-// inside one request; anything past this is reported, and a second call
-// picks up the rest (billed visits are skipped).
+// inside one request; anything past this is reported with a `next` cursor,
+// and the caller repeats with `?after=<next>` until it is null. (A visit the
+// contract covers never gets an invoice line, so it stays "pending" forever —
+// without the cursor, more than this many of them would starve the later ones.)
 const MAX_VISITS = 400;
 const IN_CHUNK = 100;
 
@@ -36,7 +38,7 @@ const IN_CHUNK = 100;
  * written as the service role, like visit completion, because changing a
  * contract's status needs no invoice permission.
  */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) {
     return NextResponse.json({ error: "Invalid contract id" }, { status: 400 });
@@ -102,7 +104,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       if (l.crm_invoices && l.crm_invoices.deleted_at == null && l.crm_invoices.status !== "void") billed.add(l.visit_id);
     }
   }
-  const pending = visits.filter((v) => !billed.has(v.id));
+  const afterParam = new URL(request.url).searchParams.get("after");
+  if (afterParam && !z.string().uuid().safeParse(afterParam).success) {
+    return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+  }
+  const startIdx = afterParam ? visits.findIndex((v) => v.id === afterParam) + 1 : 0;
+  const pending = visits.slice(startIdx).filter((v) => !billed.has(v.id));
   const batch = pending.slice(0, MAX_VISITS);
 
   let invoiced = 0;
@@ -126,5 +133,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     invoiced,
     failed,
     remaining: pending.length - batch.length,
+    next: pending.length > batch.length ? batch[batch.length - 1].id : null,
   });
 }
