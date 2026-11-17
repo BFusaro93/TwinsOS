@@ -34,7 +34,8 @@ export interface CostLayer {
 
 /** Weighted Average Cost across all layers with remaining quantity. */
 export function computeWAC(layers: CostLayer[], fallback: number): number {
-  const live = layers.filter((l) => l.quantity > 0);
+  // A $0 layer means the receipt had no cost recorded; it is "unknown", not free.
+  const live = layers.filter((l) => l.quantity > 0 && l.unitCost > 0);
   const totalQty = live.reduce((s, l) => s + l.quantity, 0);
   if (totalQty <= 0) return fallback;
   const totalValue = live.reduce((s, l) => s + l.quantity * l.unitCost, 0);
@@ -44,7 +45,7 @@ export function computeWAC(layers: CostLayer[], fallback: number): number {
 /** FIFO cost: the unit cost of the oldest layer that still has remaining quantity. */
 export function computeFIFO(layers: CostLayer[], fallback: number): number {
   const sorted = [...layers]
-    .filter((l) => l.quantity > 0)
+    .filter((l) => l.quantity > 0 && l.unitCost > 0)
     .sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
   return sorted[0]?.unitCost ?? fallback;
 }
