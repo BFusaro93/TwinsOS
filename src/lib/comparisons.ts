@@ -375,6 +375,9 @@ export const COMPETITORS: Competitor[] = [
     slug: "fleetio",
     name: "Fleetio",
     product: "Equipt",
+    seoTitle: "Fleetio Alternative for Landscape Fleets: Equipt vs. Fleetio",
+    seoDescription:
+      "Looking for a Fleetio alternative? Compare Equipt and Fleetio on pricing (per seat vs. per vehicle), mowers and non-vehicle equipment, parts inventory, and work orders.",
     category: "Fleet maintenance software",
     tagline: "Strong vehicle-specific fleet maintenance, but not a full CMMS for non-vehicle equipment — and priced per vehicle.",
     bestFor: "Fleet-heavy operations wanting dedicated vehicle inspections, service reminders, and fuel tracking.",
