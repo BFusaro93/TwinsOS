@@ -2784,8 +2784,11 @@ export function useCreateJobsFromEstimate() {
           project_id: jobType === "project" ? (projectId ?? null) : null,
           // A package job has no single date: it sits on the Waiting List inside
           // its program window ('hold' would hide it from there), and each
-          // step's visit is created below.
-          status: scheduledDate || isPackageJob ? "scheduled" : "hold",
+          // step's visit is created below. A waiting-list job is dateless by design
+          // and must stay visible there, so it's 'scheduled' too — 'hold' is hidden
+          // from the Waiting List and dispatch. A recurring job's visits come from its
+          // Schedule (generate-visits below starts from today), so it needs no date.
+          status: scheduledDate || isPackageJob || jobType === "waiting_list" || (jobType === "recurring" && schedule) ? "scheduled" : "hold",
           scheduled_date: isPackageJob ? null : scheduledDate,
           ...(isPackageJob
             ? {
@@ -3011,10 +3014,13 @@ export function useCreateJobsFromEstimate() {
             throw new Error(`The package job's visits could not be created (${stepErr.message}). Nothing was converted.`);
           }
         }
-      } else if (scheduledDate) {
+      } else if (scheduledDate && jobType !== "recurring") {
+        // Recurring jobs get no hand-placed first visit: the date is only the earliest
+        // the schedule may start, and generate-visits (below) creates every visit —
+        // including the first — on the schedule's own days.
         const noteBySid = new Map<string, string | null>();
         insertedServiceIds.forEach((sid, i) => noteBySid.set(sid, serviceRows[i]?.sv.jobNote ?? null));
-        const firstVisit = (jobServiceId: string | null, occurrence: boolean) => ({
+        const firstVisit = (jobServiceId: string | null) => ({
           job_id: jobId,
           client_id: clientId,
           scheduled_date: scheduledDate,
@@ -3024,18 +3030,9 @@ export function useCreateJobsFromEstimate() {
           // An unlinked visit does the whole job, so it carries every service's crew note.
           notes_to_crew: composeVisitNote(notesToCrew, jobServiceId ? noteBySid.get(jobServiceId) : Array.from(noteBySid.values())),
           job_service_id: jobServiceId,
-          ...(occurrence ? { occurrence_date: scheduledDate } : {}),
         });
-        // Recurring: one first visit PER SERVICE, linked and carrying its
-        // occurrence_date — exactly what generate-visits creates. A single
-        // unlinked first visit on a multi-service job made the generator
-        // skip that date for every service while no service's max_visits
-        // counted it, so the client was billed one extra visit per service.
-        // Other types keep one visit (linked when there's a single service):
-        // that one visit does the whole job.
-        const rows = jobType === "recurring" && insertedServiceIds.length > 0
-          ? insertedServiceIds.map((sid) => firstVisit(sid, true))
-          : [firstVisit(insertedServiceIds.length === 1 ? insertedServiceIds[0] : null, false)];
+        // One visit (linked when there's a single service): that visit does the whole job.
+        const rows = [firstVisit(insertedServiceIds.length === 1 ? insertedServiceIds[0] : null)];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: visitErr } = await (supabase as any).from("crm_job_visits").insert(rows);
         if (visitErr) log.error("first visit insert failed", { jobId, error: visitErr.message });
@@ -3045,8 +3042,7 @@ export function useCreateJobsFromEstimate() {
       // recurring job created from Add Job (useCreateJob) does. Without this a
       // converted 28-visit weekly mow landed on the board as a single visit
       // and the rest of the season silently never appeared. generate-visits
-      // starts from scheduled_date and skips the date of the visit inserted
-      // above. Best-effort — the "Generate Visits" button still works.
+      // starts from scheduled_date (or today). Best-effort — the "Generate Visits" button still works.
       if (jobType === "recurring" && schedule) {
         await fetch("/api/crm/jobs/generate-visits", {
           method: "POST",
