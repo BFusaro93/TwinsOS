@@ -50,7 +50,7 @@ export async function syncVehicleFaultEvents(
     checkEngineLight: boolean | null;
     fire: boolean;
   },
-): Promise<{ opened: number; cleared: number }> {
+): Promise<{ opened: number; cleared: number; ok: boolean }> {
   const { orgId, vehicle, checkEngineLight, fire } = params;
   const current = params.faults.filter(isActionable);
   const key = (source: string, code: string) => `${source}:${code}`;
@@ -65,7 +65,7 @@ export async function syncVehicleFaultEvents(
     .is("deleted_at", null);
   if (openErr) {
     log.error("could not load open fault events", { error: openErr, vehicleId: vehicle.id });
-    return { opened: 0, cleared: 0 };
+    return { opened: 0, cleared: 0, ok: false };
   }
   const openRows = (open ?? []) as { id: string; source: string; code: string }[];
   const openKeys = new Set(openRows.map((r) => key(r.source, r.code)));
@@ -82,6 +82,7 @@ export async function syncVehicleFaultEvents(
 
   // Codes that just appeared.
   let opened = 0;
+  let ok = true;
   for (const f of current.filter((c) => !openKeys.has(key(c.source, c.code)))) {
     const { data: event, error } = await admin
       .from("vehicle_fault_events")
@@ -98,7 +99,10 @@ export async function syncVehicleFaultEvents(
       .single();
     // 23505 = another run (cron vs. a tab refresh) opened it first — that run fires the rules.
     if (error || !event) {
-      if (error?.code !== "23505") log.warn("could not open fault event", { error, vehicleId: vehicle.id, code: f.code });
+      if (error?.code !== "23505") {
+        log.warn("could not open fault event", { error, vehicleId: vehicle.id, code: f.code });
+        ok = false;
+      }
       continue;
     }
     opened++;
@@ -135,7 +139,7 @@ export async function syncVehicleFaultEvents(
       log.warn("fault automations failed", { err, vehicleId: vehicle.id, code: f.code });
     }
   }
-  return { opened, cleared: gone.length };
+  return { opened, cleared: gone.length, ok };
 }
 
 /** Org-level switch: has the first (silent) sweep happened yet? Stored in integrations.config. */

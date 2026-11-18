@@ -215,7 +215,7 @@ function FaultCodes({ s, vehicleId }: { s: VehicleTelematicsSnapshot; vehicleId:
                     <Wrench className="h-3 w-3" />
                     {workOrders[`${f.source}:${f.code}`].workOrderNumber}
                   </Link>
-                ) : canEditWorkOrders ? (
+                ) : canEditWorkOrders && f.status !== "pending" ? (
                   <Button
                     size="sm"
                     variant="outline"

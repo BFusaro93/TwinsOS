@@ -100,6 +100,12 @@ function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+/** For integer DB columns: a fractional value from Samsara would make the whole snapshot upsert fail. */
+function int(v: unknown): number | null {
+  const n = num(v);
+  return n === null ? null : Math.round(n);
+}
+
 function engineState(v: string | undefined): EngineState | null {
   return v === "Off" || v === "On" || v === "Idle" ? v : null;
 }
@@ -181,18 +187,18 @@ export function normalizeVehicleStats(rows: SamsaraVehicleStats[]): NormalizedTe
   return {
     engineState: engineState(merged.engineState?.value),
     fuelPercent: num(merged.fuelPercent?.value),
-    batteryMilliVolts: num(merged.batteryMilliVolts?.value),
-    coolantMilliC: num(merged.engineCoolantTemperatureMilliC?.value),
-    defMilliPercent: num(merged.defLevelMilliPercent?.value),
-    tireFrontLeftKpa: num(tires?.frontLeftTirePressureKPa),
-    tireFrontRightKpa: num(tires?.frontRightTirePressureKPa),
-    tireBackLeftKpa: num(tires?.backLeftTirePressureKPa),
-    tireBackRightKpa: num(tires?.backRightTirePressureKPa),
+    batteryMilliVolts: int(merged.batteryMilliVolts?.value),
+    coolantMilliC: int(merged.engineCoolantTemperatureMilliC?.value),
+    defMilliPercent: int(merged.defLevelMilliPercent?.value),
+    tireFrontLeftKpa: int(tires?.frontLeftTirePressureKPa),
+    tireFrontRightKpa: int(tires?.frontRightTirePressureKPa),
+    tireBackLeftKpa: int(tires?.backLeftTirePressureKPa),
+    tireBackRightKpa: int(tires?.backRightTirePressureKPa),
     latitude: num(merged.gps?.latitude),
     longitude: num(merged.gps?.longitude),
     address: merged.gps?.reverseGeo?.formattedLocation?.trim() || null,
     speedMph: num(merged.gps?.speedMilesPerHour),
-    headingDegrees: num(merged.gps?.headingDegrees),
+    headingDegrees: int(merged.gps?.headingDegrees),
     checkEngineLight: faults.checkEngineLight,
     faultCodes: faults.faultCodes,
     statTimes: times,
