@@ -1004,12 +1004,14 @@ export async function applyVisitCompletionSideEffects(
             .filter((id): id is string => !!id);
         }
 
+        // Visit automations run once per client per service day (visitDate): a stop's
+        // sibling visits completing together share the first one's run.
         const newEnrollmentIds: string[] = [];
         if (serviceIds.length > 0) {
-          newEnrollmentIds.push(...await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: visit.client_id, serviceIds, visitId: visit.id }));
+          newEnrollmentIds.push(...await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: visit.client_id, serviceIds, visitId: visit.id, visitDate: visit.scheduled_date }));
         }
         newEnrollmentIds.push(
-          ...await fireSimpleTrigger(supabase, { orgId, clientId: visit.client_id, triggerType: "visit_completed", matchValues: serviceIds, visitId: visit.id })
+          ...await fireSimpleTrigger(supabase, { orgId, clientId: visit.client_id, triggerType: "visit_completed", matchValues: serviceIds, visitId: visit.id, visitDate: visit.scheduled_date })
         );
 
         // Drive each new enrollment through any steps due right now (e.g. an

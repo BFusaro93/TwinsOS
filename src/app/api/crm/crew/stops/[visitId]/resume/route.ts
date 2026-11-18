@@ -6,7 +6,7 @@ import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
 
 interface VisitRow {
   id: string;
@@ -156,7 +156,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: finalRows } = await (supabase as any)
     .from("crm_job_visits")
-    .select(JOB_VISIT_READ_COLUMNS)
+    .select(CREW_VISIT_RESPONSE_COLUMNS)
     .in("id", ids);
 
   return NextResponse.json({ visitIds: ids, visits: finalRows });

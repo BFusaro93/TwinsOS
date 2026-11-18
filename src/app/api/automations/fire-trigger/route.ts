@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import type { TriggerType } from "@/types/crm-automations";
+import { isJobScopedTrigger } from "@/lib/automations/enrollment-scope";
 
 /**
  * POST /api/automations/fire-trigger — fired best-effort from client mutation
@@ -130,6 +131,7 @@ export async function POST(req: NextRequest) {
     invoiceId?: string;
     matchValues?: string[];
     visitId?: string;
+    jobId?: string;
   };
   if (!body.triggerType || !ALLOWED_TRIGGER_TYPES.has(body.triggerType as TriggerType)) {
     return NextResponse.json({ error: "unsupported triggerType" }, { status: 400 });
@@ -198,6 +200,17 @@ export async function POST(req: NextRequest) {
     visitId = body.visitId;
   }
 
+  // The job a job-event trigger is about (the run is scoped to it — once per job): kept
+  // only when it is this client's, in this org.
+  let jobId: string | null = null;
+  if (typeof body.jobId === "string" && body.jobId && isJobScopedTrigger(body.triggerType)) {
+    const { data: job } = await db.from("crm_jobs").select("org_id, client_id").eq("id", body.jobId).maybeSingle();
+    if (!job || job.org_id !== orgId || job.client_id !== body.clientId) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+    jobId = body.jobId;
+  }
+
   // Server-side check that the event actually happened, for the triggers
   // where the record can prove it (see VERIFIED_TRIGGERS).
   const verify = VERIFIED_TRIGGERS[body.triggerType as TriggerType];
@@ -242,7 +255,7 @@ export async function POST(req: NextRequest) {
     // Keyed per client AND record: with a match value alone (a tag name, a package)
     // tagging four different leads "Spring Promo" in ten minutes shared one key, so
     // the fourth lead's real event was refused (and the caller swallows the 429).
-    const recordKey = body.invoiceId ?? body.estimateId ?? body.ticketId ?? matchValues[0] ?? "client";
+    const recordKey = body.invoiceId ?? body.estimateId ?? body.ticketId ?? jobId ?? visitId ?? matchValues[0] ?? "client";
     if (!(await checkAuthRateLimit(`fire:${user.id}:${body.triggerType}:${body.clientId}:${recordKey}`, 3, 600))) {
       return NextResponse.json({ error: "This automation was just triggered for this record. Try again in a few minutes." }, { status: 429 });
     }
@@ -257,6 +270,7 @@ export async function POST(req: NextRequest) {
     triggerType: body.triggerType as TriggerType,
     matchValues: Array.isArray(body.matchValues) ? body.matchValues.filter((v) => typeof v === "string") : undefined,
     visitId,
+    jobId,
   });
 
   // Send any step that's due right now (an email with no wait in front of

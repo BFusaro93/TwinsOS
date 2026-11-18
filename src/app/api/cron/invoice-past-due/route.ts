@@ -75,7 +75,7 @@ export async function GET(request: Request) {
   let fired = 0;
   let stoppedEarly = false;
   const startedAt = Date.now();
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
   // Start at a different org each day and stop before maxDuration: each overdue row costs
   // several queries, so one org with thousands of them could use up every run and the orgs
   // after it in a fixed order were never reached.

@@ -78,7 +78,7 @@ export async function GET(request: Request) {
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   let notified = 0;
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
 
   for (const w of expiring as Record<string, unknown>[]) {
     const endDate = w.end_date as string;

@@ -5,10 +5,10 @@ import type { OrgPDFData } from "./InvoiceDocument";
 
 export interface AccountStatementActivityRow {
   date: string;
-  kind: "invoice" | "payment" | "credit";
+  kind: "invoice" | "payment" | "credit" | "refund";
   label: string;
   invoiceNumber: number | null;
-  /** Signed: positive for an invoice (charge), negative for a payment/credit. */
+  /** Signed: positive for an invoice (charge) or a refund, negative for a payment/credit. */
   amountCents: number;
   /** Running account balance immediately after this transaction. */
   balanceCents: number;
@@ -120,6 +120,7 @@ const S = StyleSheet.create({
 function kindLabel(kind: AccountStatementActivityRow["kind"]): string {
   if (kind === "invoice") return "Charge";
   if (kind === "credit") return "Credit";
+  if (kind === "refund") return "Refund";
   return "Payment";
 }
 

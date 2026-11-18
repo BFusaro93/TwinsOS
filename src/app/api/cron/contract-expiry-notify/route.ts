@@ -79,7 +79,7 @@ export async function GET(request: Request) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
 
   for (const contract of expiring as Record<string, unknown>[]) {
     // Re-filter on the org's calendar — the SQL bounds above are deliberately

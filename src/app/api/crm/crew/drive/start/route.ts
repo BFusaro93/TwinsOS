@@ -4,6 +4,7 @@ import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
 import { closeStaleDriveSegment } from "@/lib/crew/drive-time";
+import { createServiceClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/crm/crew/drive/start
@@ -38,12 +39,16 @@ export async function POST(request: Request) {
   // overnight gap as driving. See closeStaleDriveSegment().
   // The moment of the tap (a queued offline "start drive" replays later).
   const now = resolveOccurredAt(await readOccurredAt(request));
-  const stale = await closeStaleDriveSegment(supabase, crewId, orgId, now);
+  // Service role for the segment writes: a crew login can't write
+  // crm_crew_drive_segments directly (it could rewrite its own drive times).
+  // crewId / orgId were resolved from the caller's own session above.
+  const db = createServiceClient();
+  const stale = await closeStaleDriveSegment(db, crewId, orgId, now);
   if (stale.error) return NextResponse.json({ error: stale.error }, { status: 500 });
   if (stale.openToday) return NextResponse.json({ segment: stale.openToday });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (db as any)
     .from("crm_crew_drive_segments")
     .insert({
       org_id: orgId,

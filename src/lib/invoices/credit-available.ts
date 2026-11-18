@@ -6,11 +6,13 @@ const log = logger.child("invoice credit available");
 type Db = any;
 
 export interface InvoiceCreditAvailable {
-  /** Unapplied credit the client (or its parent account) holds, plus any
-   *  deposit reserved for this invoice's estimate. Shown, never subtracted. */
+  /** Unapplied credit the invoice's own client holds (what checkout applies —
+   *  a parent account's credit is not counted), plus any deposit reserved for
+   *  this invoice's estimate. Shown, never subtracted. */
   creditAvailableCents: number;
   /** The balance is fully covered by that credit (oldest-due invoices first,
-   *  so one credit never counts as covering several invoices). */
+   *  each payment drawn down once per lookup, so one credit never counts as
+   *  covering several invoices). */
   covered: boolean;
 }
 

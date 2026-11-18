@@ -57,7 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     log.error("failed to load ticket messages", { ticketId: ticket.id, error: error.message });
     return NextResponse.json({ error: "Couldn't load the conversation" }, { status: 500 });
   }
-  const signed = await signPhotoPaths(service, ((rows ?? []) as any[]).flatMap((r) => r.photo_paths ?? []));
+  const signed = await signPhotoPaths(service, ctx.orgId, ((rows ?? []) as any[]).flatMap((r) => r.photo_paths ?? []));
   return NextResponse.json({
     status: ticket.status,
     messages: ((rows ?? []) as any[]).map((r) => ({
@@ -157,7 +157,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     log.error("ticket reply notification failed", { ticketId: ticket.id, error: err instanceof Error ? err.message : String(err) });
   }
 
-  const signed = await signPhotoPaths(service, photoPaths);
+  const signed = await signPhotoPaths(service, ctx.orgId, photoPaths);
   return NextResponse.json({
     reopened: ticket.status === "closed",
     message: {

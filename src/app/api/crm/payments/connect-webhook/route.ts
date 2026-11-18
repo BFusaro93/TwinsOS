@@ -742,21 +742,39 @@ async function handleDisputeEvent(
 
   if (eventType === "charge.dispute.funds_withdrawn") {
     const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
+    // The event carries the dispute as it was when the funds were withdrawn. A
+    // (re)delivery processed after the dispute was WON (funds_reinstated /
+    // closed-won already handled) must not reverse the payment again: the
+    // reversal target would pull the reinstated money straight back out. Read
+    // the dispute's CURRENT status, and trust our own record of a win too.
+    const alreadyWon = payment.stripe_dispute_id === dispute.id && payment.dispute_status === "won";
     let refundedAtStripe = 0;
-    if (chargeId) {
-      try {
-        const { data: org } = await db
-          .from("organizations")
-          .select("stripe_connect_livemode")
-          .eq("id", payment.org_id)
-          .single();
-        const orgStripe = getStripeForOrg(org?.stripe_connect_livemode ?? null);
+    let currentStatus: string = dispute.status;
+    try {
+      const { data: org } = await db
+        .from("organizations")
+        .select("stripe_connect_livemode")
+        .eq("id", payment.org_id)
+        .single();
+      const orgStripe = getStripeForOrg(org?.stripe_connect_livemode ?? null);
+      const current = await orgStripe.disputes.retrieve(dispute.id, undefined, { stripeAccount: eventAccount });
+      currentStatus = current.status;
+      if (chargeId && currentStatus !== "won") {
         const charge = await orgStripe.charges.retrieve(chargeId, undefined, { stripeAccount: eventAccount });
         refundedAtStripe = charge.amount_refunded ?? 0;
-      } catch (err) {
-        log.error("failed to load the disputed charge", { error: err, chargeId, disputeId: dispute.id });
-        return "error"; // retry — the reversal target needs Stripe's refunded amount
       }
+    } catch (err) {
+      log.error("failed to load the disputed charge", { error: err, chargeId, disputeId: dispute.id });
+      return "error"; // retry — the reversal target needs Stripe's refunded amount
+    }
+    if (alreadyWon || currentStatus === "won") {
+      log.info("skipping a funds_withdrawn delivery for a dispute already won", { paymentId: payment.id, disputeId: dispute.id });
+      if (!staleOpenEvent) {
+        // The marker above may have copied this event's stale status over the win.
+        await db.from("crm_payments").update({ dispute_status: "won" }).eq("id", payment.id);
+        await db.from("crm_invoices").update({ open_dispute_payment_id: null }).eq("open_dispute_payment_id", payment.id);
+      }
+      return "ok";
     }
 
     const qboLinks = await snapshotQuickBooksPaymentLinks(db, payment.id);

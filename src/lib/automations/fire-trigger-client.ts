@@ -16,8 +16,10 @@ export function fireAutomationTrigger(params: {
   invoiceId?: string;
   /** The value(s) this event pertains to — checked against a trigger's config.filter_values, if configured (e.g. a client's new source, a ticket's category). */
   matchValues?: string[];
-  /** The visit a visit-event trigger is about — the snow merge tags read that stop. */
+  /** The visit a visit-event trigger is about — its service day scopes the run (once per client per day) and the snow merge tags read that stop. */
   visitId?: string;
+  /** The job a job-event trigger (job_created, job_cancelled, package_*) is about — the run is scoped to it (once per job). */
+  jobId?: string;
 }): void {
   fetch("/api/automations/fire-trigger", {
     method: "POST",

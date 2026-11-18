@@ -13,6 +13,7 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { checkPackageMinDaysViolation, overridePackageMinDays } from "@/lib/package-visit-recalc";
 import { logger } from "@/lib/logger";
+import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
@@ -584,7 +585,7 @@ export function useUpdateJobStatus() {
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
       if (data.status === "cancelled" && data.resolvedClientId) {
-        fireAutomationTrigger({ triggerType: "job_cancelled", clientId: data.resolvedClientId });
+        fireAutomationTrigger({ triggerType: "job_cancelled", clientId: data.resolvedClientId, jobId: vars.id });
       }
     },
   });
@@ -1184,7 +1185,7 @@ export function useDeleteVisit() {
   });
 }
 
-/** For a waiting-list job's visit that was dispatched but never performed — soft-deletes the visit and clears the job's stale schedule/crew so it reappears on the Waiting List. */
+/** For a waiting-list job's visit that was dispatched but never performed — soft-deletes the visit (every crew's visit, on a multi-crew stop) and clears the job's stale schedule/crew so it reappears on the Waiting List. */
 export function useReturnVisitToWaitingList() {
   const qc = useQueryClient();
   return useMutation({
@@ -1194,7 +1195,8 @@ export function useReturnVisitToWaitingList() {
         const body = await res.json() as { error?: string };
         throw new Error(body.error ?? 'Failed to return visit to waiting list');
       }
-      return res.json() as Promise<{ clientId?: string }>;
+      // returnedVisitIds: every visit that went back — a multi-crew stop returns all its crews' visits.
+      return res.json() as Promise<{ clientId?: string | null; returnedVisitIds?: string[] }>;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
@@ -1748,6 +1750,7 @@ export function useUpdateVisit() {
           triggerType: 'visit_date_changed',
           clientId: data.dateChangeClientId,
           matchValues: data.dateChangeServiceIds,
+          visitId: data.statusTriggerVisitId,
         });
       }
     },
@@ -2087,12 +2090,14 @@ export function useCreateClientJob() {
       // not Job created / Package created, which would send a renewing client the
       // new-customer sequence.
       if (values.renewedFromJobId) return;
-      fireAutomationTrigger({ triggerType: 'job_created', clientId: values.clientId, matchValues: [values.jobType] });
+      const createdJobId = (data as { id?: string } | null)?.id;
+      fireAutomationTrigger({ triggerType: 'job_created', clientId: values.clientId, matchValues: [values.jobType], jobId: createdJobId });
       if (values.jobType === 'package') {
         fireAutomationTrigger({
           triggerType: 'package_created',
           clientId: values.clientId,
           matchValues: values.packageId ? [values.packageId] : undefined,
+          jobId: createdJobId,
         });
       }
     },
@@ -3065,9 +3070,13 @@ export function useCreateJobsFromEstimate() {
           })),
         ];
 
+        // org_id must lead the key: the bucket's INSERT policy scopes on the first
+        // folder and attachments.storage_path is rejected outside the org's folder.
+        // The old `job/<id>/…` key was refused, so nothing ever copied over.
+        const jobOrgId = (data as { org_id: string }).org_id;
         for (let i = 0; i < sources.length; i++) {
           const source = sources[i];
-          const newPath = `job/${jobId}/${Date.now()}-${i}-${source.file_name}`;
+          const newPath = `${jobOrgId}/job/${jobId}/${Date.now()}-${i}-${sanitizeStorageFileName(source.file_name)}`;
           const { error: copyError } = await supabase.storage
             .from("attachments")
             .copy(source.storage_path, newPath);
@@ -3161,12 +3170,13 @@ export function useCreateJobsFromEstimate() {
           ". Its milestones bill against this estimate's own total."
         );
       }
-      fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId, matchValues: [data.jobType] });
+      fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId, matchValues: [data.jobType], jobId: data.jobId });
       if (data.jobType === "package") {
         fireAutomationTrigger({
           triggerType: "package_created",
           clientId: data.clientId,
           matchValues: data.packageId ? [data.packageId] : undefined,
+          jobId: data.jobId,
         });
       }
       if (data.estimateWon) {
@@ -3506,7 +3516,6 @@ export function useUpdateCRMSchedule() {
     }) => {
       const supabase = createClient();
       const dbPatch: Record<string, unknown> = {};
-      if (patch.name !== undefined)        dbPatch.name = patch.name;
       if (patch.frequency !== undefined)   dbPatch.frequency = patch.frequency;
       if (patch.dayOfWeek !== undefined)   dbPatch.day_of_week = patch.dayOfWeek;
       if (patch.weekPattern !== undefined) dbPatch.week_pattern = patch.weekPattern;
@@ -3521,26 +3530,23 @@ export function useUpdateCRMSchedule() {
       // has to carry its jobs along — otherwise every job on it stops matching the
       // schedule row and the generator quietly falls back to parsing the old name
       // as a legacy "Weekly - Monday" pattern (wrong cadence, or no visits at all).
-      let previousName: string | null = null;
+      // crm_rename_schedule renames the row AND repoints its jobs in one
+      // transaction (security invoker: the caller's permissions apply), and refuses
+      // — changing nothing — if any job couldn't be repointed. It used to be two
+      // separate writes, and a failed second one left jobs on the old name.
       if (patch.name !== undefined) {
         await assertScheduleNameFree(supabase, patch.name, id);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: current } = await (supabase as any).from('crm_schedules').select('name').eq('id', id).maybeSingle();
-        previousName = (current?.name as string | undefined) ?? null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC added in 20270109000520; not in the generated types until the next regen
+        const { error: renameErr } = await (supabase as any).rpc('crm_rename_schedule', { p_schedule_id: id, p_name: patch.name });
+        if (renameErr) rethrowScheduleNameConflict(renameErr, patch.name);
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from('crm_schedules')
-        .update(dbPatch)
-        .eq('id', id);
-      if (error) rethrowScheduleNameConflict(error, patch.name ?? '');
-      if (previousName && patch.name !== undefined && previousName !== patch.name) {
+      if (Object.keys(dbPatch).length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: renameErr } = await (supabase as any)
-          .from('crm_jobs')
-          .update({ schedule: patch.name })
-          .eq('schedule', previousName);
-        if (renameErr) throw renameErr;
+        const { error } = await (supabase as any)
+          .from('crm_schedules')
+          .update(dbPatch)
+          .eq('id', id);
+        if (error) throw error;
       }
     },
     onSuccess: () => {

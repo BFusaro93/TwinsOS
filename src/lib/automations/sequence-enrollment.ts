@@ -11,6 +11,7 @@ import { conditionRecordKind } from "./condition-applicability";
 import { applyWaitAdvancedSettings } from "./wait-schedule";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
+import { isJobScopedTrigger, isVisitScopedTrigger } from "./enrollment-scope";
 
 const log = logger.child("sequence-enrollment");
 
@@ -79,10 +80,12 @@ function shiftOnOrgCalendar(from: Date, days: number, timeZone: string): Date | 
 /**
  * Whether a client/estimate pair may be (re-)enrolled into a sequence, given
  * the sequence's allow_reentry/reentry_after_minutes settings. Looks at the
- * most recent enrollment row (any status) for this sequence, matched by
- * estimate_id when the trigger is estimate-based, or by client_id for
- * client-based triggers (e.g. a completed service visit) that have no
- * estimate at all:
+ * most recent enrollment row (any status) for this sequence, matched by the
+ * most specific record the trigger is about — estimate / ticket / invoice /
+ * meeting, then the client's SERVICE DAY for a visit-event trigger (once per
+ * client per day: a stop's sibling visits — one per service, one per crew — share
+ * one run), then the JOB for a job-event trigger (once per job) — or by client_id
+ * for client-level triggers that carry none of those:
  *  - no prior enrollment            → eligible
  *  - prior enrollment still running → not eligible (already in progress)
  *  - prior enrollment finished      → eligible only if allow_reentry is true
@@ -98,6 +101,11 @@ export async function isEligibleForEnrollment(
     ticketId?: string | null;
     invoiceId?: string | null;
     meetingId?: string | null;
+    /** Visit-scoped run (see enrollment-scope.ts): the visit's service day (YYYY-MM-DD,
+     *  org-local) — dedupe on (client, day), not the client forever. */
+    visitDate?: string | null;
+    /** Job-scoped run: dedupe on this job, not the client. */
+    jobId?: string | null;
     allowReentry: boolean;
     reentryAfterMinutes: number;
   }
@@ -152,8 +160,18 @@ export async function isEligibleForEnrollment(
     query = query.eq("invoice_id", params.invoiceId);
   } else if (params.meetingId) {
     query = query.eq("meeting_id", params.meetingId);
+  } else if (params.visitDate) {
+    // Once per client per SERVICE DAY: a stop's sibling visits (one per service,
+    // one per crew) share one run; a visit on another day starts a new one. The
+    // same day firing again is held to allow_reentry.
+    query = query.eq("client_id", params.clientId).eq("visit_date", params.visitDate);
+  } else if (params.jobId) {
+    query = query.eq("job_id", params.jobId);
   } else {
-    query = query.eq("client_id", params.clientId).is("estimate_id", null).is("ticket_id", null).is("invoice_id", null).is("meeting_id", null);
+    query = query
+      .eq("client_id", params.clientId)
+      .is("estimate_id", null).is("ticket_id", null).is("invoice_id", null).is("meeting_id", null)
+      .is("visit_date", null).is("job_id", null);
   }
 
   const { data: existing } = await query.maybeSingle();
@@ -224,8 +242,13 @@ export async function enrollClientInSequence(
     /** The start trigger that created this run — decides when a record-scoped run
      *  ends on its own (sequence_enrollment_record_stop_reason). */
     triggerType?: string | null;
-    /** The visit a visit-event trigger fired for — the snow merge tags read this stop. */
+    /** The visit a visit-event trigger fired for (the lead/first of the day's) — the snow
+     *  merge tags read this stop. */
     visitId?: string | null;
+    /** That visit's service day — the run is scoped to (client, day). */
+    visitDate?: string | null;
+    /** The job a job-event trigger fired for — the run is scoped to it (once per job). */
+    jobId?: string | null;
   }
 ): Promise<string | null> {
   const { data: firstEvent } = await supabase
@@ -256,6 +279,8 @@ export async function enrollClientInSequence(
       meeting_id: params.meetingId ?? null,
       trigger_type: params.triggerType ?? null,
       ...(params.visitId ? { visit_id: params.visitId } : {}),
+      ...(params.visitDate ? { visit_date: params.visitDate } : {}),
+      ...(params.jobId ? { job_id: params.jobId } : {}),
       enrolled_at: new Date().toISOString(),
       // Start at the first ACTIVE step's real position (positions can have
       // gaps from deleted/deactivated steps), past it when it's a wait whose
@@ -275,6 +300,9 @@ export async function enrollClientInSequence(
       ticketId: params.ticketId ?? null,
       invoiceId: params.invoiceId ?? null,
       meetingId: params.meetingId ?? null,
+      visitId: params.visitId ?? null,
+      visitDate: params.visitDate ?? null,
+      jobId: params.jobId ?? null,
     };
     // 23505 = one of the crm_sequence_enrollments_active_*_uidx partial
     // unique indexes: an in-flight enrollment for this (sequence, scope key)
@@ -283,7 +311,10 @@ export async function enrollClientInSequence(
     // too broad (e.g. the client index once swallowing meeting-scoped
     // enrollments) is visible.
     if (error?.code === "23505") {
-      log.warn("enrollment skipped: active enrollment already exists", { ...ctx, detail: error.message });
+      // Expected for a stop's sibling visits completing/dispatching at once: the
+      // first one enrolled the client for that day (crm_sequence_enrollments_active_visit_day_uidx).
+      if (params.visitDate) log.info("enrollment skipped: already enrolled for this service day", ctx);
+      else log.warn("enrollment skipped: active enrollment already exists", { ...ctx, detail: error.message });
     } else if (error) {
       log.error("enrollment insert failed", { ...ctx, code: error.code, detail: error.message });
     }
@@ -894,6 +925,12 @@ export async function fetchOrgTriggers(
   return out;
 }
 
+/** A visit's service day (scheduled_date, YYYY-MM-DD on the org's calendar), or null. */
+async function lookupVisitDate(supabase: AnyClient, visitId: string): Promise<string | null> {
+  const { data } = await supabase.from("crm_job_visits").select("scheduled_date").eq("id", visitId).maybeSingle();
+  return (data?.scheduled_date as string | null | undefined) ?? null;
+}
+
 /**
  * Fires the 'service_visit_completed' trigger type for every active sequence
  * configured for one of the just-completed visit's services (or configured
@@ -902,13 +939,16 @@ export async function fetchOrgTriggers(
  */
 export async function fireServiceVisitCompletedTriggers(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; serviceIds: string[]; visitId?: string | null }
+  params: { orgId: string; clientId: string; serviceIds: string[]; visitId?: string | null; visitDate?: string | null }
 ): Promise<string[]> {
   if (params.serviceIds.length === 0) return [];
 
   const enrolledIds: string[] = [];
 
   const triggers = await fetchOrgTriggers(supabase, params.orgId, "service_visit_completed");
+  if (triggers.length === 0) return [];
+  // Once per client per service day — the visit's own date.
+  const visitDate = params.visitDate ?? (params.visitId ? await lookupVisitDate(supabase, params.visitId) : null);
 
   for (const trigger of (triggers ?? []) as {
     id: string;
@@ -932,6 +972,7 @@ export async function fireServiceVisitCompletedTriggers(
       sequenceId: trigger.sequence_id,
       clientId: params.clientId,
       estimateId: null,
+      visitDate,
       allowReentry: seq.allow_reentry ?? false,
       reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
     });
@@ -943,6 +984,7 @@ export async function fireServiceVisitCompletedTriggers(
       clientId: params.clientId,
       triggerType: "service_visit_completed",
       visitId: params.visitId ?? null,
+      visitDate,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
   }
@@ -987,8 +1029,16 @@ export async function fireSimpleTrigger(
      */
     recordId?: string | null;
     /** The visit a visit-event trigger is about — stored on the enrollment so the snow
-     *  merge tags read that stop, not the client's latest one. */
+     *  merge tags read that stop, not the client's latest one. For a visit-scoped trigger
+     *  (enrollment-scope.ts) the run is deduped on the client's service day: once per
+     *  client per day, whatever services/crews/properties that day has. */
     visitId?: string | null;
+    /** That visit's day (YYYY-MM-DD) — the NEW date for visit_date_changed. Looked up
+     *  from the visit when omitted. */
+    visitDate?: string | null;
+    /** The job a job-event trigger (job_created, job_cancelled, package_*) is about —
+     *  the run is deduped on it: once per job. */
+    jobId?: string | null;
   },
   /** The org's triggers of this type, already loaded by a caller that fires many events for
    *  one org (the past-due crons) — saves a paged trigger query per row. */
@@ -1008,6 +1058,17 @@ export async function fireSimpleTrigger(
   if (!clientRow || clientRow.deleted_at || clientRow.org_id !== params.orgId) return enrolledIds;
 
   const triggers = preloadedTriggers ?? await fetchOrgTriggers(supabase, params.orgId, params.triggerType);
+
+  // Which record the run is scoped to beyond estimate/ticket/invoice/meeting: a visit
+  // for visit-event triggers, a job for job-event triggers. Only those trigger types
+  // narrow the scope — a stray id on any other trigger keeps client-level dedupe.
+  const scopeVisitId = isVisitScopedTrigger(params.triggerType) ? params.visitId ?? null : null;
+  const scopeJobId = isJobScopedTrigger(params.triggerType) ? params.jobId ?? null : null;
+  // Visit runs dedupe per client per service day; read after the caller's write, so
+  // a date change yields the visit's NEW date.
+  const scopeVisitDate = isVisitScopedTrigger(params.triggerType)
+    ? params.visitDate ?? (scopeVisitId && triggers.length > 0 ? await lookupVisitDate(supabase, scopeVisitId) : null)
+    : null;
 
   for (const trigger of (triggers ?? []) as {
     id: string;
@@ -1040,6 +1101,8 @@ export async function fireSimpleTrigger(
       ticketId: params.ticketId ?? null,
       invoiceId: params.invoiceId ?? null,
       meetingId: params.meetingId ?? null,
+      visitDate: scopeVisitDate,
+      jobId: scopeJobId,
       allowReentry: seq.allow_reentry ?? false,
       reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
     });
@@ -1054,7 +1117,11 @@ export async function fireSimpleTrigger(
       invoiceId: params.invoiceId ?? null,
       meetingId: params.meetingId ?? null,
       triggerType: params.triggerType,
-      visitId: params.visitId ?? null,
+      // Only a visit-scoped trigger stores its visit (merge tags) and day; the stored
+      // visit_date is what takes the run out of the one-active-per-client index.
+      visitId: scopeVisitId,
+      visitDate: scopeVisitDate,
+      jobId: scopeJobId,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
   }

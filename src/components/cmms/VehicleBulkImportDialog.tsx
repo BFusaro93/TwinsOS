@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
 import {
@@ -256,7 +257,15 @@ export function VehicleBulkImportDialog({
       .eq("id", user?.id ?? "")
       .single();
     const uploaderName = profile?.name ?? user?.email ?? "Unknown";
-    if (!profile?.org_id) return;
+    // my_org_id(), not profiles.org_id: staff impersonating an org upload into
+    // (and file the row under) that org, matching the bucket policies and the
+    // attachments storage_path guard.
+    let orgId: string;
+    try {
+      orgId = await getStorageOrgPrefix(supabase);
+    } catch {
+      return;
+    }
 
     setIsUploading(true);
 
@@ -273,7 +282,7 @@ export function VehicleBulkImportDialog({
         group.vehicleId!,
         group.files,
         uploaderName,
-        profile.org_id,
+        orgId,
       );
 
       setGroups((prev) =>

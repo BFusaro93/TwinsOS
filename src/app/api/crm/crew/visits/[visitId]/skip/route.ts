@@ -10,7 +10,8 @@ import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { stopClockOutCap } from "@/lib/crew/visit-pause";
 import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
 
 const log = logger.child("crew/skip");
 
@@ -73,8 +74,10 @@ export async function POST(
   // everyone until the phone found signal.
   const tappedAt = resolveOccurredAt(parsed.data.occurredAt, { notBefore: existing.clocked_in_at }).toISOString();
 
+  // Service role after the ownership / writable / status checks above: a crew
+  // login can't change a visit's status directly (a_crm_job_visits_crew_column_guard).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (createVisitWriter(user.id) as any)
     .from("crm_job_visits")
     .update({
       status:      "skipped",
@@ -85,7 +88,7 @@ export async function POST(
     // Race-safe with the check above: a concurrent clock-out that won the
     // race leaves this matching 0 rows rather than overwriting its result.
     .in("status", ["scheduled", "dispatched", "in_progress"])
-    .select(JOB_VISIT_READ_COLUMNS)
+    .select(CREW_VISIT_RESPONSE_COLUMNS)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -13,6 +13,11 @@ type AnyClient = any;
  * per visit), never a stop that is mid-clock, completed, cancelled or skipped.
  * `fromDate` is the org's today ("YYYY-MM-DD").
  *
+ * The visits skipped here that carry NO crew of their own (in progress,
+ * completed / skipped, or dated before today) would still follow the job's new
+ * crew by inheritance; the DB trigger trg_crm_jobs_pin_visit_crew_on_change
+ * stamps the PREVIOUS crew onto them when crm_jobs.crew_id changes, on every path.
+ *
  * `previousCrewId` is the job's crew BEFORE the change (null = it had none).
  * Leaving it undefined skips the follow-the-job filter — only for an old
  * client that doesn't send it.

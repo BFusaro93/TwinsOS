@@ -17,6 +17,7 @@ import {
   type AdminClient,
 } from "@/lib/automations/cmms-automation-actions";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { plansWithoutModule } from "@/lib/stripe/plans";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 
@@ -309,7 +310,9 @@ async function handleRun(request: Request) {
   const skipped: { automationId: string; reason: string }[] = [];
   const now = new Date().toISOString();
 
-  const orgCanceled = createOrgCanceledResolver(adminClient);
+  // These poll automations (meter / low stock / PM due / WO overdue) are Equipt's: an org
+  // whose plan lacks Equipt (Landscapt-only) has them paused like a canceled org.
+  const orgCanceled = createOrgCanceledResolver(adminClient, { requireModule: "equipt" });
   for (const auto of automations ?? []) {
     const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
     const orgId = auto.org_id as string;
@@ -317,7 +320,7 @@ async function handleRun(request: Request) {
     // A canceled org is read-only: its poll automations pause (and resume on
     // resubscribe, with no backfill) — same rule the sequence sweep applies.
     if (await orgCanceled(orgId)) {
-      skipped.push({ automationId: auto.id, reason: "org subscription is canceled" });
+      skipped.push({ automationId: auto.id, reason: "org subscription is canceled (or its plan has no Equipt)" });
       continue;
     }
 
@@ -631,6 +634,9 @@ async function handleRun(request: Request) {
         // left them at the head of the queue forever: past ~1,000 of them, every run saw only
         // already-skipped rows and no other org's sequence step fired again.
         .or(`plan.neq.trial,trial_ends_at.is.null,trial_ends_at.gt.${nowIso},is_platform_staff_org.eq.true`, { referencedTable: "organizations" })
+        // An org whose plan lacks Landscapt (Equipt-only) has its sequences paused the same
+        // way (resume on upgrade, no catch-up); processDueEnrollment re-checks it too.
+        .not("organizations.plan", "in", `(${plansWithoutModule("landscapt").join(",")})`)
         .lte("next_fire_at", nowIso)
         .is("completed_at", null)
         .is("stopped_at", null)

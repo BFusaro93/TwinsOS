@@ -1093,6 +1093,13 @@ export function useRevokeInvoicePayLinks() {
 
 // ── duplicate a void invoice ──────────────────────────────────────────────────
 
+/** 23505 from crm_invoices_one_per_contract_date: a second live regular invoice
+ *  for the same contract on the same invoice date. */
+function isContractDateConflict(error: unknown): boolean {
+  const e = error as { code?: string; message?: string; details?: string } | null;
+  return e?.code === "23505" && `${e.message ?? ""} ${e.details ?? ""}`.includes("crm_invoices_one_per_contract_date");
+}
+
 export interface DuplicateVoidInvoiceResult {
   invoiceId: string;
   lines: number;
@@ -1116,7 +1123,12 @@ export function useDuplicateVoidInvoice() {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase.rpc as any)("crm_duplicate_void_invoice", { p_invoice_id: id });
-      if (error) throw error;
+      if (error) {
+        if (isContractDateConflict(error)) {
+          throw new Error("This contract already has a live invoice dated today — open that invoice instead, or change its date first.");
+        }
+        throw error;
+      }
       const row = (data ?? {}) as Record<string, unknown>;
       const invoiceId = typeof row.invoice_id === "string" ? row.invoice_id : null;
       if (!invoiceId) throw new Error("The draft could not be created.");
@@ -1291,6 +1303,9 @@ export function useUpdateInvoiceHeader() {
       if (error) {
         // 23505 = crm_invoices_org_number_unique: another live invoice already
         // carries this number.
+        if (isContractDateConflict(error)) {
+          throw new Error("This contract already has another invoice on that date. Pick a different invoice date.");
+        }
         if ((error as { code?: string }).code === "23505" && patch.invoice_number !== undefined) {
           throw new Error(`Invoice number ${patch.invoice_number} is already used by another invoice. Choose a different number.`);
         }

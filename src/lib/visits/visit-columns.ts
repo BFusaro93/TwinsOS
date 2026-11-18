@@ -38,6 +38,14 @@ export const JOB_VISIT_READ_COLUMNS =
   "chemical_confirmation_waived_at, chemical_confirmation_waived_by, crew_group_id, crew_group_secondary, " +
   "push_number, bill_push, handed_off_from_crew_id";
 
+/**
+ * What a crew route sends back about a visit: JOB_VISIT_READ_COLUMNS without
+ * the visit's price (rate_cents). Crew routes read these rows with the service
+ * role, which ignores the org's "hide pricing from crews" setting, and no crew
+ * screen shows a visit-level price, so it is never sent to a crew device.
+ */
+export const CREW_VISIT_RESPONSE_COLUMNS = JOB_VISIT_READ_COLUMNS.replace(" rate_cents,", "");
+
 /** Every crm_jobs column except actual_labor_cost_cents. Use instead of `*` in user-session reads. */
 export const JOB_READ_COLUMNS =
   "id, org_id, client_id, property_id, job_type, status, sub_status, scheduled_date, start_time, end_time, " +

@@ -18,7 +18,7 @@ import { stopClockOutCap } from "@/lib/crew/visit-pause";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { PAYROLL_LOCKED_PREFIX, isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
 
 const log = logger.child("crew/stops/clock-out");
 
@@ -370,7 +370,11 @@ export async function POST(
         completed_at: now,
         status: "completed",
         actual_hours: allocation?.get(row.id) ?? undefined,
-        men_count: menCount,
+        // Each service keeps its own team size (a 3-man mow and a 1-man
+        // bed-edge on the same stop). The crew app never changes men_count, so
+        // the anchor's value used to overwrite every sibling's here; it only
+        // fills a sibling that has none.
+        men_count: row.men_count == null ? menCount : undefined,
         paused_at: null,
         break_minutes: finalBreakMinutes.get(row.id) ?? row.break_minutes ?? 0,
         // Notes belong to the anchor when it's part of this clock-out; when the
@@ -388,16 +392,32 @@ export async function POST(
     if (error) updateErrors.push(`${row.id}: ${error.message}`);
     else if (((updated ?? []) as unknown[]).length > 0) transitionedRows.push(row);
   }
-  if (updateErrors.some((e) => isChemicalGateError(e))) {
-    return NextResponse.json({ error: "Confirm the chemicals applied before finishing this job.", code: "chemical_confirmation_required" }, { status: 409 });
-  }
-  // A stop left running since a day inside the payroll lock: the database's own sentence, as a 409.
-  const lockError = updateErrors.find((e) => isPayrollLockedError(e));
-  if (lockError) {
-    return NextResponse.json({ error: lockError.slice(lockError.indexOf(PAYROLL_LOCKED_PREFIX)), code: "payroll_locked" }, { status: 409 });
-  }
-  if (updateErrors.length > 0) {
-    return NextResponse.json({ error: `Failed to clock out: ${updateErrors.join("; ")}` }, { status: 500 });
+  // A sibling that failed (chemical gate, payroll lock, any error) is reported
+  // to the crew — but only AFTER the rows that did complete get their punches
+  // closed, labor written and completion side effects (invoice line, timeline,
+  // automations) run below. Returning first left those completed visits
+  // un-invoiced forever: a retry only picks up the still-open sibling.
+  const failureResponse = (() => {
+    if (updateErrors.some((e) => isChemicalGateError(e))) {
+      return NextResponse.json({ error: "Confirm the chemicals applied before finishing this job.", code: "chemical_confirmation_required" }, { status: 409 });
+    }
+    // A stop left running since a day inside the payroll lock: the database's own sentence, as a 409.
+    const lockError = updateErrors.find((e) => isPayrollLockedError(e));
+    if (lockError) {
+      return NextResponse.json({ error: lockError.slice(lockError.indexOf(PAYROLL_LOCKED_PREFIX)), code: "payroll_locked" }, { status: 409 });
+    }
+    if (updateErrors.length > 0) {
+      return NextResponse.json({ error: `Failed to clock out: ${updateErrors.join("; ")}` }, { status: 500 });
+    }
+    return null;
+  })();
+  if (failureResponse && transitionedRows.length === 0) return failureResponse;
+  if (failureResponse) {
+    log.error("stop clock-out partially failed; finishing the visits that completed", {
+      visitId: anchor.id,
+      completed: transitionedRows.map((r) => r.id),
+      errors: updateErrors,
+    });
   }
 
   // Everything below is a one-time consequence of a visit being completed,
@@ -407,7 +427,7 @@ export async function POST(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: currentRows } = await (supabase as any)
       .from("crm_job_visits")
-      .select(JOB_VISIT_READ_COLUMNS)
+      .select(CREW_VISIT_RESPONSE_COLUMNS)
       .in("id", openIds);
     return NextResponse.json({ visitIds: openIds, visits: currentRows, alreadyClockedOut: true });
   }
@@ -575,10 +595,14 @@ export async function POST(
     }
   }
 
+  // The completed rows are fully finished above; now tell the crew about the
+  // sibling(s) that didn't close, so they can retry / call the office.
+  if (failureResponse) return failureResponse;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: finalRows } = await (supabase as any)
     .from("crm_job_visits")
-    .select(JOB_VISIT_READ_COLUMNS)
+    .select(CREW_VISIT_RESPONSE_COLUMNS)
     .in("id", openIds);
 
   return NextResponse.json({ visitIds: openIds, visits: finalRows });

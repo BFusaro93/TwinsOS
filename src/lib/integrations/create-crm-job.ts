@@ -291,7 +291,7 @@ export async function createCrmJob(
   // hooks); without it a job made through the API never enrolled in
   // job_created automations. Best-effort.
   try {
-    await fireSimpleTrigger(db, { orgId, clientId: input.clientId, triggerType: "job_created", matchValues: [jobType], recordId: jobId });
+    await fireSimpleTrigger(db, { orgId, clientId: input.clientId, triggerType: "job_created", matchValues: [jobType], recordId: jobId, jobId });
   } catch {
     // enrollment failure must not fail the create
   }

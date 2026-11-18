@@ -77,7 +77,7 @@ export async function GET(request: Request) {
   const results: { campaignId: string; status: "sent" | "skipped"; reason?: string }[] = [];
 
   // Inactive and demo orgs get no automated sends (shared helper, resolved per campaign).
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
   // Don't START another campaign this close to maxDuration; a campaign already sending keeps
   // its heartbeat and is resumed (deduped per recipient) once it goes stale.
   const startedAt = Date.now();
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
       continue;
     }
     if (await orgCanceled(campaign.org_id)) {
-      results.push({ campaignId: campaign.id, status: "skipped", reason: "org inactive or demo (outbound muted)" });
+      results.push({ campaignId: campaign.id, status: "skipped", reason: "org inactive, demo, or plan without Landscapt (outbound muted)" });
       continue;
     }
     const result = await sendCampaignEmails(db, campaign, campaign.org_id, null);

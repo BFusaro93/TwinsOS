@@ -82,7 +82,7 @@ export async function GET(request: Request) {
   let fired = 0;
   let stoppedEarly = false;
   const startedAt = Date.now();
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
 
   // Group by org and skip orgs with no live credit_card_about_to_expire trigger before any
   // Stripe call: one retrieve per card-on-file client across every org, one at a time, ran

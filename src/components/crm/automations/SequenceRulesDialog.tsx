@@ -551,6 +551,12 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
               Allow Re-Entry
             </Label>
           </div>
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500 -mt-1">
+            Visit triggers run once per client per service day — all of a client&apos;s visits that day (every service, crew
+            and property) share one run, and another day starts a new one. Job and package triggers run once per job;
+            estimate, invoice, ticket and meeting triggers once per record; every other trigger once per client. Re-entry
+            lets the same day, record or client start it again after the delay below.
+          </p>
 
           {allowReentry && (
             <div className="flex items-center gap-2">

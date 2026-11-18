@@ -550,7 +550,16 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
       }
       onClose();
     } catch (err) {
-      toast.error(err instanceof ScheduleNameTakenError ? err.message : schedule ? "Failed to update schedule" : "Failed to create schedule");
+      // Say why an update failed (e.g. a rename refused because some of its jobs
+      // couldn't be moved to the new name) instead of a bare "Failed".
+      const reason = (err as { message?: unknown } | null)?.message;
+      toast.error(
+        err instanceof ScheduleNameTakenError
+          ? err.message
+          : schedule
+            ? `Failed to update schedule${typeof reason === "string" && reason ? `: ${reason}` : ""}`
+            : "Failed to create schedule"
+      );
     }
   }
 

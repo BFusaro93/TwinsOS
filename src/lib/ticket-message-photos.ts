@@ -74,9 +74,14 @@ export async function storeReplyPhotos(
   return { paths: uploaded };
 }
 
-/** Signed URLs (read-time, never stored) for the photos on a set of messages, keyed by storage path. */
-export async function signPhotoPaths(db: any, paths: string[]): Promise<Map<string, string>> {
-  const unique = [...new Set(paths)];
+/**
+ * Signed URLs (read-time, never stored) for the photos on a set of messages, keyed by storage path.
+ * `db` is the service client, so only paths inside `orgId`'s folder are signed — a path that
+ * points anywhere else (another tenant's file) is dropped rather than handed out.
+ */
+export async function signPhotoPaths(db: any, orgId: string, paths: string[]): Promise<Map<string, string>> {
+  const prefix = `${orgId}/`;
+  const unique = [...new Set(paths)].filter((p) => typeof p === "string" && p.startsWith(prefix));
   const out = new Map<string, string>();
   if (!unique.length) return out;
   const { data } = await db.storage.from(BUCKET).createSignedUrls(unique, 3600);

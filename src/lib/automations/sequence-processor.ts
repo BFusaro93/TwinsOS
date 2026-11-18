@@ -1,6 +1,6 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep, isMarketingEmailCategory } from "./sequence-email";
 import { logger } from "@/lib/logger";
-import { isOrgInactive, isOrgDemo } from "@/lib/orgs/org-canceled";
+import { isOrgInactive, isOrgDemo, orgLacksModule } from "@/lib/orgs/org-canceled";
 import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
 import { SMS_NOT_REGISTERED_REASON } from "@/lib/sms/send";
 import { phoneLast10 } from "@/lib/sms/opt-outs";
@@ -381,7 +381,10 @@ export async function processDueEnrollment(
     .select("plan, trial_ends_at, is_platform_staff_org")
     .eq("id", enrollment.org_id)
     .maybeSingle();
-  if (isOrgInactive(org)) {
+  // An org whose plan doesn't include Landscapt (Equipt-only) is paused the same way: its
+  // users can't use Landscapt, so its sequences hold their current step until it upgrades, like a canceled org.
+  const lacksLandscapt = orgLacksModule(org, "landscapt");
+  if (isOrgInactive(org) || lacksLandscapt) {
     // Move the row off the head of the queue (oldest-due first) so a large inactive org can't
     // starve every other org; it is re-checked tomorrow and resumes if the org resubscribes.
     await adminClient
@@ -390,7 +393,10 @@ export async function processDueEnrollment(
       .eq("id", enrollment.id)
       .is("completed_at", null)
       .is("stopped_at", null);
-    return { skipped: { enrollmentId: enrollment.id, reason: org?.plan === "trial" ? "org trial has ended" : "org subscription is canceled" } };
+    const reason = lacksLandscapt
+      ? "org plan does not include Landscapt"
+      : org?.plan === "trial" ? "org trial has ended" : "org subscription is canceled";
+    return { skipped: { enrollmentId: enrollment.id, reason } };
   }
   if (!(await claimEnrollmentStep(adminClient, enrollment))) {
     return { skipped: { enrollmentId: enrollment.id, reason: "already claimed by another run (or no longer due)" } };

@@ -69,7 +69,7 @@ export async function GET(request: Request) {
 
   // Canceled orgs get no automated visit generation (resolved per job's org;
   // the resolver caches per org for this run).
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  const orgCanceled = createOrgCanceledResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt work paused
   const jobs: GeneratorJob[] = [];
   for (const job of allJobs) {
     if (await orgCanceled(job.org_id)) continue;

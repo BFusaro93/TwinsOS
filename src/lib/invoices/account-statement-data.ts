@@ -132,6 +132,35 @@ export async function buildAccountStatementData(
     return isIssued(inv);
   });
 
+  // Refunds of these payments, dated the day they were refunded (the
+  // crm_payment_refunds ledger). A payment shows at its full amount on its own
+  // date and each refund as its own row on its refund date — netting refunds
+  // into the original payment rewrote history: a statement for a period before
+  // the refund showed the payment already reduced, and the refund never
+  // appeared on the statement for the period it happened in.
+  const refundsByPayment = new Map<string, { date: string; amountCents: number }[]>();
+  const ledgerTotalByPayment = new Map<string, number>();
+  const refundedIds = paymentRows.filter((r) => ((r.refunded_amount_cents as number) ?? 0) > 0).map((r) => r.id as string);
+  for (let i = 0; i < refundedIds.length; i += 200) {
+    const chunk = refundedIds.slice(i, i + 200);
+    const { rows: refundRows, error: refundErr } = await selectAllRows<Row>(() => supabase
+      .from("crm_payment_refunds")
+      .select("id, payment_id, amount_cents, refund_date")
+      .in("payment_id", chunk)
+      .is("deleted_at", null));
+    if (refundErr) throw new Error(`Failed to load refunds for statement: ${refundErr}`);
+    for (const rf of refundRows) {
+      const pid = rf.payment_id as string;
+      const amt = (rf.amount_cents as number) ?? 0;
+      ledgerTotalByPayment.set(pid, (ledgerTotalByPayment.get(pid) ?? 0) + amt);
+      const date = rf.refund_date as string;
+      if (date > toDate) continue;
+      const list = refundsByPayment.get(pid) ?? [];
+      list.push({ date, amountCents: amt });
+      refundsByPayment.set(pid, list);
+    }
+  }
+
   // Every allocation onto these accounts' invoices. Allocations from a payment
   // recorded on ANOTHER account (typically the parent) reduce what these
   // accounts owe — omitting them overstated a sub-account's balance by every
@@ -159,10 +188,28 @@ export async function buildAccountStatementData(
   type LedgerEntry = {
     groupId: string;
     date: string;
-    kind: "invoice" | "payment" | "credit";
+    kind: "invoice" | "payment" | "credit" | "refund";
     label: string;
     invoiceNumber: number | null;
-    amountCents: number; // signed: +charge, -payment/credit
+    amountCents: number; // signed: +charge/refund, -payment/credit
+  };
+
+  // A payment's refunds, each on its refund date. Any part of refunded_amount_cents
+  // the ledger doesn't account for (a refund recorded before the ledger existed)
+  // is shown on the payment's own date, as statements always did.
+  const refundEntries = (r: Row, groupId: string, invoiceNumber: number | null): LedgerEntry[] => {
+    const pid = r.id as string;
+    const refunded = (r.refunded_amount_cents as number) ?? 0;
+    if (refunded <= 0) return [];
+    const label = `${r.is_credit === true ? "Credit" : `${r.method ?? "Card"} payment`}${invoiceNumber ? ` (Invoice #${invoiceNumber})` : ""}${r.reference ? ` (Ref #: ${r.reference})` : ""}`;
+    const out: LedgerEntry[] = (refundsByPayment.get(pid) ?? []).map((rf) => ({
+      groupId, date: rf.date, kind: "refund", label, invoiceNumber, amountCents: rf.amountCents,
+    }));
+    const unledgered = refunded - (ledgerTotalByPayment.get(pid) ?? 0);
+    if (unledgered > 0) {
+      out.push({ groupId, date: r.payment_date as string, kind: "refund", label, invoiceNumber, amountCents: unledgered });
+    }
+    return out;
   };
 
   const paymentLabel = (r: Row, invoiceNumber: number | null): string => {
@@ -184,8 +231,8 @@ export async function buildAccountStatementData(
     ...paymentRows.flatMap((r): LedgerEntry[] => {
       const kind = r.is_credit === true ? "credit" : "payment";
       const payerId = r.client_id as string;
-      // Net of refunds: a refunded payment no longer reduces what's owed.
-      const net = ((r.amount_cents as number) ?? 0) - ((r.refunded_amount_cents as number) ?? 0);
+      // The full amount on the payment date; refunds follow as their own rows.
+      const gross = (r.amount_cents as number) ?? 0;
       const fkInvoice = r.crm_invoices as InvoiceRef | null;
       const allocs = rolledUp ? ownAllocsByPayment.get(r.id as string) ?? [] : [];
       if (allocs.length === 0) {
@@ -193,7 +240,10 @@ export async function buildAccountStatementData(
         // account it paid — its invoice's account when that's one of these, else the payer.
         const groupId = rolledUp && fkInvoice?.client_id && inSet.has(fkInvoice.client_id) ? fkInvoice.client_id : payerId;
         const invoiceNumber = fkInvoice?.invoice_number ?? null;
-        return [{ groupId, date: r.payment_date as string, kind, label: paymentLabel(r, invoiceNumber), invoiceNumber, amountCents: -net }];
+        return [
+          { groupId, date: r.payment_date as string, kind, label: paymentLabel(r, invoiceNumber), invoiceNumber, amountCents: -gross },
+          ...refundEntries(r, groupId, invoiceNumber),
+        ];
       }
       // Rolled up: split the payment over the accounts whose invoices it paid; anything not
       // applied to them stays on the paying account.
@@ -212,10 +262,13 @@ export async function buildAccountStatementData(
           amountCents: -share,
         });
       }
-      const rest = net - applied;
+      // Allocations are already net of refunds (refund_payment shrinks them), so the
+      // refunded part shows on the paying account together with its refund rows.
+      const rest = gross - applied;
       if (rest !== 0) {
         out.push({ groupId: payerId, date: r.payment_date as string, kind, label: paymentLabel(r, null), invoiceNumber: null, amountCents: -rest });
       }
+      out.push(...refundEntries(r, payerId, null));
       return out;
     }),
     ...paidFromOutside.map((r): LedgerEntry => {
@@ -266,7 +319,8 @@ export async function buildAccountStatementData(
 
   // Cash only, like the invoice-statement layout: an AR write-off zeroes bad
   // debt without money changing hands, so it must never print as the client's
-  // "last payment".
+  // "last payment". Its full amount, the way the activity shows it (any refund
+  // is a separate row).
   const lastPaymentRow = [...paymentRows]
     .filter((r) => r.is_credit !== true && r.method !== AR_WRITE_OFF_METHOD)
     .sort((a, b) => (b.payment_date as string).localeCompare(a.payment_date as string))[0];

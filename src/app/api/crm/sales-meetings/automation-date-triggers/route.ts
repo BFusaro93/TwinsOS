@@ -79,7 +79,7 @@ async function handleRun(request: Request) {
   }
 
   let enrolled = 0;
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
 
   for (const trigger of triggers ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

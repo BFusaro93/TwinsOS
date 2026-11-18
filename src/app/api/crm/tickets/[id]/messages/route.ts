@@ -28,7 +28,7 @@ async function authorize(ticketId: string) {
   // RLS scopes the read to the caller's org (and honours impersonation).
   const { data: ticket } = await supabase
     .from("crm_tickets")
-    .select("id, client_id, ticket_number, subject, status, visible_to_client")
+    .select("id, org_id, client_id, ticket_number, subject, status, visible_to_client")
     .eq("id", ticketId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -47,7 +47,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const signed = await signPhotoPaths(createServiceClient(), ((data ?? []) as any[]).flatMap((r) => r.photo_paths ?? []));
+  const signed = await signPhotoPaths(createServiceClient(), auth.ticket.org_id, ((data ?? []) as any[]).flatMap((r) => r.photo_paths ?? []));
   return NextResponse.json(
     ((data ?? []) as any[]).map((r) => ({
       id: r.id,

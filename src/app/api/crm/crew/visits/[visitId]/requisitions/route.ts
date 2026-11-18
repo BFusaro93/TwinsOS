@@ -89,15 +89,16 @@ export async function POST(
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
-  // product_items reads are not restricted for crew role by RLS (only the
-  // procurement write-side is — see 20260824114014_restrict_crew_role_
-  // from_financial_tables.sql), so this validation lookup can use the
-  // caller's own session client.
+  // A crew login can't read product_items (unit cost / price — 20270109000210),
+  // so this validation lookup uses the service role, pinned to the org of the
+  // visit whose ownership was just proven. unit_cost prices the requisition
+  // line server-side; it is never sent back to the crew (shapeCrewRequisition).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: product, error: productError } = await (supabase as any)
+  const { data: product, error: productError } = await (adminClient() as any)
     .from("product_items")
     .select("id, org_id, name, part_number, unit_cost, category")
     .eq("id", productItemId)
+    .eq("org_id", visit.org_id)
     .is("deleted_at", null)
     .maybeSingle();
   if (productError) return NextResponse.json({ error: productError.message }, { status: 500 });

@@ -7332,59 +7332,6 @@ export type Database = {
           sub_status: string | null
           temperature: number | null
           updated_at: string
-          crew_job: {
-            actual_hours: number | null
-            arrival_window_hours: number | null
-            asset_type: string | null
-            budgeted_hours: number | null
-            call_ahead: boolean | null
-            client_id: string | null
-            completion_notes: string | null
-            contract_id: string | null
-            created_at: string | null
-            crew_id: string | null
-            deleted_at: string | null
-            end_date_window: string | null
-            end_time: string | null
-            id: string | null
-            inch_trigger: number | null
-            is_complete: boolean | null
-            is_high_priority: boolean | null
-            job_number: number | null
-            job_type: string | null
-            last_service_date: string | null
-            lat: number | null
-            lng: number | null
-            man_count: number | null
-            map_code: string | null
-            notes_to_crew: string | null
-            notes_to_crew_updated_at: string | null
-            org_id: string | null
-            package_id: string | null
-            package_name: string | null
-            package_step: number | null
-            package_total_steps: number | null
-            priority: number | null
-            project_id: string | null
-            property_id: string | null
-            recurrence_end: string | null
-            recurrence_rule: string | null
-            recurrence_start: string | null
-            schedule: string | null
-            schedule_days: string[] | null
-            scheduled_date: string | null
-            service_address: string | null
-            service_city: string | null
-            service_state: string | null
-            service_zip: string | null
-            start_date_window: string | null
-            start_time: string | null
-            status: string | null
-            sub_status: string | null
-            updated_at: string | null
-            waiting_list_end: string | null
-            waiting_list_start: string | null
-          } | null
         }
         Insert: {
           acknowledged_notes_at?: string | null
@@ -9537,6 +9484,7 @@ export type Database = {
           estimate_id: string | null
           id: string
           invoice_id: string | null
+          job_id: string | null
           meeting_id: string | null
           next_event_position: number
           next_fire_at: string | null
@@ -9548,6 +9496,7 @@ export type Database = {
           ticket_id: string | null
           trigger_type: string | null
           updated_at: string
+          visit_date: string | null
           visit_id: string | null
         }
         Insert: {
@@ -9561,6 +9510,7 @@ export type Database = {
           estimate_id?: string | null
           id?: string
           invoice_id?: string | null
+          job_id?: string | null
           meeting_id?: string | null
           next_event_position?: number
           next_fire_at?: string | null
@@ -9572,6 +9522,7 @@ export type Database = {
           ticket_id?: string | null
           trigger_type?: string | null
           updated_at?: string
+          visit_date?: string | null
           visit_id?: string | null
         }
         Update: {
@@ -9585,6 +9536,7 @@ export type Database = {
           estimate_id?: string | null
           id?: string
           invoice_id?: string | null
+          job_id?: string | null
           meeting_id?: string | null
           next_event_position?: number
           next_fire_at?: string | null
@@ -9596,6 +9548,7 @@ export type Database = {
           ticket_id?: string | null
           trigger_type?: string | null
           updated_at?: string
+          visit_date?: string | null
           visit_id?: string | null
         }
         Relationships: [
@@ -9639,6 +9592,27 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "rpt_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crew_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crm_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_enrollments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_jobs"
             referencedColumns: ["id"]
           },
           {
@@ -18754,7 +18728,7 @@ export type Database = {
           priority?: number | null
           push_number?: number | null
           qty?: number | null
-          rate_cents?: number | null
+          rate_cents?: never
           scheduled_date?: string | null
           skip_reason?: string | null
           snow_depth_inches?: number | null
@@ -18809,7 +18783,7 @@ export type Database = {
           priority?: number | null
           push_number?: number | null
           qty?: number | null
-          rate_cents?: number | null
+          rate_cents?: never
           scheduled_date?: string | null
           skip_reason?: string | null
           snow_depth_inches?: number | null
@@ -20330,6 +20304,7 @@ export type Database = {
         Args: { p_keep: string; p_merge: string }
         Returns: undefined
       }
+      _crm_money_rpc_active: { Args: never; Returns: boolean }
       _crm_queue_qbo_pending_voids: {
         Args: { p_keep_qbo_ids: string[]; p_payment_id: string }
         Returns: undefined
@@ -20525,6 +20500,10 @@ export type Database = {
         }[]
       }
       assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
+      assign_jobs_to_snow_route_crew: {
+        Args: { p_crew_id: string; p_job_ids: string[]; p_route_id?: string }
+        Returns: number
+      }
       auth_rate_limit_hit: {
         Args: { p_key: string; p_limit: number; p_window_start: string }
         Returns: boolean
@@ -20624,133 +20603,68 @@ export type Database = {
         Args: { p_member: string; p_work_date: string }
         Returns: boolean
       }
-      crew_job:
-        | {
-            Args: {
-              "": Database["public"]["Views"]["crm_crew_job_visits"]["Row"]
-            }
-            Returns: {
-              actual_hours: number | null
-              arrival_window_hours: number | null
-              asset_type: string | null
-              budgeted_hours: number | null
-              call_ahead: boolean | null
-              client_id: string | null
-              completion_notes: string | null
-              contract_id: string | null
-              created_at: string | null
-              crew_id: string | null
-              deleted_at: string | null
-              end_date_window: string | null
-              end_time: string | null
-              id: string | null
-              inch_trigger: number | null
-              is_complete: boolean | null
-              is_high_priority: boolean | null
-              job_number: number | null
-              job_type: string | null
-              last_service_date: string | null
-              lat: number | null
-              lng: number | null
-              man_count: number | null
-              map_code: string | null
-              notes_to_crew: string | null
-              notes_to_crew_updated_at: string | null
-              org_id: string | null
-              package_id: string | null
-              package_name: string | null
-              package_step: number | null
-              package_total_steps: number | null
-              priority: number | null
-              project_id: string | null
-              property_id: string | null
-              recurrence_end: string | null
-              recurrence_rule: string | null
-              recurrence_start: string | null
-              schedule: string | null
-              schedule_days: string[] | null
-              scheduled_date: string | null
-              service_address: string | null
-              service_city: string | null
-              service_state: string | null
-              service_zip: string | null
-              start_date_window: string | null
-              start_time: string | null
-              status: string | null
-              sub_status: string | null
-              updated_at: string | null
-              waiting_list_end: string | null
-              waiting_list_start: string | null
-            }
-            SetofOptions: {
-              from: "crm_crew_job_visits"
-              to: "crm_crew_jobs"
-              isOneToOne: true
-              isSetofReturn: true
-            }
-          }
-        | {
-            Args: { "": Database["public"]["Tables"]["crm_job_visits"]["Row"] }
-            Returns: {
-              actual_hours: number | null
-              arrival_window_hours: number | null
-              asset_type: string | null
-              budgeted_hours: number | null
-              call_ahead: boolean | null
-              client_id: string | null
-              completion_notes: string | null
-              contract_id: string | null
-              created_at: string | null
-              crew_id: string | null
-              deleted_at: string | null
-              end_date_window: string | null
-              end_time: string | null
-              id: string | null
-              inch_trigger: number | null
-              is_complete: boolean | null
-              is_high_priority: boolean | null
-              job_number: number | null
-              job_type: string | null
-              last_service_date: string | null
-              lat: number | null
-              lng: number | null
-              man_count: number | null
-              map_code: string | null
-              notes_to_crew: string | null
-              notes_to_crew_updated_at: string | null
-              org_id: string | null
-              package_id: string | null
-              package_name: string | null
-              package_step: number | null
-              package_total_steps: number | null
-              priority: number | null
-              project_id: string | null
-              property_id: string | null
-              recurrence_end: string | null
-              recurrence_rule: string | null
-              recurrence_start: string | null
-              schedule: string | null
-              schedule_days: string[] | null
-              scheduled_date: string | null
-              service_address: string | null
-              service_city: string | null
-              service_state: string | null
-              service_zip: string | null
-              start_date_window: string | null
-              start_time: string | null
-              status: string | null
-              sub_status: string | null
-              updated_at: string | null
-              waiting_list_end: string | null
-              waiting_list_start: string | null
-            }
-            SetofOptions: {
-              from: "crm_job_visits"
-              to: "crm_crew_jobs"
-              isOneToOne: true
-              isSetofReturn: true
-            }
-          }
+      crew_job: {
+        Args: { "": Database["public"]["Views"]["crm_crew_job_visits"]["Row"] }
+        Returns: {
+          actual_hours: number | null
+          arrival_window_hours: number | null
+          asset_type: string | null
+          budgeted_hours: number | null
+          call_ahead: boolean | null
+          client_id: string | null
+          completion_notes: string | null
+          contract_id: string | null
+          created_at: string | null
+          crew_id: string | null
+          deleted_at: string | null
+          end_date_window: string | null
+          end_time: string | null
+          id: string | null
+          inch_trigger: number | null
+          is_complete: boolean | null
+          is_high_priority: boolean | null
+          job_number: number | null
+          job_type: string | null
+          last_service_date: string | null
+          lat: number | null
+          lng: number | null
+          man_count: number | null
+          map_code: string | null
+          notes_to_crew: string | null
+          notes_to_crew_updated_at: string | null
+          org_id: string | null
+          package_id: string | null
+          package_name: string | null
+          package_step: number | null
+          package_total_steps: number | null
+          priority: number | null
+          project_id: string | null
+          property_id: string | null
+          recurrence_end: string | null
+          recurrence_rule: string | null
+          recurrence_start: string | null
+          schedule: string | null
+          schedule_days: string[] | null
+          scheduled_date: string | null
+          service_address: string | null
+          service_city: string | null
+          service_state: string | null
+          service_zip: string | null
+          start_date_window: string | null
+          start_time: string | null
+          status: string | null
+          sub_status: string | null
+          updated_at: string | null
+          waiting_list_end: string | null
+          waiting_list_start: string | null
+        }
+        SetofOptions: {
+          from: "crm_crew_job_visits"
+          to: "crm_crew_jobs"
+          isOneToOne: true
+          isSetofReturn: true
+        }
+      }
       crew_job_services: {
         Args: { "": Database["public"]["Views"]["crm_crew_jobs"]["Row"] }
         Returns: {
@@ -20953,9 +20867,31 @@ export type Database = {
           rate_cents: number
         }[]
       }
+      crm_crew_product_info: {
+        Args: { p_product_ids: string[] }
+        Returns: {
+          category: string
+          epa_registration_number: string
+          id: string
+          label_instructions: string
+          name: string
+          part_number: string
+          re_entry_interval: string
+          restricted_product: boolean
+          track_chemicals: boolean
+        }[]
+      }
       crm_crew_request_help: {
         Args: { p_crew_id: string; p_visit_id: string }
         Returns: string
+      }
+      crm_crew_upsell_services: {
+        Args: never
+        Returns: {
+          id: string
+          name: string
+          upsell_pitch: string
+        }[]
       }
       crm_default_role_templates: {
         Args: never
@@ -21293,6 +21229,10 @@ export type Database = {
         Args: { p_visit_id: string }
         Returns: undefined
       }
+      crm_rename_schedule: {
+        Args: { p_name: string; p_schedule_id: string }
+        Returns: number
+      }
       crm_reorder_invoice_lines: {
         Args: { p_invoice_id: string; p_line_ids: string[] }
         Returns: undefined
@@ -21305,6 +21245,10 @@ export type Database = {
           p_visit_id: string
         }
         Returns: string
+      }
+      crm_return_visit_to_waiting_list: {
+        Args: { p_visit_id: string }
+        Returns: Json
       }
       crm_revert_price_adjustment: {
         Args: { p_id: string }
@@ -21956,6 +21900,10 @@ export type Database = {
           p_ticket_id?: string
         }
         Returns: number
+      }
+      storage_paths_in_org: {
+        Args: { p_org: string; p_paths: string[] }
+        Returns: boolean
       }
       submit_for_approval: {
         Args: { p_entity_id: string; p_entity_type: string }

@@ -8,6 +8,7 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 import { FALLBACK_CREW_COLORS } from "@/components/crm/dispatch/crew-color";
+import { planIncludesModule } from "@/lib/stripe/plans";
 
 const log = logger.child("users-create-crew");
 
@@ -57,6 +58,21 @@ export async function POST(request: Request) {
   const readOnly = await assertOrgWritable(supabase, callerProfile.org_id);
   if (readOnly) return readOnly;
 
+  // Crew logins are Landscapt's (the Crew App + a crm_crews row). An org whose plan
+  // doesn't include Landscapt (Equipt-only) can't use one, and the service-role
+  // writes below would bypass the plan_module_write_* policies that block it.
+  const { data: orgRow } = await supabase
+    .from("organizations")
+    .select("plan")
+    .eq("id", callerProfile.org_id)
+    .maybeSingle();
+  if (orgRow?.plan && !planIncludesModule(orgRow.plan, "landscapt")) {
+    return NextResponse.json(
+      { error: "Crew logins are part of Landscapt, which your plan doesn't include. Upgrade your plan to add crew logins." },
+      { status: 403 }
+    );
+  }
+
   // 2. Parse body
   let body: { teamName?: string; password?: string; customEmail?: string };
   try { body = await request.json(); } catch {
@@ -73,6 +89,8 @@ export async function POST(request: Request) {
   // 3. Determine login email — use custom if provided, otherwise auto-generate
   const orgTag = String(callerProfile.org_id).replace(/-/g, "").slice(0, 8);
   let loginEmail: string;
+  /** For a generated address: the next candidate when one is already taken (null = none). */
+  let nextGeneratedEmail: ((attempt: number) => string | null) | null = null;
   let needsConfirmation = false;
   if (customEmail?.trim()) {
     // Basic email format validation
@@ -95,7 +113,16 @@ export async function POST(request: Request) {
     const slug = teamName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
     // Short org id keeps auto emails unique per tenant (a bare slug collided
     // across orgs and revealed that another org used the same team name).
-    loginEmail = `${slug || "crew"}-${orgTag}@${CREW_EMAIL_DOMAIN}`;
+    const base = slug || "crew";
+    loginEmail = `${base}-${orgTag}@${CREW_EMAIL_DOMAIN}`;
+    // Different team names can normalize to the same slug ("Mow 1" / "Mow-1", two
+    // "Crew"s), and the address is only a login handle — so a taken one gets a short
+    // suffix instead of failing: -2, -3, … then a random tag.
+    nextGeneratedEmail = (attempt) => {
+      if (attempt > 6) return null;
+      const suffix = attempt <= 4 ? String(attempt + 1) : crypto.randomUUID().replace(/-/g, "").slice(0, 6);
+      return `${base}-${suffix}-${orgTag}@${CREW_EMAIL_DOMAIN}`;
+    };
   }
 
   // 4. Create the auth user with the service role client
@@ -128,21 +155,28 @@ export async function POST(request: Request) {
     confirmTokenHash = data?.properties?.hashed_token ?? null;
   } else {
     // Our own crew domain: nobody else can receive mail there, so the login is
-    // created confirmed (no email needed).
-    const { data, error } = await adminClient.auth.admin.createUser({
-      email: loginEmail,
-      password,
-      email_confirm: true,
-      user_metadata: userMetadata,
-    });
-    createdUser = data?.user ? { user: data.user } : null;
-    createErr = error;
+    // created confirmed (no email needed). A generated address that's already
+    // taken is retried with the next suffix.
+    for (let attempt = 1; ; attempt++) {
+      const { data, error } = await adminClient.auth.admin.createUser({
+        email: loginEmail,
+        password,
+        email_confirm: true,
+        user_metadata: userMetadata,
+      });
+      createdUser = data?.user ? { user: data.user } : null;
+      createErr = error;
+      if (!error || !isEmailTakenError(error)) break;
+      const next = nextGeneratedEmail?.(attempt) ?? null;
+      if (!next) break;
+      loginEmail = next;
+    }
   }
 
   if (createErr || !createdUser?.user) {
     const msg = createErr?.message ?? "Failed to create crew account";
     // If email already taken, surface a useful error
-    if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already been registered")) {
+    if (createErr && isEmailTakenError(createErr)) {
       return NextResponse.json({ error: `A crew account for "${teamName}" already exists (${loginEmail}).` }, { status: 409 });
     }
     // Supabase's leaked-password check (HaveIBeenPwned) rejects common
@@ -204,6 +238,13 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json({ success: true, loginEmail, crew, confirmationSent: needsConfirmation }, { status: 200 });
+}
+
+/** Supabase auth's "this email already has a login" error (code email_exists, or the older message). */
+function isEmailTakenError(err: { message?: string; code?: string }): boolean {
+  if (err.code === "email_exists" || err.code === "user_already_exists") return true;
+  const msg = (err.message ?? "").toLowerCase();
+  return msg.includes("already registered") || msg.includes("already been registered");
 }
 
 async function sendCrewConfirmationEmail(email: string, teamName: string, tokenHash: string): Promise<boolean> {

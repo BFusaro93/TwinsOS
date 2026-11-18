@@ -55,9 +55,11 @@ export async function POST(
   }
 
   // The curated list is the authorization boundary: a crew may only suggest a
-  // service the office has opened up, never an arbitrary catalog entry.
+  // service the office has opened up, never an arbitrary catalog entry. Read
+  // with the service role (name + flag only), pinned to the org of the visit
+  // proven above: a crew login can't read crm_services (rates / costs).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: service } = await (supabase as any)
+  const { data: service } = await (adminClient() as any)
     .from("crm_services")
     .select("id, name, show_in_field_upsells")
     .eq("id", serviceId)

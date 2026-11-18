@@ -230,7 +230,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const { data: svc } = await db.from("crm_job_services").select("service_id").eq("id", visitToMove.job_service_id).maybeSingle();
         if (svc?.service_id) matchValues = [svc.service_id as string];
       }
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "visit_date_changed", matchValues, recordId: visitToMove.id });
+      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "visit_date_changed", matchValues, recordId: visitToMove.id, visitId: visitToMove.id });
     } catch {
       // enrollment failure must not fail the update
     }
@@ -241,7 +241,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // automations or Zapier hooks. Best-effort.
   if (body.status === "cancelled" && before.status !== "cancelled" && before.client_id) {
     try {
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "job_cancelled" });
+      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "job_cancelled", jobId: id });
     } catch {
       // enrollment failure must not fail the update
     }

@@ -10,6 +10,7 @@ import { downscaleImage } from "@/lib/utils/downscale-image";
 import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 import { mapServiceSubitems } from "@/lib/utils/job-service-subitems";
+import { loadCrewProductInfo } from "@/lib/crew/product-info";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
@@ -589,15 +590,19 @@ export function useVisitChemicals(visitIds: string[]) {
         .from("crm_chemical_applications")
         .select(
           "id, visit_id, product_id, chemical_amount, unit_of_measure_id, solution_amount, used, application_rate_label, preloaded, confirmed_at, application_method_id, target_ids, areas_treated_ids, " +
-          "product:product_id(name, epa_registration_number, re_entry_interval, label_instructions, restricted_product), unit:unit_of_measure_id(name), " +
+          "unit:unit_of_measure_id(name), " +
           "solution_unit:solution_unit_of_measure_id(name)"
         )
         .in("visit_id", visitIds)
         .is("deleted_at", null)
         .order("created_at");
       if (error) throw error;
+      // Product name / label fields come from the price-free crew RPC: a crew
+      // login can't read product_items (unit cost, price — 20270109000210).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data as any[]).map((row) => ({
+      const products = await loadCrewProductInfo(supabase, (data as any[]).map((row) => row.product_id));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data as any[]).map((r) => ({ ...r, product: products.get(r.product_id) ?? null })).map((row) => ({
         id: row.id,
         visitId: row.visit_id,
         productName: row.product?.name ?? null,
@@ -708,6 +713,7 @@ export function useCrewChemicalCatalog(visitId: string | undefined) {
 export function useAddCrewChemical() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async (input: {
       visitId: string;
       productId: string;
@@ -739,6 +745,7 @@ export function useAddCrewChemical() {
 export function useConfirmChemicals() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ items, conditions }: { items: ChemicalConfirmItem[]; conditions?: ChemicalConditionsInput }) => {
       const res = await fetch("/api/crm/crew/chemicals/confirm", {
         method: "POST",
@@ -996,6 +1003,14 @@ export function useCrewDriveToday(date: string) {
 
 // ── mutations ─────────────────────────────────────────────────────────────────
 
+/** Every crew-app mutation shares this scope, so TanStack runs them ONE AT A TIME in tap
+ *  order. Without it, the requests parked while the phone had no signal all replayed at once
+ *  on reconnect (resumePausedMutations runs unscoped mutations in parallel), so Start Day /
+ *  Start Job or Stop A / Start B could land out of order — losing paid minutes or billing
+ *  drive time to the job. Online taps queue the same way (each waits for the previous one);
+ *  clock routes use the tap's occurredAt, so the wait never shifts a recorded time. */
+const CREW_ACTIONS_SCOPE = { id: "crew-actions" } as const;
+
 /** The moment the crew tapped, captured in the click handler. Without signal TanStack parks the
  *  request and only runs it on reconnect, so stamping inside mutationFn recorded the reconnect
  *  time (a 12:00 break that synced at 12:25 became ~0 minutes). The routes accept occurredAt
@@ -1078,6 +1093,7 @@ export function useClockIn() {
   const qc = useQueryClient();
   const tz = useOrgTimeZone();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async (visitId: string) => {
       const tap = crewTap(tz);
       const res = await fetch(`/api/crm/crew/visits/${visitId}/clock-in`, {
@@ -1101,6 +1117,7 @@ export function useClockOut() {
   const qc = useQueryClient();
   const tz = useOrgTimeZone();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitId, notes }: { visitId: string; notes?: string }) => {
       const tap = crewTap(tz);
       const res = await fetch(`/api/crm/crew/visits/${visitId}/clock-out`, {
@@ -1123,6 +1140,7 @@ export function useClockOut() {
 export function useStopClockIn() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ anchorVisitId, tap }: { anchorVisitId: string; tap: CrewTap }) => {
       const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/clock-in`, {
         method: "POST",
@@ -1171,6 +1189,7 @@ export function useStopClockIn() {
 export function useStartDrive() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async (tap: CrewTap) => {
       const res = await fetch("/api/crm/crew/drive/start", {
         method: "POST",
@@ -1190,6 +1209,7 @@ export function useStartDrive() {
 export function useEndDrive() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async (tap: CrewTap) => {
       const res = await fetch("/api/crm/crew/drive/end", {
         method: "POST",
@@ -1209,6 +1229,7 @@ export function useEndDrive() {
 export function useStopPause() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ anchorVisitId, tap }: { anchorVisitId: string; tap: CrewTap }) => {
       const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/pause`, {
         method: "POST",
@@ -1231,6 +1252,7 @@ export function useStopPause() {
 export function useStopResume() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ anchorVisitId, tap }: { anchorVisitId: string; tap: CrewTap }) => {
       const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/resume`, {
         method: "POST",
@@ -1255,6 +1277,7 @@ class ChemicalConfirmationRequiredError extends Error {}
 export function useStopClockOut() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ anchorVisitId, notes, tap }: { anchorVisitId: string; notes?: string; tap: CrewTap }) => {
       const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/clock-out`, {
         method: "POST",
@@ -1294,6 +1317,7 @@ export function useStopClockOut() {
 export function useSkipVisit() {
   const qc = useQueryClient();
   return stampTapTime(useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitId, reason, occurredAt }: { visitId: string; reason: string; occurredAt?: string }) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/skip`, {
         method: "POST",
@@ -1319,6 +1343,7 @@ export function useSkipVisit() {
 export function useAddCrewPush() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async (visitId: string): Promise<{ id: string; pushNumber: number }> => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/add-push`, { method: "POST" });
       if (!res.ok) throw await crewRequestError(res, "Failed to add another push");
@@ -1351,6 +1376,7 @@ export function useHelperCrews(enabled: boolean) {
 export function useRequestHelp() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitIds, crewId }: { visitIds: string[]; crewId: string }): Promise<{ crewName: string; added: number }> => {
       let crewName = "";
       let added = 0;
@@ -1387,6 +1413,7 @@ export function useRequestHelp() {
 export function useHandOffStop() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitIds, crewId }: { visitIds: string[]; crewId: string }): Promise<{ crewName: string }> => {
       let crewName = "";
       for (const visitId of visitIds) {
@@ -1412,6 +1439,7 @@ export function useHandOffStop() {
 export function useAcknowledgeNotes() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async (visitId: string) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/acknowledge`, { method: "POST" });
       if (!res.ok) throw await crewRequestError(res, "Failed to acknowledge notes");
@@ -1428,6 +1456,7 @@ export function useAcknowledgeNotes() {
 export function useAddCrewNote() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitId, note }: { visitId: string; note: string }) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/notes`, {
         method: "POST",
@@ -1498,6 +1527,7 @@ export function useVisitRequisitions(visitId: string) {
 export function useRequestMaterials() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({
       visitId,
       productItemId,
@@ -1539,6 +1569,7 @@ export function useRequestMaterials() {
 export function useUseJobProductMaterials() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({
       visitId,
       jobProductId,
@@ -1582,6 +1613,7 @@ export function useUseJobProductMaterials() {
 export function useUploadVisitPhoto() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitId, file, caption, clientId }: { visitId: string; file: File; caption?: string; clientId?: string }) => {
       const form = new FormData();
       // Vercel rejects request bodies over ~4.5MB (413, HTML body), and a phone
@@ -1610,6 +1642,7 @@ export function useUploadVisitPhoto() {
 export function useUpsertCrewMemberTime() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({
       visitId,
       crewMemberId,
@@ -1671,6 +1704,7 @@ export function useCrewDayAction() {
   // with the request (stampTapTime), so a tap queued with no signal pays from
   // the tap, not from whenever the phone reconnected.
   return stampTapTime(useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async (input: { action: "start_day" | "end_day" | "member_in" | "member_out" | "add_member"; crewMemberId?: string; visitId?: string; occurredAt?: string }) => {
       const res = await fetch("/api/crm/crew/day", {
         method: "POST",
@@ -1707,6 +1741,7 @@ export function useCrewAbsences() {
 export function useSetCrewMemberAbsent() {
   const qc = useQueryClient();
   return stampTapTime(useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ crewMemberId, absent, visitId, occurredAt }: { crewMemberId: string; absent: boolean; visitId?: string; occurredAt?: string }) => {
       const res = await fetch("/api/crm/crew/attendance", {
         method: "POST",
@@ -1734,6 +1769,7 @@ export function useSetCrewMemberAbsent() {
 export function useSetVisitBreakPaid() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitId, breakPaid }: { visitId: string; breakPaid: boolean | null }) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/break-paid`, {
         method: "PATCH",
@@ -1755,6 +1791,7 @@ export function useSetVisitBreakPaid() {
 export function useDeleteCrewMemberTime() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitId, crewMemberId }: { visitId: string; crewMemberId: string }) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/member-times`, {
         method: "DELETE",
@@ -1785,14 +1822,10 @@ export function useFieldUpsellServices() {
     queryKey: ["crew-app-upsell-services"],
     queryFn: async () => {
       const supabase = createClient();
+      // A definer RPC (name + pitch only): a crew login can't read crm_services,
+      // whose rows carry the service's rate and cost (20270109000210).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_services")
-        .select("id, name, upsell_pitch")
-        .eq("show_in_field_upsells", true)
-        .eq("is_active", true)
-        .is("deleted_at", null)
-        .order("name");
+      const { data, error } = await (supabase as any).rpc("crm_crew_upsell_services");
       if (error) throw error;
       return (data ?? []) as { id: string; name: string; upsell_pitch: string | null }[];
     },
@@ -1807,6 +1840,7 @@ export function useFieldUpsellServices() {
 export function useSubmitFieldUpsell() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({
       visitId,
       serviceId,
@@ -1858,6 +1892,7 @@ export function useVisitSubitemChecks(visitIds: string[]) {
 export function useToggleSubitemCheck() {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ visitId, subitemId, checked }: { visitId: string; subitemId: string; checked: boolean }) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/subitems/${subitemId}/check`, {
         method: "POST",
@@ -1971,6 +2006,7 @@ export function useCrewMaterials(date: string) {
 export function useToggleCrewLoaded(date: string) {
   const qc = useQueryClient();
   return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
     mutationFn: async ({ key, loaded }: { key: string; loaded: boolean }) => {
       const res = await fetch("/api/crm/crew/load-checks", {
         method: "POST",

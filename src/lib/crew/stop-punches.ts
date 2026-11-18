@@ -175,12 +175,16 @@ export async function resolveWorkingMemberIds(
  */
 export async function openStopPunches(
   supabase: AnySupabase,
-  anchor: { id: string; orgId: string; crewId: string | null; scheduledDate: string },
+  // rosterDate: the org-local date of the Start Job TAP — the same date Start
+  // Day / the auto-opened shift use. Not the visit's scheduled_date: a stop
+  // carried over past midnight is worked by today's roster (same-day moves,
+  // absences, days_of_week), and resolving yesterday's punched the wrong people.
+  anchor: { id: string; orgId: string; crewId: string | null; rosterDate: string },
   clockedInAt: string
 ): Promise<{ rosterEmpty: boolean }> {
   try {
     if (!anchor.crewId) return { rosterEmpty: true };
-    const memberIds = await resolveWorkingMemberIds(supabase, anchor.orgId, anchor.crewId, anchor.scheduledDate);
+    const memberIds = await resolveWorkingMemberIds(supabase, anchor.orgId, anchor.crewId, anchor.rosterDate);
     if (memberIds.length === 0) return { rosterEmpty: true };
 
     const { data: existing } = await supabase

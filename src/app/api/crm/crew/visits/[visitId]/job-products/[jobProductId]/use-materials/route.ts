@@ -153,8 +153,10 @@ export async function POST(
 
     let product: ProductRow | null = null;
     if (jobProduct.product_id) {
+      // Service role: a crew login can't read product_items (cost / price rows).
+      // Scoped to the job product's org, which was proven through the visit above.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: productRow, error: productError } = await (supabase as any)
+      const { data: productRow, error: productError } = await (admin as any)
         .from("product_items")
         .select("name, category, is_inventory, quantity_on_hand")
         .eq("id", jobProduct.product_id)

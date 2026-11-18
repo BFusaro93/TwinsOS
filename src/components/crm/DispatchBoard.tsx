@@ -4421,6 +4421,11 @@ export function DispatchBoard() {
   // City and Zip are checklists (exact values), like Service and Crew.
   const [cityFilters,     setCityFilters]     = useState<string[]>([]);
   const [zipFilters,      setZipFilters]      = useState<string[]>([]);
+  // An older saved view's free-text City / Zip, kept as a case-insensitive
+  // substring match (it used to be converted against the board's values BEFORE
+  // the view's own dates loaded, so it could silently turn into "no filter").
+  // Picking from the checklist replaces it; re-saving the view keeps it.
+  const [legacyLocationText, setLegacyLocationText] = useState<{ city: string; zip: string }>({ city: "", zip: "" });
   const setColFilter = (key: string, value: string) => setColFilters((prev) => ({ ...prev, [key]: value }));
   // Service filter is multi-select (unlike the other Select-a-Filter text
   // filters), so it gets its own array instead of sharing colFilterValue.
@@ -4847,7 +4852,16 @@ export function DispatchBoard() {
   function captureViewFilters(): DispatchViewFilters {
     return {
       serviceFilters, crewFilters, tagFilters, priorityFilters, statusFilter, search,
-      colFilterKey: null, colFilterValue: "", colFilters, cityFilters, zipFilters, visibleKeys, dateMode,
+      colFilterKey: null, colFilterValue: "",
+      // A legacy City / Zip text still in effect is saved as text again (applySavedView reads it back).
+      colFilters: {
+        ...colFilters,
+        ...(legacyLocationText.city ? { city: legacyLocationText.city } : {}),
+        ...(legacyLocationText.zip ? { zip: legacyLocationText.zip } : {}),
+      },
+      cityFilters: legacyLocationText.city ? undefined : cityFilters,
+      zipFilters: legacyLocationText.zip ? undefined : zipFilters,
+      visibleKeys, dateMode,
     };
   }
 
@@ -4861,7 +4875,10 @@ export function DispatchBoard() {
     const knownServiceNames = allServices ? new Set(allServices.map((svc) => svc.name)) : null;
     const knownTags = orgTags.length > 0 ? new Set(orgTags) : null;
     const savedServices = f.serviceFilters ?? [];
-    const savedCrews = f.crewFilters ?? [];
+    // Older views stored one crew id in the Crew column filter; it goes through the
+    // same deleted-crew check (a deleted one filtered the board to nothing).
+    const legacyCrew = f.colFilterKey === "crew" && f.colFilterValue && !f.colFilters ? f.colFilterValue : null;
+    const savedCrews = [...(f.crewFilters ?? []), ...(legacyCrew && !(f.crewFilters ?? []).includes(legacyCrew) ? [legacyCrew] : [])];
     const savedTags = f.tagFilters ?? [];
     const nextServices = knownServiceNames ? savedServices.filter((n) => knownServiceNames.has(n)) : savedServices;
     const nextCrews = knownCrewIds ? savedCrews.filter((id) => id === NO_CREW || knownCrewIds.has(id)) : savedCrews;
@@ -4881,20 +4898,19 @@ export function DispatchBoard() {
     let nextCols: Record<string, string> = {};
     if (f.colFilters) nextCols = { ...f.colFilters };
     else if (f.colFilterKey && f.colFilterValue && f.colFilterKey !== "crew") nextCols = { [f.colFilterKey]: f.colFilterValue }; // older single-filter view
-    // Older views kept City / Zip as free text; they are checklists now, so turn
-    // the text into the matching values on the board (none match → dropped).
-    const legacyCity = (nextCols.city ?? "").toLowerCase();
-    const legacyZip = (nextCols.zip ?? "").toLowerCase();
+    // Older views kept City / Zip as free text; they are checklists now. The text
+    // stays a substring match (legacyLocationText) rather than being turned into
+    // checklist values here: the board still holds the PREVIOUS date range's
+    // visits at this point (the view's dates apply below and load after), so a
+    // conversion could match nothing and silently become "no filter".
+    const legacyCity = f.cityFilters ? "" : (nextCols.city ?? "").trim().toLowerCase();
+    const legacyZip = f.zipFilters ? "" : (nextCols.zip ?? "").trim().toLowerCase();
     delete nextCols.city;
     delete nextCols.zip;
     setColFilters(nextCols);
-    setCityFilters(f.cityFilters ?? (legacyCity ? cityFilterOptions.filter((c) => c.toLowerCase().includes(legacyCity)) : []));
-    setZipFilters(f.zipFilters ?? (legacyZip ? zipFilterOptions.filter((z) => z.toLowerCase().includes(legacyZip)) : []));
-    // Older views stored one crew id in the Crew column filter.
-    const legacyCrew = f.colFilterValue;
-    if (f.colFilterKey === "crew" && legacyCrew && !f.colFilters) {
-      setCrewFilters((prev) => (prev.includes(legacyCrew) ? prev : [...prev, legacyCrew]));
-    }
+    setCityFilters(f.cityFilters ?? []);
+    setZipFilters(f.zipFilters ?? []);
+    setLegacyLocationText({ city: legacyCity, zip: legacyZip });
     // Only keys this board still knows — a column removed since the view was saved is dropped.
     if (f.visibleKeys) {
       const known = new Set(allColumnDefs.map((d) => d.key));
@@ -5025,6 +5041,8 @@ export function DispatchBoard() {
     }
     if (cityFilters.length > 0 && !cityFilters.includes((v.job?.serviceCity ?? "").trim())) return false;
     if (zipFilters.length > 0 && !zipFilters.includes((v.job?.serviceZip ?? "").trim())) return false;
+    if (legacyLocationText.city && !(v.job?.serviceCity ?? "").toLowerCase().includes(legacyLocationText.city)) return false;
+    if (legacyLocationText.zip && !(v.job?.serviceZip ?? "").toLowerCase().includes(legacyLocationText.zip)) return false;
     return true;
   });
 
@@ -5685,8 +5703,17 @@ export function DispatchBoard() {
                   label={label}
                   title={key === "city" ? "Cities" : "Zips"}
                   options={(key === "city" ? cityFilterOptions : zipFilterOptions).map((n) => ({ value: n, label: n }))}
-                  selected={key === "city" ? cityFilters : zipFilters}
-                  onChange={key === "city" ? setCityFilters : setZipFilters}
+                  // A legacy saved view's text shows as the values it matches; picking
+                  // from the list replaces it with an exact checklist.
+                  selected={
+                    key === "city"
+                      ? (legacyLocationText.city ? cityFilterOptions.filter((c) => c.toLowerCase().includes(legacyLocationText.city)) : cityFilters)
+                      : (legacyLocationText.zip ? zipFilterOptions.filter((z) => z.toLowerCase().includes(legacyLocationText.zip)) : zipFilters)
+                  }
+                  onChange={(next) => {
+                    setLegacyLocationText((prev) => ({ ...prev, [key]: "" }));
+                    if (key === "city") setCityFilters(next); else setZipFilters(next);
+                  }}
                 />
               );
             }
@@ -6249,9 +6276,21 @@ export function DispatchBoard() {
                     try {
                       // One at a time: the route resets the job's date/crew only when its
                       // LAST visit goes back, which concurrent calls can't tell.
-                      for (const id of ids) await returnToWaitingList(id);
+                      // A multi-crew stop goes back whole (every crew's visit), so a sibling
+                      // that's also selected is already returned — skip it, and count what
+                      // actually went back.
+                      const returned = new Set<string>();
+                      for (const id of ids) {
+                        if (returned.has(id)) continue;
+                        const res = await returnToWaitingList(id);
+                        for (const rid of res.returnedVisitIds ?? [id]) returned.add(rid);
+                      }
                       setSelectedIds(new Set());
-                      toast.success(`Returned ${ids.length} visit${ids.length > 1 ? "s" : ""} to the waiting list`);
+                      const extraCrews = [...returned].filter((rid) => !selectedIds.has(rid)).length;
+                      toast.success(
+                        `Returned ${returned.size} visit${returned.size === 1 ? "" : "s"} to the waiting list` +
+                          (extraCrews > 0 ? ` (including ${extraCrews} other crew visit${extraCrews === 1 ? "" : "s"} on the same stop)` : "")
+                      );
                     } catch (err) {
                       toast.error(err instanceof Error ? err.message : "Failed to return to waiting list");
                     }
@@ -6501,7 +6540,7 @@ export function DispatchBoard() {
               <tr>
                 <td colSpan={20} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search || crewFilters.length > 0 || statusFilter !== "all" || tagFilters.length > 0 ||
-                    priorityFilters.length > 0 || serviceFilters.length > 0 || cityFilters.length > 0 || zipFilters.length > 0 || Object.values(colFilters).some(Boolean)
+                    priorityFilters.length > 0 || serviceFilters.length > 0 || cityFilters.length > 0 || zipFilters.length > 0 || !!legacyLocationText.city || !!legacyLocationText.zip || Object.values(colFilters).some(Boolean)
                     ? "No visits match the current filters"
                     : "No visits scheduled for this date"}
                 </td>

@@ -14,7 +14,7 @@ import { logger } from "@/lib/logger";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { autoStopOtherRunningStops } from "@/lib/crew/auto-stop";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
 
 const log = logger.child("crew/stops/clock-in");
 
@@ -258,7 +258,7 @@ export async function POST(
     // And not moved to a later day since the check above: the dispatcher's date move can commit
     // between our read and this write, which stranded a clocked-in visit on tomorrow's date.
     .lte("scheduled_date", orgToday)
-    .select(JOB_VISIT_READ_COLUMNS);
+    .select(CREW_VISIT_RESPONSE_COLUMNS);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -314,6 +314,12 @@ export async function POST(
     });
   }
 
+  // The TAP's org-local date. Start Day and the job punches both resolve the
+  // crew's roster for this date (not the visit's scheduled_date): a stop
+  // carried over past midnight is worked by tonight's roster, and the punches
+  // used yesterday's while the shift used today's.
+  const tapWorkDate = isoInZone(new Date(now), await getOrgTimeZone(supabase, anchor.org_id));
+
   // If nobody tapped Start Day, the first job opens the day so payroll still
   // has a shift (flagged auto_first_job — the true start was earlier, at the shop).
   try {
@@ -324,7 +330,7 @@ export async function POST(
       await startCrewDay(createServiceClient(), {
         orgId: anchor.org_id,
         crewId,
-        workDate: isoInZone(new Date(now), await getOrgTimeZone(supabase, anchor.org_id)),
+        workDate: tapWorkDate,
         at: now,
         source: "auto_first_job",
         userId: user.id,
@@ -341,7 +347,7 @@ export async function POST(
   const punchVisitId = await resolvePunchOwnerVisitId(supabase, stopRows.map((r) => r.id), anchor.id);
   const { rosterEmpty } = await openStopPunches(
     createServiceClient(), // crew can't write punches directly; stop authorized above
-    { id: punchVisitId, orgId: anchor.org_id, crewId: effectiveVisitCrewId(anchor), scheduledDate: anchor.scheduled_date },
+    { id: punchVisitId, orgId: anchor.org_id, crewId: effectiveVisitCrewId(anchor), rosterDate: tapWorkDate },
     now
   );
 
@@ -354,7 +360,8 @@ export async function POST(
     // Closed at the moment of the tap, not the server's clock: a queued offline
     // Clock In replaying hours later would otherwise credit every hour until the
     // sync as driving (see crew/occurred-at.ts).
-    if (driveCrewId) await closeOpenDriveSegment(supabase, driveCrewId, anchor.org_id, new Date(now));
+    // Service role: crew logins can't write drive segments directly.
+    if (driveCrewId) await closeOpenDriveSegment(createServiceClient(), driveCrewId, anchor.org_id, new Date(now));
   } catch (err) {
     log.error("auto-close drive segment failed", {
       crewId: effectiveVisitCrewId(anchor),

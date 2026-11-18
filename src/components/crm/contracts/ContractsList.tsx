@@ -75,7 +75,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search, FileSignature } from "lucide-react";
 import { toast } from "sonner";
 import type { BillingFrequency, CRMContract, MonthlyAmounts, ContractStatus, SnowOutsideDates } from "@/types/crm-invoices";
-import { billingAnchor, normalizeBillingFrequency } from "@/lib/contract-billing";
+import { billingAnchor, contractBilledThrough, normalizeBillingFrequency, rescheduledBillingAnchor } from "@/lib/contract-billing";
 import {
   BILLING_FREQUENCY_OPTIONS,
   billingFrequencyLabel,
@@ -330,6 +330,7 @@ function ContractDetailsTab({
   createdAt,
   lastBilledDate,
   billingAnchorDate,
+  savedSchedule,
   hadMonthOverrides,
   hasSnowJob,
   contractId,
@@ -344,6 +345,14 @@ function ContractDetailsTab({
   /** Once a contract has billed, its quarterly/annual cycle months are pinned (contract-billing.ts monthGrid). */
   lastBilledDate?: string | null;
   billingAnchorDate?: string | null;
+  /** The saved cadence, for the "takes effect after the period already billed" note on an edit. */
+  savedSchedule?: {
+    billingFrequency: string | null;
+    startDate: string | null;
+    billingDayOfMonth: number | null;
+    billMonthInAdvance: boolean | null;
+    firstPeriodProratedAt: string | null;
+  } | null;
   /** A non-monthly contract (set via API/import) whose per-month amounts differ from its flat amount. */
   hadMonthOverrides?: boolean;
   /** A snow job is linked — the snow toggle can't be switched off while one is. */
@@ -366,6 +375,37 @@ function ContractDetailsTab({
   };
   const gridPinned = !!(lastBilledDate || billingAnchorDate);
   const anchorLabel = fmtAnchor(billingAnchor(scheduleRow, new Date()));
+  // Changing the cadence or start date of a contract that has billed: the period
+  // already billed runs out first (the same rule useUpdateContract applies).
+  const rescheduleNote = (() => {
+    if (!savedSchedule || !(lastBilledDate || savedSchedule.firstPeriodProratedAt)) return null;
+    const changed =
+      normalizeBillingFrequency(state.billingFrequency) !== normalizeBillingFrequency(savedSchedule.billingFrequency) ||
+      (state.startDate || null) !== (savedSchedule.startDate || null);
+    if (!changed) return null;
+    const before = {
+      billing_frequency: savedSchedule.billingFrequency,
+      billing_day_of_month: savedSchedule.billingDayOfMonth,
+      bill_month_in_advance: savedSchedule.billMonthInAdvance,
+      start_date: savedSchedule.startDate,
+      signed_at: signedAt ?? null,
+      created_at: createdAt ?? null,
+      last_billed_date: lastBilledDate ?? null,
+      billing_anchor_date: billingAnchorDate ?? null,
+      first_period_prorated_at: savedSchedule.firstPeriodProratedAt,
+    };
+    const through = contractBilledThrough(before);
+    const resumes = rescheduledBillingAnchor(before, {
+      ...before,
+      billing_frequency: state.billingFrequency,
+      billing_day_of_month: state.billingDayOfMonth,
+      bill_month_in_advance: state.billMonthInAdvance,
+      start_date: state.startDate || null,
+    });
+    if (!through || !resumes) return null;
+    const ymd = (v: string) => ({ y: Number(v.slice(0, 4)), m: Number(v.slice(5, 7)), d: Number(v.slice(8, 10)) });
+    return `The new schedule takes effect after the period already billed, ending ${fmtAnchor(ymd(through))} — its first cycle starts ${fmtAnchor(ymd(resumes))}.`;
+  })();
   const anchorSource = state.startDate ? "the start date" : signedAt ? "the signed date" : createdAt ? "the date it was created" : "today (no start date set)";
 
   // Every grid month is explicitly set, so the flat amount never applies here.
@@ -607,7 +647,10 @@ function ContractDetailsTab({
                   <>Invoices once, on or after {anchorSource} ({anchorLabel}).</>
                 ) : (
                   <>
-                    Invoices every {state.billingFrequency === "weekly" ? "7" : "14"} days, counted from {anchorSource} ({anchorLabel}).
+                    Invoices every {state.billingFrequency === "weekly" ? "7" : "14"} days, counted from{" "}
+                    {billingAnchorDate && !rescheduleNote && savedSchedule?.billingFrequency === state.billingFrequency
+                      ? `${fmtAnchor({ y: Number(billingAnchorDate.slice(0, 4)), m: Number(billingAnchorDate.slice(5, 7)), d: Number(billingAnchorDate.slice(8, 10)) })}, the period it is already billing on`
+                      : `${anchorSource} (${anchorLabel})`}.
                   </>
                 )}
               </p>
@@ -629,6 +672,9 @@ function ContractDetailsTab({
                 </SelectContent>
               </Select>
             </div>
+            {rescheduleNote && (
+              <p className="max-w-xs text-[11px] leading-snug text-amber-700 dark:text-amber-400">{rescheduleNote}</p>
+            )}
             {/* Weekly/biweekly count days from the anchor and one-time dates its invoice the day it
                 runs, so the day of month means nothing to them (see contract-billing.ts). */}
             {!subMonthly && state.billingFrequency !== "one_time" && (
@@ -1668,6 +1714,17 @@ export function ContractDialog({
               createdAt={contract?.createdAt}
               lastBilledDate={contract?.lastBilledDate}
               billingAnchorDate={contract?.billingAnchorDate}
+              savedSchedule={
+                contract
+                  ? {
+                      billingFrequency: contract.billingFrequency ?? null,
+                      startDate: contract.startDate ?? null,
+                      billingDayOfMonth: contract.billingDayOfMonth ?? null,
+                      billMonthInAdvance: contract.billMonthInAdvance ?? null,
+                      firstPeriodProratedAt: contract.firstPeriodProratedAt ?? null,
+                    }
+                  : null
+              }
               hasSnowJob={(linkedJobs ?? []).some((j) => j.jobType === "snow")}
               contractId={contract?.id}
               snowJobs={(linkedJobs ?? [])

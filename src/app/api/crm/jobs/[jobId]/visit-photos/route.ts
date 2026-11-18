@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ jobI
   if (!hasCrm) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { jobId } = await params;
-  const { data: job } = await db.from("crm_jobs").select("id").eq("id", jobId).is("deleted_at", null).maybeSingle();
+  const { data: job } = await db.from("crm_jobs").select("id, org_id").eq("id", jobId).is("deleted_at", null).maybeSingle();
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
   const { data: rows, error } = await db
@@ -38,8 +38,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ jobI
 
   type Row = { id: string; visit_id: string; storage_path: string; caption: string | null; created_at: string; crm_job_visits: { scheduled_date: string | null } | null };
   const list = (rows ?? []) as Row[];
-  const { data: signed } = list.length
-    ? await createServiceClient().storage.from("attachments").createSignedUrls(list.map((r) => r.storage_path), 3600)
+  // Service-role signing: only sign objects inside the job's own org folder, so a crafted
+  // crm_visit_photos row can never hand out another org's file.
+  const orgPrefix = `${(job as { org_id: string }).org_id}/`;
+  const signable = list.filter((r) => typeof r.storage_path === "string" && r.storage_path.startsWith(orgPrefix));
+  const { data: signed } = signable.length
+    ? await createServiceClient().storage.from("attachments").createSignedUrls(signable.map((r) => r.storage_path), 3600)
     : { data: [] as { path: string | null; signedUrl: string }[] };
   const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
 

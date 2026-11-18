@@ -6,7 +6,7 @@ import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
 
 interface VisitRow {
   id: string;
@@ -126,7 +126,7 @@ export async function POST(
     // the two taps — and a stop clocked out in between must not be re-paused.
     .is("paused_at", null)
     .is("clocked_out_at", null)
-    .select(JOB_VISIT_READ_COLUMNS);
+    .select(CREW_VISIT_RESPONSE_COLUMNS);
 
   // Inside the payroll lock period (a stop left running since a locked day): the
   // database's own sentence, as a 409.

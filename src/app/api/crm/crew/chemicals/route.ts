@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { loadCrewProductInfo } from "@/lib/crew/product-info";
 
 /**
  * GET ?visitIds=a,b — chemical applications for every visit in a stop, in one
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
     .from("crm_chemical_applications")
     .select(
       "id, visit_id, product_id, chemical_amount, unit_of_measure_id, solution_amount, used, application_rate_label, preloaded, confirmed_at, application_method_id, target_ids, areas_treated_ids, " +
-      "product:product_id(name, epa_registration_number, re_entry_interval, label_instructions, restricted_product), unit:unit_of_measure_id(name), " +
+      "unit:unit_of_measure_id(name), " +
       "solution_unit:solution_unit_of_measure_id(name)"
     )
     .in("visit_id", visitIds)
@@ -50,27 +51,40 @@ export async function GET(request: Request) {
     .order("created_at");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Product name / label fields come from the price-free crew RPC: a crew login
+  // can't read product_items (20270109000210).
+  let products: Awaited<ReturnType<typeof loadCrewProductInfo>>;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    products = await loadCrewProductInfo(supabase, (data as any[]).map((row) => row.product_id));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not load products" }, { status: 500 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return NextResponse.json((data as any[]).map((row) => ({
-    id: row.id,
-    visitId: row.visit_id,
-    productName: row.product?.name ?? null,
-    used: row.used ?? true,
-    chemicalAmount: row.chemical_amount,
-    unitOfMeasureId: row.unit_of_measure_id ?? null,
-    unitName: row.unit?.name ?? null,
-    solutionAmount: row.solution_amount,
-    solutionUnitName: row.solution_unit?.name ?? null,
-    applicationRateLabel: row.application_rate_label,
-    preloaded: row.preloaded === true,
-    confirmedAt: row.confirmed_at ?? null,
-    productId: row.product_id ?? null,
-    epaNumber: row.product?.epa_registration_number ?? null,
-    reEntryInterval: row.product?.re_entry_interval ?? null,
-    labelInstructions: row.product?.label_instructions ?? null,
-    restricted: row.product?.restricted_product === true,
-    applicationMethodId: row.application_method_id ?? null,
-    targetIds: row.target_ids ?? [],
-    areasTreatedIds: row.areas_treated_ids ?? [],
-  })));
+  return NextResponse.json((data as any[]).map((row) => {
+    const product = products.get(row.product_id);
+    return {
+      id: row.id,
+      visitId: row.visit_id,
+      productName: product?.name ?? null,
+      used: row.used ?? true,
+      chemicalAmount: row.chemical_amount,
+      unitOfMeasureId: row.unit_of_measure_id ?? null,
+      unitName: row.unit?.name ?? null,
+      solutionAmount: row.solution_amount,
+      solutionUnitName: row.solution_unit?.name ?? null,
+      applicationRateLabel: row.application_rate_label,
+      preloaded: row.preloaded === true,
+      confirmedAt: row.confirmed_at ?? null,
+      productId: row.product_id ?? null,
+      epaNumber: product?.epa_registration_number ?? null,
+      reEntryInterval: product?.re_entry_interval ?? null,
+      labelInstructions: product?.label_instructions ?? null,
+      restricted: product?.restricted_product === true,
+      applicationMethodId: row.application_method_id ?? null,
+      targetIds: row.target_ids ?? [],
+      areasTreatedIds: row.areas_treated_ids ?? [],
+    };
+  }));
 }

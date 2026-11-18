@@ -104,12 +104,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (l.crm_invoices && l.crm_invoices.deleted_at == null && l.crm_invoices.status !== "void") billed.add(l.visit_id);
     }
   }
+  // Keyset cursor on (scheduled_date, id) — the list's own order. Finding the
+  // cursor visit by id in the list restarted from the top whenever it dropped
+  // out between pages (deleted, un-completed, now billed elsewhere): findIndex
+  // gave -1, so +1 = 0. A key compares correctly whether or not that visit is
+  // still listed. "<YYYY-MM-DD>~<uuid>" ("~<uuid>" for an undated visit); a bare
+  // uuid from an older client is resolved to its key once.
   const afterParam = new URL(request.url).searchParams.get("after");
-  if (afterParam && !z.string().uuid().safeParse(afterParam).success) {
-    return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+  let cursor: { date: string | null; id: string } | null = null;
+  if (afterParam) {
+    const sep = afterParam.lastIndexOf("~");
+    const id = sep >= 0 ? afterParam.slice(sep + 1) : afterParam;
+    const datePart = sep >= 0 ? afterParam.slice(0, sep) : null;
+    if (!z.string().uuid().safeParse(id).success || (datePart && !/^\d{4}-\d{2}-\d{2}$/.test(datePart))) {
+      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+    }
+    if (sep >= 0) {
+      cursor = { date: datePart || null, id };
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: at } = await (service as any)
+        .from("crm_job_visits")
+        .select("scheduled_date")
+        .eq("id", id)
+        .eq("org_id", c.org_id)
+        .maybeSingle();
+      cursor = { date: (at as { scheduled_date: string | null } | null)?.scheduled_date ?? null, id };
+    }
   }
-  const startIdx = afterParam ? visits.findIndex((v) => v.id === afterParam) + 1 : 0;
-  const pending = visits.slice(startIdx).filter((v) => !billed.has(v.id));
+  // Ascending order puts undated visits last (Postgres NULLS LAST).
+  const sortDate = (d: string | null) => d ?? "9999-99-99";
+  const afterCursor = (v: { id: string; scheduled_date: string | null }) => {
+    if (!cursor) return true;
+    const a = sortDate(v.scheduled_date);
+    const b = sortDate(cursor.date);
+    return a > b || (a === b && v.id > cursor.id);
+  };
+  const pending = visits.filter((v) => afterCursor(v) && !billed.has(v.id));
   const batch = pending.slice(0, MAX_VISITS);
 
   let invoiced = 0;
@@ -133,6 +164,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     invoiced,
     failed,
     remaining: pending.length - batch.length,
-    next: pending.length > batch.length ? batch[batch.length - 1].id : null,
+    next: pending.length > batch.length
+      ? `${batch[batch.length - 1].scheduled_date ?? ""}~${batch[batch.length - 1].id}`
+      : null,
   });
 }

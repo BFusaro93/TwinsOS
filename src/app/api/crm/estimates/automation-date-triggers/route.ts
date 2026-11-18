@@ -64,7 +64,7 @@ async function handleRun(request: Request) {
 
   let enrolled = 0;
   let stoppedEarly = false;
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
   // Each matching estimate costs several sequential queries. Start at a different trigger each
   // day and stop before maxDuration, so a large org can't use up every run and leave the
   // triggers (and estimates) after it never checked.

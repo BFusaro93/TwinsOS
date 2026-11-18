@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
 import { mapAttachment } from "@/lib/supabase/mappers";
 import type { Attachment, AttachmentRecordType } from "@/types/attachment";
 
@@ -67,6 +68,9 @@ export function useUploadAttachment(recordType: AttachmentRecordType, hookRecord
         .eq("id", user?.id ?? "")
         .single();
       const uploaderName = profile?.name ?? user?.email ?? "Unknown";
+      // Folder = my_org_id() (honours staff impersonation), the same value the
+      // bucket policies and the attachments.storage_path guard check against.
+      const orgPrefix = await getStorageOrgPrefix(supabase);
 
       const uploadOne = async (file: File): Promise<UploadResult> => {
         try {
@@ -76,7 +80,7 @@ export function useUploadAttachment(recordType: AttachmentRecordType, hookRecord
           // wide-open "any authenticated user" policy nothing to check
           // against, so any org's users could read/overwrite another org's
           // attachments by guessing or enumerating a path.
-          const storagePath = `${profile?.org_id ?? "unknown"}/${recordType}/${recordId}/${Date.now()}-${sanitizeStorageFileName(file.name)}`;
+          const storagePath = `${orgPrefix}/${recordType}/${recordId}/${Date.now()}-${sanitizeStorageFileName(file.name)}`;
 
           // Fast path: stream File directly — no JS heap copy, fast for local files.
           // The Supabase storage client may either return { error } OR throw depending
