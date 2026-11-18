@@ -348,6 +348,9 @@ export function useCreateEstimate() {
   });
 }
 
+/** Stages that mean an imported estimate was already sent from the other system. */
+const IMPORTED_SENT_STAGES = new Set<string>(["sent", "accepted", "invoiced"]);
+
 export function useBulkImportEstimates() {
   // Imported rows without a date mean "today" on the ORG's calendar, not
   // the importer's laptop or the UTC server.
@@ -418,6 +421,7 @@ export function useBulkImportEstimates() {
         const probabilityPct = Number.parseFloat((r.probability ?? "").replace("%", ""));
         const externalRef = r.externalRef?.trim();
 
+        const stage = (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft";
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: inserted, error } = await (supabase as any).from("estimates").insert({
           created_by: user?.id ?? null,
@@ -426,7 +430,11 @@ export function useBulkImportEstimates() {
           estimate_date: estimateDate,
           valid_until_date: validUntilDate,
           po_number: r.poNumber?.trim() || null,
-          stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",
+          stage,
+          // An estimate imported as already sent was sent from the other system, on its
+          // estimate date. Without a sent date the "Estimate expiring" and "No response"
+          // reminders never consider it.
+          ...(IMPORTED_SENT_STAGES.has(stage) && { sent_at: `${estimateDate}T12:00:00Z` }),
           ...(repMatches.length === 1 && { sales_rep_id: repMatches[0] }),
           ...(Number.isFinite(probabilityPct) && {
             probability_bps: Math.min(10000, Math.max(0, Math.round(probabilityPct * 100))),

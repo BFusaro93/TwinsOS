@@ -17,7 +17,7 @@
  *
  * Trigger points wired to this (see each call site for details):
  *   - New assignment: crm_job_visits.crew_id set (src/app/api/crm/visits/
- *     [visitId]/route.ts, and the notify-crew route it shares logic with).
+ *     bulk-update/route.ts and the single-visit notify route).
  *   - Dispatcher note: crm_job_visits.notes_to_crew set (same routes).
  *   - Requisition approved/rejected: src/app/api/notifications/email/route.ts
  *     (alongside the existing email trigger), only for requesters who came

@@ -76,6 +76,10 @@
       "schedule": "5 14 * * *"
     },
     {
+      "path": "/api/cron/visit-coming-up",
+      "schedule": "5 14 * * *"
+    },
+    {
       "path": "/api/cron/ticket-past-due",
       "schedule": "5 14 * * *"
     },

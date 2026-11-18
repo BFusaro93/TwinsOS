@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
-import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
+import { firePOStatusAutomations, submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
 import type { BulkImportResult, BulkImportRowError } from "@/lib/csv";
 import { correctPartReceipt, clampProductReduction, shortfallMessage } from "@/lib/inventory/part-stock";
@@ -222,7 +222,7 @@ export function useUpdatePurchaseOrder() {
       const supabase = createClient();
       const { data: before } = await supabase
         .from("purchase_orders")
-        .select("grand_total, vendor_id")
+        .select("grand_total, vendor_id, status")
         .eq("id", id)
         .single();
       const { error } = await supabase
@@ -252,6 +252,13 @@ export function useUpdatePurchaseOrder() {
       // and a new vendor is a different order: either one re-opens approval.
       if (before && (before.grand_total !== grandTotal || (before.vendor_id ?? null) !== (vendorId ?? null))) {
         await resubmitPOForApprovalIfNeeded(supabase, id, grandTotal);
+        // A vendor change on an approved PO is sent back to pending by the database
+        // itself (procurement_reopen_on_vendor_change) before the re-submit runs, so the
+        // re-submit sees pending → pending and reports nothing. Compare with the status
+        // from before the edit and fire the "PO status change" rules for a real move.
+        const { data: after } = await supabase.from("purchase_orders").select("status").eq("id", id).maybeSingle();
+        const statusAfter = (after as { status: string } | null)?.status ?? null;
+        if (statusAfter && before.status && statusAfter !== before.status) firePOStatusAutomations(id, statusAfter);
       }
     },
     onSuccess: (_, { id }) => {

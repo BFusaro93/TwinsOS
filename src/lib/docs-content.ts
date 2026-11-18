@@ -2016,6 +2016,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Maintenance & Work Orders",
     items: [
       {
+        q: "Does a PO status automation fire when changing the vendor sends a PO back for approval?",
+        a: "Yes. When a vendor change on an approved PO sends it back to Pending Approval, your Purchase Order Status Changed rules for Pending Approval run, once for that change, just as when you submit it yourself.",
+      },
+      {
         q: "My PM Due automation fired once and then never again. Why?",
         a: "That's fixed. PM Due automations now fire once for each PM schedule each time it comes due, naming that schedule's asset, so one overdue schedule no longer silences the alert for the others. The same schedule fires again once its next due date moves on. Work Order Overdue automations fire once for each overdue work order.",
       },
@@ -2221,6 +2225,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Can an automation remind clients a few days before their visit?",
+        a: "Yes. Use the Visit is coming up trigger and type how many days before the visit it should fire (1 when left blank). Every morning, around 9 to 10am Eastern, it starts the sequence for clients with a scheduled or dispatched visit that many days out on your company's calendar. It runs once per client per service day, the service filter matches any service that day, and [visitdate] / [visitservices] name that day. A cancelled, skipped or moved visit stops the run before its next step.",
+      },
+      {
+        q: "Can one sequence send a reminder a week before and again the day before a visit?",
+        a: "Use two sequences: one on Visit is coming up set to 7 days, one set to 1 day. A single sequence runs once per client per service day for that trigger, so a second Visit is coming up trigger on the same sequence wouldn't start it again for the same day.",
+      },
+      {
+        q: "Do the \"days past due\" automation conditions use my time zone?",
+        a: "Yes. Days invoice is past due, Days since invoice was paid and Days ticket is past due count whole days between the date and today on your company's calendar, so a rule checked at 9pm counts the same as one checked that morning.",
+      },
+      {
+        q: "My imported estimates are in Sent. Will the estimate reminders pick them up?",
+        a: "Yes. An estimate imported already in Sent, Accepted or Invoiced counts as sent on its estimate date, so Estimate expiring and No response from client can pick it up like an estimate you emailed.",
+      },
+      {
         q: "I marked an estimate as Sent by hand. Will my \"Estimate was sent\" automation run?",
         a: "Yes. Estimate was sent fires the first time an estimate moves into Sent, however it gets there: emailing it, copying its proposal link, or changing its stage to Sent (stage picker, drag or bulk change). That first move also records the sent date that No response from client counts from. Sending it again later doesn't restart the sequence.",
       },
@@ -2250,7 +2270,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I send a day-before visit reminder?",
-        a: "Make an automation on the Visit was dispatched trigger with a text or email step that uses [visitdate] and [visitservices], for example \"Your [visitservices] is scheduled for [visitdate].\" Then press Dispatch day on the Dispatch Board for tomorrow's schedule. Each client gets one message for all their visits that day. Only visits with a crew are dispatched, and if the visit is cancelled or moved before the message goes out, the run stops.",
+        a: "Make an automation on the Visit is coming up trigger, set to 1 day before, with a text or email step that uses [visitdate] and [visitservices], for example \"Your [visitservices] is scheduled for [visitdate].\" It's checked every morning (about 9 to 10am Eastern) for the next day's scheduled and dispatched visits. Each client gets one message for all their visits that day, and if the visit is cancelled or moved before the message goes out, the run stops. If you'd rather the reminder go out when you press Dispatch day for tomorrow, use the Visit was dispatched trigger instead.",
       },
       {
         q: "What's the difference between [servicedate] and [visitdate]?",
@@ -2302,7 +2322,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How often does a \"Job created\" or \"Package renewed\" automation run for a client with several jobs?",
-        a: "Once per job. Job created, Job cancelled, Package created and Package renewed each run for every job separately, so two new jobs for the same client each get their own run.",
+        a: "Once per job for each trigger. Job created, Job cancelled, Package created and Package renewed each run for every job separately, so two new jobs for the same client each get their own run. A sequence started by both Job created and Job cancelled still runs for the cancellation while the creation run is going.",
       },
       {
         q: "What does Allow Re-Entry do on an automation sequence?",
@@ -2402,7 +2422,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Do files attached to an estimate carry over when I convert it to a job?",
-        a: "Yes. Files attached to the estimate are copied onto the new job's attachments. The estimate's photos stay on the estimate and aren't copied.",
+        a: "Yes. The estimate's photos and the files attached to it are copied onto the new job's Files tab, marked \"Transferred from estimate\", so the crew sees the estimator's site photos. The originals stay on the estimate. If a copy fails you're told, and the job is still created.",
       },
       {
         q: "I clicked Return to Waiting List on a stop two crews share. What happens to the other crew?",
@@ -3034,7 +3054,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which merge tags can an automation's email or text use?",
-        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags. In a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it; [servicename], [servicedate] and [chemicalnotice] (the compact Notice of Treatment) read that day's visits. Otherwise [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. For a day-before reminder, dispatch the day before and start the sequence with Visit dispatched and a text such as \"We'll be out on [visitdate] for [visitservices].\" A tag with no value is left blank.",
+        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags. In a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it; [servicename], [servicedate] and [chemicalnotice] (the compact Notice of Treatment) read that day's visits. Otherwise [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. For a day-before reminder, start the sequence with Visit is coming up (1 day before) and a text such as \"We'll be out on [visitdate] for [visitservices].\" A tag with no value is left blank.",
       },
       {
         q: "Why didn't a form submission create a ticket?",

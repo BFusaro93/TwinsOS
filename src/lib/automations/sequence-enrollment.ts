@@ -13,7 +13,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import { isJobScopedTrigger, isVisitScopedTrigger, recordScopeType } from "./enrollment-scope";
 import { invoiceDaysPastDue } from "@/lib/invoice-status";
-import { todayInZone } from "@/lib/time/zone";
+import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("sequence-enrollment");
 
@@ -189,7 +189,11 @@ export async function isEligibleForEnrollment(
     query = query.eq("client_id", params.clientId).eq("visit_date", params.visitDate);
     if (params.triggerType) query = query.or(`trigger_type.eq.${params.triggerType},trigger_type.is.null`);
   } else if (params.jobId) {
+    // Once per job PER START TRIGGER, like the visit day: a sequence started by both
+    // "Job created" and "Job cancelled" must not have the creation run swallow the
+    // cancellation run of the same job.
     query = query.eq("job_id", params.jobId);
+    if (params.triggerType) query = query.or(`trigger_type.eq.${params.triggerType},trigger_type.is.null`);
   } else if (params.recordType && params.recordKey) {
     query = query.eq("record_type", params.recordType).eq("record_key", params.recordKey);
   } else {
@@ -457,20 +461,22 @@ const ESTIMATE_FIELD_GETTERS: Partial<Record<ConditionField, (estimate: Record<s
 // Multi-select "any of" fields needing the same `estimates` row fetched.
 const SPECIAL_ESTIMATE_CONDITION_FIELDS = new Set<ConditionField>(["estimate_sales_rep", "estimate_status", "estimate_stage"]);
 
-/** Whole days elapsed since `date`, or null if there isn't one. Floored, not
- *  fractional: these back the "Days … past due / since paid" conditions, whose
- *  value box takes an integer. A raw 3.47 never equals a typed 3, so an
- *  `equals 3` rule silently never fired. */
-function daysSince(date: unknown): number | null {
-  if (!date) return null;
-  const ms = new Date(String(date)).getTime();
-  if (Number.isNaN(ms)) return null;
-  return Math.floor((Date.now() - ms) / 86400000);
+/** Whole days from a date column (YYYY-MM-DD) to the ORG's today, or null if either is
+ *  missing. These back the "Days … past due / since paid" conditions: due_date and
+ *  payment_date are calendar dates, so the count is in the company's days, not UTC's
+ *  (a UTC diff ran a day ahead every evening after 8pm Eastern). Integers, so an
+ *  `equals 3` rule matches. org_today is merged onto the record below. */
+function orgDaysSince(date: unknown, orgToday: unknown): number | null {
+  if (!date || typeof orgToday !== "string") return null;
+  const ymd = String(date).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  return daysBetweenYmd(ymd, orgToday);
 }
 
 const TICKET_FIELD_GETTERS: Partial<Record<ConditionField, (ticket: Record<string, unknown>) => unknown>> = {
-  ticket_past_due_days: (t) => daysSince(t.due_date),
+  ticket_past_due_days: (t) => orgDaysSince(t.due_date, t.org_today),
 };
+const ORG_DAY_CONDITION_FIELDS = new Set<ConditionField>(["ticket_past_due_days", "invoice_past_due_days", "invoice_was_paid_days"]);
 const SPECIAL_TICKET_CONDITION_FIELDS = new Set<ConditionField>(["ticket_category"]);
 
 const INVOICE_FIELD_GETTERS: Partial<Record<ConditionField, (invoice: Record<string, unknown>) => unknown>> = {
@@ -484,7 +490,7 @@ const INVOICE_FIELD_GETTERS: Partial<Record<ConditionField, (invoice: Record<str
       : null,
   // last_payment_date isn't a real crm_invoices column — it's merged onto
   // this object from a separate crm_payments query below.
-  invoice_was_paid_days: (i) => daysSince(i.last_payment_date),
+  invoice_was_paid_days: (i) => orgDaysSince(i.last_payment_date, i.org_today),
 };
 
 /**
@@ -726,7 +732,7 @@ export async function evaluateConditionSet(
       ? getClientServiceSets(supabase, clientId)
       : Promise.resolve({ scheduled: new Set<string>(), completed: new Set<string>() }),
     needsTicket && ticketId
-      ? supabase.from("crm_tickets").select("category, due_date").eq("id", ticketId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
+      ? supabase.from("crm_tickets").select("org_id, category, due_date").eq("id", ticketId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
       : Promise.resolve(null),
     needsInvoice && invoiceId
       ? supabase.from("crm_invoices").select("org_id, due_date, invoice_date").eq("id", invoiceId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
@@ -763,11 +769,14 @@ export async function evaluateConditionSet(
     ? await getClientCustomFieldFacts(supabase, clientId, conditions)
     : null;
 
-  const invoiceOrgToday =
-    invoice && conditions.some((c) => c.field === "invoice_past_due_days") && typeof invoice.org_id === "string"
-      ? todayInZone(await getOrgTimeZone(supabase, invoice.org_id))
-      : null;
-  const invoiceWithPayment = invoice ? { ...invoice, last_payment_date: lastPaymentDate, org_today: invoiceOrgToday } : null;
+  // Day-count conditions are measured on the company's calendar.
+  const needsOrgToday = conditions.some((c) => ORG_DAY_CONDITION_FIELDS.has(c.field));
+  const dayOrgId =
+    (invoice && typeof invoice.org_id === "string" ? invoice.org_id : null) ??
+    (ticket && typeof ticket.org_id === "string" ? ticket.org_id : null);
+  const orgToday = needsOrgToday && dayOrgId ? todayInZone(await getOrgTimeZone(supabase, dayOrgId)) : null;
+  const invoiceWithPayment = invoice ? { ...invoice, last_payment_date: lastPaymentDate, org_today: orgToday } : null;
+  const ticketWithToday = ticket ? { ...ticket, org_today: orgToday } : null;
 
   // These fields are rendered with the multi-select checkbox picker (see
   // TAG_CONDITION_FIELDS / SERVICE_CONDITION_FIELDS / etc. in
@@ -918,7 +927,7 @@ export async function evaluateConditionSet(
     if (estimateGetter) return !!estimate && compare(estimateGetter(estimate), c.operator, c.value ?? "");
 
     const ticketGetter = TICKET_FIELD_GETTERS[c.field];
-    if (ticketGetter) return !!ticket && compare(ticketGetter(ticket), c.operator, c.value ?? "");
+    if (ticketGetter) return !!ticketWithToday && compare(ticketGetter(ticketWithToday), c.operator, c.value ?? "");
 
     const invoiceGetter = INVOICE_FIELD_GETTERS[c.field];
     if (invoiceGetter) return !!invoiceWithPayment && compare(invoiceGetter(invoiceWithPayment), c.operator, c.value ?? "");

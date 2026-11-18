@@ -13,7 +13,6 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { checkPackageMinDaysViolation, overridePackageMinDays } from "@/lib/package-visit-recalc";
 import { logger } from "@/lib/logger";
-import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
@@ -1409,7 +1408,7 @@ export function useUpdateVisitStatus() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: prior } = await (supabase as any)
         .from('crm_job_visits').select('id, job_id, status, clocked_in_at, clocked_out_at').eq('id', id).maybeSingle();
-      // Same guards as PATCH /api/crm/visits/[id]: a status change while the crew is
+      // Same guards as /api/crm/visits/bulk-update: a status change while the crew is
       // mid-stop strands their open punches, and reopening a finished visit must clear
       // its clock stamps or the crew app treats it as already worked.
       if (prior && GUARDED_STATUS_CHANGES.includes(status) && prior.status !== status && isVisitInProgress(prior)) {
@@ -3161,56 +3160,21 @@ export function useCreateJobsFromEstimate() {
       }
 
       // Copy the estimate's photos and attachments over to the new job so the
-      // crew doesn't lose site-visit photos the estimator already captured.
-      // Best-effort: a copy failure here shouldn't block job creation.
+      // crew doesn't lose site-visit photos the estimator already captured. Done
+      // server-side: estimate photos have no attachments row, so a copy with this
+      // session was refused by the bucket's SELECT policy and only plain files came
+      // across. Best-effort: a copy failure here shouldn't block job creation.
+      let filesCopyFailed = false;
       try {
-        const { data: estimatePhotos } = await supabase
-          .from("estimate_photos")
-          .select("storage_path, file_name, file_size, mime_type")
-          .eq("estimate_id", estimateId)
-          .is("deleted_at", null);
-
-        const { data: estimateAttachments } = await supabase
-          .from("attachments")
-          .select("storage_path, file_name, file_size, file_type")
-          .eq("record_type", "estimate")
-          .eq("record_id", estimateId)
-          .is("deleted_at", null);
-
-        const sources: { storage_path: string; file_name: string; file_size: number | null; file_type: string | null }[] = [
-          ...(estimatePhotos ?? []).map((p) => ({
-            storage_path: p.storage_path, file_name: p.file_name, file_size: p.file_size, file_type: p.mime_type,
-          })),
-          ...(estimateAttachments ?? []).map((a) => ({
-            storage_path: a.storage_path, file_name: a.file_name, file_size: a.file_size, file_type: a.file_type,
-          })),
-        ];
-
-        // org_id must lead the key: the bucket's INSERT policy scopes on the first
-        // folder and attachments.storage_path is rejected outside the org's folder.
-        // The old `job/<id>/…` key was refused, so nothing ever copied over.
-        const jobOrgId = (data as { org_id: string }).org_id;
-        for (let i = 0; i < sources.length; i++) {
-          const source = sources[i];
-          const newPath = `${jobOrgId}/job/${jobId}/${Date.now()}-${i}-${sanitizeStorageFileName(source.file_name)}`;
-          const { error: copyError } = await supabase.storage
-            .from("attachments")
-            .copy(source.storage_path, newPath);
-          if (copyError) continue;
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("attachments").insert({
-            record_type: "job",
-            record_id: jobId,
-            file_name: source.file_name,
-            file_size: source.file_size ?? 0,
-            file_type: source.file_type ?? "",
-            storage_path: newPath,
-            uploaded_by_name: "Transferred from estimate",
-          });
-        }
+        const res = await fetch(`/api/crm/estimates/${estimateId}/copy-files-to-job`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId }),
+        });
+        const body = (await res.json().catch(() => null)) as { failed?: number } | null;
+        filesCopyFailed = !res.ok || (body?.failed ?? 0) > 0;
       } catch {
-        // Non-fatal — the job itself was created successfully above.
+        filesCopyFailed = true;
       }
 
       // Mark estimate accepted — only if it isn't already (an estimate accepted
@@ -3260,12 +3224,16 @@ export function useCreateJobsFromEstimate() {
         }
       }
 
-      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed, packageId: packageId ?? null, estimateWon, projectLink, projectLinkError };
+      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed, filesCopyFailed, packageId: packageId ?? null, estimateWon, projectLink, projectLinkError };
     },
     onSuccess: (data) => {
       if (data.materialsFailed) {
         toast.warning("Job created, but the estimate's materials couldn't be copied onto it. Add them on the job's Products tab; don't convert again.");
       }
+      if (data.filesCopyFailed) {
+        toast.warning("Job created, but some of the estimate's photos or files couldn't be copied onto it. Add them on the job's Files tab if the crew needs them.");
+      }
+      qc.invalidateQueries({ queryKey: ["attachments", "job", data.jobId] });
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });

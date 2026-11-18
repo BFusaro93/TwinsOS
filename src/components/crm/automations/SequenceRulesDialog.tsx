@@ -41,11 +41,11 @@ import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
 import { availableRecordKinds } from "@/lib/automations/condition-applicability";
 import type { TriggerType, TriggerConfig } from "@/types/crm-automations";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
-import { DEFAULT_DATE_GAP_DAYS, resolveDateGapDays } from "@/lib/automations/activation-warnings";
+import { defaultDateGapDays, resolveDateGapDays } from "@/lib/automations/activation-warnings";
 
 // Trigger types that fire off a day-count gap rather than an event — the
 // builder shows a "days" input for these instead of just the type selector.
-const DATE_GAP_TRIGGER_TYPES = new Set<TriggerType>(["estimate_expiring", "estimate_no_response"]);
+const DATE_GAP_TRIGGER_TYPES = new Set<TriggerType>(["estimate_expiring", "estimate_no_response", "visit_coming_up"]);
 
 // Trigger types that fire off a minute-count gap before a scheduled moment —
 // the builder shows a "minutes before" input for these instead of "days".
@@ -64,6 +64,7 @@ const MULTI_FILTER_TRIGGER_TYPES: Partial<Record<TriggerType, FilterKind>> = {
   visit_completed: "service",
   visit_cancelled: "service",
   visit_dispatched: "service",
+  visit_coming_up: "service",
   visit_skipped: "service",
   visit_date_changed: "service",
   client_source_updated: "source",
@@ -184,6 +185,7 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "service_visit_completed", label: "Visit completed for service" },
       { value: "visit_cancelled", label: "Visit was cancelled" },
       { value: "visit_dispatched", label: "Visit was dispatched" },
+      { value: "visit_coming_up", label: "Visit is coming up" },
       { value: "visit_skipped", label: "Visit was skipped" },
       { value: "visit_date_changed", label: "Visit date changed" },
       { value: "visit_moved_to_waiting_list", label: "Visit moved to waiting list" },
@@ -377,7 +379,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
 
   function updateTriggerType(key: string, type: TriggerType) {
     // Date-gap triggers start with the default day count, so a box left untouched still saves a value.
-    const config: TriggerConfig = DATE_GAP_TRIGGER_TYPES.has(type) ? { days: DEFAULT_DATE_GAP_DAYS } : {};
+    const config: TriggerConfig = DATE_GAP_TRIGGER_TYPES.has(type) ? { days: defaultDateGapDays(type) } : {};
     setTriggers((prev) => prev.map((t) => t._key === key ? { ...t, triggerType: type, config } : t));
   }
 
@@ -444,10 +446,11 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                 sequence_id: sequenceId,
                 trigger_type: t.triggerType,
                 position: i,
-                // A date-gap trigger saved with its "days" box blank gets the default (7, the
-                // placeholder) — a missing value used to mean the trigger never fired.
+                // A date-gap trigger saved with its "days" box blank gets the default (the
+                // placeholder: 7, or 1 for a visit reminder) — a missing value used to mean
+                // the trigger never fired.
                 config: DATE_GAP_TRIGGER_TYPES.has(t.triggerType)
-                  ? { ...t.config, days: resolveDateGapDays(t.config) ?? t.config.days }
+                  ? { ...t.config, days: resolveDateGapDays(t.config, t.triggerType) ?? t.config.days }
                   : t.config,
               }))
             )
@@ -561,7 +564,8 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
           </div>
           <p className="text-[11px] text-slate-400 dark:text-neutral-500 -mt-1">
             Visit triggers run once per client per service day — all of a client&apos;s visits that day (every service, crew
-            and property) share one run, and another day starts a new one. Job and package triggers run once per job;
+            and property) share one run, and another day starts a new one. Job and package triggers run once per job
+            (visit and job runs are counted separately for each start trigger);
             estimate, invoice, ticket and meeting triggers once per record; every other trigger once per client. Re-entry
             lets the same day, record or client start it again after the delay below.
           </p>
@@ -631,11 +635,15 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                       min={1}
                       value={t.config.days ?? ""}
                       onChange={(e) => updateTriggerConfig(t._key, { days: Number(e.target.value) || undefined })}
-                      placeholder="7"
+                      placeholder={String(defaultDateGapDays(t.triggerType))}
                       className="h-9 w-16 text-sm"
                     />
                     <span className="text-xs text-slate-400 dark:text-neutral-500 whitespace-nowrap">
-                      {t.triggerType === "estimate_expiring" ? "days before expiry" : "days since sent"}
+                      {t.triggerType === "estimate_expiring"
+                        ? "days before expiry"
+                        : t.triggerType === "visit_coming_up"
+                          ? "days before the visit"
+                          : "days since sent"}
                     </span>
                   </div>
                 )}

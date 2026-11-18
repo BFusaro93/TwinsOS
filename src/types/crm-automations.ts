@@ -46,6 +46,7 @@ export type TriggerType =
   | 'visit_cancelled'
   | 'visit_completed'
   | 'visit_dispatched'
+  | 'visit_coming_up'
   | 'visit_skipped'
   // Tag
   | 'tag_added'
