@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { notifyTicketComment } from "@/lib/ticket-notify";
 import { logger } from "@/lib/logger";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { MAX_REPLY_PHOTOS, photosForMessage, signPhotoPaths, storeReplyPhotos } from "@/lib/ticket-message-photos";
 
 const log = logger.child("portal/tickets/messages");
@@ -131,12 +132,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // A reply to a closed ticket reopens it, so it comes back to the office's
   // open list instead of sitting unseen.
   if (ticket.status === "closed") {
-    const { error: reopenError } = await service
+    // Conditional on still being closed: of two replies racing, only the one that
+    // actually reopened it fires ticket_reopened below.
+    const { data: reopened, error: reopenError } = await (service as any)
       .from("crm_tickets")
       .update({ status: "open", closed_at: null })
       .eq("id", ticket.id)
-      .eq("org_id", ctx.orgId);
+      .eq("org_id", ctx.orgId)
+      .eq("status", "closed")
+      .select("id, client_id, category");
     if (reopenError) log.error("failed to reopen ticket on reply", { ticketId: ticket.id, error: reopenError.message });
+    const row = (reopened ?? [])[0] as { client_id: string | null; category: string | null } | undefined;
+    // Same event the office's reopen fires (use-tickets.ts), server-side: a portal
+    // customer has no session that could call /api/automations/fire-trigger.
+    if (row?.client_id) {
+      await fireServerTrigger(service, {
+        orgId: ctx.orgId,
+        clientId: row.client_id,
+        ticketId: ticket.id,
+        triggerType: "ticket_reopened",
+        matchValues: row.category ? [row.category] : undefined,
+      });
+    }
   }
 
   // Tell the assignee/contributors (or the new-ticket audience when nobody is

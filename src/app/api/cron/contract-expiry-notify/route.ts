@@ -8,6 +8,7 @@ import { EMAIL_FROM, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
 import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("contract-expiry-notify cron");
@@ -56,8 +57,10 @@ export async function GET(request: Request) {
   const todayStr = shiftYmd(isoInZone(today, "UTC"), -1);
   const windowEndStr = shiftYmd(isoInZone(windowEnd, "UTC"), 1);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: expiring } = await (supabase as any)
+  // Paged across every org: one select stops at 1,000 rows, silently skipping the rest.
+  const expiring = await fetchAllRows<Record<string, unknown>>(() =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
     .from("crm_contracts")
     .select("id, org_id, title, end_date, sales_rep_id, client_id, clients!inner(display_name, deleted_at, status)")
     // A deleted or off-service client's contract needs no renewal reminder.
@@ -71,7 +74,7 @@ export async function GET(request: Request) {
     // still-draft) contract nearing its end date told the rep to "renew it"
     // and enrolled the CLIENT in the contract_about_to_expire automation.
     .in("status", ["signed", "active"])
-    .is("deleted_at", null);
+    .is("deleted_at", null));
 
   if (!expiring?.length) {
     return NextResponse.json({ notified: 0 });
@@ -105,8 +108,8 @@ export async function GET(request: Request) {
     // The claim above is taken before anything is sent; if the automation or
     // the rep email then fails, give the claim back (only if it still holds
     // this end date) so tomorrow's run retries instead of never notifying.
-    // Re-firing the automation on retry is safe: isEligibleForEnrollment
-    // won't re-enroll a client whose enrollment is still in flight.
+    // Re-firing the automation on retry is safe: the run is scoped to this contract
+    // term, and isEligibleForEnrollment won't re-enroll it while it is in flight.
     const releaseClaim = async (reason: string, error?: unknown) => {
       log.error("contract expiry notification failed; releasing claim for retry", {
         contractId: contract.id, orgId: contract.org_id, endDate, reason, error,
@@ -126,6 +129,11 @@ export async function GET(request: Request) {
           orgId: contract.org_id as string,
           clientId: contractClientId,
           triggerType: "contract_about_to_expire",
+          // Once per contract TERM: a client with two expiring contracts gets a run for
+          // each, and a renewal (new end date) is a new run.
+          recordId: contract.id as string,
+          recordKey: `${contract.id as string}:${endDate}`,
+          anchorKey: endDate,
         });
       } catch (err) {
         await releaseClaim("automation trigger failed", err);

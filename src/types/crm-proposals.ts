@@ -78,8 +78,10 @@ export const SMS_EVENT_MERGE_TAGS = [
   { tag: "[invoiceduedate]",  label: "Invoice Due Date" },
   { tag: "[invoiceterms]",    label: "Invoice Terms (e.g. Net 30)" },
   { tag: "[paymentlink]",     label: "Payment Link (URL)" },
-  { tag: "[servicename]",     label: "Last Completed Service" },
-  { tag: "[servicedate]",     label: "Last Service Date" },
+  { tag: "[visitdate]",       label: "Visit Day (visit triggers)" },
+  { tag: "[visitservices]",   label: "Services on the Visit Day (visit triggers)" },
+  { tag: "[servicename]",     label: "Service(s): Visit Day's, else Last Completed" },
+  { tag: "[servicedate]",     label: "Service Date: Visit Day, else Last Completed" },
   { tag: "[nextservicedate]", label: "Next Service Date" },
 ] as const;
 

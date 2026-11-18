@@ -642,7 +642,9 @@ export function useCreateInvoice() {
     onSuccess: (invoice, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
-      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId, invoiceId: invoice.id });
+      // No invoice_created here: this is the New Invoice sheet's empty, numberless
+      // draft (made as the sheet opens). The invoice is "issued" — and the trigger
+      // fires — when Save Invoice gives it its number (useAssignInvoiceNumber).
     },
   });
 }
@@ -916,8 +918,13 @@ export function useBulkImportInvoices() {
           continue;
         }
 
+        // Historical invoices being imported are not "issued" now: the 2-arg overload
+        // numbers them without queueing the invoice_created automation (20270109000700).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: invoiceNumber } = await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
+        const { data: invoiceNumber } = await (supabase as any).rpc("assign_invoice_number", {
+          p_invoice_id: invoice.id,
+          p_suppress_automation: true,
+        });
 
         // Log to the client's activity timeline (same as useAssignInvoiceNumber).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -966,6 +973,9 @@ export function useAssignInvoiceNumber() {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      // Saved with its number = issued. Claimed once per invoice server-side, so
+      // saving again (or the queued copy of this event) never fires it twice.
+      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId, invoiceId: vars.id });
     },
   });
 }
@@ -1260,10 +1270,20 @@ export function useUpdateInvoiceStatus() {
         .update(patch)
         .eq("id", id);
       if (error) throw error;
+      return { clientId: (current?.client_id as string | null) ?? null, leftDraft: current?.status === "draft" && status !== "draft" };
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       invalidateClientBalances(qc);
+      // Leaving draft numbers the invoice ("issued"), and Mark as Sent / Print is the
+      // first send. Both are claimed once per invoice server-side (the DB queues
+      // them too, so a missed call here still fires on the next automations run).
+      if (data?.leftDraft && data.clientId) {
+        fireAutomationTrigger({ triggerType: "invoice_created", clientId: data.clientId, invoiceId: vars.id });
+        if (vars.status === "sent" || vars.status === "printed") {
+          fireAutomationTrigger({ triggerType: "invoice_sent", clientId: data.clientId, invoiceId: vars.id });
+        }
+      }
       if (vars.status === "sent") {
         fireQuickBooksInvoiceSync(vars.id);
       } else {
@@ -1399,7 +1419,16 @@ export function useRecordPayment() {
         ref_table: "crm_payments",
       });
 
-      return { newlyPaidInvoiceIds, paymentId: inserted.id, hasAllocations: hasAlloc };
+      // Enter Payment on a parent account can pay its sub-accounts' invoices: each
+      // invoice_paid must name the invoice's OWN client, or fire-trigger refuses it
+      // (the invoice doesn't belong to the parent) and the automation never runs.
+      const owners = await invoiceStatusById(supabase, newlyPaidInvoiceIds);
+      const newlyPaid = newlyPaidInvoiceIds.map((invoiceId) => ({
+        invoiceId,
+        clientId: owners.get(invoiceId)?.clientId ?? null,
+      }));
+
+      return { newlyPaid, paymentId: inserted.id, hasAllocations: hasAlloc };
     },
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
@@ -1409,8 +1438,8 @@ export function useRecordPayment() {
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
       // Paid by hand: cancel any open online pay form the customer still has for these invoices.
       fireStaleIntentCancel();
-      for (const invoiceId of data?.newlyPaidInvoiceIds ?? []) {
-        fireAutomationTrigger({ triggerType: "invoice_paid", clientId: vars.clientId, invoiceId });
+      for (const n of data?.newlyPaid ?? []) {
+        fireAutomationTrigger({ triggerType: "invoice_paid", clientId: n.clientId ?? vars.clientId, invoiceId: n.invoiceId });
       }
       if (data?.hasAllocations) {
         fireQuickBooksPaymentSync(data.paymentId);
@@ -1587,7 +1616,7 @@ export function useUpsertInvoiceLineItem() {
         if (error) throwIfLockedInvoiceError(error);
         // A tax-affecting edit (taxable toggle) must not leave the stored
         // header's tax_cents/total_cents stale until the next Save.
-        if (recalc) await recalcInvoiceTotalsFromLines(supabase, invoiceId);
+        if (recalc) return recalcInvoiceTotalsFromLines(supabase, invoiceId);
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any)
@@ -1595,13 +1624,15 @@ export function useUpsertInvoiceLineItem() {
           .insert({ invoice_id: invoiceId, ...item });
         if (error) throwIfLockedInvoiceError(error);
       }
+      return null;
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] });
       if (vars.recalc) {
         qc.invalidateQueries({ queryKey: ["crm-invoices"] });
         invalidateClientBalances(qc);
       }
+      fireInvoicePaidAfterRecalc(data);
     },
   });
 }
@@ -1690,6 +1721,8 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
 
   const result = await recalcInvoiceTotalsFromLines(supabase, invoiceId);
   if (tagErr) {
+    // The recalc already committed: don't lose the invoice_paid it earned.
+    fireInvoicePaidAfterRecalc(result);
     throw new Error(
       `The line was removed, but the visit's "already invoiced" marker could not be moved to its remaining line (${tagErr.message ?? "unknown error"}). Don't re-complete that visit until this is fixed, or it may be billed again.`,
     );
@@ -1789,6 +1822,19 @@ export async function recalcInvoiceTotalsFromLines(supabase: any, invoiceId: str
   return { invoiceId, clientId: inv?.client_id as string | undefined, wasNewlyPaid };
 }
 
+/**
+ * invoice_paid for a recalc whose payment reconcile just flipped the invoice to
+ * paid (a lower total now covered by what was already paid). wasNewlyPaid comes
+ * from crm_reconcile_invoice_payments, so it is true only on the real transition;
+ * fire-trigger re-checks that the invoice really is paid and is this client's.
+ */
+export function fireInvoicePaidAfterRecalc(
+  result: { invoiceId: string; clientId?: string; wasNewlyPaid: boolean } | null | undefined
+): void {
+  if (!result?.wasNewlyPaid || !result.clientId) return;
+  fireAutomationTrigger({ triggerType: "invoice_paid", clientId: result.clientId, invoiceId: result.invoiceId });
+}
+
 export function useDeleteInvoiceLineItem() {
   const qc = useQueryClient();
   return useMutation({
@@ -1797,10 +1843,11 @@ export function useDeleteInvoiceLineItem() {
       const supabase = createClient();
       return deleteInvoiceLineItemAndRecalc(supabase, id, invoiceId);
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       invalidateClientBalances(qc);
+      fireInvoicePaidAfterRecalc(data);
     },
   });
 }

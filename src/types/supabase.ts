@@ -893,6 +893,72 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_record_firings: {
+        Row: {
+          automation_id: string
+          claimed_at: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          fired_at: string | null
+          id: string
+          org_id: string
+          record_id: string
+          record_key: string
+          record_type: string
+          result: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          automation_id: string
+          claimed_at?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          fired_at?: string | null
+          id?: string
+          org_id: string
+          record_id: string
+          record_key?: string
+          record_type: string
+          result?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          automation_id?: string
+          claimed_at?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          fired_at?: string | null
+          id?: string
+          org_id?: string
+          record_id?: string
+          record_key?: string
+          record_type?: string
+          result?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_record_firings_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_record_firings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automations: {
         Row: {
           action_config: Json
@@ -2278,11 +2344,14 @@ export type Database = {
           client_id: string
           created_at: string
           created_by: string | null
+          failed_at: string | null
           id: string
+          invoice_id: string | null
           last_error: string | null
           match_values: string[] | null
           org_id: string
           processed_at: string | null
+          skip_reason: string | null
           trigger_type: string
           updated_at: string
         }
@@ -2292,11 +2361,14 @@ export type Database = {
           client_id: string
           created_at?: string
           created_by?: string | null
+          failed_at?: string | null
           id?: string
+          invoice_id?: string | null
           last_error?: string | null
           match_values?: string[] | null
           org_id: string
           processed_at?: string | null
+          skip_reason?: string | null
           trigger_type: string
           updated_at?: string
         }
@@ -2306,11 +2378,14 @@ export type Database = {
           client_id?: string
           created_at?: string
           created_by?: string | null
+          failed_at?: string | null
           id?: string
+          invoice_id?: string | null
           last_error?: string | null
           match_values?: string[] | null
           org_id?: string
           processed_at?: string | null
+          skip_reason?: string | null
           trigger_type?: string
           updated_at?: string
         }
@@ -2327,6 +2402,20 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_automation_trigger_queue_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "crm_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_automation_trigger_queue_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_invoices"
             referencedColumns: ["id"]
           },
           {
@@ -9474,6 +9563,7 @@ export type Database = {
       }
       crm_sequence_enrollments: {
         Row: {
+          anchor_key: string | null
           awaiting_approval: boolean
           client_id: string
           completed_at: string | null
@@ -9489,6 +9579,8 @@ export type Database = {
           next_event_position: number
           next_fire_at: string | null
           org_id: string
+          record_key: string | null
+          record_type: string | null
           sequence_id: string
           status: string
           stop_reason: string | null
@@ -9500,6 +9592,7 @@ export type Database = {
           visit_id: string | null
         }
         Insert: {
+          anchor_key?: string | null
           awaiting_approval?: boolean
           client_id: string
           completed_at?: string | null
@@ -9515,6 +9608,8 @@ export type Database = {
           next_event_position?: number
           next_fire_at?: string | null
           org_id?: string
+          record_key?: string | null
+          record_type?: string | null
           sequence_id: string
           status?: string
           stop_reason?: string | null
@@ -9526,6 +9621,7 @@ export type Database = {
           visit_id?: string | null
         }
         Update: {
+          anchor_key?: string | null
           awaiting_approval?: boolean
           client_id?: string
           completed_at?: string | null
@@ -9541,6 +9637,8 @@ export type Database = {
           next_event_position?: number
           next_fire_at?: string | null
           org_id?: string
+          record_key?: string | null
+          record_type?: string | null
           sequence_id?: string
           status?: string
           stop_reason?: string | null
@@ -17836,6 +17934,7 @@ export type Database = {
       }
       vehicle_telematics_snapshots: {
         Row: {
+          address: string | null
           battery_milli_volts: number | null
           check_engine_light: boolean | null
           coolant_milli_c: number | null
@@ -17847,14 +17946,13 @@ export type Database = {
           fault_codes: Json
           fetched_at: string
           fuel_percent: number | null
-          address: string | null
           heading_degrees: number | null
+          id: string
           latitude: number | null
           longitude: number | null
-          speed_mph: number | null
-          id: string
           org_id: string
           samsara_vehicle_id: string | null
+          speed_mph: number | null
           stat_times: Json
           tire_back_left_kpa: number | null
           tire_back_right_kpa: number | null
@@ -17864,6 +17962,7 @@ export type Database = {
           vehicle_id: string
         }
         Insert: {
+          address?: string | null
           battery_milli_volts?: number | null
           check_engine_light?: boolean | null
           coolant_milli_c?: number | null
@@ -17875,14 +17974,13 @@ export type Database = {
           fault_codes?: Json
           fetched_at?: string
           fuel_percent?: number | null
-          address?: string | null
           heading_degrees?: number | null
+          id?: string
           latitude?: number | null
           longitude?: number | null
-          speed_mph?: number | null
-          id?: string
           org_id?: string
           samsara_vehicle_id?: string | null
+          speed_mph?: number | null
           stat_times?: Json
           tire_back_left_kpa?: number | null
           tire_back_right_kpa?: number | null
@@ -17892,6 +17990,7 @@ export type Database = {
           vehicle_id: string
         }
         Update: {
+          address?: string | null
           battery_milli_volts?: number | null
           check_engine_light?: boolean | null
           coolant_milli_c?: number | null
@@ -17903,14 +18002,13 @@ export type Database = {
           fault_codes?: Json
           fetched_at?: string
           fuel_percent?: number | null
-          address?: string | null
           heading_degrees?: number | null
+          id?: string
           latitude?: number | null
           longitude?: number | null
-          speed_mph?: number | null
-          id?: string
           org_id?: string
           samsara_vehicle_id?: string | null
+          speed_mph?: number | null
           stat_times?: Json
           tire_back_left_kpa?: number | null
           tire_back_right_kpa?: number | null
@@ -20755,7 +20853,12 @@ export type Database = {
           new_contract_cents: number
         }[]
       }
-      assign_invoice_number: { Args: { p_invoice_id: string }; Returns: number }
+      assign_invoice_number:
+        | { Args: { p_invoice_id: string }; Returns: number }
+        | {
+            Args: { p_invoice_id: string; p_suppress_automation: boolean }
+            Returns: number
+          }
       assign_jobs_to_snow_route_crew: {
         Args: { p_crew_id: string; p_job_ids: string[]; p_route_id?: string }
         Returns: number
@@ -20769,6 +20872,19 @@ export type Database = {
       chem_amount_in_stock_unit: {
         Args: { p_amount: number; p_product_id: string; p_unit_id: string }
         Returns: number
+      }
+      claim_automation_record_firing: {
+        Args: {
+          p_automation_id: string
+          p_record_id: string
+          p_record_key: string
+          p_record_type: string
+        }
+        Returns: string
+      }
+      claim_invoice_automation_event: {
+        Args: { p_invoice_id: string; p_trigger_type: string }
+        Returns: boolean
       }
       cmms_asset_metrics: {
         Args: { p_asset_id?: string; p_window_days?: number }

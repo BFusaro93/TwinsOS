@@ -26,6 +26,7 @@ import {
   useDeleteAutomation,
 } from "@/lib/hooks/use-automations";
 import { useMeters } from "@/lib/hooks/use-meters";
+import { PO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
@@ -91,17 +92,8 @@ export function formatTrigger(
       return "New maintenance request submitted";
     case "wo_status_change":
       return `Work order status changes to "${trigger.toStatus.replace("_", " ")}"`;
-    case "po_status_change": {
-      const label: Record<string, string> = {
-        draft: "Draft",
-        pending_approval: "Pending Approval",
-        approved: "Approved",
-        rejected: "Rejected",
-        ordered: "Ordered",
-        closed: "Closed",
-      };
-      return `Purchase order status changes to "${label[trigger.toStatus] ?? trigger.toStatus}"`;
-    }
+    case "po_status_change":
+      return `Purchase order status changes to "${PO_STATUS_LABELS[trigger.toStatus] ?? trigger.toStatus}"`;
     case "vehicle_fault_code":
       return trigger.onlyCheckEngineLight
         ? "A vehicle reports a new fault code with the check-engine light on"
@@ -112,9 +104,9 @@ export function formatTrigger(
 export function formatAction(action: AutomationAction): string {
   switch (action.type) {
     case "create_work_order":
-      return `Create work order: "${action.title}" — ${action.priority} priority${action.assignedToName ? ` → ${action.assignedToName}` : ""}`;
+      return `Create work order: "${action.title}" — ${WO_PRIORITY_LABELS[action.priority] ?? action.priority} priority${action.assignedToName ? ` → ${action.assignedToName}` : ""}`;
     case "create_wo_request":
-      return `Create WO request: "${action.title}" — ${action.priority} priority${action.assignedToName ? ` → ${action.assignedToName}` : ""}`;
+      return `Create WO request: "${action.title}" — ${WO_PRIORITY_LABELS[action.priority] ?? action.priority} priority${action.assignedToName ? ` → ${action.assignedToName}` : ""}`;
     case "create_requisition":
       return `Create purchase requisition${action.notes ? `: ${action.notes}` : ""}`;
     case "send_notification":

@@ -130,16 +130,21 @@ export function useCreateDamageCase() {
         // below keeps the old "ignore surrounding spaces" rule.
         const pattern = input.customerName.trim().replace(/[\\%_]/g, (ch) => `\\${ch}`);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: clients } = await (supabase as any)
+        let clientQuery = (supabase as any)
           .from("clients")
           .select("id, display_name")
           .is("deleted_at", null)
-          .ilike("display_name", pattern)
-          .order("created_at")
-          .limit(5);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const match = (clients ?? []).find((c: any) => c.display_name.trim().toLowerCase() === normalizedName);
-        matchedClientId = match?.id ?? null;
+          .ilike("display_name", pattern);
+        // Scoped to the case's own org explicitly, not just by RLS.
+        if (data.org_id) clientQuery = clientQuery.eq("org_id", data.org_id);
+        const { data: clients } = await clientQuery.order("created_at").limit(5);
+        // Fire only when the name points at exactly ONE client — the same rule form
+        // submissions use. Two clients with the same name used to resolve to the oldest,
+        // which could send the damage-case sequence to the wrong customer.
+        const matches = ((clients ?? []) as { id: string; display_name: string | null }[]).filter(
+          (c) => (c.display_name ?? "").trim().toLowerCase() === normalizedName
+        );
+        matchedClientId = matches.length === 1 ? matches[0].id : null;
       }
 
       return { ...mapDamageCase(data), matchedClientId };
@@ -151,6 +156,8 @@ export function useCreateDamageCase() {
           triggerType: "damage_case_created",
           clientId: result.matchedClientId,
           matchValues: [result.caseType],
+          // Once per damage case (the run is scoped to it).
+          recordId: result.id,
         });
       }
     },

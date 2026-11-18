@@ -11,7 +11,9 @@ import { conditionRecordKind } from "./condition-applicability";
 import { applyWaitAdvancedSettings } from "./wait-schedule";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
-import { isJobScopedTrigger, isVisitScopedTrigger } from "./enrollment-scope";
+import { isJobScopedTrigger, isVisitScopedTrigger, recordScopeType } from "./enrollment-scope";
+import { invoiceDaysPastDue } from "@/lib/invoice-status";
+import { todayInZone } from "@/lib/time/zone";
 
 const log = logger.child("sequence-enrollment");
 
@@ -90,7 +92,11 @@ function shiftOnOrgCalendar(from: Date, days: number, timeZone: string): Date | 
  *  - prior enrollment still running → not eligible (already in progress)
  *  - prior enrollment finished      → eligible only if allow_reentry is true
  *                                      AND reentry_after_minutes has elapsed
- *                                      since it finished
+ *                                      since it STARTED (enrolled_at), and — for a
+ *                                      date-gap trigger (anchorKey) — the anchor date
+ *                                      has changed since that run
+ * A record-scoped trigger (enrollment-scope.ts RECORD_SCOPED_TRIGGERS: a form response,
+ * contract, contract term, damage case or card) dedupes on that record.
  */
 export async function isEligibleForEnrollment(
   supabase: AnyClient,
@@ -106,6 +112,20 @@ export async function isEligibleForEnrollment(
     visitDate?: string | null;
     /** Job-scoped run: dedupe on this job, not the client. */
     jobId?: string | null;
+    /** The start trigger. A visit-day run is deduped per trigger: a sequence started by both
+     *  "Visit dispatched" and "Visit completed" runs once for each on the same day. */
+    triggerType?: string | null;
+    /** Record-scoped run (RECORD_SCOPED_TRIGGERS): dedupe on (record_type, record_key). */
+    recordType?: string | null;
+    recordKey?: string | null;
+    /**
+     * Date-gap triggers (estimate_expiring / estimate_no_response / sales_meeting_reminder /
+     * credit_card_about_to_expire / contract_about_to_expire): the date the run is about
+     * (estimate sent_at or valid_until_date, meeting time, card id+expiry, contract end).
+     * Re-entry re-admits only when it differs from the previous run's — the delay alone
+     * passing re-sent "no response" emails about the same estimate every couple of days.
+     */
+    anchorKey?: string | null;
     allowReentry: boolean;
     reentryAfterMinutes: number;
   }
@@ -142,7 +162,7 @@ export async function isEligibleForEnrollment(
 
   let query = supabase
     .from("crm_sequence_enrollments")
-    .select("completed_at, stopped_at")
+    .select("enrolled_at, created_at, completed_at, stopped_at, anchor_key")
     .eq("sequence_id", params.sequenceId)
     .is("deleted_at", null)
     .order("enrolled_at", { ascending: false })
@@ -163,15 +183,20 @@ export async function isEligibleForEnrollment(
   } else if (params.visitDate) {
     // Once per client per SERVICE DAY: a stop's sibling visits (one per service,
     // one per crew) share one run; a visit on another day starts a new one. The
-    // same day firing again is held to allow_reentry.
+    // same day firing again is held to allow_reentry. Per start trigger: a morning
+    // "dispatched" run must not swallow the same day's "completed" run of the sequence
+    // (rows from before trigger_type was stored still count, so nothing doubles up).
     query = query.eq("client_id", params.clientId).eq("visit_date", params.visitDate);
+    if (params.triggerType) query = query.or(`trigger_type.eq.${params.triggerType},trigger_type.is.null`);
   } else if (params.jobId) {
     query = query.eq("job_id", params.jobId);
+  } else if (params.recordType && params.recordKey) {
+    query = query.eq("record_type", params.recordType).eq("record_key", params.recordKey);
   } else {
     query = query
       .eq("client_id", params.clientId)
       .is("estimate_id", null).is("ticket_id", null).is("invoice_id", null).is("meeting_id", null)
-      .is("visit_date", null).is("job_id", null);
+      .is("visit_date", null).is("job_id", null).is("record_key", null);
   }
 
   const { data: existing } = await query.maybeSingle();
@@ -183,8 +208,41 @@ export async function isEligibleForEnrollment(
 
   if (!params.allowReentry) return false;
 
-  const elapsedMinutes = (Date.now() - new Date(finishedAt).getTime()) / 60_000;
-  return elapsedMinutes >= params.reentryAfterMinutes;
+  // A date-gap run re-enters only for a NEW anchor (rescheduled meeting, re-sent or
+  // re-dated estimate, new card, renewed contract term). Older rows have no anchor
+  // stored and keep the plain delay rule.
+  if (params.anchorKey && existing.anchor_key && anchorsMatch(existing.anchor_key, params.anchorKey)) return false;
+
+  // Measured from when the previous run STARTED, not when it finished: a daily cron
+  // enrolls at ~09:00 and the run completes at ~09:15, so "re-enter after 1 day" counted
+  // from completion was 1425 minutes short the next morning and fired every other day.
+  // A short grace absorbs cron jitter / run order between one day's enrollment and the next.
+  const startedAt = existing.enrolled_at ?? existing.created_at ?? finishedAt;
+  const graceMinutes = params.reentryAfterMinutes >= 1440 ? REENTRY_GRACE_MINUTES : 0;
+  const elapsedMinutes = (Date.now() - new Date(startedAt).getTime()) / 60_000;
+  return elapsedMinutes + graceMinutes >= params.reentryAfterMinutes;
+}
+
+/** Slack for day-based re-entry delays (cron jitter / processing order between days). */
+const REENTRY_GRACE_MINUTES = 60;
+
+/** Same anchor? Timestamps compare by instant (DB vs JS precision/format), anything else exactly. */
+function anchorsMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const isTs = (v: string) => /^\d{4}-\d{2}-\d{2}T/.test(v);
+  if (isTs(a) && isTs(b)) {
+    const ta = new Date(a).getTime();
+    const tb = new Date(b).getTime();
+    return !Number.isNaN(ta) && ta === tb;
+  }
+  return false;
+}
+
+/** A timestamp anchor in one canonical form (ISO, UTC, ms) — what crm_sequence_enrollments.anchor_key stores. */
+export function timestampAnchor(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const t = new Date(value);
+  return Number.isNaN(t.getTime()) ? null : t.toISOString();
 }
 
 /**
@@ -249,6 +307,11 @@ export async function enrollClientInSequence(
     visitDate?: string | null;
     /** The job a job-event trigger fired for — the run is scoped to it (once per job). */
     jobId?: string | null;
+    /** Record-scoped run (RECORD_SCOPED_TRIGGERS) — once per record. */
+    recordType?: string | null;
+    recordKey?: string | null;
+    /** Date-gap anchor this run was created for (see isEligibleForEnrollment). */
+    anchorKey?: string | null;
   }
 ): Promise<string | null> {
   const { data: firstEvent } = await supabase
@@ -281,6 +344,8 @@ export async function enrollClientInSequence(
       ...(params.visitId ? { visit_id: params.visitId } : {}),
       ...(params.visitDate ? { visit_date: params.visitDate } : {}),
       ...(params.jobId ? { job_id: params.jobId } : {}),
+      ...(params.recordType && params.recordKey ? { record_type: params.recordType, record_key: params.recordKey } : {}),
+      ...(params.anchorKey ? { anchor_key: params.anchorKey } : {}),
       enrolled_at: new Date().toISOString(),
       // Start at the first ACTIVE step's real position (positions can have
       // gaps from deleted/deactivated steps), past it when it's a wait whose
@@ -303,6 +368,8 @@ export async function enrollClientInSequence(
       visitId: params.visitId ?? null,
       visitDate: params.visitDate ?? null,
       jobId: params.jobId ?? null,
+      recordType: params.recordType ?? null,
+      recordKey: params.recordKey ?? null,
     };
     // 23505 = one of the crm_sequence_enrollments_active_*_uidx partial
     // unique indexes: an in-flight enrollment for this (sequence, scope key)
@@ -314,6 +381,7 @@ export async function enrollClientInSequence(
       // Expected for a stop's sibling visits completing/dispatching at once: the
       // first one enrolled the client for that day (crm_sequence_enrollments_active_visit_day_uidx).
       if (params.visitDate) log.info("enrollment skipped: already enrolled for this service day", ctx);
+      else if (params.recordKey) log.info("enrollment skipped: already enrolled for this record", ctx);
       else log.warn("enrollment skipped: active enrollment already exists", { ...ctx, detail: error.message });
     } else if (error) {
       log.error("enrollment insert failed", { ...ctx, code: error.code, detail: error.message });
@@ -406,7 +474,14 @@ const TICKET_FIELD_GETTERS: Partial<Record<ConditionField, (ticket: Record<strin
 const SPECIAL_TICKET_CONDITION_FIELDS = new Set<ConditionField>(["ticket_category"]);
 
 const INVOICE_FIELD_GETTERS: Partial<Record<ConditionField, (invoice: Record<string, unknown>) => unknown>> = {
-  invoice_past_due_days: (i) => daysSince(i.due_date),
+  // The same rule as the invoice-past-due cron and every A/R figure: days past the due
+  // date — or the invoice date when there is none — on the ORG's calendar. A UTC
+  // timestamp diff never matched a due-date-less invoice and was off by a day in the
+  // evening. org_today is merged onto this object below.
+  invoice_past_due_days: (i) =>
+    typeof i.org_today === "string"
+      ? invoiceDaysPastDue({ dueDate: (i.due_date as string | null) ?? null, invoiceDate: (i.invoice_date as string | null) ?? null }, i.org_today)
+      : null,
   // last_payment_date isn't a real crm_invoices column — it's merged onto
   // this object from a separate crm_payments query below.
   invoice_was_paid_days: (i) => daysSince(i.last_payment_date),
@@ -654,7 +729,7 @@ export async function evaluateConditionSet(
       ? supabase.from("crm_tickets").select("category, due_date").eq("id", ticketId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
       : Promise.resolve(null),
     needsInvoice && invoiceId
-      ? supabase.from("crm_invoices").select("due_date").eq("id", invoiceId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
+      ? supabase.from("crm_invoices").select("org_id, due_date, invoice_date").eq("id", invoiceId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
       : Promise.resolve(null),
     needsEstimateServices && estimateId
       ? supabase.from("estimate_line_items").select("service_name").eq("estimate_id", estimateId).is("deleted_at", null)
@@ -688,7 +763,11 @@ export async function evaluateConditionSet(
     ? await getClientCustomFieldFacts(supabase, clientId, conditions)
     : null;
 
-  const invoiceWithPayment = invoice ? { ...invoice, last_payment_date: lastPaymentDate } : null;
+  const invoiceOrgToday =
+    invoice && conditions.some((c) => c.field === "invoice_past_due_days") && typeof invoice.org_id === "string"
+      ? todayInZone(await getOrgTimeZone(supabase, invoice.org_id))
+      : null;
+  const invoiceWithPayment = invoice ? { ...invoice, last_payment_date: lastPaymentDate, org_today: invoiceOrgToday } : null;
 
   // These fields are rendered with the multi-select checkbox picker (see
   // TAG_CONDITION_FIELDS / SERVICE_CONDITION_FIELDS / etc. in
@@ -973,6 +1052,7 @@ export async function fireServiceVisitCompletedTriggers(
       clientId: params.clientId,
       estimateId: null,
       visitDate,
+      triggerType: "service_visit_completed",
       allowReentry: seq.allow_reentry ?? false,
       reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
     });
@@ -1039,6 +1119,12 @@ export async function fireSimpleTrigger(
     /** The job a job-event trigger (job_created, job_cancelled, package_*) is about —
      *  the run is deduped on it: once per job. */
     jobId?: string | null;
+    /** For a record-scoped trigger (enrollment-scope.ts RECORD_SCOPED_TRIGGERS): the record
+     *  key the run is deduped on when it isn't simply recordId — the contract term
+     *  (`<id>:<end date>`) or the card (`<pm id>:<yyyy-mm>`). Defaults to recordId. */
+    recordKey?: string | null;
+    /** Date-gap anchor (see isEligibleForEnrollment): re-entry only for a new anchor. */
+    anchorKey?: string | null;
   },
   /** The org's triggers of this type, already loaded by a caller that fires many events for
    *  one org (the past-due crons) — saves a paged trigger query per row. */
@@ -1064,6 +1150,10 @@ export async function fireSimpleTrigger(
   // narrow the scope — a stray id on any other trigger keeps client-level dedupe.
   const scopeVisitId = isVisitScopedTrigger(params.triggerType) ? params.visitId ?? null : null;
   const scopeJobId = isJobScopedTrigger(params.triggerType) ? params.jobId ?? null : null;
+  // Once per record (form response, contract, contract term, damage case, card) for those
+  // triggers; a caller that passes no record keeps the old client-level dedupe.
+  const scopeRecordType = recordScopeType(params.triggerType);
+  const scopeRecordKey = scopeRecordType ? params.recordKey ?? params.recordId ?? null : null;
   // Visit runs dedupe per client per service day; read after the caller's write, so
   // a date change yields the visit's NEW date.
   const scopeVisitDate = isVisitScopedTrigger(params.triggerType)
@@ -1103,6 +1193,10 @@ export async function fireSimpleTrigger(
       meetingId: params.meetingId ?? null,
       visitDate: scopeVisitDate,
       jobId: scopeJobId,
+      triggerType: params.triggerType,
+      recordType: scopeRecordKey ? scopeRecordType : null,
+      recordKey: scopeRecordKey,
+      anchorKey: params.anchorKey ?? null,
       allowReentry: seq.allow_reentry ?? false,
       reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
     });
@@ -1122,6 +1216,9 @@ export async function fireSimpleTrigger(
       visitId: scopeVisitId,
       visitDate: scopeVisitDate,
       jobId: scopeJobId,
+      recordType: scopeRecordKey ? scopeRecordType : null,
+      recordKey: scopeRecordKey,
+      anchorKey: params.anchorKey ?? null,
     });
     if (enrollmentId) enrolledIds.push(enrollmentId);
   }

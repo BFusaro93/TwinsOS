@@ -12,7 +12,7 @@ import { createElement } from "react";
 import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { fireClaimedInvoiceEvents } from "@/lib/automations/invoice-events";
 import { livePinnedTemplate, resolveDefaultInvoicePdfTemplate } from "@/lib/invoices/default-pdf-template";
 import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { billingTermsLabel } from "@/lib/constants";
@@ -611,8 +611,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (inv.client_id && effOrgId && !orgReadOnly) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await fireSimpleTrigger(supabase as any, { orgId: effOrgId, clientId: inv.client_id, invoiceId, triggerType: "invoice_sent" });
+    // invoice_created ("issued": it has its number) and invoice_sent each fire once
+    // per invoice: the crm_invoices trigger queued them, and claiming here fires
+    // them now instead of on the next automations run. A resend claims nothing.
+    await fireClaimedInvoiceEvents(effOrgId, inv.client_id, invoiceId, ["invoice_created", "invoice_sent"]);
   }
 
   // Log activity

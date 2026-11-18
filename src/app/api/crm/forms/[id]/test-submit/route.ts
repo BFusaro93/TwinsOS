@@ -24,7 +24,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
   {
-    const denied = await rejectWithoutFormsPermission(supabase, "view");
+    // forms_edit, not just view: a test submission is real — it creates leads, tickets and
+    // tags and fires live automations — so it needs the same key as building the form.
+    const denied = await rejectWithoutFormsPermission(supabase, "edit");
     if (denied) return denied;
   }
 

@@ -10,7 +10,7 @@ import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems, sumSubitemTotals } from "@
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { complexityFactor } from "@/lib/estimate-calc";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { markEstimateFirstSent } from "@/lib/estimates/estimate-sent";
 import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { buildEstimateGridHtml } from "@/lib/estimates/estimate-grid-html";
@@ -572,10 +572,9 @@ export async function POST(
     cc_emails: ccEmails,
   });
 
-  // Move estimate to "sent" — sent_at is set only on the first send, as the
-  // anchor timestamp for "no response in N days" automation triggers.
-  // Conditioned on the stage still being open so a client accepting while
-  // this send was in flight isn't reverted.
+  // Move estimate to "sent". Conditioned on the stage still being open so a client
+  // accepting while this send was in flight isn't reverted. sent_at (the anchor for "no
+  // response in N days") is stamped below by markEstimateFirstSent, on the FIRST move only.
   if (opensForAcceptance) {
     const sentIso = new Date().toISOString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -584,7 +583,6 @@ export async function POST(
       updated_at: sentIso,
       // A (re)send restarts the expiry-reminder cycle.
       expiry_notified_at: null,
-      ...(est.sent_at ? {} : { sent_at: sentIso }),
     }).eq("id", estimateId).in("stage", ["draft", "quote", "sent"]);
   }
 
@@ -606,22 +604,14 @@ export async function POST(
     }, { html: resolvedBody, cc: ccEmails });
   }
 
-  // ── Enroll client in estimate_sent automation sequences ───────────────────
-  // Not for a view-only copy of a decided estimate: "no response" follow-ups
-  // would chase a client who already answered.
+  // ── "Estimate was sent" automations ───────────────────────────────────────
+  // Fires once per estimate, on its FIRST move into Sent by any path (this send, a
+  // copied proposal link, or a manual stage change): markEstimateFirstSent stamps
+  // sent_at only while it is empty, and only that claim fires. A re-send doesn't
+  // restart the sequence. Not for a view-only copy of a decided estimate (it isn't
+  // moved to Sent): "no response" follow-ups would chase a client who already answered.
   if (opensForAcceptance) {
-    try {
-      await fireSimpleTrigger(supabase, {
-        orgId: est.org_id,
-        clientId: est.client_id,
-        estimateId,
-        triggerType: "estimate_sent",
-        matchValues: est.sales_rep_id ? [est.sales_rep_id] : undefined,
-      });
-    } catch (enrollErr) {
-      // best-effort — don't fail the send if enrollment errors
-      log.error("Enrollment error", { estimateId, error: enrollErr instanceof Error ? enrollErr.message : String(enrollErr) });
-    }
+    await markEstimateFirstSent(supabase, estimateId, effOrgId);
   }
 
   return NextResponse.json({ ok: true, proposalUrl, bouncedSkipped: bouncedEmails });

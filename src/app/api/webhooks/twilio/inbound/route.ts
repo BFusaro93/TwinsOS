@@ -284,12 +284,28 @@ export async function POST(request: Request) {
     if (contactErr) log.error("failed to apply START to contacts", { orgId, error: contactErr });
     const primaryIds = orgMatches.filter((c) => c.match_kind === "primary").map((c) => c.id);
     if (primaryIds.length > 0) {
+      // Who wasn't opted in yet — only a real false→true change starts "Has Opted In to
+      // SMS" automations (a START from someone already opted in isn't a new opt-in).
+      const { data: beforeRows } = await supabase
+        .from("clients")
+        .select("id, sms_opt_in")
+        .eq("org_id", orgId)
+        .in("id", primaryIds);
+      const newlyOptedIn = ((beforeRows ?? []) as { id: string; sms_opt_in: boolean | null }[])
+        .filter((c) => c.sms_opt_in !== true)
+        .map((c) => c.id);
       const { error: optInErr } = await supabase
         .from("clients")
         .update({ sms_opt_in: true, sms_opt_in_at: new Date().toISOString(), sms_opt_in_source: "keyword" })
         .eq("org_id", orgId)
         .in("id", primaryIds);
       if (optInErr) log.error("failed to apply START", { orgId, error: optInErr.message });
+      else {
+        // orgId and the client ids came from the phone match scoped to the number's org.
+        for (const clientId of newlyOptedIn) {
+          await fireServerTrigger(supabase, { orgId, clientId, triggerType: "has_opted_in_sms" });
+        }
+      }
     }
   }
 

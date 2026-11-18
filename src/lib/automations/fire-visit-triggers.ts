@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { fetchOrgTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { isZapierTriggerType } from "@/lib/integrations/zapier";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 import { logger } from "@/lib/logger";
 import type { TriggerType } from "@/types/crm-automations";
@@ -38,8 +39,17 @@ export type ChangedVisit = {
 export async function fireVisitTriggers(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
-  params: { orgId: string; triggerTypes: TriggerType[]; visits: ChangedVisit[] }
+  params: {
+    orgId: string;
+    triggerTypes: TriggerType[];
+    visits: ChangedVisit[];
+    /** Stop sending due steps right away after this long (ms): a large batch must not run
+     *  the request out of time. Enrollments not processed here stay due and the
+     *  automations cron sends them on its next sweep. Unlimited when omitted. */
+    processBudgetMs?: number;
+  }
 ): Promise<void> {
+  const startedAt = Date.now();
   try {
     if (params.triggerTypes.length === 0 || params.visits.length === 0) return;
 
@@ -53,53 +63,77 @@ export async function fireVisitTriggers(
       }
     }
 
+    // Service ids per visit, loaded in batches: a specific job_service_id names that
+    // line's service; a whole-job visit covers every service the job INCLUDES (a line
+    // marked not included isn't performed, so it must not match a service filter).
+    const serviceIdByLine = new Map<string, string>();
+    const serviceIdsByJob = new Map<string, string[]>();
+    const lineIds = [...new Set(params.visits.map((v) => v.job_service_id).filter((x): x is string => !!x))];
+    const wholeJobIds = [...new Set(params.visits.filter((v) => !v.job_service_id && v.job_id).map((v) => v.job_id as string))];
+    for (let i = 0; i < lineIds.length; i += 100) {
+      const { data } = await db.from("crm_job_services").select("id, service_id").in("id", lineIds.slice(i, i + 100));
+      for (const r of (data ?? []) as { id: string; service_id: string | null }[]) {
+        if (r.service_id) serviceIdByLine.set(r.id, r.service_id);
+      }
+    }
+    for (let i = 0; i < wholeJobIds.length; i += 100) {
+      const { data } = await db
+        .from("crm_job_services")
+        .select("job_id, service_id")
+        .in("job_id", wholeJobIds.slice(i, i + 100))
+        .not("included", "is", false);
+      for (const r of (data ?? []) as { job_id: string; service_id: string | null }[]) {
+        if (!r.service_id) continue;
+        serviceIdsByJob.set(r.job_id, [...(serviceIdsByJob.get(r.job_id) ?? []), r.service_id]);
+      }
+    }
+
     // One firing per (client, service day) with the union of the day's service ids and
-    // its first visit id; visits without an id/date fold per client. Service ids per
-    // visit: a specific job_service_id, else every service on the job.
+    // its first visit id; visits without an id/date fold per client.
     const firings = new Map<string, { clientId: string; visitId: string | null; visitDate: string | null; serviceIds: Set<string> }>();
-    const jobServiceCache = new Map<string, string[]>();
     for (const v of params.visits) {
       if (!v.client_id) continue;
       const visitDate = v.id ? dateById.get(v.id) ?? null : null;
       const firingKey = visitDate ? `day:${v.client_id}:${visitDate}` : `client:${v.client_id}`;
       const firing = firings.get(firingKey) ?? { clientId: v.client_id, visitId: v.id ?? null, visitDate, serviceIds: new Set<string>() };
       firings.set(firingKey, firing);
-      const set = firing.serviceIds;
-      let ids: string[] = [];
-      if (v.job_service_id) {
-        const key = `js:${v.job_service_id}`;
-        if (!jobServiceCache.has(key)) {
-          const { data } = await db.from("crm_job_services").select("service_id").eq("id", v.job_service_id).maybeSingle();
-          jobServiceCache.set(key, data?.service_id ? [data.service_id as string] : []);
-        }
-        ids = jobServiceCache.get(key) ?? [];
-      } else if (v.job_id) {
-        const key = `job:${v.job_id}`;
-        if (!jobServiceCache.has(key)) {
-          const { data } = await db.from("crm_job_services").select("service_id").eq("job_id", v.job_id);
-          jobServiceCache.set(
-            key,
-            ((data ?? []) as { service_id: string | null }[]).map((s) => s.service_id).filter((x): x is string => !!x)
-          );
-        }
-        ids = jobServiceCache.get(key) ?? [];
-      }
-      for (const id of ids) set.add(id);
+      const ids = v.job_service_id
+        ? (serviceIdByLine.has(v.job_service_id) ? [serviceIdByLine.get(v.job_service_id) as string] : [])
+        : v.job_id ? serviceIdsByJob.get(v.job_id) ?? [] : [];
+      for (const id of ids) firing.serviceIds.add(id);
+    }
+
+    // The org's triggers of each type, loaded ONCE for the whole batch instead of once
+    // per client (a 500-visit bulk action re-ran the paged trigger lookup per client).
+    const triggersByType = new Map<TriggerType, unknown[]>();
+    for (const triggerType of params.triggerTypes) {
+      triggersByType.set(triggerType, await fetchOrgTriggers(db, params.orgId, triggerType));
     }
 
     const enrollmentIds: string[] = [];
     for (const { clientId, visitId, visitDate, serviceIds } of firings.values()) {
       for (const triggerType of params.triggerTypes) {
+        const triggers = triggersByType.get(triggerType) ?? [];
+        // Nothing configured and no Zapier hook to notify: skip the per-client work.
+        if (triggers.length === 0 && !isZapierTriggerType(triggerType)) continue;
+        // One client's failure never stops the rest of the batch.
         try {
           enrollmentIds.push(
-            ...(await fireSimpleTrigger(db, {
-              orgId: params.orgId,
-              clientId,
-              triggerType,
-              matchValues: serviceIds.size > 0 ? [...serviceIds] : undefined,
-              visitId,
-              visitDate,
-            }))
+            ...(await fireSimpleTrigger(
+              db,
+              {
+                orgId: params.orgId,
+                clientId,
+                triggerType,
+                matchValues: serviceIds.size > 0 ? [...serviceIds] : undefined,
+                visitId,
+                visitDate,
+                // The visit the event is about — Zapier's visit_dispatched hook sends that
+                // record, not the client's newest dispatched visit.
+                recordId: visitId,
+              },
+              triggers
+            ))
           );
         } catch (err) {
           log.error("fire failed", { triggerType, clientId, error: err instanceof Error ? err.message : String(err) });
@@ -109,7 +143,12 @@ export async function fireVisitTriggers(
 
     if (enrollmentIds.length > 0) {
       const admin = createServiceClient();
-      for (const enrollmentId of enrollmentIds) {
+      for (let i = 0; i < enrollmentIds.length; i++) {
+        if (params.processBudgetMs !== undefined && Date.now() - startedAt > params.processBudgetMs) {
+          log.info("immediate processing deferred to the automations cron", { deferred: enrollmentIds.length - i });
+          break;
+        }
+        const enrollmentId = enrollmentIds[i];
         try {
           await processEnrollmentImmediately(admin, enrollmentId);
         } catch (err) {

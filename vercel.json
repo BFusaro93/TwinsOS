@@ -45,7 +45,7 @@
     },
     {
       "path": "/api/cron/contract-expiry-notify",
-      "schedule": "0 8 * * *"
+      "schedule": "0 14 * * *"
     },
     {
       "path": "/api/cron/warranty-expiry-notify",
@@ -65,7 +65,7 @@
     },
     {
       "path": "/api/crm/estimates/automation-date-triggers",
-      "schedule": "0 9 * * *"
+      "schedule": "5 14 * * *"
     },
     {
       "path": "/api/cron/scheduled-campaigns",
@@ -73,15 +73,15 @@
     },
     {
       "path": "/api/cron/invoice-past-due",
-      "schedule": "0 9 * * *"
+      "schedule": "5 14 * * *"
     },
     {
       "path": "/api/cron/ticket-past-due",
-      "schedule": "0 9 * * *"
+      "schedule": "5 14 * * *"
     },
     {
       "path": "/api/cron/card-expiry-notify",
-      "schedule": "0 8 * * *"
+      "schedule": "0 14 * * *"
     },
     {
       "path": "/api/cron/trial-reminders",

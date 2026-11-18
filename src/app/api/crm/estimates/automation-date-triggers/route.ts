@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
+import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet, timestampAnchor } from "@/lib/automations/sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd } from "@/lib/time/zone";
 import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { resolveDateGapDays } from "@/lib/automations/activation-warnings";
 // Loops every org; give it room before the default function limit.
 export const maxDuration = 300;
 
@@ -81,8 +82,10 @@ async function handleRun(request: Request) {
 
     const orgId = auto.org_id as string;
     if (await orgCanceled(orgId)) continue; // canceled orgs get no automated enrollments
-    const days = (trigger.config as { days?: number } | null)?.days;
-    if (!days || days <= 0) continue;
+    // A blank "days" box means the builder's default (7); an unusable value is skipped
+    // (the activation check warns about it).
+    const days = resolveDateGapDays(trigger.config);
+    if (days === null) continue;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let matches: any[] = [];
@@ -97,13 +100,17 @@ async function handleRun(request: Request) {
       // rather than over-fetching and re-filtering.
       const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
       // Paged: a single select stops at 1,000 rows in arbitrary order.
-      matches = await fetchAllRows<{ id: string; client_id: string }>(() =>
+      matches = await fetchAllRows<{ id: string; client_id: string; sent_at: string | null; valid_until_date: string | null }>(() =>
         supabase
           .from("estimates")
-          .select("id, client_id")
+          .select("id, client_id, sent_at, valid_until_date")
           .eq("org_id", orgId)
           .in("stage", ["sent", "quote"])
           .is("deleted_at", null)
+          // Only estimates the client actually received: 'quote' is the internal
+          // Quote Ready stage, so without this an expiry reminder went out about
+          // an estimate that was never sent.
+          .not("sent_at", "is", null)
           .not("valid_until_date", "is", null)
           .gte("valid_until_date", orgToday)
           .lte("valid_until_date", shiftYmd(orgToday, days))
@@ -118,10 +125,10 @@ async function handleRun(request: Request) {
       // years-old estimates every day.
       const floor = new Date(cutoff);
       floor.setDate(floor.getDate() - NO_RESPONSE_LOOKBACK_DAYS);
-      matches = await fetchAllRows<{ id: string; client_id: string }>(() =>
+      matches = await fetchAllRows<{ id: string; client_id: string; sent_at: string | null; valid_until_date: string | null }>(() =>
         supabase
           .from("estimates")
-          .select("id, client_id")
+          .select("id, client_id, sent_at, valid_until_date")
           .eq("org_id", orgId)
           .in("stage", ["sent", "quote"])
           .is("deleted_at", null)
@@ -134,6 +141,10 @@ async function handleRun(request: Request) {
     for (const est of matches) {
       if (Date.now() - startedAt > RUN_BUDGET_MS) { stoppedEarly = true; break outer; }
       if (!(await triggerConditionsMet(supabase, trigger.id, est.client_id, est.id))) continue;
+      // The date this run is about: with re-entry on, the same estimate re-enters only once
+      // it is re-sent (no response) or re-dated (expiring) — not every time the delay passes.
+      const anchorKey =
+        trigger.trigger_type === "estimate_expiring" ? est.valid_until_date ?? null : timestampAnchor(est.sent_at);
 
       // A date-gap trigger fires off a fixed anchor (valid_until_date / sent_at)
       // that never changes, so without allow_reentry a prior enrollment row —
@@ -143,6 +154,7 @@ async function handleRun(request: Request) {
         sequenceId: trigger.sequence_id,
         clientId: est.client_id,
         estimateId: est.id,
+        anchorKey,
         allowReentry: seq.allow_reentry ?? false,
         reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
       });
@@ -154,6 +166,7 @@ async function handleRun(request: Request) {
         clientId: est.client_id,
         estimateId: est.id,
         triggerType: trigger.trigger_type,
+        anchorKey,
       });
       if (ok) enrolled++;
     }

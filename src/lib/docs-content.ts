@@ -2196,7 +2196,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     items: [
       {
         q: "A client had three visits completed on the same day. Why did my \"Visit completed\" automation only send one email?",
-        a: "Visit triggers run once per client per service day. Every visit that client has that day, across services, crews and properties, shares one run, so they get one message instead of three. A visit on another day starts a new run.",
+        a: "Visit triggers run once per client per service day. Every visit that client has that day, across services, crews and properties, shares one run, so they get one message instead of three. A visit on another day starts a new run. Visit completed also waits for the client's day to be finished (no scheduled, dispatched or in-progress visit left that day), so the email goes out once the last visit is completed, skipped, cancelled or moved, and it names every service done that day.",
       },
       {
         q: "Will a weekly mow follow-up automation send every week?",
@@ -2936,7 +2936,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which merge tags can an automation's email or text use?",
-        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags: [servicename] and [servicedate] for the client's last completed service, [nextservicename] and [nextservicedate] for their next scheduled one. [chemicalnotice] adds the compact Notice of Treatment for that last completed visit and is blank when it logged no chemicals. A tag with no value is left blank.",
+        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags. In a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it; [servicename], [servicedate] and [chemicalnotice] (the compact Notice of Treatment) read that day's visits. Otherwise [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. For a day-before reminder, dispatch the day before and start the sequence with Visit dispatched and a text such as \"We'll be out on [visitdate] for [visitservices].\" A tag with no value is left blank.",
       },
       {
         q: "Why didn't a form submission create a ticket?",

@@ -1,3 +1,6 @@
+import type { POStatus } from "@/types/purchase-order";
+import type { WorkOrderPriority } from "@/types/cmms";
+
 // ─── Triggers ─────────────────────────────────────────────────────────────────
 
 export type TriggerType =
@@ -39,7 +42,9 @@ export interface WOStatusChangeTrigger {
 }
 export interface POStatusChangeTrigger {
   type: "po_status_change";
-  toStatus: "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed";
+  /** A real purchase_orders.status value. Rules saved before 2027-01 may hold the old
+   *  requisition-style names (pending_approval / closed / draft) — see LEGACY_PO_TRIGGER_STATUS. */
+  toStatus: POStatus;
 }
 
 export interface VehicleFaultCodeTrigger {
@@ -60,6 +65,9 @@ export type AutomationTrigger =
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
+/** Same values as work_orders / maintenance_requests priority (CHECK constraint). */
+export type AutomationPriority = WorkOrderPriority;
+
 export type ActionType =
   | "create_work_order"
   | "create_wo_request"
@@ -71,7 +79,7 @@ export type ActionType =
 export interface CreateWorkOrderAction {
   type: "create_work_order";
   title: string;
-  priority: "low" | "medium" | "high" | "urgent";
+  priority: AutomationPriority;
   /** crm_employees.id of the assignee (same FK as work_orders.assigned_to_id); "" = unassigned. */
   assignedToId: string;
   /** Display name snapshot of the assignee, for the rule summary. */
@@ -82,7 +90,7 @@ export interface CreateWorkOrderAction {
 export interface CreateWORequestAction {
   type: "create_wo_request";
   title: string;
-  priority: "low" | "medium" | "high" | "urgent";
+  priority: AutomationPriority;
   /** crm_employees.id; carried onto the request and then its converted work order. "" = unassigned. */
   assignedToId: string;
   assignedToName: string;
@@ -98,7 +106,10 @@ export interface SendNotificationAction {
 }
 export interface SendEmailAction {
   type: "send_email";
-  recipient: string;        // email address or name
+  /** A single email address. */
+  recipient: string;
+  /** Optional body text; the automation's name is always appended. */
+  message: string;
 }
 
 export type AutomationAction =
@@ -120,4 +131,39 @@ export interface AutomationRule {
   lastFiredAt: string | null;
   lastFiredValue: number | null;
   pendingReset: boolean;
+}
+
+// ─── Legacy value normalisation ──────────────────────────────────────────────
+// Shared by the rule mapper (dialog/list) and the server executor, so a rule
+// saved with an old value behaves and displays the same everywhere. Migration
+// 20270109001000 rewrites stored rows too; these keep any straggler working.
+
+const PO_STATUSES: readonly POStatus[] = [
+  "requested", "pending", "approved", "ordered", "canceled", "completed", "rejected", "partially_fulfilled",
+];
+
+/** Old PO trigger values (requisition-style names the PO table never uses) → the real PO status. */
+export const LEGACY_PO_TRIGGER_STATUS: Readonly<Record<string, POStatus>> = {
+  pending_approval: "pending",
+  closed: "completed",
+};
+
+/**
+ * A saved po_status_change to_status as a real PO status, or null when it can never
+ * match ("draft" — POs have no draft status — or anything unknown).
+ */
+export function normalizePOTriggerStatus(value: unknown): POStatus | null {
+  if (typeof value !== "string") return null;
+  if ((PO_STATUSES as readonly string[]).includes(value)) return value as POStatus;
+  return LEGACY_PO_TRIGGER_STATUS[value] ?? null;
+}
+
+const PRIORITIES: readonly AutomationPriority[] = ["low", "medium", "high", "critical"];
+
+/** A saved action priority as a value work_orders / maintenance_requests accept ("urgent" → "critical"), or null. */
+export function normalizeAutomationPriority(value: unknown): AutomationPriority | null {
+  if (value === "urgent") return "critical";
+  return typeof value === "string" && (PRIORITIES as readonly string[]).includes(value)
+    ? (value as AutomationPriority)
+    : null;
 }

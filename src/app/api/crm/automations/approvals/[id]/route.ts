@@ -14,7 +14,7 @@ import {
   stopEnrollment,
   type EnrollmentGateRow,
 } from "@/lib/automations/sequence-processor";
-import { sendResolvedSequenceSms, nextSmsSendTime, resolveSmsRecipients } from "@/lib/automations/sequence-sms";
+import { sendResolvedSequenceSms, nextSmsSendTime, resolveSmsRecipients, loadIsMarketingSequence } from "@/lib/automations/sequence-sms";
 import { instantToZoneWallClock } from "@/lib/time/zone";
 import { logSequenceExecution, shouldStopSequence } from "@/lib/automations/sequence-enrollment";
 
@@ -212,7 +212,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // ── Gates (approve) ──────────────────────────────────────────────────────
   const { data: enrollmentData } = await admin
     .from("crm_sequence_enrollments")
-    .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, next_event_position, stopped_at, completed_at, deleted_at")
+    .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, visit_date, next_event_position, stopped_at, completed_at, deleted_at")
     .eq("id", approval.enrollment_id)
     .eq("org_id", approval.org_id)
     .maybeSingle();
@@ -271,7 +271,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!enrollment.client_id) {
       reason = "this step has no client to send to";
     } else if (approval.channel === "sms") {
-      const fresh = await resolveSmsRecipients(admin, { orgId: approval.org_id, clientId: enrollment.client_id, toSelection });
+      const fresh = await resolveSmsRecipients(admin, {
+        orgId: approval.org_id, clientId: enrollment.client_id, toSelection,
+        // A marketing sequence's texts skip Do Not Market clients (checked again: the flag may have changed while it waited).
+        marketing: await loadIsMarketingSequence(admin, approval.sequence_id),
+      });
       if ("error" in fresh) reason = fresh.error;
       else {
         const kept = intersectPhones(approval.to_phone ?? "", fresh.toPhones);

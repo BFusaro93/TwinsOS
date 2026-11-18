@@ -215,7 +215,7 @@ export function useCreateContract() {
     },
     onSuccess: (contract) => {
       qc.invalidateQueries({ queryKey: ["crm-contracts"] });
-      fireAutomationTrigger({ triggerType: "contract_created", clientId: contract.clientId });
+      fireAutomationTrigger({ triggerType: "contract_created", clientId: contract.clientId, recordId: contract.id });
     },
   });
 }
@@ -726,7 +726,7 @@ export function useUpdateContractStatus() {
         await cancelFutureContractVisits(supabase, id, data.org_id as string);
       }
 
-      return { clientId: data?.client_id as string | undefined, status, previousStatus: currentStatus ?? null, skipped: false as const };
+      return { contractId: id, clientId: data?.client_id as string | undefined, status, previousStatus: currentStatus ?? null, skipped: false as const };
     },
     onSuccess: (data) => {
       if (data.skipped) return;
@@ -735,7 +735,7 @@ export function useUpdateContractStatus() {
         qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       }
       if (data.status === "signed" && data.clientId) {
-        fireAutomationTrigger({ triggerType: "contract_signed", clientId: data.clientId });
+        fireAutomationTrigger({ triggerType: "contract_signed", clientId: data.clientId, recordId: data.contractId });
       }
     },
   });

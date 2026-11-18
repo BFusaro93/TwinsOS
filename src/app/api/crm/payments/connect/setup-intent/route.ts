@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { getOrCreateStripeCustomer, summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
+import { saveClientPaymentMethod } from "@/lib/stripe/save-client-payment-method";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
@@ -206,16 +207,13 @@ export async function PUT(request: Request) {
   const pm = setupIntent.payment_method;
   const summary = summarizePaymentMethod(pm);
 
-  const serviceClient = createServiceClient();
-  const { error } = await serviceClient
-    .from("clients")
-    .update({
-      saved_payment_method_id: pm.id,
-      saved_payment_method_type: pm.type,
-      saved_payment_method_summary: summary,
-      autopay_enabled: enableAutopay,
-    })
-    .eq("id", clientId);
+  const { error } = await saveClientPaymentMethod(createServiceClient(), {
+    orgId: effOrgId,
+    clientId,
+    pm,
+    summary,
+    enableAutopay,
+  });
   if (error) {
     log.error("failed to save payment method", { error, clientId });
     return NextResponse.json({ error: "Failed to save payment method" }, { status: 500 });

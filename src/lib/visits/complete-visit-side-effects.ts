@@ -1,11 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
 import { loadPrintedSubitems, splitPrintedSubitems, type PrintedSubitem } from "@/lib/invoices/printed-subitems";
-import type { Database } from "@/types/supabase";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { logger } from "@/lib/logger";
-import { fireServiceVisitCompletedTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
+import { fireVisitDayCompletedTriggers } from "@/lib/automations/visit-day-completed";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
@@ -32,8 +29,8 @@ import { billableJobProductStatusesForVisit, visitLineAmount } from "@/lib/invoi
  *      increment_invoice_totals; upon-completion bills each visit) and tax pass-through
  *      (crm_job_services.is_taxable + estimate / client default rate).
  *   3. "Visit completed — <service> (<date>)" client_activity timeline row.
- *   4. service_visit_completed / visit_completed automation triggers, driven
- *      through any immediately-due steps.
+ *   4. service_visit_completed / visit_completed automation triggers once the
+ *      client's service day is finished, driven through any immediately-due steps.
  *
  * Callers own authentication, authorization and the status flip itself.
  * The office route passes its RLS-scoped user client; the crew clock-out
@@ -979,59 +976,13 @@ export async function applyVisitCompletionSideEffects(
   }
 
   // ── 4. Automation triggers ────────────────────────────────────────────────
-  // Fire any 'service_visit_completed' sequence triggers configured for the
-  // service(s) this visit covered. Best-effort — an automation-enrollment
-  // failure must never block the completion response.
-  if (fireAutomations) {
-    try {
-      if (visit.client_id) {
-        let serviceIds: string[] = [];
-        if (visitJobServiceId) {
-          const { data: js } = await supabase
-            .from("crm_job_services")
-            .select("service_id")
-            .eq("id", visitJobServiceId)
-            .maybeSingle();
-          const sid = (js as { service_id: string | null } | null)?.service_id;
-          if (sid) serviceIds = [sid];
-        } else {
-          const { data: jobServices } = await supabase
-            .from("crm_job_services")
-            .select("service_id")
-            .eq("job_id", visit.job_id);
-          serviceIds = ((jobServices ?? []) as { service_id: string | null }[])
-            .map((s) => s.service_id)
-            .filter((id): id is string => !!id);
-        }
-
-        // Visit automations run once per client per service day (visitDate): a stop's
-        // sibling visits completing together share the first one's run.
-        const newEnrollmentIds: string[] = [];
-        if (serviceIds.length > 0) {
-          newEnrollmentIds.push(...await fireServiceVisitCompletedTriggers(supabase, { orgId, clientId: visit.client_id, serviceIds, visitId: visit.id, visitDate: visit.scheduled_date }));
-        }
-        newEnrollmentIds.push(
-          ...await fireSimpleTrigger(supabase, { orgId, clientId: visit.client_id, triggerType: "visit_completed", matchValues: serviceIds, visitId: visit.id, visitDate: visit.scheduled_date })
-        );
-
-        // Drive each new enrollment through any steps due right now (e.g. an
-        // email with no "wait" in front of it) instead of leaving it queued
-        // for the next daily /api/automations/run cron sweep. Needs the
-        // service-role client since the processor writes across tables not
-        // all covered by a request's RLS-scoped session.
-        if (newEnrollmentIds.length > 0) {
-          const adminClient = createClient<Database>(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-          );
-          for (const enrollmentId of newEnrollmentIds) {
-            await processEnrollmentImmediately(adminClient, enrollmentId);
-          }
-        }
-      }
-    } catch (err) {
-      log.error("automation trigger enrollment failed", { visitId, error: err instanceof Error ? err.message : String(err) });
-    }
+  // service_visit_completed / visit_completed fire once the client's whole SERVICE
+  // DAY is finished (no scheduled / dispatched / in-progress visit left for them on
+  // this date), matching the services of all of that day's completed visits — not on
+  // each sibling visit of a multi-service stop. Due steps are sent right away.
+  // Best-effort — never blocks the completion response (the helper never throws).
+  if (fireAutomations && visit.client_id) {
+    await fireVisitDayCompletedTriggers(supabase, { orgId, clientId: visit.client_id, visitDate: visit.scheduled_date });
   }
 
   result.ok = true;

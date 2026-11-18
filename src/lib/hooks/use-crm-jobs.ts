@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { fireQuickBooksInvoiceUpdate } from "@/lib/integrations/quickbooks-client";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
-import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { checkVisitDayClosed, fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { roundHours, formatMonthDay, formatCurrency } from "@/lib/utils";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
@@ -544,37 +544,10 @@ export function useUpdateJobStatus() {
         }
       }
 
-      // Log to client activity timeline — naming the job ("Job cancelled:
-      // Package · 5-Step Fert Package"), not just the new status, so a client
-      // with several jobs shows which one changed.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: jobInfo } = await (supabase as any)
-        .from("crm_jobs")
-        .select("client_id, job_type, package_name, crm_job_services(service_name)")
-        .eq("id", id)
-        .single();
-      const resolvedClientId = clientId ?? (jobInfo?.client_id as string | null) ?? null;
-      if (resolvedClientId) {
-        const label = status.replace(/_/g, " ");
-        const what = jobInfo
-          ? jobActivityLabel({
-              jobType: jobInfo.job_type,
-              packageName: jobInfo.package_name,
-              serviceNames: ((jobInfo.crm_job_services ?? []) as { service_name: string | null }[]).map((sv) => sv.service_name),
-            })
-          : null;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: activityError } = await (supabase as any).from("client_activity").insert({
-          client_id: resolvedClientId,
-          activity_type: "job",
-          subject: what ? `Job ${label}: ${what}` : `Job ${label}`,
-          ref_id: id,
-          ref_table: "crm_jobs",
-        });
-        if (activityError) log.error("client_activity insert failed", { jobId: id, error: activityError.message });
-      }
+      const resolvedClientId = await logJobStatusActivity(supabase, id, status, clientId);
 
-      return { scheduledDate, resolvedClientId, status: resolvedStatus };
+      // job_cancelled only on a real change into Cancelled (re-saving a cancelled job fires nothing).
+      return { scheduledDate, resolvedClientId, status: resolvedStatus, cancelledNow: resolvedStatus === "cancelled" && prior?.status !== "cancelled" };
     },
     onSuccess: (data, vars) => {
       // Every job list, not just the dispatch board's day — invalidating only
@@ -584,11 +557,52 @@ export function useUpdateJobStatus() {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       if (vars.clientId) qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
-      if (data.status === "cancelled" && data.resolvedClientId) {
+      if (data.cancelledNow && data.resolvedClientId) {
         fireAutomationTrigger({ triggerType: "job_cancelled", clientId: data.resolvedClientId, jobId: vars.id });
       }
     },
   });
+}
+
+/**
+ * The client-timeline row for a job status change — naming the job ("Job
+ * cancelled: Package · 5-Step Fert Package"), not just the new status, so a
+ * client with several jobs shows which one changed. Shared by the status menu
+ * (useUpdateJobStatus) and the job's Edit form (useUpdateJob). Returns the
+ * job's client id.
+ */
+async function logJobStatusActivity(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  id: string,
+  status: string,
+  clientId?: string | null,
+): Promise<string | null> {
+  const { data: jobInfo } = await supabase
+    .from("crm_jobs")
+    .select("client_id, job_type, package_name, crm_job_services(service_name)")
+    .eq("id", id)
+    .single();
+  const resolvedClientId = clientId ?? (jobInfo?.client_id as string | null) ?? null;
+  if (resolvedClientId) {
+    const label = status.replace(/_/g, " ");
+    const what = jobInfo
+      ? jobActivityLabel({
+          jobType: jobInfo.job_type,
+          packageName: jobInfo.package_name,
+          serviceNames: ((jobInfo.crm_job_services ?? []) as { service_name: string | null }[]).map((sv) => sv.service_name),
+        })
+      : null;
+    const { error: activityError } = await supabase.from("client_activity").insert({
+      client_id: resolvedClientId,
+      activity_type: "job",
+      subject: what ? `Job ${label}: ${what}` : `Job ${label}`,
+      ref_id: id,
+      ref_table: "crm_jobs",
+    });
+    if (activityError) log.error("client_activity insert failed", { jobId: id, error: activityError.message });
+  }
+  return resolvedClientId;
 }
 
 export function useAssignCrew() {
@@ -1138,11 +1152,25 @@ export function useCreateVisit() {
         await (supabase as any).from('crm_jobs').update(jobUpdate).eq('id', values.jobId);
       }
 
-      return mapVisit(data);
+      // Created already dispatched: this IS the visit's dispatch, so it fires
+      // visit_dispatched like a scheduled -> dispatched change does.
+      const dispatchServiceIds = values.status === 'dispatched'
+        ? await fetchVisitServiceIds(supabase, values.jobId, values.jobServiceId ?? null)
+        : undefined;
+
+      return Object.assign(mapVisit(data), { dispatchServiceIds });
     },
-    onSuccess: () => {
+    onSuccess: (data, values) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      if (values.status === 'dispatched' && values.clientId) {
+        fireAutomationTrigger({
+          triggerType: 'visit_dispatched',
+          clientId: values.clientId,
+          matchValues: data.dispatchServiceIds,
+          visitId: data.id,
+        });
+      }
     },
   });
 }
@@ -1298,7 +1326,7 @@ export function useDeleteVisitsByDayOfWeek() {
 
 /**
  * Service ids a visit covers — a specific job_service_id if the visit is
- * scoped to one, otherwise every service on the parent job. Mirrors the
+ * scoped to one, otherwise every included service on the parent job. Mirrors the
  * lookup in /api/crm/visits/[visitId]/complete/route.ts, duplicated here
  * because that route is server-only and this runs client-side.
  */
@@ -1312,7 +1340,9 @@ async function fetchVisitServiceIds(
     const { data } = await supabase.from('crm_job_services').select('service_id').eq('id', jobServiceId).maybeSingle();
     return data?.service_id ? [data.service_id] : [];
   }
-  const { data } = await supabase.from('crm_job_services').select('service_id').eq('job_id', jobId);
+  // A whole-job visit performs the services the job INCLUDES — a line marked not
+  // included must not match a trigger's service filter.
+  const { data } = await supabase.from('crm_job_services').select('service_id').eq('job_id', jobId).not('included', 'is', false);
   return ((data ?? []) as { service_id: string | null }[]).map((s) => s.service_id).filter((v): v is string => !!v);
 }
 
@@ -1395,8 +1425,9 @@ export function useUpdateVisitStatus() {
       // Sending a visit to the crew pre-loads its service's chemicals so the
       // crew's Chemical Mix card isn't empty (best-effort; never blocks dispatch).
       if (status === 'dispatched') await loadServiceChemicalsForVisit(supabase, id).catch(() => 0);
-      if ((status === 'dispatched' || isOutcome) && data?.client_id) {
+      if ((status === 'dispatched' || isOutcome) && data?.client_id && prior?.status !== status) {
         // Same lightweight timeline row useUpdateVisit writes — no notification.
+        // Only on a real change: re-applying the same status leaves no new row.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any).from('client_activity').insert({
           client_id: data.client_id,
@@ -1412,6 +1443,14 @@ export function useUpdateVisitStatus() {
         jobServiceId: data?.job_service_id as string | null | undefined,
         visitId: id,
         status,
+        // Automations fire only on a real transition (re-applying the same status
+        // fires nothing), and reopening a COMPLETED visit to dispatched isn't a new
+        // dispatch of unperformed work.
+        fireStatusTrigger:
+          !!prior && prior.status !== status && !(status === 'dispatched' && prior.status === 'completed'),
+        // Skipping / cancelling the client's last open visit of the day finishes the
+        // day: visit_completed fires then if anything that day was completed.
+        dayClosedDate: isOutcome && prior?.status !== status ? ((data?.scheduled_date as string | null | undefined) ?? null) : null,
       };
     },
     onSuccess: async (data) => {
@@ -1431,7 +1470,7 @@ export function useUpdateVisitStatus() {
           dispatched: ['visit_dispatched'],
           skipped: ['visit_skipped'],
         };
-        const triggerTypes = (status && VISIT_STATUS_TRIGGERS[status]) || [];
+        const triggerTypes = (data && 'fireStatusTrigger' in data && data.fireStatusTrigger && status && VISIT_STATUS_TRIGGERS[status]) || [];
         if (triggerTypes.length > 0) {
           const matchValues = data?.jobId
             ? await fetchVisitServiceIds(createClient(), data.jobId, data.jobServiceId ?? null)
@@ -1439,6 +1478,9 @@ export function useUpdateVisitStatus() {
           for (const triggerType of triggerTypes) {
             fireAutomationTrigger({ triggerType, clientId, matchValues, visitId: data?.visitId });
           }
+        }
+        if (data && 'dayClosedDate' in data && data.dayClosedDate && data.visitId) {
+          checkVisitDayClosed({ visitId: data.visitId, visitDate: data.dayClosedDate });
         }
       }
       qc.invalidateQueries({ queryKey: ['clients'] });
@@ -1635,7 +1677,10 @@ export function useUpdateVisit() {
         before?.job_id &&
         updates.status &&
         updates.status !== before.status &&
-        (updates.status === 'dispatched' || updates.status === 'skipped' || updates.status === 'cancelled')
+        (updates.status === 'dispatched' || updates.status === 'skipped' || updates.status === 'cancelled') &&
+        // Reopening a completed visit straight to dispatched: the work is done, so no
+        // "on the way" automation for it.
+        !(updates.status === 'dispatched' && before.status === 'completed')
       ) {
         statusTrigger = updates.status === 'dispatched' ? 'visit_dispatched' : updates.status === 'skipped' ? 'visit_skipped' : 'visit_cancelled';
         statusTriggerServiceIds = await fetchVisitServiceIds(supabase, before.job_id, before.job_service_id ?? null);
@@ -1766,7 +1811,32 @@ export function useUpdateVisit() {
         enqueueVisitNotify(id, 'note');
       }
 
+      // A package step's season placeholder (status 'scheduled') moved onto a day AND
+      // dispatched in one save (Waiting List / Nearby dispatch, a package visit's
+      // Dispatch on the job) is a dispatch, not a reschedule: the placeholder's date
+      // was never an appointment the client was told about, so only visit_dispatched
+      // fires — not a "your visit moved" visit_date_changed.
+      let resolvedJobType = jobType ?? null;
+      if (dateChanged && before?.status === 'scheduled' && updates.status === 'dispatched' && !resolvedJobType && before.job_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: jt } = await (supabase as any).from('crm_jobs').select('job_type').eq('id', before.job_id).maybeSingle();
+        resolvedJobType = (jt?.job_type as string | null | undefined) ?? null;
+      }
+      const placeholderDispatch =
+        dateChanged && before?.status === 'scheduled' && updates.status === 'dispatched' && resolvedJobType === 'package';
+      if (placeholderDispatch) dateChanged = false;
+
+      // A skip / cancel, or a move off the day, may leave the client's day finished
+      // (visit_completed fires for the day then). Checked against the day the visit WAS on.
+      const leftDay =
+        !!before && (
+          (updates.status !== undefined && updates.status !== before.status && (updates.status === 'skipped' || updates.status === 'cancelled')) ||
+          (updates.scheduled_date !== undefined && updates.scheduled_date !== before.scheduled_date)
+        );
+      const dayClosedDate = leftDay ? before?.scheduled_date ?? null : null;
+
       return {
+        dayClosedDate,
         clientId, dateChanged, dateChangeClientId, dateChangeServiceIds,
         activityClientId: activityRows[0]?.client_id ?? null,
         statusTrigger, statusTriggerClientId: before?.client_id ?? null, statusTriggerServiceIds,
@@ -1797,6 +1867,9 @@ export function useUpdateVisit() {
           matchValues: data.dateChangeServiceIds,
           visitId: data.statusTriggerVisitId,
         });
+      }
+      if (data?.dayClosedDate && data.statusTriggerVisitId) {
+        checkVisitDayClosed({ visitId: data.statusTriggerVisitId, visitDate: data.dayClosedDate });
       }
     },
   });
@@ -3305,11 +3378,31 @@ export function useUpdateJob() {
   return useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Record<string, unknown> }) => {
       const supabase = createClient();
+      // A status change from the job's Edit form is the same event as the status
+      // menu's (useUpdateJobStatus): it writes the timeline row and a change into
+      // Cancelled fires job_cancelled. Only a REAL change counts — the previous
+      // status is read first, so re-saving the form fires nothing.
+      let priorStatus: string | null = null;
+      if (typeof patch.status === 'string') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: prior } = await (supabase as any).from('crm_jobs').select('status').eq('id', id).maybeSingle();
+        priorStatus = (prior?.status as string | null | undefined) ?? null;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_jobs').update(patch).eq('id', id);
       if (error) throw error;
+      const newStatus = typeof patch.status === 'string' ? patch.status : null;
+      if (!newStatus || newStatus === priorStatus) return { statusClientId: null, cancelledNow: false };
+      const statusClientId = await logJobStatusActivity(supabase, id, newStatus);
+      return { statusClientId, cancelledNow: newStatus === 'cancelled' };
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (data, vars) => {
+      if (data?.statusClientId) {
+        qc.invalidateQueries({ queryKey: ['clients', data.statusClientId, 'activity'] });
+        if (data.cancelledNow) {
+          fireAutomationTrigger({ triggerType: 'job_cancelled', clientId: data.statusClientId, jobId: vars.id });
+        }
+      }
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', vars.id] });
       qc.invalidateQueries({ queryKey: ['crm-jobs'] });
       // Job-level fields (e.g. is_high_priority) are denormalized onto the

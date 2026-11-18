@@ -141,6 +141,10 @@ export async function resolveEmailStepContent(
     invoiceId?: string | null;
     /** The visit a visit-event trigger fired for — the snow merge tags read this stop. */
     visitId?: string | null;
+    /** The run's service day (enrollment visit_date) — [servicename]/[servicedate]/[chemicalnotice] read that day's visits. */
+    visitDate?: string | null;
+    /** The trigger that started the run (enrollment trigger_type). */
+    triggerType?: string | null;
     meetingId?: string | null;
     subjectTemplate: string;
     bodyTemplate: string;
@@ -272,7 +276,10 @@ export async function resolveEmailStepContent(
   Object.assign(
     extras,
     await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: true }),
-    await buildServiceExtras(supabase, { orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)) }),
+    await buildServiceExtras(supabase, {
+      orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)),
+      visitDate: params.visitDate ?? null, triggerType: params.triggerType ?? null,
+    }),
   );
   const vars = await buildAutomationMergeVars(supabase, { orgId: params.orgId, client, extras, escapeHtml });
   const resolve = (template: string, escapeValues: boolean) => {

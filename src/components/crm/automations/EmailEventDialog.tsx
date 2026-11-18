@@ -64,11 +64,13 @@ const MERGE_TAGS = [
   { tag: "[invoiceterms]", label: "Invoice terms (e.g. Net 30)" },
   { tag: "[viewinvoiceonline]", label: "Invoice online link (URL)" },
   { tag: "[paymentlink]", label: "Pay Now button" },
-  { tag: "[servicename]", label: "Last completed service" },
-  { tag: "[servicedate]", label: "Last service date" },
+  { tag: "[visitdate]", label: "Visit day (visit triggers)" },
+  { tag: "[visitservices]", label: "Services on the visit day (visit triggers)" },
+  { tag: "[servicename]", label: "Service(s) — the visit day's, else last completed" },
+  { tag: "[servicedate]", label: "Service date — the visit day, else last completed" },
   { tag: "[nextservicename]", label: "Next scheduled service" },
   { tag: "[nextservicedate]", label: "Next service date" },
-  { tag: "[chemicalnotice]", label: "Notice of Treatment (last completed visit's chemical record)" },
+  { tag: "[chemicalnotice]", label: "Notice of Treatment (the visit day's, else last completed visit's chemical record)" },
   // Snow: read from the client's most recent snow-board stop (last 7 days).
   ...SNOW_TAGS.map(({ tag, label }) => ({ tag, label: `Snow: ${label}` })),
 ];

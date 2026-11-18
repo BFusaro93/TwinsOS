@@ -12,7 +12,7 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const TRIGGER_GROUPS: [string, string][] = [
   [
     "Client / Lead",
-    "Client created, Client cancelled, Client reactivated, Client source updated, Lead created, Lead cancelled, Lead converted to client, Client referred a new lead/client, Credit card charge failed, Credit card about to expire, Credit card updated, Has opted in for emails, Has opted in for texts, Payment method updated",
+    "Client created, Client cancelled, Client reactivated, Client source updated, Lead created, Lead cancelled, Lead converted to client, Client referred a new lead/client, Credit card charge failed, Credit card about to expire, Credit card updated, Re-subscribed to emails, Has opted in for texts, Payment method updated",
   ],
   ["Contract", "Contract created, Contract signed, Contract about to expire"],
   ["Damage Case", "Damage case created"],
@@ -37,11 +37,11 @@ const EVENT_TYPES: [string, string][] = [
   ["Wait", "Pauses the sequence for a set number of days, hours, and minutes before the next event runs. Days are counted on your company calendar, so a 7-day wait that starts at 9:00 AM resumes at 9:00 AM even across a daylight-saving change; hours and minutes are elapsed time. Two optional settings refine when it resumes, both read on your company clock: Then wait until a time of day (e.g. wait 1 day, then continue at 9:00 AM — if that time has already passed today it rolls to tomorrow), and Weekdays only (a Saturday or Sunday result moves to Monday at the same time)."],
   [
     "Email",
-    "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template. Beyond the client tags, email and text steps can use invoice tags — [invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink] — which fill in for automations started by an invoice trigger (and are blank otherwise; [viewinvoiceonline] and [paymentlink] stay blank while the invoice is still a draft, since a draft can't be viewed or paid online), and service tags — [servicename], [servicedate] for the client's last completed service, [nextservicename], [nextservicedate] for their next scheduled one, plus [chemicalnotice], the compact Notice of Treatment for that last completed visit (blank when it logged no chemicals). The Email Category decides who is suppressed: Marketing, General and Follow-up emails are not sent to clients marked Do Not Market (and carry an unsubscribe link), while Transactional and Reminder emails still reach those clients. A hard-bounced address or a client marked not OK to email blocks every category.",
+    "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template. Beyond the client tags, email and text steps can use invoice tags — [invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink] — which fill in for automations started by an invoice trigger (and are blank otherwise; [viewinvoiceonline] and [paymentlink] stay blank while the invoice is still a draft, since a draft can't be viewed or paid online), and service tags. For a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it (\"Mowing, Edging\"); [servicename] and [servicedate] name the services and date of that day's visits the trigger is about (the completed ones for Visit completed, the skipped ones for Visit skipped, and so on), and [chemicalnotice] is the compact Notice of Treatment for each of that day's completed visits. For any other trigger [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. [chemicalnotice] is blank when no chemicals were logged. A day-before reminder: if you dispatch the day before, a sequence on Visit dispatched with a text step like \"Reminder: we'll be out on [visitdate] for [visitservices].\" goes out as you dispatch, and names every service that day in one message. The Email Category decides who is suppressed: Marketing, General and Follow-up emails are not sent to clients marked Do Not Market (and carry an unsubscribe link), while Transactional and Reminder emails still reach those clients. A hard-bounced address or a client marked not OK to email blocks every category.",
   ],
   [
     "Text Message",
-    "Sends an SMS to the client's primary phone, their billing phone (a number typed Billing in the client's phone list), and/or every contact's main phone, per the Send To boxes. Consent is per person: the client's primary and billing phones are texted only when the client has opted in to texts, and a contact only when that contact has its own Opted in to text messages box ticked — contacts who haven't are skipped. A number that replied STOP is always skipped. Can require manual approval before sending, same as email.",
+    "Sends an SMS to the client's primary phone, their billing phone (a number typed Billing in the client's phone list), and/or every contact's main phone, per the Send To boxes. Consent is per person: the client's primary and billing phones are texted only when the client has opted in to texts, and a contact only when that contact has its own Opted in to text messages box ticked — contacts who haven't are skipped. A number that replied STOP is always skipped. In a sequence whose email steps are Marketing, General or Follow-up, a client marked Do Not Market isn't texted either (Transactional and Reminder sequences still text them), the same rule email steps follow. Can require manual approval before sending, same as email.",
   ],
   [
     "Alert",
@@ -166,13 +166,29 @@ export function AutomationsGuide() {
           customer accepts through the proposal link or the client portal, and when an open estimate is
           converted to a job; <strong>Estimate was lost</strong> fires when they decline in the portal.
           <strong> Lead cancelled</strong> fires both when a lead is cancelled from the Clients list and
-          when it is closed as lost from the Leads page.
+          when it is closed as lost from the Leads page. <strong>Estimate was won</strong> also fires when
+          an open estimate goes straight to Invoiced (Create Invoice, a drag or a bulk stage change) —
+          once only, so moving it on from Accepted to Invoiced doesn&apos;t fire it again.
+        </p>
+        <p>
+          <strong>Estimate was sent</strong> fires once per estimate, the first time it moves into Sent
+          — by emailing it, copying its proposal link, or changing its stage to Sent (stage picker,
+          drag or bulk change). That first move also records the sent date that <strong>No response
+          from client</strong> counts from. Sending it again later doesn&apos;t restart the sequence.
+          <strong> Estimate expiring</strong> only picks up estimates that were actually sent, and a
+          blank &quot;days&quot; box on either estimate date trigger means 7 days.
+        </p>
+        <p>
+          <strong>Re-subscribed to emails</strong> fires when a client&apos;s Do Not Market is turned
+          off (on the client, or through the API) — ticking OK to Email doesn&apos;t fire it.{" "}
+          <strong>Has opted in for texts</strong> fires when text consent is newly given: a client
+          replying START, ticking the consent box on a web form, the office ticking it, or the API.
         </p>
         <p>
           <strong>Bulk edits fire triggers too.</strong> Adding or removing a tag on many clients at
           once fires Tag added or Tag removed for each client that actually changed (a client that
           already had the tag isn&apos;t counted as newly tagged), and a bulk edit of a client&apos;s
-          source or email opt-in fires the same triggers as editing one client.
+          source fires the same trigger as editing one client.
         </p>
       </Section>
 
@@ -189,7 +205,13 @@ export function AutomationsGuide() {
             <strong>once per client per service day</strong>. All of that client&apos;s visits on the same
             day &mdash; every service, every crew and every property &mdash; share one run, so a stop with a
             mow, a bed edge and a second crew sends one &quot;thanks for your service&quot; email, not three. A
-            visit on another day starts a new run, so a weekly mow follow-up goes out every week.
+            visit on another day starts a new run, so a weekly mow follow-up goes out every week.{" "}
+            <strong>Visit completed</strong> (and Visit completed for a specific service) waits until the
+            client&apos;s day is finished &mdash; no scheduled, dispatched or in-progress visit left for them
+            that day &mdash; so the email never goes out while a crew is still working the rest of the stop.
+            Completing the last open visit finishes the day, and so does skipping, cancelling or moving it to
+            another day (as long as something that day was completed). A service filter matches any service
+            completed that day.
           </li>
           <li>
             <strong>Job and package triggers</strong> (Job created, Job cancelled, Package created, Package

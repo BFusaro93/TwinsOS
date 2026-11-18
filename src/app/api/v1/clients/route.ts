@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { isClientStatus } from "@/lib/reports/client-status";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { CLIENT_SELECT, shapeClient } from "./shape";
 import { createClientSchema } from "./validation";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -151,11 +151,18 @@ export async function POST(request: Request) {
       activity_type: "note",
       subject: status === "lead" ? "Lead created" : "Client created",
     });
-    await fireSimpleTrigger(db, {
+    // fireServerTrigger also sends the first due step right away (e.g. a speed-to-lead
+    // reply), the same as a web-form lead — not up to 15 minutes later on the cron.
+    await fireServerTrigger(db, {
       orgId: auth.orgId,
       clientId: data.id,
       triggerType: status === "lead" ? "lead_created" : "client_created",
     });
+    // The referrer was verified above (same org, not deleted). The app fires this for the
+    // REFERRER's record — a thank-you/reward sequence targets whoever made the referral.
+    if (body.referredByClientId) {
+      await fireServerTrigger(db, { orgId: auth.orgId, clientId: body.referredByClientId, triggerType: "client_referred" });
+    }
 
     return NextResponse.json(shapeClient(data), { status: 201 });
   });

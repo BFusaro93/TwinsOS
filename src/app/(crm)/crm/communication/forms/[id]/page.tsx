@@ -95,14 +95,17 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
                 Embed
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setFillOpen(true)}
-            >
-              <PenLine className="mr-1.5 h-3.5 w-3.5" />
-              Fill Out Form
-            </Button>
+            {/* Same key the test-submit route requires — a test submission is real. */}
+            {canEdit && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setFillOpen(true)}
+              >
+                <PenLine className="mr-1.5 h-3.5 w-3.5" />
+                Fill Out Form
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={() => router.push("/crm/communication/forms")}>
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
               All Forms

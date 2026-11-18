@@ -7,6 +7,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
 import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 import { resolveAssigneeId } from "@/lib/ticket-notify";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 // Loops every org; give it room before the default function limit.
 export const maxDuration = 300;
 
@@ -42,8 +43,12 @@ export async function GET(req: NextRequest) {
   const windowEndStr = shiftYmd(isoInZone(windowEnd, "UTC"), 1);
 
   // Estimates expiring in the next 3 days that are still open (sent or quote_ready stage)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: expiring } = await (supabase as any)
+  // Paged across every org: one select stops at 1,000 rows, silently skipping the rest.
+  // All pages are read before the loop below stamps expiry_notified_at, so the stamping
+  // can't shift a later page.
+  const expiring = await fetchAllRows<Record<string, unknown>>(() =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
     .from("estimates")
     .select(`
       id, estimate_number, description, valid_until_date, total_cents, org_id, created_by, sales_rep_id,
@@ -54,7 +59,7 @@ export async function GET(req: NextRequest) {
     .lte("valid_until_date", windowEndStr)
     .in("stage", ["sent", "quote"])
     .is("deleted_at", null)
-    .is("expiry_notified_at", null);
+    .is("expiry_notified_at", null));
 
   if (!expiring?.length) {
     return NextResponse.json({ notified: 0 });

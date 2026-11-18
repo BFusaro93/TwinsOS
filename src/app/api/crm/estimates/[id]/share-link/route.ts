@@ -6,6 +6,7 @@ import { findLiveShareToken, proposalUrlFor, shareLinkExpiry } from "@/lib/estim
 import { logger } from "@/lib/logger";
 import { publishSharedVersion } from "@/lib/estimates/versions";
 import { getPublishedProposal, isChangedSinceSent } from "@/lib/estimates/proposal-content";
+import { markEstimateFirstSent } from "@/lib/estimates/estimate-sent";
 
 const log = logger.child("estimate-share-link");
 
@@ -151,8 +152,8 @@ export async function POST(
 
   // Handing out the link is sending it, and the public accept route only takes proposals at
   // stage 'sent': without this a draft/quote link showed the client a proposal they couldn't
-  // accept. Same transition (and sent_at anchor) as send-email, conditioned on the stage still
-  // being open so a client accepting meanwhile isn't reverted.
+  // accept. Same transition as send-email, conditioned on the stage still being open so a
+  // client accepting meanwhile isn't reverted.
   if (est.stage === "draft" || est.stage === "quote") {
     const sentIso = new Date().toISOString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -160,9 +161,11 @@ export async function POST(
       stage: "sent",
       updated_at: sentIso,
       expiry_notified_at: null,
-      ...(est.sent_at ? {} : { sent_at: sentIso }),
     }).eq("id", estimateId).in("stage", ["draft", "quote"]);
   }
+  // The first move into Sent (by any path) stamps sent_at and fires "Estimate was sent"
+  // once — so copying the link counts as sending it, and copying it again never re-fires.
+  await markEstimateFirstSent(supabase, estimateId, est.org_id as string);
 
   // The link lives at least until the estimate's Valid until date is over.
   const expiresAt = shareLinkExpiry(new Date(Date.now() + expiresInDays * 86_400_000).toISOString(), est.valid_until_date as string | null);

@@ -175,6 +175,7 @@ export async function POST(request: Request) {
   // Settle each invoice with any deposit/credit the client already holds, then
   // charge only what is still owed. Otherwise the card pays money the client has
   // already paid and the deposit sits unused.
+  const creditService = createServiceClient();
   try {
     for (const a of allocations) {
       a.amountCents = await applyCreditBeforeCharge(supabase, {
@@ -182,7 +183,7 @@ export async function POST(request: Request) {
         // Each invoice is settled from its own account's credit.
         client_id: invoiceClient.get(a.invoiceId) ?? clientId,
         balance_cents: a.amountCents,
-      });
+      }, { serviceDb: creditService, orgId: effOrgId });
     }
   } catch {
     return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
@@ -241,6 +242,9 @@ export async function POST(request: Request) {
         off_session: true,
         confirm: true,
         metadata: {
+          // Read by the Connect webhook: a failed charge fires credit_card_charge_failed
+          // only for these off-session (card/bank on file) charges.
+          off_session: "true",
           source: "crm_invoice_multi",
           org_id: effOrgId,
           client_id: clientId,

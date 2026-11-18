@@ -211,11 +211,7 @@ export async function POST(request: Request) {
         event.account &&
         (await eventAccountOwnedByOrg(db, failedOrgId, event.account))
       ) {
-        await fireSimpleTrigger(supabase, {
-          orgId: failedOrgId,
-          clientId: failedClientId,
-          triggerType: "credit_card_charge_failed",
-        });
+        await fireChargeFailedForInvoices(db, supabase, failedOrgId, failedIntent);
         // A card decline happens in front of whoever is paying; a bank debit
         // returned days later (NSF, closed account) doesn't — and nothing was
         // ever written to the ledger for it, so without this the office had no
@@ -241,11 +237,8 @@ export async function POST(request: Request) {
         event.account &&
         (await eventAccountOwnedByOrg(db, failedOrgId, event.account))
       ) {
-        await fireSimpleTrigger(supabase, {
-          orgId: failedOrgId,
-          clientId: failedClientId,
-          triggerType: "credit_card_charge_failed",
-        });
+        // No credit_card_charge_failed: a portal prepayment is paid by the customer
+        // on the spot, who sees the decline — the trigger is for off-session charges.
         if (failedIntent.payment_method_types.includes("us_bank_account")) {
           // A card decline happens in front of the customer; a bank return
           // doesn't, so leave a trace on the client's timeline for staff.
@@ -433,7 +426,11 @@ export async function POST(request: Request) {
     // the scenes, but also any explicit update. Matched by payment method id
     // rather than customer id since that's the identifier we actually store
     // on the client row (src/app/api/crm/payments/connect/setup-intent/route.ts).
-    case "payment_method.updated": {
+    // automatically_updated is the one this app actually gets: Stripe's card account
+    // updater refreshing a saved card (new number / expiry from the issuer). Nothing
+    // here ever calls paymentMethods.update, so payment_method.updated alone never fired.
+    case "payment_method.updated":
+    case "payment_method.automatically_updated": {
       const pm = event.data.object as Stripe.PaymentMethod;
       if (!event.account) break;
 
@@ -619,6 +616,58 @@ export async function POST(request: Request) {
  * succeeds days later), and is a no-op when the synchronous path already
  * recorded the charge — deduped in the database on the PaymentIntent id.
  */
+/**
+ * credit_card_charge_failed for a failed invoice charge — only an OFF-SESSION one
+ * (autopay, or the office charging the card/bank on file: metadata.off_session,
+ * set by the autopay charge routes). A customer paying in the portal or by link
+ * sees the decline on screen, so it isn't an automation event. Fires once per
+ * invoice the charge covered, against the client that owns each invoice, with
+ * invoiceId so [invoicenumber]/[paymentlink] render; the invoice-scoped
+ * enrollment dedupe keeps a retried autopay from re-sending it for the same
+ * invoice. The caller has already verified the event's account belongs to orgId.
+ */
+async function fireChargeFailedForInvoices(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  orgId: string,
+  intent: Stripe.PaymentIntent
+): Promise<void> {
+  if (intent.metadata?.off_session !== "true") return;
+  const invoiceIds =
+    intent.metadata?.source === "crm_invoice_multi"
+      ? decodeAllocations(intent.metadata?.allocations ?? "").map((a) => a.invoiceId)
+      : intent.metadata?.invoice_id
+        ? [intent.metadata.invoice_id]
+        : [];
+  const unique = [...new Set(invoiceIds.filter(Boolean))];
+  if (unique.length === 0) return;
+  const { data: rows, error } = await db
+    .from("crm_invoices")
+    .select("id, client_id")
+    .eq("org_id", orgId)
+    .in("id", unique)
+    .is("deleted_at", null);
+  if (error) {
+    log.error("charge-failed trigger: invoice lookup failed", { error, paymentIntentId: intent.id });
+    return;
+  }
+  for (const r of (rows ?? []) as { id: string; client_id: string | null }[]) {
+    if (!r.client_id) continue;
+    try {
+      await fireSimpleTrigger(supabase, {
+        orgId,
+        clientId: r.client_id,
+        invoiceId: r.id,
+        triggerType: "credit_card_charge_failed",
+      });
+    } catch (err) {
+      log.error("charge-failed trigger failed", { invoiceId: r.id, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+}
+
 async function applyCrmInvoicePayment(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,

@@ -117,7 +117,8 @@ export function useCreateRequest() {
       fetch("/api/automations/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventTrigger: "request_submitted", assetId: mr.assetId ?? null, assetName: mr.assetName ?? null }),
+        // The server verifies the request, keys its replay guard on it and reads the asset from it.
+        body: JSON.stringify({ eventTrigger: "request_submitted", requestId: mr.id }),
       }).catch(() => {});
     },
   });

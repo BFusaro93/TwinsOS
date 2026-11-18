@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
+import { createServiceClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("api/crm/visits/return-to-waiting-list");
 
 /**
  * POST /api/crm/visits/[visitId]/return-to-waiting-list
@@ -79,13 +84,31 @@ export async function POST(
 
     // One stop, one firing (visit triggers run once per client per service day). The
     // day is passed explicitly: the visit may now be soft-deleted.
-    await fireSimpleTrigger(db, {
-      orgId: r.org_id,
-      clientId: r.client_id,
-      triggerType: "visit_moved_to_waiting_list",
-      visitId,
-      visitDate: r.scheduled_date ?? null,
-    });
+    try {
+      const enrollmentIds = await fireSimpleTrigger(db, {
+        orgId: r.org_id,
+        clientId: r.client_id,
+        triggerType: "visit_moved_to_waiting_list",
+        visitId,
+        visitDate: r.scheduled_date ?? null,
+      });
+      // Send any step that's due now instead of waiting for the next cron sweep, as
+      // /api/automations/fire-trigger does. Service role: the processor writes tables
+      // the caller's session doesn't cover; only the ids just created are processed.
+      if (enrollmentIds.length > 0) {
+        const admin = createServiceClient();
+        for (const enrollmentId of enrollmentIds) {
+          try {
+            await processEnrollmentImmediately(admin, enrollmentId);
+          } catch (err) {
+            log.error("immediate processing failed", { enrollmentId, error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+      }
+    } catch (err) {
+      // The visit is already back on the list; an automation failure must not fail the request.
+      log.error("visit_moved_to_waiting_list trigger failed", { visitId, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   return NextResponse.json({ ok: true, clientId: r.client_id ?? null, returnedVisitIds });

@@ -1,3 +1,4 @@
+import "server-only";
 import { createHash, randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -172,8 +173,18 @@ export async function checkZapierRateLimit(db: AdminClient, integrationId: strin
  * fireSimpleTrigger itself is called from mutation hooks).
  */
 export async function notifyZapierSubscribers(
+  /**
+   * The caller's client. NOT used for the lookups or the record load: the
+   * integration row is admin-only (RLS) and the subscriptions table is
+   * RESTRICTIVE admin-only, so an event fired by a non-admin member, by
+   * impersonating staff or by an inline bulk action read nothing through a
+   * session client and every Zap was silently skipped. Kept so existing call
+   * sites don't change.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
+  _callerDb: any,
+  /** Must already be verified by the caller (session org, API key or cron row) — every
+   *  query below is scoped to it and runs as the service role. */
   orgId: string,
   triggerType: ZapierTriggerType,
   payload: Record<string, unknown>,
@@ -189,6 +200,9 @@ export async function notifyZapierSubscribers(
    */
   opts?: { record?: LiveTriggerIds }
 ): Promise<void> {
+  if (!orgId) return;
+  // Service role, scoped to orgId on every query (see _callerDb above).
+  const db = adminClient();
   // A disabled integration delivers nothing, even to subscriptions that are
   // still on file (the key check only guards inbound calls).
   const { data: integration } = await db

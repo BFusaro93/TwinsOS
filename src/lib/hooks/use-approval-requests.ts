@@ -53,6 +53,22 @@ export function useApprovalRequests(entityId: string) {
   });
 }
 
+/**
+ * Fires the org's "PO status change" automations (and the Zapier po_approved hook) for a
+ * status the approval RPCs just moved a PO into. Approved / rejected / pending are reached
+ * only through submit_for_approval / decide_approval, which nothing reported, so those
+ * rules never fired. The server re-reads the PO and only acts when it really is in that
+ * status, once per status write (so a second report of the same change is ignored).
+ * Best-effort.
+ */
+function firePOStatusAutomations(purchaseOrderId: string, toStatus: string) {
+  fetch("/api/automations/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ eventTrigger: "po_status_change", toStatus, purchaseOrderId }),
+  }).catch(() => {});
+}
+
 /** Equipt roles that can't see approve/reject buttons — never valid as chain approvers. */
 export const LIMITED_APPROVER_ROLES: string[] = ["viewer", "requestor"];
 
@@ -81,12 +97,25 @@ export async function submitEntityForApproval(
   supabase: any,
   { entityId, entityType }: SubmitForApprovalArgs
 ): Promise<{ entityType: ApprovalFlow["entityType"]; autoApproved: boolean }> {
+  // A PO's status before (re)submission, so the status-change automations fire only when
+  // the submission actually moved it (re-submitting an edited pending PO stays pending).
+  let poStatusBefore: string | null = null;
+  if (entityType === "purchase_order") {
+    const { data: before } = await supabase.from("purchase_orders").select("status").eq("id", entityId).maybeSingle();
+    poStatusBefore = (before as { status: string } | null)?.status ?? null;
+  }
   const { data, error } = await supabase.rpc("submit_for_approval", {
     p_entity_type: entityType,
     p_entity_id: entityId,
   });
   if (error) throw new Error(error.message);
   const autoApproved = !!(data as { auto_approved?: boolean } | null)?.auto_approved;
+
+  if (entityType === "purchase_order") {
+    const { data: after } = await supabase.from("purchase_orders").select("status").eq("id", entityId).maybeSingle();
+    const poStatusAfter = (after as { status: string } | null)?.status ?? null;
+    if (poStatusAfter && poStatusAfter !== poStatusBefore) firePOStatusAutomations(entityId, poStatusAfter);
+  }
 
   if (!autoApproved && entityType !== "crm_estimate") {
     // A saved chain can still point at a viewer/requestor (limited Equipt roles
@@ -211,6 +240,10 @@ export function useDecideApproval(entityId: string) {
       const entityType = result.entity_type;
       const newEntityStatus = result.new_entity_status ?? undefined;
       const allResolved = !!newEntityStatus;
+      // decide_approval only resolves a PO that was pending, so a returned status is a real change.
+      if (entityType === "purchase_order" && newEntityStatus) {
+        firePOStatusAutomations(result.entity_id, newEntityStatus);
+      }
 
       // Estimates have a Comments tab (same pattern as POs/WOs) — auto-post
       // the rejection reason there so it's visible in context, not just in

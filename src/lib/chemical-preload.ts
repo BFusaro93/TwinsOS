@@ -230,3 +230,98 @@ export async function loadServiceChemicalsForVisit(
   }
   return inserted;
 }
+
+/**
+ * Batch form of loadServiceChemicalsForVisit for bulk actions (the board's bulk
+ * Dispatch on up to 500 stops). Loading each visit in turn ran ~7 queries per visit
+ * even when it had nothing to load; this reads the visits, their service lines, the
+ * attached chemicals and what is already loaded in a few batched queries, and runs
+ * the full per-visit load (rates, areas, inserts) only for visits that are actually
+ * missing a product — a few at a time. Same rules as the single-visit form; returns
+ * how many rows it added. Best-effort per visit: one failure doesn't stop the rest.
+ */
+export async function loadServiceChemicalsForVisits(
+  supabase: SupabaseClient,
+  visitIds: string[],
+  opts: { actingUserId?: string | null; concurrency?: number } = {}
+): Promise<number> {
+  const ids = [...new Set(visitIds)];
+  if (ids.length === 0) return 0;
+  type VisitLite = { id: string; job_id: string; scheduled_date: string | null; status: string | null; job_service_id: string | null; crew_group_secondary: boolean | null };
+  const visits: VisitLite[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data } = await supabase
+      .from("crm_job_visits")
+      .select("id, job_id, scheduled_date, status, job_service_id, crew_group_secondary")
+      .in("id", ids.slice(i, i + 100))
+      .is("deleted_at", null);
+    visits.push(...((data ?? []) as unknown as VisitLite[]));
+  }
+  const live = visits.filter((v) => ["scheduled", "dispatched", "in_progress"].includes(v.status ?? "") && !v.crew_group_secondary);
+  if (live.length === 0) return 0;
+
+  const jobIds = [...new Set(live.map((v) => v.job_id))];
+  const lines: { id: string; job_id: string; service_id: string | null; included: boolean | null }[] = [];
+  for (let i = 0; i < jobIds.length; i += 100) {
+    const { data } = await supabase
+      .from("crm_job_services")
+      .select("id, job_id, service_id, included")
+      .in("job_id", jobIds.slice(i, i + 100));
+    lines.push(...((data ?? []) as typeof lines));
+  }
+  const servicesFor = (v: VisitLite) =>
+    lines
+      .filter((l) => l.job_id === v.job_id && l.included !== false && l.service_id && (!v.job_service_id || l.id === v.job_service_id))
+      .map((l) => l.service_id as string);
+  const allServiceIds = [...new Set(live.flatMap(servicesFor))];
+  if (allServiceIds.length === 0) return 0;
+
+  const attached: { service_id: string; product_id: string; start_date: string | null; end_date: string | null }[] = [];
+  for (let i = 0; i < allServiceIds.length; i += 100) {
+    const { data } = await supabase
+      .from("crm_service_chemicals")
+      .select("service_id, product_id, start_date, end_date")
+      .in("service_id", allServiceIds.slice(i, i + 100));
+    attached.push(...((data ?? []) as typeof attached));
+  }
+  if (attached.length === 0) return 0;
+
+  const candidates = live.filter((v) => servicesFor(v).some((sid) => attached.some((c) => c.service_id === sid)));
+  if (candidates.length === 0) return 0;
+  const haveByVisit = new Map<string, Set<string>>();
+  const candidateIds = candidates.map((v) => v.id);
+  for (let i = 0; i < candidateIds.length; i += 100) {
+    const { data } = await supabase
+      .from("crm_chemical_applications")
+      .select("visit_id, product_id")
+      .in("visit_id", candidateIds.slice(i, i + 100))
+      .is("deleted_at", null);
+    for (const r of (data ?? []) as { visit_id: string; product_id: string }[]) {
+      const set = haveByVisit.get(r.visit_id) ?? new Set<string>();
+      set.add(r.product_id);
+      haveByVisit.set(r.visit_id, set);
+    }
+  }
+  const needsLoad = candidates.filter((v) => {
+    const day = v.scheduled_date;
+    const services = new Set(servicesFor(v));
+    const have = haveByVisit.get(v.id) ?? new Set<string>();
+    return attached.some(
+      (c) =>
+        services.has(c.service_id) &&
+        !(day && c.start_date && day < c.start_date) &&
+        !(day && c.end_date && day > c.end_date) &&
+        !have.has(c.product_id)
+    );
+  });
+
+  let inserted = 0;
+  const queue = [...needsLoad];
+  const worker = async () => {
+    for (let v = queue.shift(); v; v = queue.shift()) {
+      inserted += await loadServiceChemicalsForVisit(supabase, v.id, { actingUserId: opts.actingUserId }).catch(() => 0);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(opts.concurrency ?? 4, queue.length)) }, worker));
+  return inserted;
+}

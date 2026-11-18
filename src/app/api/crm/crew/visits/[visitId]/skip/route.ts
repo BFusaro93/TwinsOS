@@ -10,6 +10,7 @@ import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { stopClockOutCap } from "@/lib/crew/visit-pause";
 import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
+import { fireVisitDayCompletedTriggers } from "@/lib/automations/visit-day-completed";
 import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
 
@@ -196,6 +197,13 @@ export async function POST(
     triggerTypes: ["visit_skipped"],
     visits: [{ id: visitId, client_id: existing.client_id, job_id: existing.job_id, job_service_id: existing.job_service_id ?? null }],
   });
+  // Skipping the client's last open visit of the day finishes the day: visit_completed
+  // fires for it if anything that day was completed (same service client, same proof).
+  if (existing.client_id) {
+    await fireVisitDayCompletedTriggers(createServiceClient(), {
+      orgId: existing.org_id, clientId: existing.client_id, visitDate: existing.scheduled_date,
+    });
+  }
 
   return NextResponse.json(data);
 }

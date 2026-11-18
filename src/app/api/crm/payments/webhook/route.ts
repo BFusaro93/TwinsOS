@@ -39,14 +39,31 @@ export async function POST(request: Request) {
 
   if (event.type === "payment_intent.payment_failed") {
     const failedIntent = event.data.object as Stripe.PaymentIntent;
-    const { org_id: failedOrgId, client_id: failedClientId } = failedIntent.metadata ?? {};
-    if (failedIntent.metadata?.source === "crm_invoice" && failedOrgId && failedClientId) {
+    const { org_id: failedOrgId, invoice_id: failedInvoiceId } = failedIntent.metadata ?? {};
+    // Same rule as the Connect webhook: only an off-session (card on file) charge
+    // fires credit_card_charge_failed, once per invoice, for the invoice's own client.
+    if (
+      failedIntent.metadata?.source === "crm_invoice" &&
+      failedIntent.metadata?.off_session === "true" &&
+      failedOrgId &&
+      failedInvoiceId
+    ) {
       const supabase = createServiceClient();
-      await fireSimpleTrigger(supabase, {
-        orgId: failedOrgId,
-        clientId: failedClientId,
-        triggerType: "credit_card_charge_failed",
-      });
+      const { data: inv } = await supabase
+        .from("crm_invoices")
+        .select("client_id")
+        .eq("id", failedInvoiceId)
+        .eq("org_id", failedOrgId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (inv?.client_id) {
+        await fireSimpleTrigger(supabase, {
+          orgId: failedOrgId,
+          clientId: inv.client_id,
+          invoiceId: failedInvoiceId,
+          triggerType: "credit_card_charge_failed",
+        });
+      }
     }
     return NextResponse.json({ received: true });
   }

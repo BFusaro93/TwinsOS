@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet, logSequenceExecution } from "@/lib/automations/sequence-enrollment";
+import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet, logSequenceExecution, timestampAnchor } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
@@ -124,6 +124,9 @@ async function handleRun(request: Request) {
         clientId,
         estimateId: null,
         meetingId: meeting.id,
+        // Re-entry never re-sends the reminder for the SAME meeting time (a short delay
+        // used to re-fire on every 5-minute run inside the window); a new time is a new run.
+        anchorKey: timestampAnchor(meeting.scheduled_at as string),
         allowReentry: seq.allow_reentry ?? false,
         reentryAfterMinutes: seq.reentry_after_minutes ?? 1440,
       });
@@ -143,6 +146,7 @@ async function handleRun(request: Request) {
         orgId,
         clientId,
         meetingId: meeting.id,
+        anchorKey: timestampAnchor(meeting.scheduled_at as string),
       });
       if (enrollmentId) {
         enrolled++;
