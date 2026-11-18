@@ -24,7 +24,7 @@ const TRIGGER_GROUPS: [string, string][] = [
   ["Invoice", "Invoice created, Invoice sent, Invoice past due, Invoice paid"],
   [
     "Job / Visit",
-    "Job created, Job cancelled, Package created, Package renewed, Visit completed, Visit completed for a specific service, Visit cancelled, Visit dispatched, Visit skipped, Visit date changed, Visit moved to waiting list",
+    "Job created, Job cancelled, Package created, Package renewed, Visit completed, Visit completed for a specific service, Visit cancelled, Visit dispatched, Visit is coming up, Visit skipped, Visit date changed, Visit moved to waiting list",
   ],
   ["Tag", "Tag added, Tag removed"],
   [
@@ -37,7 +37,7 @@ const EVENT_TYPES: [string, string][] = [
   ["Wait", "Pauses the sequence for a set number of days, hours, and minutes before the next event runs. Days are counted on your company calendar, so a 7-day wait that starts at 9:00 AM resumes at 9:00 AM even across a daylight-saving change; hours and minutes are elapsed time. Two optional settings refine when it resumes, both read on your company clock: Then wait until a time of day (e.g. wait 1 day, then continue at 9:00 AM — if that time has already passed today it rolls to tomorrow), and Weekdays only (a Saturday or Sunday result moves to Monday at the same time)."],
   [
     "Email",
-    "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template. Beyond the client tags, email and text steps can use invoice tags — [invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink] — which fill in for automations started by an invoice trigger (and are blank otherwise; [viewinvoiceonline] and [paymentlink] stay blank while the invoice is still a draft, since a draft can't be viewed or paid online), and service tags. For a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it (\"Mowing, Edging\"); [servicename] and [servicedate] name the services and date of that day's visits the trigger is about (the completed ones for Visit completed, the skipped ones for Visit skipped, and so on), and [chemicalnotice] is the compact Notice of Treatment for each of that day's completed visits. For any other trigger [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. [chemicalnotice] is blank when no chemicals were logged. A day-before reminder: if you dispatch the day before, a sequence on Visit dispatched with a text step like \"Reminder: we'll be out on [visitdate] for [visitservices].\" goes out as you dispatch, and names every service that day in one message. The Email Category decides who is suppressed: Marketing, General and Follow-up emails are not sent to clients marked Do Not Market (and carry an unsubscribe link), while Transactional and Reminder emails still reach those clients. A hard-bounced address or a client marked not OK to email blocks every category.",
+    "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template. Beyond the client tags, email and text steps can use invoice tags — [invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink] — which fill in for automations started by an invoice trigger (and are blank otherwise; [viewinvoiceonline] and [paymentlink] stay blank while the invoice is still a draft, since a draft can't be viewed or paid online), and service tags. For a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it (\"Mowing, Edging\"); [servicename] and [servicedate] name the services and date of that day's visits the trigger is about (the completed ones for Visit completed, the skipped ones for Visit skipped, and so on), and [chemicalnotice] is the compact Notice of Treatment for each of that day's completed visits. For any other trigger [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. [chemicalnotice] is blank when no chemicals were logged. A day-before reminder: start a sequence on Visit is coming up (1 day before) with a text step like \"Reminder: we'll be out on [visitdate] for [visitservices].\" It goes out each morning for the next day's visits and names every service that day in one message. If you'd rather it go out the moment you dispatch, use Visit dispatched instead. The Email Category decides who is suppressed: Marketing, General and Follow-up emails are not sent to clients marked Do Not Market (and carry an unsubscribe link), while Transactional and Reminder emails still reach those clients. A hard-bounced address or a client marked not OK to email blocks every category.",
   ],
   [
     "Text Message",
@@ -176,7 +176,17 @@ export function AutomationsGuide() {
           drag or bulk change). That first move also records the sent date that <strong>No response
           from client</strong> counts from. Sending it again later doesn&apos;t restart the sequence.
           <strong> Estimate expiring</strong> only picks up estimates that were actually sent, and a
-          blank &quot;days&quot; box on either estimate date trigger means 7 days.
+          blank &quot;days&quot; box on either estimate date trigger means 7 days. An estimate imported
+          already in Sent, Accepted or Invoiced counts as sent on its estimate date.
+        </p>
+        <p>
+          <strong>Visit is coming up</strong> fires a set number of days before a client&apos;s scheduled
+          or dispatched visit (1 day when the box is left blank). It is checked every morning, around 9 to
+          10am Eastern, for the visits that many days out on your company&apos;s calendar. Like the other
+          visit triggers it runs once per client per service day, its service filter matches any service on
+          that day, and [visitdate] / [visitservices] name that day. If the visit is cancelled, skipped or
+          moved to another day before the next step, the run stops. Want a reminder a week out and another
+          the day before? Use two sequences, one per lead time.
         </p>
         <p>
           <strong>Re-subscribed to emails</strong> fires when a client&apos;s Do Not Market is turned
@@ -250,7 +260,9 @@ export function AutomationsGuide() {
           </li>
           <li>
             <strong>Job and package triggers</strong> (Job created, Job cancelled, Package created, Package
-            renewed) run <strong>once per job</strong>. Two new jobs for the same client each get their own run.
+            renewed) run <strong>once per job</strong> for each trigger. Two new jobs for the same client each
+            get their own run, and a sequence started by both Job created and Job cancelled runs for the
+            cancellation even if the creation run is still going.
           </li>
           <li>
             <strong>Estimate, invoice, ticket and meeting triggers</strong> run <strong>once per record</strong>:
@@ -285,7 +297,7 @@ export function AutomationsGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Visit runs</strong> (Visit dispatched, Visit completed, Visit date changed): the client has
+            <strong>Visit runs</strong> (Visit dispatched, Visit is coming up, Visit completed, Visit date changed): the client has
             no visit left on that day &mdash; everything that day was cancelled, skipped, deleted or moved. A
             &quot;crew coming tomorrow&quot; text won&apos;t go out after a rain-out.
           </li>
@@ -339,6 +351,11 @@ export function AutomationsGuide() {
           tag event, say) there is no such record, so the condition could never be met &mdash; a start condition
           would never enroll anyone and a stop condition would never stop. The builder hides them with a hint,
           and an old rule that already uses one is still shown (and logged as not applicable when it is checked).
+        </p>
+        <p>
+          <strong>Day counts use your company&apos;s calendar.</strong> Days invoice is past due, Days since
+          invoice was paid and Days ticket is past due are whole days between the date and today in your
+          company&apos;s time zone, so a rule checked in the evening counts the same as one checked that morning.
         </p>
         <p>
           <strong>Custom field conditions.</strong> The &quot;Custom field&quot; condition (available in trigger

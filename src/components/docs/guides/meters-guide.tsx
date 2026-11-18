@@ -16,7 +16,7 @@ const TRIGGER_TYPES: [string, string][] = [
   ["Work Order Overdue", "A work order's due date has passed by N or more days. Fires once per overdue work order, naming it."],
   ["New Maintenance Request", "A new maintenance request is submitted — every request, however many come in at once."],
   ["Work Order Status Changed", "A work order's status changes to a specific value you pick."],
-  ["Purchase Order Status Changed", "A purchase order's status changes to the value you pick: Requested, Pending Approval, Approved, Rejected, Ordered, Partially Fulfilled, Completed or Canceled. Approving, rejecting or submitting a PO for approval counts, once per change."],
+  ["Purchase Order Status Changed", "A purchase order's status changes to the value you pick: Requested, Pending Approval, Approved, Rejected, Ordered, Partially Fulfilled, Completed or Canceled. Approving, rejecting or submitting a PO for approval counts, and so does a PO sent back to Pending Approval because its vendor changed after approval, once per change."],
 ];
 
 const ACTION_TYPES: [string, string][] = [

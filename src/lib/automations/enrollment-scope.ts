@@ -12,6 +12,7 @@ export const VISIT_SCOPED_TRIGGERS: ReadonlySet<TriggerType> = new Set<TriggerTy
   "visit_completed",
   "service_visit_completed",
   "visit_dispatched",
+  "visit_coming_up",
   "visit_skipped",
   "visit_cancelled",
   "visit_date_changed",

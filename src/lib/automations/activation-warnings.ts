@@ -4,11 +4,18 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
-/** Date-gap trigger types (estimate_expiring, estimate_no_response) — they fire `days` before/after an anchor date. */
-export const DATE_GAP_TRIGGER_TYPE_LIST = ["estimate_expiring", "estimate_no_response"] as const;
+/** Date-gap trigger types (estimate_expiring, estimate_no_response, visit_coming_up) — they fire `days` before/after an anchor date. */
+export const DATE_GAP_TRIGGER_TYPE_LIST = ["estimate_expiring", "estimate_no_response", "visit_coming_up"] as const;
 
 /** Day count a date-gap trigger uses when the builder left the box blank (the placeholder the builder shows). */
 export const DEFAULT_DATE_GAP_DAYS = 7;
+/** A visit reminder defaults to the day before. */
+export const DEFAULT_VISIT_COMING_UP_DAYS = 1;
+
+/** The default day count for a date-gap trigger type. */
+export function defaultDateGapDays(triggerType: string | null | undefined): number {
+  return triggerType === "visit_coming_up" ? DEFAULT_VISIT_COMING_UP_DAYS : DEFAULT_DATE_GAP_DAYS;
+}
 
 /**
  * The day count a date-gap trigger runs with: DEFAULT_DATE_GAP_DAYS when none was saved
@@ -16,9 +23,9 @@ export const DEFAULT_DATE_GAP_DAYS = 7;
  * saved whole number when it is positive, or null when the saved value is unusable
  * (zero, negative, not a number) — the cron skips those and activation warns about them.
  */
-export function resolveDateGapDays(config: unknown): number | null {
+export function resolveDateGapDays(config: unknown, triggerType?: string | null): number | null {
   const raw = (config as { days?: unknown } | null | undefined)?.days;
-  if (raw === undefined || raw === null || raw === "") return DEFAULT_DATE_GAP_DAYS;
+  if (raw === undefined || raw === null || raw === "") return defaultDateGapDays(triggerType);
   const n = Number(raw);
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
 }
@@ -57,9 +64,9 @@ export async function automationActivationWarnings(supabase: AnyClient, automati
       (t) =>
         t.sequence_id === seq.id &&
         (DATE_GAP_TRIGGER_TYPE_LIST as readonly string[]).includes(t.trigger_type) &&
-        resolveDateGapDays(t.config) === null
+        resolveDateGapDays(t.config, t.trigger_type) === null
     );
-    if (badDays) warnings.push(`${label} has an estimate date trigger whose number of days isn't a whole number of 1 or more — that trigger will never fire.`);
+    if (badDays) warnings.push(`${label} has a date trigger (estimate or visit coming up) whose number of days isn't a whole number of 1 or more — that trigger will never fire.`);
     if (steps.length === 0) {
       warnings.push(`${label} has no active steps.`);
       continue;

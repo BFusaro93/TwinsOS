@@ -30,7 +30,7 @@ export type ChangedVisit = {
  * service ids and the day's first visit id. A stop's sibling visits (one per
  * service, one per crew) dispatched together fire once; a visit on another day
  * fires its own. (Visits without an id or date fold into one client-level firing.)
- * Best-effort: never throws.
+ * Best-effort: never throws. Returns how many runs were started.
  *
  * `db` must be the caller's RLS-scoped client (org-scoped reads); processing of
  * any due steps runs under the service client, scoped to the enrollment ids
@@ -47,11 +47,15 @@ export async function fireVisitTriggers(
      *  the request out of time. Enrollments not processed here stay due and the
      *  automations cron sends them on its next sweep. Unlimited when omitted. */
     processBudgetMs?: number;
+    /** Only fire the org's triggers this accepts — the visit-coming-up cron fires each
+     *  "N days before" setting for the visits N days out. All triggers when omitted. */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    triggerFilter?: (trigger: any) => boolean;
   }
-): Promise<void> {
+): Promise<number> {
   const startedAt = Date.now();
   try {
-    if (params.triggerTypes.length === 0 || params.visits.length === 0) return;
+    if (params.triggerTypes.length === 0 || params.visits.length === 0) return 0;
 
     // Each visit's CURRENT service day (after the caller's write: the new date for a move).
     const dateById = new Map<string, string>();
@@ -107,7 +111,8 @@ export async function fireVisitTriggers(
     // per client (a 500-visit bulk action re-ran the paged trigger lookup per client).
     const triggersByType = new Map<TriggerType, unknown[]>();
     for (const triggerType of params.triggerTypes) {
-      triggersByType.set(triggerType, await fetchOrgTriggers(db, params.orgId, triggerType));
+      const all = await fetchOrgTriggers(db, params.orgId, triggerType);
+      triggersByType.set(triggerType, params.triggerFilter ? all.filter(params.triggerFilter) : all);
     }
 
     const enrollmentIds: string[] = [];
@@ -156,7 +161,9 @@ export async function fireVisitTriggers(
         }
       }
     }
+    return enrollmentIds.length;
   } catch (err) {
     log.error("visit trigger firing failed", { error: err instanceof Error ? err.message : String(err) });
+    return 0;
   }
 }

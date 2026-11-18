@@ -2,14 +2,12 @@
  * Push-notification triggers for crm_job_visits changes — new crew
  * assignment and dispatcher notes. Shared by the two server-side surfaces
  * that write crew_id / notes_to_crew on a visit:
- *   - src/app/api/crm/visits/[visitId]/route.ts (single + bulk re-assign,
- *     status updates, notes — DispatchBoard.tsx's bulk actions and the
- *     "Notes to Crew" dialog both go through this route)
+ *   - src/app/api/crm/visits/bulk-update/route.ts (the dispatch board's
+ *     bulk re-assign, status and notes actions)
  *   - src/app/api/crm/visits/[visitId]/notify/route.ts (a lightweight
  *     fire-and-forget endpoint for the single-visit assignment/notes paths
  *     that update crm_job_visits directly via useUpdateVisit()'s
- *     client-side Supabase call rather than the PATCH route above — see
- *     that route's doc comment for why a separate endpoint exists)
+ *     client-side Supabase call)
  *
  * Both callers already know the visit was just written; this module's job
  * is purely "look up who to notify and send it" — it never writes to

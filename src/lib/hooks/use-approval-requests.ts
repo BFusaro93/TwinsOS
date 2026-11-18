@@ -61,7 +61,7 @@ export function useApprovalRequests(entityId: string) {
  * status, once per status write (so a second report of the same change is ignored).
  * Best-effort.
  */
-function firePOStatusAutomations(purchaseOrderId: string, toStatus: string) {
+export function firePOStatusAutomations(purchaseOrderId: string, toStatus: string) {
   fetch("/api/automations/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
