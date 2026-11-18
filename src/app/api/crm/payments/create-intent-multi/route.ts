@@ -182,7 +182,7 @@ export async function POST(request: Request) {
         // Each invoice is settled from its own account's credit.
         client_id: invoiceClient.get(a.invoiceId) ?? clientId,
         balance_cents: a.amountCents,
-      });
+      }, { serviceDb: service, orgId: effOrgId });
     }
   } catch {
     return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });

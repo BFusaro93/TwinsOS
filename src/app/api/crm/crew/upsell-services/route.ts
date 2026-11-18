@@ -3,24 +3,19 @@ import { getRouteAuth } from "@/lib/supabase/route-auth";
 
 /**
  * GET — services the office has opened up for crews to suggest from the field.
- * Native counterpart of useFieldUpsellServices() (the web hook reads crm_services
- * through the browser client). An empty list is the feature's on/off switch: the
- * app hides "Suggest work" entirely. The upsell POST re-checks
- * show_in_field_upsells, so this only drives the UI. Scoped by the caller's own
- * RLS, same as the web hook.
+ * Native counterpart of useFieldUpsellServices(); both read the
+ * crm_crew_upsell_services() definer RPC (name + pitch only — a crew login can't
+ * read crm_services, whose rows carry rates and costs). An empty list is the
+ * feature's on/off switch: the app hides "Suggest work" entirely. The upsell
+ * POST re-checks the same list, so this only drives the UI. Scoped to the
+ * caller's org by the RPC.
  */
 export async function GET(request: Request) {
   const { supabase, user } = await getRouteAuth(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from("crm_services")
-    .select("id, name, upsell_pitch")
-    .eq("show_in_field_upsells", true)
-    .eq("is_active", true)
-    .is("deleted_at", null)
-    .order("name");
+  const { data, error } = await (supabase as any).rpc("crm_crew_upsell_services");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

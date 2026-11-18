@@ -634,6 +634,13 @@ export function ClientsGuide() {
           them a few at a time so the mail provider&apos;s rate limit isn&apos;t hit.
         </p>
         <p>
+          <strong>Refunds are their own rows.</strong> A payment the client made shows at its full amount on
+          the date it was paid, and each refund of it shows as a separate <strong>Refund</strong> row on the
+          date the refund was issued, adding back to the balance. So a statement for a period before the
+          refund shows the payment as it was then, and the statement for the period the refund happened in
+          shows the refund.
+        </p>
+        <p>
           <strong>Sub-accounts and parent payments.</strong> Only issued invoices count (not drafts
           or voids). When a payment was recorded on another account, typically the parent&apos;s, and
           applied to this client&apos;s invoices, the child&apos;s statement shows it as a payment

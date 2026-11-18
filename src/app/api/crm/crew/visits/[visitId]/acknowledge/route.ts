@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
 
 // Accepts either the web app's cookie session or crew-app's bearer token —
 // see getRouteAuth(). Idempotent: re-acknowledging just re-stamps `now`.
@@ -32,7 +32,7 @@ export async function POST(
     .from("crm_job_visits")
     .update({ acknowledged_notes_at: now, updated_at: now })
     .eq("id", visitId)
-    .select(JOB_VISIT_READ_COLUMNS)
+    .select(CREW_VISIT_RESPONSE_COLUMNS)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

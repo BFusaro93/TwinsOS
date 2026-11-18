@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 
 const log = logger.child("stripe apply credit first");
 
@@ -62,9 +63,17 @@ export async function getClientUnappliedPayments(
  * null under the service role. */
 export async function applyCreditBeforeCharge(
   userDb: Db,
-  invoice: { id: string; client_id: string; balance_cents: number }
+  invoice: { id: string; client_id: string; balance_cents: number },
+  /** Fire invoice_paid when this call's credit pays the invoice off — the route
+   *  then returns without a charge, so record-charge (which fires it for card/ACH
+   *  payments) never runs and the "thanks for your payment" automation was lost.
+   *  `serviceDb` must be the service-role client; `orgId` the org the route has
+   *  already verified the invoice belongs to. */
+  paidOff?: { serviceDb: Db; orgId: string }
 ): Promise<number> {
-  let balance = invoice.balance_cents;
+  const startBalance = invoice.balance_cents;
+  let balance = startBalance;
+  let applied = 0;
   const payments = await getClientUnappliedPayments(userDb, invoice.client_id, invoice.id);
   for (const p of payments) {
     if (balance <= 0) break;
@@ -78,7 +87,33 @@ export async function applyCreditBeforeCharge(
       log.error("credit apply failed", { invoiceId: invoice.id, paymentId: p.id, error });
       throw error;
     }
-    balance -= typeof data === "number" ? data : 0;
+    const got = typeof data === "number" ? data : 0;
+    applied += got;
+    balance -= got;
+  }
+  // Only the call whose own applies took the balance to zero fires: the RPC caps
+  // each apply at the open balance, so two concurrent calls can't both get here.
+  if (paidOff && startBalance > 0 && applied > 0 && balance <= 0) {
+    await fireInvoicePaidFromCredit(paidOff.serviceDb, paidOff.orgId, invoice.id);
   }
   return Math.max(0, balance);
+}
+
+/** invoice_paid for an invoice credit just paid off. Re-reads the invoice in the
+ *  verified org (it must really be paid now) and enrolls the client that owns it.
+ *  Best-effort: never throws, so a trigger failure can't fail the payment flow. */
+async function fireInvoicePaidFromCredit(serviceDb: Db, orgId: string, invoiceId: string): Promise<void> {
+  try {
+    const { data: inv } = await serviceDb
+      .from("crm_invoices")
+      .select("client_id, status")
+      .eq("id", invoiceId)
+      .eq("org_id", orgId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!inv?.client_id || inv.status !== "paid") return;
+    await fireServerTrigger(serviceDb, { orgId, clientId: inv.client_id, invoiceId, triggerType: "invoice_paid" });
+  } catch (err) {
+    log.error("invoice_paid after credit apply failed", { invoiceId, error: err instanceof Error ? err.message : String(err) });
+  }
 }

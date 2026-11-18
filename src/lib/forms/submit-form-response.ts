@@ -737,6 +737,9 @@ export async function submitFormResponse(
   // write and flag the ticket instead of silently dropping it or attaching
   // consent to a phone-less client record.
   let smsConsentPendingPhone = false;
+  // True only when this submission turned the client's SMS consent from off to on — that
+  // (not a re-confirmation) is what fires "Has Opted In to SMS" below.
+  let smsOptInJustEnabled = false;
   if (formFields) {
     const optInField = formFields.find((f: { field_type?: string }) => f.field_type === "sms_optin");
     if (optInField && formData[optInField.label] === "true") {
@@ -764,7 +767,12 @@ export async function submitFormResponse(
           }
         }
         if (relatedClientId && phoneOnFile) {
-          await db
+          const { data: consentBefore } = await db
+            .from("clients")
+            .select("sms_opt_in")
+            .eq("id", relatedClientId)
+            .maybeSingle();
+          const { error: consentErr } = await db
             .from("clients")
             .update({
               sms_opt_in: true,
@@ -772,6 +780,7 @@ export async function submitFormResponse(
               sms_opt_in_source: "form",
             })
             .eq("id", relatedClientId);
+          smsOptInJustEnabled = !consentErr && (consentBefore as { sms_opt_in?: boolean | null } | null)?.sms_opt_in !== true;
         }
       } else {
         smsConsentPendingPhone = true;
@@ -891,7 +900,11 @@ export async function submitFormResponse(
   // ── Log form response ─────────────────────────────────────────────────────────
   const responseStatus = autoManage ? "completed" : "on_hold";
 
+  // Id chosen here (not read back): the internal test path inserts through the caller's
+  // session, and the form_submitted run is scoped to this response.
+  const responseId = crypto.randomUUID();
   const { error: insertError } = await db.from("crm_form_responses").insert({
+    id: responseId,
     form_id: form.id,
     org_id: form.org_id,
     submitted_by_name: submittedName,
@@ -921,6 +934,8 @@ export async function submitFormResponse(
       // The form's id lets a "Form was submitted" automation be limited to specific forms.
       enrollmentIds.push(...await fireSimpleTrigger(db, {
         orgId: form.org_id, clientId: relatedClientId, triggerType: "form_submitted", matchValues: [form.id],
+        // Once per form response (the run is scoped to it), not once per client.
+        recordId: responseId,
       }));
     } catch (err) {
       console.error("[submitFormResponse] form_submitted trigger failed:", err instanceof Error ? err.message : err);
@@ -932,6 +947,17 @@ export async function submitFormResponse(
         }));
       } catch (err) {
         console.error("[submitFormResponse] tag_added trigger failed:", err instanceof Error ? err.message : err);
+      }
+    }
+    // Consent given on the form is an opt-in like a START reply or the office ticking the
+    // box, so "Has Opted In to SMS" automations run for it.
+    if (smsOptInJustEnabled) {
+      try {
+        enrollmentIds.push(...await fireSimpleTrigger(db, {
+          orgId: form.org_id, clientId: relatedClientId, triggerType: "has_opted_in_sms",
+        }));
+      } catch (err) {
+        log.error("has_opted_in_sms trigger failed", { formId: form.id, error: err instanceof Error ? err.message : String(err) });
       }
     }
     // A ticket the form filed is a new ticket like one from the New Ticket dialog,

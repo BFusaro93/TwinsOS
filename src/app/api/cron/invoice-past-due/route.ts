@@ -51,6 +51,10 @@ export async function GET(request: Request) {
       .not("status", "in", '("paid","void","draft")')
       // Same as isInvoiceOverdue: an invoice with nothing left to pay is not past due.
       .gt("balance_cents", 0)
+      // A payment is in flight (an ACH debit takes days to clear and the balance
+      // doesn't move until it does): the client has paid, so don't chase them.
+      // The marker is cleared when the payment settles or fails.
+      .is("pending_payment_intent_id", null)
       .is("deleted_at", null)
       .order("id")
       .range(from, from + 999);
@@ -75,7 +79,7 @@ export async function GET(request: Request) {
   let fired = 0;
   let stoppedEarly = false;
   const startedAt = Date.now();
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
   // Start at a different org each day and stop before maxDuration: each overdue row costs
   // several queries, so one org with thousands of them could use up every run and the orgs
   // after it in a fixed order were never reached.

@@ -343,7 +343,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Create a work order",
             detail:
-              "Go to CMMS > Work Orders and click '+ New Work Order'. Fill in the title, linked asset or vehicle, priority (Low / Medium / High / Urgent), due date, and assign to a technician.",
+              "Go to CMMS > Work Orders and click '+ New Work Order'. Fill in the title, linked asset or vehicle, priority (Low / Medium / High / Critical), due date, and assign to a technician.",
           },
           {
             step: "Status flow",
@@ -424,7 +424,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Notifications",
             detail:
-              "PM schedules due within 7 days appear in the Notifications bell as 'PM Due' alerts. The PM Due Reminder automation template can also create a work order automatically before the due date.",
+              "PM schedules due within 7 days appear in the Notifications bell as 'PM Due' alerts. The PM Due Reminder automation template can also create a work order automatically before the due date — once for each PM schedule each time it comes due.",
           },
           {
             step: "Generating work orders",
@@ -2016,6 +2016,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Maintenance & Work Orders",
     items: [
       {
+        q: "My PM Due automation fired once and then never again. Why?",
+        a: "That's fixed. PM Due automations now fire once for each PM schedule each time it comes due, naming that schedule's asset, so one overdue schedule no longer silences the alert for the others. The same schedule fires again once its next due date moves on. Work Order Overdue automations fire once for each overdue work order.",
+      },
+      {
+        q: "My \"PO Approved\" automation never runs. Why?",
+        a: "Approving a PO through its approval chain didn't trigger it before; now it does. Purchase Order Status Changed fires when a PO is approved, rejected or submitted for approval, once per change. It offers the real PO statuses: Requested, Pending Approval, Approved, Rejected, Ordered, Partially Fulfilled, Completed and Canceled. Older rules saved as Closed now mean Completed.",
+      },
+      {
+        q: "Where did the Urgent priority go on automation work orders?",
+        a: "Work orders and maintenance requests use Low, Medium, High and Critical. Automations saved with Urgent now create Critical work orders. Urgent was never a valid priority, so those automations couldn't create anything before.",
+      },
+      {
+        q: "Why does my Send Email automation action need an email address?",
+        a: "The mail service can only deliver to a real address, so the recipient must be one. You can also add a message. If the mail service rejects the address, the failure is logged once instead of retried every 15 minutes.",
+      },
+      {
+        q: "Do Equipt automations run on the Starter plan?",
+        a: "No. Equipt's automations (meter readings, low stock, PM due and work order overdue) pause on the Starter plan, which includes Landscapt only. They resume once the plan includes Equipt.",
+      },
+      {
         q: "What happens to the parts when I delete a work order?",
         a: "For an Open, On Hold, In Progress or Skipped work order, the parts it took from stock go back on hand automatically. For a Done work order you're asked whether the parts went back on the shelf: answer Yes to return them, or No to keep them counted as used.",
       },
@@ -2201,6 +2221,202 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "I marked an estimate as Sent by hand. Will my \"Estimate was sent\" automation run?",
+        a: "Yes. Estimate was sent fires the first time an estimate moves into Sent, however it gets there: emailing it, copying its proposal link, or changing its stage to Sent (stage picker, drag or bulk change). That first move also records the sent date that No response from client counts from. Sending it again later doesn't restart the sequence.",
+      },
+      {
+        q: "When does \"Invoice created\" fire?",
+        a: "When the invoice is issued, meaning it gets its invoice number: Save Invoice, Send, Print, emailing it, or any invoice Landscapt creates for you (completed visits, contract billing, snow, milestones, merged invoices). It fires once per invoice. Opening the New Invoice screen doesn't fire it, and imported invoices never do. Invoices Landscapt creates on its own start their automation within 15 minutes.",
+      },
+      {
+        q: "Does \"Invoice sent\" fire if I print or mail the invoice?",
+        a: "Yes. Invoice sent fires once per invoice the first time it leaves draft: emailed, printed or marked as Sent. Re-emailing the same invoice doesn't fire it again.",
+      },
+      {
+        q: "A client paid with account credit. Does \"Invoice paid\" still run?",
+        a: "Yes. Invoice paid fires however the invoice is paid off: a payment entered in the office, a card or bank payment online or through autopay, account credit that covers the balance, or a line edit that leaves nothing owing. When a parent account's check pays a sub-account's invoice, the sub-account is the one enrolled.",
+      },
+      {
+        q: "Will a client get a past-due reminder while their bank payment is still clearing?",
+        a: "No. Invoice past due skips an invoice while a bank (ACH) payment for it is in progress, and a past-due sequence that's already running stops at its next step. It also stops if you move the due date out or the client's unused credit covers the invoice.",
+      },
+      {
+        q: "My client mistyped their card on the payment page. Did they get a \"card failed\" email?",
+        a: "No. Credit card charge failed only fires when a charge the customer wasn't there for fails: autopay, or the office charging the card on file. It runs once per invoice, so its email can include [invoicenumber] and [paymentlink].",
+      },
+      {
+        q: "My \"Visit completed\" email goes out later than the first visit at a stop. Why?",
+        a: "Visit completed waits until the client's whole day is finished: no scheduled, dispatched or in-progress visit left for them that day. That way the email, and the chemical Notice of Treatment, cover every service and product from the stop. Completing, skipping, cancelling or moving the last open visit finishes the day.",
+      },
+      {
+        q: "How do I send a day-before visit reminder?",
+        a: "Make an automation on the Visit was dispatched trigger with a text or email step that uses [visitdate] and [visitservices], for example \"Your [visitservices] is scheduled for [visitdate].\" Then press Dispatch day on the Dispatch Board for tomorrow's schedule. Each client gets one message for all their visits that day. Only visits with a crew are dispatched, and if the visit is cancelled or moved before the message goes out, the run stops.",
+      },
+      {
+        q: "What's the difference between [servicedate] and [visitdate]?",
+        a: "In a visit-triggered sequence, [visitdate] and [visitservices] always describe the day the run is about; [servicename], [servicedate] and [chemicalnotice] now do too. [nextservicename] and [nextservicedate] still show the client's next upcoming visit, which may be a different one, so use [visitdate] for reminders.",
+      },
+      {
+        q: "A crew got rained out. Will clients still get the \"crew coming tomorrow\" text?",
+        a: "No. A visit-triggered run stops at its next step when the client has no visit left on that day: everything was cancelled, skipped, deleted or moved.",
+      },
+      {
+        q: "The client asked for changes on the proposal. Will they still get \"we haven't heard from you\"?",
+        a: "No. Estimate sent, No response and Estimate expiring runs stop as soon as the client has an open change request on the proposal page.",
+      },
+      {
+        q: "A returning lead filled out our web form again but got no reply. Why?",
+        a: "That's fixed: Form submitted now runs once per submission, not once per client. Contract created, Contract signed, Contract about to expire (once per contract term), Damage case created and Credit card about to expire (once per card) also run once per record, so next year's contract renewal reminder goes out too.",
+      },
+      {
+        q: "With Allow Re-Entry on, my estimate reminder used to repeat every other day. Is that fixed?",
+        a: "Yes. Re-entry is counted from when the earlier run started, so a 1-day delay means once a day. For date-based triggers (No response, Estimate expiring, Meeting is coming up, card or contract expiring), re-entry only starts a new run when the date itself changes, such as a re-sent estimate, a rescheduled meeting, a new card or a renewed contract.",
+      },
+      {
+        q: "What is the \"Re-subscribed to emails\" trigger?",
+        a: "It replaces \"Has opted in for emails\". It fires when a client's Do Not Market is turned off, on the client record or through the API. Has opted in for texts fires when text consent is newly given: a client replying START, the consent box on a web form, the office ticking it, or the API.",
+      },
+      {
+        q: "Do marketing automations text clients who unsubscribed?",
+        a: "No. A client marked Do Not Market doesn't get texts from marketing-type sequences (ones with Marketing, General or Follow-up emails). Service sequences, such as text-only reminders or ones whose emails are Transactional or Reminder, still text them.",
+      },
+      {
+        q: "My Zap didn't fire when a sales rep created a lead. Why?",
+        a: "Zapier events used to be skipped when the person making the change wasn't an admin. They now go out no matter who makes the change, including office users, sales reps and bulk actions.",
+      },
+      {
+        q: "An automation step adds a tag. Why didn't my \"Tag added\" automation run?",
+        a: "By design, automation steps never start other automations. A Tags step or an Update a field step doesn't fire Tag added or Client source updated, so automations can't set each other off in a loop. Add the follow-up steps to the same sequence instead.",
+      },
+      {
+        q: "What time do date-based automations send?",
+        a: "Past-due, expiring-estimate, no-response, card-expiry and contract-expiry automations are checked once a day around 9 to 10am Eastern, so their first emails no longer go out overnight. Email steps with a send window and texts (8am to 9pm in your time zone) still follow those rules.",
+      },
+      {
+        q: "A client had three visits completed on the same day. Why did my \"Visit completed\" automation only send one email?",
+        a: "Visit triggers run once per client per service day. Every visit that client has that day, across services, crews and properties, shares one run, so they get one message instead of three. A visit on another day starts a new run. Visit completed also waits for the client's day to be finished (no scheduled, dispatched or in-progress visit left that day), so the email goes out once the last visit is completed, skipped, cancelled or moved, and it names every service done that day.",
+      },
+      {
+        q: "Will a weekly mow follow-up automation send every week?",
+        a: "Yes. Visit triggers are scoped to the service day, so each week's visit starts its own run. Only the same client on the same day is held to one run.",
+      },
+      {
+        q: "How often does a \"Job created\" or \"Package renewed\" automation run for a client with several jobs?",
+        a: "Once per job. Job created, Job cancelled, Package created and Package renewed each run for every job separately, so two new jobs for the same client each get their own run.",
+      },
+      {
+        q: "What does Allow Re-Entry do on an automation sequence?",
+        a: "It lets the same service day, record (estimate, invoice, ticket, meeting or job) or client start the sequence again once its earlier run has finished and the re-entry delay has passed. A run that is still going is never started twice. Without it, each day, record or client runs the sequence once.",
+      },
+      {
+        q: "Do Landscapt automations, recurring visits and contract invoices keep running on the Equipt plan?",
+        a: "No. On the Equipt plan (Equipt only), Landscapt's background work is paused: recurring visits aren't generated, contract invoices aren't created, past-due and expiry reminders and scheduled campaigns aren't sent, QuickBooks invoice sync stops and automation steps wait. Upgrading to a plan with Landscapt resumes it from that day; skipped days aren't made up.",
+      },
+      {
+        q: "Can I create crew logins on the Equipt plan?",
+        a: "No. Crew logins are part of Landscapt, so Create Crew Account is refused on the Equipt plan with a note to upgrade.",
+      },
+      {
+        q: "Can a crew login see product costs, prices or stock levels?",
+        a: "No. The product catalog is office-only: unit cost, sale price and stock on hand are never available to a crew login, in the app, in Request Materials or on a crew-visible dashboard. The crew sees the product names, quantities and label details a stop needs.",
+      },
+      {
+        q: "Can a crew login see our service rates?",
+        a: "No. Default rates, costs, target rates and rate matrices stay with the office. The crew app only gets the service names on its stops and the services you ticked for Show in field upsells. A service's price on a stop shows only while Hide pricing from crews is off.",
+      },
+      {
+        q: "With Hide pricing from crews on, is the visit price still on the crew's tablet somewhere?",
+        a: "No. With the setting on, a visit's price is never sent to crew devices at all, so it can't be recovered from a shared tablet.",
+      },
+      {
+        q: "Can a crew login see other crews' times?",
+        a: "No. A crew login sees only its own crew's job punches. Other crews' times stay with the office.",
+      },
+      {
+        q: "Can a crew edit a visit's date, crew or status outside the crew app's buttons?",
+        a: "No. A crew changes its visits only through the crew app: Start Job, breaks, Stop Job, Skip, acknowledging notes and completion notes. Anything else on a visit is refused for a crew login.",
+      },
+      {
+        q: "Can a crew fix its own drive times?",
+        a: "No. Start Drive and End Drive record drive time; correcting a drive time after the fact is done by the office.",
+      },
+      {
+        q: "My crew tapped several buttons with no signal. Do they reach the office in the right order?",
+        a: "Yes. Crew-app taps are sent one at a time in the order they were tapped, both while online and when signal comes back, so Start Day lands before the first Start Job and a pause before its resume.",
+      },
+      {
+        q: "The Payroll report says \"Started at first job\" but the crew did tap Start Day earlier. What happened?",
+        a: "Start Day takes the earlier time when its tap reaches the office after the first Start Job (for example both were tapped with no signal). The day's start is moved back to the Start Day tap and the flag goes away. If the flag stays, the crew never tapped Start Day; correct the start in Payroll.",
+      },
+      {
+        q: "One service on a stop wouldn't stop. Were the other services invoiced?",
+        a: "Yes. If one service on a stop can't finish at Stop Job (unconfirmed chemicals, a locked payroll day), the crew is told why, but the services that did finish are still completed, invoiced and costed. Fix the one that failed and tap Stop Job again.",
+      },
+      {
+        q: "Does Stop Job change each service's crew size?",
+        a: "No. Each service keeps its own men count, so a three-man mow and a one-man bed edge on the same stop are costed as three and one. Stop Job only fills in a service that has no crew size.",
+      },
+      {
+        q: "A crew started yesterday's leftover stop after midnight. Which roster is clocked in?",
+        a: "That day's roster, the same people Start Day uses that day, not the roster of the day the stop was originally scheduled.",
+      },
+      {
+        q: "Why does Payroll say someone is \"Not linked to an employee\"?",
+        a: "That crew roster entry has no employee record attached, so it is paid as its own person and its hours can't combine with the same worker's hours on another crew for overtime. Pick the employee for it under Team → Crews.",
+      },
+      {
+        q: "Can I change a payment's amount or an invoice's paid balance through the API?",
+        a: "No. Amounts, refunds, online-payment details, how a payment is applied, and an invoice's paid amount, balance and Paid / Partial status change only through Enter / Edit Payment, Apply Credit, Refund and the invoice editor. Direct writes are refused, even for admins, so balances always match the payments behind them.",
+      },
+      {
+        q: "Which payments can be deleted?",
+        a: "Only an unapplied manual payment: nothing applied, nothing refunded and not taken online. It needs Delete Card Payments or Delete ACH Payments. Anything else is edited or refunded instead.",
+      },
+      {
+        q: "I changed a contract from quarterly to monthly after it had billed. When does monthly billing start?",
+        a: "After the period already billed runs out. The quarter already invoiced is used up first, then the first monthly cycle starts on the next billing day, so nothing is billed twice and no month is skipped. The contract dialog shows the end of the billed period and the new first cycle before you save.",
+      },
+      {
+        q: "I edited the start date of a weekly contract that's already billing. Will the billing day move?",
+        a: "No. Once a weekly or every-2-weeks contract has billed, its cycle is fixed to the day it started billing on, so a new start date doesn't slide the cycle or bill days already invoiced.",
+      },
+      {
+        q: "A parent account has credit. Why are its sub-accounts still getting past-due reminders?",
+        a: "A parent's credit isn't spent on a sub-account's invoices automatically, so it doesn't mark them as covered. Only the invoice's own account's credit (and a deposit on its estimate) counts. Apply the parent's credit to those invoices yourself if that's what you want.",
+      },
+      {
+        q: "Can one credit make two invoices look covered?",
+        a: "No. Credit is counted toward one invoice at a time, oldest due first, so a single $200 credit covers one $200 invoice, not two.",
+      },
+      {
+        q: "Can I duplicate a voided contract invoice on the same day it was dated?",
+        a: "Yes. A void invoice doesn't count against the contract's one-invoice-per-date rule, so Duplicate as draft works the same day. Voiding still never makes the contract bill that period again on its own.",
+      },
+      {
+        q: "How do refunds show on an account statement?",
+        a: "The payment shows at its full amount on the day it was paid, and each refund appears as its own Refund row on the day it was refunded, adding back to the balance. A statement for a period before the refund shows the payment as it was then.",
+      },
+      {
+        q: "Can a property manager file a portal ticket for one of their properties?",
+        a: "Yes. A parent account signed in to the portal can file a ticket for any of its sub-accounts as well as its own account, and the ticket lands on the account they pick.",
+      },
+      {
+        q: "Do files attached to an estimate carry over when I convert it to a job?",
+        a: "Yes. Files attached to the estimate are copied onto the new job's attachments. The estimate's photos stay on the estimate and aren't copied.",
+      },
+      {
+        q: "I clicked Return to Waiting List on a stop two crews share. What happens to the other crew?",
+        a: "Both crews' visits go back together, so the job reappears on the Waiting List as one waiting job. It's refused if any crew on the stop has already clocked in.",
+      },
+      {
+        q: "I renamed a schedule and got an error. Did my jobs move?",
+        a: "No. Renaming a schedule moves every job on it in the same step. If any job couldn't be moved, for example one you don't have permission to change, nothing is renamed and the message says why.",
+      },
+      {
+        q: "An old dispatch saved view had a city typed in. Does it still filter?",
+        a: "Yes. Typed City or Zip text from an older view keeps filtering the board by that text (any city or zip containing it). Picking from the City or Zip checklist replaces it with an exact list.",
+      },
+      {
         q: "Why can't I add a maintenance part as a job material?",
         a: "Maintenance parts are Equipt inventory and their stock comes from Parts Inventory. Use a Stocked or Project Material on Landscapt jobs.",
       },
@@ -2258,7 +2474,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What does \"Credit available\" on an invoice mean?",
-        a: "The client has unapplied money, such as a prepayment or overpayment, that could pay it. It isn't subtracted until you click Apply to this invoice. Invoices fully covered by credit don't get past-due reminders.",
+        a: "The client has unapplied money, such as a prepayment or overpayment, that could pay it. It isn't subtracted until you click Apply to this invoice. Only the invoice's own account's credit counts (plus a deposit taken on its estimate), never a parent account's. Invoices fully covered by credit don't get past-due reminders.",
       },
       {
         q: "Why won't these two invoices merge?",
@@ -2306,7 +2522,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Someone works on two crews. Will Payroll count their overtime correctly?",
-        a: "Yes. Overtime limits are per person, so hours on every crew count together, and the person is listed once.",
+        a: "Yes, as long as each crew's roster entry is linked to their employee record. Overtime limits are per person, so hours on every crew count together, and the person is listed once. A roster entry with no linked employee is counted on its own; Payroll names those people in an amber note so you can link them under Team → Crews.",
       },
       {
         q: "Can crew logins see the change history?",
@@ -2706,7 +2922,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "If I move a job to another crew mid-day, what happens to the stop the first crew is working on?",
-        a: "It stays with the first crew so they can finish it, and finished visits keep the crew that did them. Only upcoming visits move to the new crew.",
+        a: "It stays with the first crew so they can finish it. Completed and skipped visits, visits dated before today and any visit already started keep the crew that had them. Only visits from today onward that haven't been started move to the new crew.",
       },
       {
         q: "The office completed a stop before the crew tapped Stop Job. Are the crew's notes lost?",
@@ -2734,7 +2950,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Why does a dashboard marked visible to crews show no job data to my crew?",
-        a: "Reports built on jobs and visits include prices, so they return nothing to a crew login.",
+        a: "Reports built on jobs and visits include prices, so they return nothing to a crew login. Product and service reports return nothing either, since the catalogs carry costs and rates, and product or service names show blank on reports such as chemical applications and upsells.",
       },
       {
         q: "Why can't I change the price or quantity on some estimate lines?",
@@ -2818,7 +3034,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which merge tags can an automation's email or text use?",
-        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags: [servicename] and [servicedate] for the client's last completed service, [nextservicename] and [nextservicedate] for their next scheduled one. [chemicalnotice] adds the compact Notice of Treatment for that last completed visit and is blank when it logged no chemicals. A tag with no value is left blank.",
+        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags. In a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it; [servicename], [servicedate] and [chemicalnotice] (the compact Notice of Treatment) read that day's visits. Otherwise [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. For a day-before reminder, dispatch the day before and start the sequence with Visit dispatched and a text such as \"We'll be out on [visitdate] for [visitservices].\" A tag with no value is left blank.",
       },
       {
         q: "Why didn't a form submission create a ticket?",
@@ -3513,6 +3729,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "Two crews would get the same crew login email. What happens?",
+        a: "The account is still created. If the generated @crew.landscapt.com address is already taken (\"Mow 1\" and \"Mow-1\", say), a short suffix such as -2 is added. The success screen shows the address to sign in with.",
+      },
+      {
+        q: "Can a crew login see other users' emails, roles or employee details?",
+        a: "No. A crew login sees only its own user record. Other users' email addresses and roles, employees' HR details and sales meetings are office-only.",
+      },
+      {
+        q: "Can support staff upload files while helping in our account?",
+        a: "Yes. When Landscapt support is signed in to your company to help, attachments they upload are saved in your company's files, the same as yours.",
+      },
+      {
+        q: "Can another company see or open our uploaded files?",
+        a: "No. Every company's attachments, logos, thumbnails and document images are kept in its own storage folder, and one company can't browse another's files or open its attachments. Images in the emails and PDFs you send still show for the people you send them to.",
+      },
       {
         q: "Why can't I set a card processing fee above 4%?",
         a: "Landscapt caps the card surcharge at 4%. Card networks cap surcharges at 3% and some states ban them, so keep your rate lawful where you operate.",

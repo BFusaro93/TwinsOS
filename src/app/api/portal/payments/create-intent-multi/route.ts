@@ -163,7 +163,7 @@ export async function POST(request: Request) {
           id: a.invoiceId,
           client_id: invoiceClient.get(a.invoiceId) ?? clientId,
           balance_cents: a.amountCents,
-        });
+        }, { serviceDb: service, orgId: ctx.orgId });
       }
     } catch {
       return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });

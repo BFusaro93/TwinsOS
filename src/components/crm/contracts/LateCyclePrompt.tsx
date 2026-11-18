@@ -28,6 +28,7 @@ import { formatCurrency } from "@/lib/utils";
 import {
   cycleBilledBy,
   pendingLateCycle,
+  pinsCycleGrid,
   unbilledContractCycles,
   type ContractCycle,
   type LateCycle,
@@ -203,7 +204,7 @@ export function useLateCyclePrompt() {
           id: pending.contractId,
           updates: {
             last_billed_date: pending.lastBilledDate && pending.lastBilledDate > last.cycleStart ? pending.lastBilledDate : last.cycleStart,
-            ...(!pending.billingAnchorDate && (frequency === "quarterly" || frequency === "annual") ? { billing_anchor_date: first.cycleStart } : {}),
+            ...(!pending.billingAnchorDate && pinsCycleGrid(frequency) ? { billing_anchor_date: first.cycleStart } : {}),
           },
         });
         toast.success("The missed cycles won't be billed");

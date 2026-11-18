@@ -164,7 +164,7 @@ export async function POST(request: Request) {
   // Settle with any deposit/prepayment the client already holds before
   // touching the card; otherwise they pay twice and the deposit floats.
   try {
-    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
+    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice, { serviceDb: createServiceClient(), orgId: invoice.org_id });
   } catch {
     return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
   }
@@ -213,6 +213,9 @@ export async function POST(request: Request) {
         off_session: true,
         confirm: true,
         metadata: {
+          // Read by the Connect webhook: a failed charge fires credit_card_charge_failed
+          // only for these off-session (card/bank on file) charges.
+          off_session: "true",
           source: "crm_invoice",
           org_id: invoice.org_id,
           invoice_id: invoice.id,

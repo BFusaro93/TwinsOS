@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import type { CRMOtherCharge } from "@/types/crm-invoices";
-import { recalcInvoiceTotalsFromLines } from "@/lib/hooks/use-invoices";
+import { fireInvoicePaidAfterRecalc, recalcInvoiceTotalsFromLines } from "@/lib/hooks/use-invoices";
 import {
   otherChargeBaseCents,
   otherChargeLineDescription,
@@ -216,7 +216,7 @@ export function useAddOtherChargeToInvoices() {
             sort_order: lineRows?.length ?? 0,
           });
           if (insErr) throw insErr;
-          await recalcInvoiceTotalsFromLines(supabase, invoiceId);
+          fireInvoicePaidAfterRecalc(await recalcInvoiceTotalsFromLines(supabase, invoiceId));
           result.added++;
         } catch (err) {
           result.skipped.push({ invoiceId, reason: err instanceof Error ? err.message : "Failed" });

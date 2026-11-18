@@ -45,12 +45,36 @@ export async function startCrewDay(
   if (memberIds.length === 0) return 0;
   const { data: existing } = await supabase
     .from("crm_crew_day_shifts")
-    .select("id, crew_member_id, ended_at, break_minutes")
+    .select("id, crew_member_id, started_at, ended_at, break_minutes, source")
     .eq("org_id", p.orgId)
     .eq("work_date", p.workDate)
     .is("deleted_at", null)
     .in("crew_member_id", memberIds);
   const has = new Set(((existing ?? []) as { crew_member_id: string }[]).map((r) => r.crew_member_id));
+
+  // Offline replay out of order: the leader tapped Start Day at 7:00 and Start
+  // Job at 7:40 with no signal, and the Start Job landed first — it auto-opened
+  // the shifts at 7:40, so the explicit Start Day used to be a no-op and the 40
+  // paid minutes from the shop were lost. An explicit Start Day whose tap is
+  // EARLIER than a shift the first job auto-opened pulls that shift's start back
+  // to the tap and makes it a manual start. Never moves a start later, never
+  // touches a shift the crew or office started, and leaves payroll-locked days
+  // alone (the trigger refuses; the rest of the crew still gets theirs). The tap
+  // is already bounded by resolveOccurredAt in the route.
+  if (p.source === "crew") {
+    const atMs = new Date(p.at).getTime();
+    for (const s of (existing ?? []) as { id: string; started_at: string; ended_at: string | null; source: string | null }[]) {
+      if (s.source !== "auto_first_job") continue;
+      if (new Date(s.started_at).getTime() <= atMs) continue;
+      const { error: pullErr } = await supabase
+        .from("crm_crew_day_shifts")
+        .update({ started_at: p.at, source: "crew" })
+        .eq("id", s.id)
+        .eq("started_at", s.started_at);
+      if (pullErr && isPayrollLockedError(pullErr.message)) continue;
+      if (pullErr) throw new Error(pullErr.message);
+    }
+  }
 
   // A job started after End Day (storm call-back, an accidental End Day, a
   // second shift): the member's shift for today is already ended, and the

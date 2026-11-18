@@ -12,26 +12,26 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const TRIGGER_TYPES: [string, string][] = [
   ["Meter Threshold", "A cumulative meter reaches a number you choose, or a level meter drops below one (see below for the full walkthrough)."],
   ["Part Low Stock", "A part's quantity on hand drops to or below its minimum stock level — any part, or one you specify."],
-  ["PM Schedule Due", "A preventive-maintenance schedule's next-due date is within N days."],
-  ["Work Order Overdue", "A work order's due date has passed by N or more days."],
-  ["New Maintenance Request", "A new maintenance request is submitted."],
+  ["PM Schedule Due", "A preventive-maintenance schedule's next-due date is within N days. Fires once per schedule each time it comes due, naming that schedule's asset."],
+  ["Work Order Overdue", "A work order's due date has passed by N or more days. Fires once per overdue work order, naming it."],
+  ["New Maintenance Request", "A new maintenance request is submitted — every request, however many come in at once."],
   ["Work Order Status Changed", "A work order's status changes to a specific value you pick."],
-  ["Purchase Order Status Changed", "A purchase order's status changes to a specific value you pick."],
+  ["Purchase Order Status Changed", "A purchase order's status changes to the value you pick: Requested, Pending Approval, Approved, Rejected, Ordered, Partially Fulfilled, Completed or Canceled. Approving, rejecting or submitting a PO for approval counts, once per change."],
 ];
 
 const ACTION_TYPES: [string, string][] = [
-  ["Create Work Order", "Opens a work order directly. Supports a Service Interval (see below)."],
+  ["Create Work Order", "Opens a work order directly, with priority Low, Medium, High or Critical. Supports a Service Interval (see below)."],
   ["Create Maintenance Request", "Adds a review step before it becomes a work order. Also supports a Service Interval."],
   ["Create Purchase Requisition", "Starts a requisition — useful for parts or consumables tied to the trigger."],
   ["Send Notification", "Notifies a role in-app."],
-  ["Send Email", "Emails a role or address. Requires email configured in Settings first."],
+  ["Send Email", "Emails one address (it must be a real email address) with an optional message. Requires email configured in Settings first. An address the mail service rejects is logged once and not retried."],
 ];
 
 const TEMPLATES: [string, string][] = [
   ["Low Stock Alert", "Fires on Part Low Stock; creates a requisition automatically."],
-  ["PM Due Reminder", "Fires on PM Schedule Due; creates a work order ahead of the due date."],
+  ["PM Due Reminder", "Fires on PM Schedule Due, once for each PM schedule each time it comes due (and again when its next due date moves on); creates a work order for that schedule's asset ahead of the due date."],
   ["WO Completed — Notify Team", "Fires on Work Order Status Changed (Done); sends a notification."],
-  ["PO Approved", "Fires on Purchase Order Status Changed (Approved); sends a notification."],
+  ["PO Approved", "Fires on Purchase Order Status Changed (Approved) when a PO is approved through its approval chain; sends a notification."],
 ];
 
 export function MetersGuide() {

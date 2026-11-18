@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { Resend } from "resend";
 import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -223,25 +223,37 @@ export async function POST(req: Request) {
     const ticketUrl = ticketLink(ticket.id);
     const resend = new Resend(process.env.RESEND_API_KEY!);
 
-    // Best-effort — don't fail the ticket if email errors
-    resend.emails.send({
-      // Tenant-branded sender on the shared verified domain — never a
-      // hard-coded tenant name.
-      from: orgEmailFrom(settings?.company_name),
-      to: notifyEmail,
-      subject: `[Ticket #${ticket.ticket_number}] ${subject.trim()} — ${clientName}`,
-      html: buildTicketNotificationEmail({
-        ticketNumber: ticket.ticket_number,
-        subject: subject.trim(),
-        body: body?.trim() ?? null,
-        category,
-        clientName,
-        recipientName: notifyName ?? notifyEmail,
-        orgName,
-        ticketUrl,
-      }),
-    }).catch((err) => {
-      console.error("[portal/tickets] Notification email error:", err);
+    // Best-effort — don't fail the ticket if email errors. after() keeps the
+    // serverless function alive until the send settles; a bare un-awaited
+    // promise could be dropped once the response was returned.
+    const html = buildTicketNotificationEmail({
+      ticketNumber: ticket.ticket_number,
+      subject: subject.trim(),
+      body: body?.trim() ?? null,
+      category,
+      clientName,
+      recipientName: notifyName ?? notifyEmail,
+      orgName,
+      ticketUrl,
+    });
+    const to = notifyEmail;
+    after(async () => {
+      try {
+        const { error } = await resend.emails.send({
+          // Tenant-branded sender on the shared verified domain — never a
+          // hard-coded tenant name.
+          from: orgEmailFrom(settings?.company_name),
+          to,
+          subject: `[Ticket #${ticket.ticket_number}] ${subject.trim()} — ${clientName}`,
+          html,
+        });
+        if (error) log.error("notification email failed", { ticketId: ticket.id, error: error.message });
+      } catch (err) {
+        log.error("notification email error", {
+          ticketId: ticket.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     });
   }
 

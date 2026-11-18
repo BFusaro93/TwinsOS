@@ -678,6 +678,14 @@ export function useUpdateEstimateStage() {
         .eq("id", id);
       if (error) throw error;
 
+      // A move into Sent (picker, kanban drag, bulk) counts as sending it. The server stamps
+      // sent_at and fires "Estimate was sent" — only on the estimate's FIRST move into Sent,
+      // whichever path that was (email, proposal link, or this). Best-effort: the stage
+      // change itself already succeeded.
+      if (stage === "sent" && fromStage !== "sent") {
+        await fetch(`/api/crm/estimates/${encodeURIComponent(id)}/mark-sent`, { method: "POST" }).catch(() => undefined);
+      }
+
       const resolvedClientId = clientId ?? existing?.client_id;
       if (resolvedClientId) {
         const stageLabel: Record<string, string> = {
@@ -697,7 +705,11 @@ export function useUpdateEstimateStage() {
         });
       }
 
-      return { salesRepId: existing?.sales_rep_id as string | null | undefined, clientId: resolvedClientId as string | undefined };
+      return {
+        salesRepId: existing?.sales_rep_id as string | null | undefined,
+        clientId: resolvedClientId as string | undefined,
+        fromStage,
+      };
     },
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.id] });
@@ -711,7 +723,13 @@ export function useUpdateEstimateStage() {
       const clientId = data?.clientId;
       if (clientId) {
         qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
-        if (vars.stage === "accepted") {
+        // Won = entering accepted OR invoiced from any other stage. Create Invoice / drag /
+        // bulk stage change can move an open estimate straight to "invoiced", which never
+        // passed through "accepted" and so never fired estimate_won. Fired once: a move
+        // between accepted and invoiced (either way) or onto the same stage doesn't re-fire.
+        const WON_STAGES = ["accepted", "invoiced"];
+        const enteringWon = WON_STAGES.includes(vars.stage) && !WON_STAGES.includes(data?.fromStage ?? "");
+        if (enteringWon) {
           fireAutomationTrigger({ triggerType: "estimate_won", clientId, estimateId: vars.id, matchValues });
         } else if (vars.stage === "lost") {
           fireAutomationTrigger({ triggerType: "estimate_lost", clientId, estimateId: vars.id, matchValues });

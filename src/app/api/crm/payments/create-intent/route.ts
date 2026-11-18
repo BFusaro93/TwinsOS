@@ -139,7 +139,7 @@ export async function POST(request: Request) {
   // existing deposit/credit first so they aren't charged for money they've
   // already paid.
   try {
-    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
+    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice, { serviceDb: service, orgId: invoice.org_id });
   } catch {
     return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
   }

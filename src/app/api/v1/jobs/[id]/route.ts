@@ -10,7 +10,7 @@ import { propagateCrewToVisits } from "@/lib/visits/propagate-crew";
 import { applyJobStatusToVisits } from "@/lib/visits/job-status-visits";
 import { GENERATOR_JOB_COLUMNS, generateVisitsForJobs, type GeneratorJob } from "@/lib/visits/generate";
 import { logger } from "@/lib/logger";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("api/v1/jobs");
@@ -229,8 +229,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (visitToMove.job_service_id) {
         const { data: svc } = await db.from("crm_job_services").select("service_id").eq("id", visitToMove.job_service_id).maybeSingle();
         if (svc?.service_id) matchValues = [svc.service_id as string];
+      } else {
+        // A whole-job visit covers every service the job includes, as in the app.
+        const { data: svcs } = await db
+          .from("crm_job_services")
+          .select("service_id")
+          .eq("org_id", auth.orgId)
+          .eq("job_id", id)
+          .not("included", "is", false);
+        const ids = ((svcs ?? []) as { service_id: string | null }[]).map((s) => s.service_id).filter((x): x is string => !!x);
+        if (ids.length > 0) matchValues = ids;
       }
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "visit_date_changed", matchValues, recordId: visitToMove.id });
+      await fireServerTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "visit_date_changed", matchValues, recordId: visitToMove.id, visitId: visitToMove.id, visitDate: body.scheduledDate ?? null });
     } catch {
       // enrollment failure must not fail the update
     }
@@ -241,7 +251,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // automations or Zapier hooks. Best-effort.
   if (body.status === "cancelled" && before.status !== "cancelled" && before.client_id) {
     try {
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "job_cancelled" });
+      await fireServerTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "job_cancelled", jobId: id, recordId: id });
     } catch {
       // enrollment failure must not fail the update
     }

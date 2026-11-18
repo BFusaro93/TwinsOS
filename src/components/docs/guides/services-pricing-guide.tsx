@@ -331,6 +331,9 @@ export function ServicesPricingGuide() {
           <li>
             <strong>Blank matrix cells.</strong> Clearing a From or Hours cell in the rate matrix saves 0.
           </li>
+          <li>
+            <strong>Crews don&apos;t see your rates.</strong> Crew logins can&apos;t read the service catalog &mdash; default rates, costs, target rates and rate matrices stay with the office. The crew app only gets the service names on its stops and the services you ticked for <strong>Show in field upsells</strong>. Whether a crew sees each service&apos;s price on its stops is set by <strong>Hide pricing from crews</strong> in Landscapt Settings.
+          </li>
         </ul>
       </Section>
     </DocsFontScope>

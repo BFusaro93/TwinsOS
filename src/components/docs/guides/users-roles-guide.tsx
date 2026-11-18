@@ -477,7 +477,14 @@ export function UsersRolesGuide() {
           instead if you want one: that address gets a confirmation email, and the crew can sign in
           only after someone opens it and confirms the address (the success screen says so). If the
           confirmation email can&apos;t be sent, the account isn&apos;t created. You can&apos;t type your
-          own <code>@crew.landscapt.com</code> address; leave the field blank to get one.
+          own <code>@crew.landscapt.com</code> address; leave the field blank to get one. If the
+          generated address is already taken (two crews named &quot;Mow 1&quot; and &quot;Mow-1&quot;, say),
+          a short suffix such as <code>-2</code> is added so the account is still created; the success
+          screen shows the address to sign in with.
+        </p>
+        <p>
+          Crew logins are part of Landscapt, so <strong>Create Crew Account</strong> isn&apos;t available
+          on the Equipt plan (Equipt only) &mdash; the request is refused with a note to upgrade.
         </p>
         <p>
           Creating a crew account also creates a matching Landscapt crew and links the login to it,
@@ -539,7 +546,10 @@ export function UsersRolesGuide() {
               job service lines are read-only to a crew account, so a crew can never alter a
               service&apos;s price — pricing is only editable by staff roles with the relevant
               permission. Nor can a crew change the price or quantity on one of its own visits.
-              Invoices and payments are not readable by a crew login at all.
+              Invoices and payments are not readable by a crew login at all. On its own visits a crew
+              changes things only through the crew app&apos;s buttons (Start Job, breaks, Stop Job, Skip,
+              acknowledging notes, completion notes) &mdash; it can&apos;t change a visit&apos;s date, crew,
+              status or billing any other way &mdash; and its drive times can only be corrected by the office.
             </p>
             <p className="mt-2">
               What a crew login can <em>see</em> about money is limited to what the crew app shows.
@@ -550,6 +560,15 @@ export function UsersRolesGuide() {
               accounts</strong> is off. For the same reason, reports built on jobs and visits
               (revenue, rates, job costing, budget vs. actual) return no data to a crew login, even on
               a dashboard marked visible to crews.
+            </p>
+            <p className="mt-2">
+              The product and service catalogs are office-only as well: a crew login can&apos;t read
+              product costs, sale prices or stock levels, or service rates and costs, anywhere &mdash;
+              including product and service reports on a crew-visible dashboard. The crew app still
+              shows the product names, label details and quantities a stop needs, and the services offered
+              under Suggest work. A crew login also can&apos;t see other users&apos; email addresses or
+              roles, employees&apos; HR details, or sales meetings, and it sees only its own crew&apos;s job
+              punches.
             </p>
             <p className="mt-2">
               What a crew login can see about <em>clients</em> is limited to the clients on its own
@@ -651,6 +670,9 @@ export function UsersRolesGuide() {
           </li>
           <li>
             <strong>Your plan decides which product you can change.</strong> On the Equipt plan you can view but not create or change Landscapt records (clients, jobs, estimates, invoices, contracts and the like); on the Starter plan the same applies to Equipt records (work orders, assets, parts, PM schedules, meters, vehicles, maintenance requests). Vendors, products, requisitions, purchase orders and projects are shared and always editable. Trial, Growth and Enterprise include both. The public API follows the same rule.
+          </li>
+          <li>
+            <strong>Background work follows the plan too.</strong> On the Equipt plan, Landscapt&apos;s automatic work is paused: recurring visits aren&apos;t generated, contract invoices aren&apos;t created, past-due, card-expiry and contract-expiry reminders and scheduled campaigns aren&apos;t sent, invoices don&apos;t sync to QuickBooks, and automation steps wait. Upgrading to a plan with Landscapt resumes it from that day on &mdash; days that were skipped while paused aren&apos;t made up. On the Starter plan, Equipt&apos;s automations (meter readings, low stock, PM due, work order overdue) are paused the same way.
           </li>
         </ul>
       </Section>

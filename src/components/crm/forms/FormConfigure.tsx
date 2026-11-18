@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useUpdateForm } from "@/lib/hooks/use-crm-forms";
+import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +17,9 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Plus, Trash2, Mail } from "lucide-react";
 import type { CRMForm, AccountMatchingStrategy, AccountUpdateStrategy } from "@/types/crm-forms";
+
+/** Select value for "no category chosen" — the ticket then uses the form's name. */
+const TICKET_CATEGORY_DEFAULT = "__form_name__";
 
 interface EmailNotification {
   _key: string;
@@ -98,6 +102,10 @@ export function FormConfigure({ form }: Props) {
   const [ticketCreate, setTicketCreate] = useState<boolean>(savedTicket?.create !== false);
   const [ticketPriority, setTicketPriority] = useState<string>(savedTicket?.priority ?? "normal");
   const [ticketCategory, setTicketCategory] = useState<string>(savedTicket?.category ?? "");
+  // The org's ticket categories (Settings → Lists). Picking from them is what lets a
+  // category-filtered "Ticket was created" automation match this form's tickets — a
+  // free-typed category rarely matched any of them exactly.
+  const { data: ticketCategoryOptions } = useOrgList("ticket_categories");
 
   const [saving, setSaving] = useState(false);
 
@@ -386,12 +394,24 @@ export function FormConfigure({ form }: Props) {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Category</Label>
-              <Input
-                value={ticketCategory}
-                onChange={(e) => setTicketCategory(e.target.value)}
-                placeholder={form.name}
-                className="h-9 text-sm"
-              />
+              <Select
+                value={ticketCategory.trim() || TICKET_CATEGORY_DEFAULT}
+                onValueChange={(v) => setTicketCategory(v === TICKET_CATEGORY_DEFAULT ? "" : v)}
+              >
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TICKET_CATEGORY_DEFAULT}>Form name ({form.name})</SelectItem>
+                  {/* A category saved before this was a picker (or since removed from the
+                      list) stays visible and selected until it's changed. */}
+                  {ticketCategory.trim() &&
+                    !(ticketCategoryOptions ?? []).some((o) => o.value === ticketCategory.trim()) && (
+                      <SelectItem value={ticketCategory.trim()}>{ticketCategory.trim()} (not in list)</SelectItem>
+                    )}
+                  {(ticketCategoryOptions ?? []).map((o) => (
+                    <SelectItem key={o.id} value={o.value}>{o.value}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         )}

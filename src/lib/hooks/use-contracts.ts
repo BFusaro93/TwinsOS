@@ -11,9 +11,11 @@ import {
   currentPeriodBillingDate,
   cycleBilledBy,
   normalizeBillingFrequency,
+  pinsCycleGrid,
   planContractBilling,
   planFirstPeriodProration,
   prorationPending,
+  rescheduledBillingAnchor,
   termSkipReason,
   type ContractCycle,
   type ContractInvoiceRef,
@@ -213,7 +215,7 @@ export function useCreateContract() {
     },
     onSuccess: (contract) => {
       qc.invalidateQueries({ queryKey: ["crm-contracts"] });
-      fireAutomationTrigger({ triggerType: "contract_created", clientId: contract.clientId });
+      fireAutomationTrigger({ triggerType: "contract_created", clientId: contract.clientId, recordId: contract.id });
     },
   });
 }
@@ -369,7 +371,7 @@ export function useBulkImportContracts() {
           last_billed_date: lastBilledDate,
           // Imported as already billing: its last billed date pins a quarterly/annual grid to the
           // months the previous system billed in (contract-billing.ts monthGrid).
-          billing_anchor_date: lastBilledDate && (billingFrequency === "quarterly" || billingFrequency === "annual") ? lastBilledDate : null,
+          billing_anchor_date: lastBilledDate && pinsCycleGrid(billingFrequency) ? lastBilledDate : null,
           payment_type: r.paymentType?.trim() || null,
           po_number: r.poNumber?.trim() || null,
           auto_generate: yesNo(r.autoGenerate, true),
@@ -547,6 +549,30 @@ export function useUpdateContract() {
         }
       }
 
+      // Cadence / start date edited: "finish the old period". What the contract
+      // already billed under its OLD schedule runs out, and the new schedule
+      // starts with its first cycle after that (rescheduledBillingAnchor) — so a
+      // weekly start-date edit can't re-bill days already invoiced, quarterly →
+      // monthly can't re-bill months the quarter paid for, and monthly →
+      // quarterly can't skip months.
+      if (("billing_frequency" in updates || "start_date" in updates) && !("billing_anchor_date" in updates)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: sched, error: schedErr } = await (supabase as any)
+          .from("crm_contracts")
+          .select("org_id, billing_frequency, billing_day_of_month, bill_month_in_advance, start_date, end_date, signed_at, created_at, last_billed_date, billing_anchor_date, first_period_prorated_at")
+          .eq("id", id)
+          .single();
+        if (schedErr) throw schedErr;
+        if (sched) {
+          const timeZone = await getOrgTimeZone(supabase, sched.org_id as string);
+          const before = { ...sched, time_zone: timeZone };
+          const anchor = rescheduledBillingAnchor(before, { ...before, ...updates }, new Date());
+          if (anchor !== undefined && anchor !== (sched.billing_anchor_date ?? null)) {
+            finalUpdates = { ...finalUpdates, billing_anchor_date: anchor };
+          }
+        }
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_contracts")
@@ -700,7 +726,7 @@ export function useUpdateContractStatus() {
         await cancelFutureContractVisits(supabase, id, data.org_id as string);
       }
 
-      return { clientId: data?.client_id as string | undefined, status, previousStatus: currentStatus ?? null, skipped: false as const };
+      return { contractId: id, clientId: data?.client_id as string | undefined, status, previousStatus: currentStatus ?? null, skipped: false as const };
     },
     onSuccess: (data) => {
       if (data.skipped) return;
@@ -709,7 +735,7 @@ export function useUpdateContractStatus() {
         qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       }
       if (data.status === "signed" && data.clientId) {
-        fireAutomationTrigger({ triggerType: "contract_signed", clientId: data.clientId });
+        fireAutomationTrigger({ triggerType: "contract_signed", clientId: data.clientId, recordId: data.contractId });
       }
     },
   });
@@ -1200,7 +1226,7 @@ export function useBillContractCatchUp() {
         .from("crm_contracts")
         .update({
           last_billed_date: newLast,
-          ...(!contract.billing_anchor_date && (frequency === "quarterly" || frequency === "annual") ? { billing_anchor_date: first.cycleStart } : {}),
+          ...(!contract.billing_anchor_date && pinsCycleGrid(frequency) ? { billing_anchor_date: first.cycleStart } : {}),
         })
         .eq("id", contractId);
       return {

@@ -308,8 +308,22 @@ async function applyViaRpc({
   // recorded atomically, so none of it may turn this into an "error" (that
   // would make the webhook 500 and Stripe retry a no-op forever).
   try {
+    // A parent account's payment can pay its sub-accounts' invoices: invoice_paid
+    // belongs to the client that owns the invoice, not the payer (enrolling the
+    // parent against a child's invoice sent the wrong client the wrong record).
+    const owners = new Map<string, string>();
+    if (newlyPaidInvoiceIds.length > 0) {
+      const { data: invRows } = await db
+        .from("crm_invoices")
+        .select("id, client_id")
+        .eq("org_id", orgId)
+        .in("id", newlyPaidInvoiceIds);
+      for (const r of (invRows ?? []) as { id: string; client_id: string | null }[]) {
+        if (r.client_id) owners.set(r.id, r.client_id);
+      }
+    }
     for (const invoiceId of newlyPaidInvoiceIds) {
-      await fireSimpleTrigger(supabase, { orgId, clientId: payerId, invoiceId, triggerType: "invoice_paid" });
+      await fireSimpleTrigger(supabase, { orgId, clientId: owners.get(invoiceId) ?? payerId, invoiceId, triggerType: "invoice_paid" });
     }
 
     const invoiceCount = new Set(allocations.map((a) => a.invoiceId)).size;

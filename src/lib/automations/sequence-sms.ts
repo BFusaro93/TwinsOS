@@ -7,6 +7,7 @@ import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
 import { instantToZoneWallClock, shiftYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 import type { CardExpiryContext } from "./card-expiry-context";
 import { buildAutomationMergeVars, loadAutomationClient, type AutomationClientRow } from "./client-merge-vars";
+import { isMarketingEmailCategory } from "./sequence-email";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -41,6 +42,31 @@ export async function nextSmsSendTime(
 }
 
 /**
+ * Whether a sequence is a MARKETING sequence for its text steps. A text step has no
+ * Email Category of its own, so it follows the sequence's email steps, with the same
+ * rule as email (isMarketingEmailCategory): a sequence with any active Marketing,
+ * General, Follow-up or uncategorised email step is marketing, so a client marked Do
+ * Not Market isn't texted by it either. A sequence whose emails are all Transactional /
+ * Reminder, or that has no email step, is a service sequence and still texts them.
+ */
+export function isMarketingSequence(events: { event_type: string; config?: unknown }[]): boolean {
+  return events.some(
+    (e) => e.event_type === "email" && isMarketingEmailCategory(((e.config ?? {}) as { category?: string | null }).category)
+  );
+}
+
+/** isMarketingSequence for a sequence id (loads its active steps). */
+export async function loadIsMarketingSequence(supabase: AnyClient, sequenceId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("crm_sequence_events")
+    .select("event_type, config")
+    .eq("sequence_id", sequenceId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
+  return isMarketingSequence((data ?? []) as { event_type: string; config: unknown }[]);
+}
+
+/**
  * Which numbers a text step may go to right now — the client's numbers for the
  * step's "Send To" selection minus numbers that replied STOP — or why nobody can
  * be texted. Shared by step resolution and by the approval route / processor,
@@ -48,12 +74,23 @@ export async function nextSmsSendTime(
  */
 export async function resolveSmsRecipients(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; toSelection?: string[] }
+  params: {
+    orgId: string;
+    clientId: string;
+    toSelection?: string[];
+    /** The step belongs to a marketing-category sequence (isMarketingSequence): a Do Not Market client isn't texted. */
+    marketing?: boolean;
+  }
 ): Promise<{ toPhones: string[]; client: AutomationClientRow } | { error: string }> {
   const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
   const client = loaded?.client;
 
   if (!client) return { error: "client not found" };
+  // do_not_market is a marketing preference: a marketing sequence's texts skip the
+  // client the same way its emails do; service sequences still text them.
+  if (params.marketing && client.do_not_market) {
+    return { error: "client has opted out of marketing messages (do_not_market)" };
+  }
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary_phone"];
   // Keyed by digits so the same number typed two ways is one recipient.
@@ -131,9 +168,15 @@ export async function resolveSmsStepContent(
     invoiceId?: string | null;
     /** The visit a visit-event trigger fired for — the snow merge tags read this stop. */
     visitId?: string | null;
+    /** The run's service day (enrollment visit_date) — [servicename]/[servicedate]/[chemicalnotice] read that day's visits. */
+    visitDate?: string | null;
+    /** The trigger that started the run (enrollment trigger_type). */
+    triggerType?: string | null;
     bodyTemplate: string;
     /** The step's "Send To" selection (client_primary_phone | billing_phone | all_contacts). Defaults to the client's primary phone. */
     toSelection?: string[];
+    /** The step belongs to a marketing-category sequence (isMarketingSequence). */
+    marketing?: boolean;
     /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
     cardExpiryContext?: CardExpiryContext | null;
   }
@@ -180,7 +223,10 @@ export async function resolveSmsStepContent(
   Object.assign(
     extras,
     await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: false }),
-    await buildServiceExtras(supabase, { orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)), html: false }),
+    await buildServiceExtras(supabase, {
+      orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)), html: false,
+      visitDate: params.visitDate ?? null, triggerType: params.triggerType ?? null,
+    }),
   );
   const vars = await buildAutomationMergeVars(supabase, {
     orgId: params.orgId, client, extras, escapeHtml: (t) => t,

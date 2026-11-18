@@ -72,7 +72,7 @@ export async function GET(request: Request) {
   const settledBefore = new Date(now - SETTLE_MS).toISOString();
   const retryBefore = new Date(now - RETRY_FAILED_MS).toISOString();
   const summary: Record<string, { created: number; updated: number; payments: number }> = {};
-  const orgInactive = createOrgCanceledResolver(supabase);
+  const orgInactive = createOrgCanceledResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt work paused
   const overBudget = () => Date.now() - now > TIME_BUDGET_MS;
   let stoppedEarly = false;
 

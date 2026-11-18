@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth } from "@/lib/supabase/route-auth";
+import { adminClient } from "@/lib/api/auth";
 
 /**
  * GET /api/crm/crew/products?q=... — the product picker crew-app's "Request
@@ -7,11 +8,10 @@ import { getRouteAuth } from "@/lib/supabase/route-auth";
  * materials.tsx). Restricted to categories a landscaping/snow field crew
  * would plausibly request — stocked_material and project_material — never
  * maintenance_part (that's the CMMS side; see CLAUDE.md's ProductItem
- * category note). product_items reads are not blocked for crew role by RLS
- * (only the procurement write-side is), so this could also be a direct
- * Supabase query from the RN client, but it goes through a route here for
- * consistency with every other list this app fetches (visits, photos) and
- * to keep the category/org scoping server-side and in one place.
+ * category note). A crew login can't read product_items itself (the rows
+ * carry unit cost, price and stock — 20270109000210), so the search runs with
+ * the service role, scoped to the caller's org from their own profile, and
+ * returns only id / name / part number / category.
  */
 export async function GET(request: Request) {
   const { supabase, user } = await getRouteAuth(request);
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   if (!orgId) return NextResponse.json({ error: "No organization for this user" }, { status: 403 });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query = (supabase as any)
+  let query = (adminClient() as any)
     .from("product_items")
     .select("id, name, part_number, category")
     .eq("org_id", orgId)

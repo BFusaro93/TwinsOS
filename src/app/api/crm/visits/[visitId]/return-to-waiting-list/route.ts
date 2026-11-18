@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
+import { createServiceClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("api/crm/visits/return-to-waiting-list");
 
 /**
  * POST /api/crm/visits/[visitId]/return-to-waiting-list
@@ -44,96 +49,67 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as unknown as any;
 
-  const { data: visit, error: visitErr } = await db
-    .from("crm_job_visits")
-    .select("id, job_id, job_service_id, client_id, scheduled_date, status, clocked_in_at")
-    .eq("id", visitId)
-    .is("deleted_at", null)
-    .single();
-  if (visitErr || !visit) {
-    return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+  // The whole return is one transaction (crm_return_visit_to_waiting_list, security
+  // invoker so RLS and the schedule write guard apply). A multi-crew stop goes back
+  // as ONE stop: every crew's visit on it is returned together, and it's refused if
+  // any crew on it has clocked in. Returning only the clicked crew's visit used to
+  // leave the job half-scheduled (hidden from the Waiting List) or another crew's
+  // package-step visit still dispatched.
+  const { data: result, error: rpcErr } = await db.rpc("crm_return_visit_to_waiting_list", { p_visit_id: visitId });
+  if (rpcErr) {
+    const hinted = Number((rpcErr as { hint?: string | null }).hint);
+    const status = hinted === 400 || hinted === 404 || hinted === 409 ? hinted : 500;
+    return NextResponse.json({ error: rpcErr.message ?? "Failed to return visit to waiting list" }, { status });
   }
+  const r = (result ?? {}) as {
+    returned_visit_ids?: string[];
+    client_id?: string | null;
+    job_id?: string;
+    org_id?: string;
+    scheduled_date?: string | null;
+  };
+  const returnedVisitIds = r.returned_visit_ids ?? [visitId];
 
-  // Only a visit that was dispatched but never worked can go back: once the
-  // crew has clocked in (or it's in progress/completed/skipped) there is real
-  // history here, and soft-deleting it would erase it.
-  if (!["scheduled", "dispatched"].includes(visit.status) || visit.clocked_in_at) {
-    return NextResponse.json(
-      { error: "Only a scheduled or dispatched visit that hasn't been clocked in can be returned to the waiting list" },
-      { status: 409 }
-    );
-  }
-
-  const { data: job, error: jobErr } = await db
-    .from("crm_jobs")
-    .select("id, org_id, job_type")
-    .eq("id", visit.job_id)
-    .single();
-  if (jobErr || !job) {
-    return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  }
-  if (job.job_type !== "waiting_list" && job.job_type !== "package") {
-    return NextResponse.json({ error: "Only waiting-list and package jobs can be returned to the waiting list" }, { status: 400 });
-  }
-
-  const nowIso = new Date().toISOString();
-
-  if (job.job_type === "package") {
-    if (!visit.job_service_id) {
-      return NextResponse.json({ error: "This package visit isn't linked to a step, so it can't go back to the waiting list" }, { status: 400 });
-    }
-    if (visit.status === "scheduled") {
-      return NextResponse.json({ error: "This package step isn't dispatched — it is already on the waiting list" }, { status: 409 });
-    }
-    const { error: resetErr } = await db
-      .from("crm_job_visits")
-      .update({ status: "scheduled", dispatched_at: null })
-      .eq("id", visitId);
-    if (resetErr) return NextResponse.json({ error: resetErr.message }, { status: 500 });
-  } else {
-    const { error: deleteErr } = await db
-      .from("crm_job_visits")
-      .update({ deleted_at: nowIso })
-      .eq("id", visitId);
-    if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 });
-
-    // A multi-service waiting-list job is dispatched one service at a time, so
-    // other services may still have live visits. Clearing the job's date and crew
-    // under them would strip the crew from every visit that inherits it from the
-    // job — only reset the job once nothing else is scheduled on it.
-    const { count: remainingVisits, error: remainingErr } = await db
-      .from("crm_job_visits")
-      .select("id", { count: "exact", head: true })
-      .eq("job_id", job.id)
-      .is("deleted_at", null);
-    if (remainingErr) return NextResponse.json({ error: remainingErr.message }, { status: 500 });
-
-    if ((remainingVisits ?? 0) === 0) {
-      const { error: jobUpdateErr } = await db
-        .from("crm_jobs")
-        .update({ scheduled_date: null, crew_id: null })
-        .eq("id", job.id);
-      if (jobUpdateErr) return NextResponse.json({ error: jobUpdateErr.message }, { status: 500 });
-    }
-  }
-
-  if (visit.client_id) {
+  if (r.client_id && r.job_id && r.org_id) {
+    const crews = returnedVisitIds.length > 1 ? ` — all ${returnedVisitIds.length} crews on the stop` : "";
     await db.from("client_activity").insert({
-      org_id: job.org_id,
-      client_id: visit.client_id,
+      org_id: r.org_id,
+      client_id: r.client_id,
       activity_type: "job",
-      subject: `Visit returned to waiting list${visit.scheduled_date ? ` (was scheduled ${visit.scheduled_date})` : ""}`,
-      ref_id: job.id,
+      subject: `Visit returned to waiting list${r.scheduled_date ? ` (was scheduled ${r.scheduled_date})` : ""}${crews}`,
+      ref_id: r.job_id,
       ref_table: "crm_jobs",
       created_by: user.id,
     });
 
-    await fireSimpleTrigger(db, {
-      orgId: job.org_id,
-      clientId: visit.client_id,
-      triggerType: "visit_moved_to_waiting_list",
-    });
+    // One stop, one firing (visit triggers run once per client per service day). The
+    // day is passed explicitly: the visit may now be soft-deleted.
+    try {
+      const enrollmentIds = await fireSimpleTrigger(db, {
+        orgId: r.org_id,
+        clientId: r.client_id,
+        triggerType: "visit_moved_to_waiting_list",
+        visitId,
+        visitDate: r.scheduled_date ?? null,
+      });
+      // Send any step that's due now instead of waiting for the next cron sweep, as
+      // /api/automations/fire-trigger does. Service role: the processor writes tables
+      // the caller's session doesn't cover; only the ids just created are processed.
+      if (enrollmentIds.length > 0) {
+        const admin = createServiceClient();
+        for (const enrollmentId of enrollmentIds) {
+          try {
+            await processEnrollmentImmediately(admin, enrollmentId);
+          } catch (err) {
+            log.error("immediate processing failed", { enrollmentId, error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+      }
+    } catch (err) {
+      // The visit is already back on the list; an automation failure must not fail the request.
+      log.error("visit_moved_to_waiting_list trigger failed", { visitId, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
-  return NextResponse.json({ ok: true, clientId: visit.client_id });
+  return NextResponse.json({ ok: true, clientId: r.client_id ?? null, returnedVisitIds });
 }

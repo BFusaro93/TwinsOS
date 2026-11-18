@@ -72,7 +72,7 @@ export async function GET(request: Request) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
 
   for (const meeting of upcoming as Record<string, unknown>[]) {
     if (await orgCanceled(meeting.org_id as string)) continue; // canceled orgs get no automated reminders

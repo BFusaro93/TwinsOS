@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { loadCrewProductInfo } from "@/lib/crew/product-info";
 
 /**
  * Read-only chemical mix info for a crew's visit — what product to use, how
@@ -33,7 +34,6 @@ export async function GET(
     .from("crm_chemical_applications")
     .select(
       "id, product_id, chemical_amount, solution_amount, used, application_rate_label, " +
-      "product:product_id(name), " +
       "unit:unit_of_measure_id(name), " +
       "solution_unit:solution_unit_of_measure_id(name)"
     )
@@ -43,10 +43,20 @@ export async function GET(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Product names come from the price-free crew RPC: a crew login can't read
+  // product_items (20270109000210).
+  let products: Awaited<ReturnType<typeof loadCrewProductInfo>>;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    products = await loadCrewProductInfo(supabase, (data as any[]).map((row) => row.product_id));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not load products" }, { status: 500 });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applications = (data as any[]).map((row) => ({
     id: row.id,
-    productName: row.product?.name ?? null,
+    productName: products.get(row.product_id)?.name ?? null,
     used: row.used ?? true,
     chemicalAmount: row.chemical_amount,
     unitName: row.unit?.name ?? null,

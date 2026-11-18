@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { getOrCreateStripeCustomer, summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
+import { saveClientPaymentMethod } from "@/lib/stripe/save-client-payment-method";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
@@ -182,17 +183,13 @@ export async function PUT(request: Request) {
   const pm = setupIntent.payment_method;
   const summary = summarizePaymentMethod(pm);
 
-  const serviceClient = createServiceClient();
-  const { error } = await serviceClient
-    .from("clients")
-    .update({
-      saved_payment_method_id: pm.id,
-      saved_payment_method_type: pm.type,
-      saved_payment_method_summary: summary,
-      autopay_enabled: enableAutopay,
-    })
-    .eq("id", client.id)
-    .eq("org_id", ctx.orgId);
+  const { error } = await saveClientPaymentMethod(createServiceClient(), {
+    orgId: ctx.orgId,
+    clientId: client.id,
+    pm,
+    summary,
+    enableAutopay,
+  });
   if (error) {
     log.error("failed to save payment method", { error, clientId: client.id });
     return NextResponse.json({ error: "Failed to save payment method" }, { status: 500 });

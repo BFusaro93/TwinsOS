@@ -9,9 +9,10 @@ import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/re
 import { formatMonthDay } from "@/lib/utils";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { CREW_GROUP_SIBLING_IN_PROGRESS_MESSAGE, findVisitsWithInProgressGroupSibling } from "@/lib/visits/crew-group-guards";
-import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
+import { loadServiceChemicalsForVisits } from "@/lib/chemical-preload";
 import { notifyVisitAssigned } from "@/lib/notifications/visit-notify";
 import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
+import { fireVisitDayCompletedTriggers, visitDaysOf } from "@/lib/automations/visit-day-completed";
 import type { TriggerType } from "@/types/crm-automations";
 import {
   INVOICED_VISIT_LOCKED_CODE,
@@ -19,6 +20,14 @@ import {
   findInvoicedLockedVisits,
   overrideInvoicedVisit,
 } from "@/lib/visits/invoiced-guard";
+
+// Up to 500 visits per call: the write is one RPC, but the follow-ups (chemical
+// preload, crew pushes, automation triggers) scale with the batch.
+export const maxDuration = 300;
+
+/** Time after which due automation steps are left to the automations cron rather than
+ *  sent inline, so a big batch always returns before maxDuration. */
+const AUTOMATION_INLINE_BUDGET_MS = 150_000;
 
 const BulkUpdateSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
@@ -38,6 +47,7 @@ const BulkUpdateSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const requestStartedAt = Date.now();
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -262,10 +272,9 @@ export async function POST(request: Request) {
   if (updates.status === "dispatched") {
     const newlyDispatched = before.filter((r) => r.status !== "dispatched").map((r) => r.id);
     if (newlyDispatched.length > 0) {
-      for (const id of newlyDispatched) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await loadServiceChemicalsForVisit(supabase as any, id).catch(() => 0);
-      }
+      // Batched: only visits actually missing a product get the full per-visit load.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await loadServiceChemicalsForVisits(supabase as any, newlyDispatched, { actingUserId: user.id }).catch(() => 0);
     }
   }
 
@@ -329,11 +338,21 @@ export async function POST(request: Request) {
       skipped: "visit_skipped",
     };
     const statusTrigger = updates.status ? statusTriggers[updates.status] : undefined;
+    // Each call loads the org's triggers once for the whole batch, folds the visits per
+    // client + service day, isolates one client's failure from the rest, and leaves
+    // due steps to the automations cron once the inline budget is spent.
+    const budgetLeft = () => Math.max(0, AUTOMATION_INLINE_BUDGET_MS - (Date.now() - requestStartedAt));
     if (statusTrigger) {
       await fireVisitTriggers(supabase, {
         orgId,
         triggerTypes: [statusTrigger],
-        visits: before.filter((r) => r.status !== updates.status),
+        // Only a real transition fires. Reopening a COMPLETED visit straight to
+        // dispatched is not a new dispatch of unperformed work, so it doesn't send
+        // "your service is on the way" for work already done.
+        visits: before.filter(
+          (r) => r.status !== updates.status && !(updates.status === "dispatched" && r.status === "completed")
+        ),
+        processBudgetMs: budgetLeft(),
       });
     }
     if (updates.scheduled_date) {
@@ -341,7 +360,19 @@ export async function POST(request: Request) {
         orgId,
         triggerTypes: ["visit_date_changed"],
         visits: before.filter((r) => r.scheduled_date !== updates.scheduled_date),
+        processBudgetMs: budgetLeft(),
       });
+    }
+    // Skipping / cancelling / moving a client's last open visit of a day finishes that
+    // day: visit_completed fires for it if anything that day was completed. Checked
+    // per (client, day the visit WAS on).
+    const leftDay = before.filter(
+      (r) =>
+        ((updates.status === "skipped" || updates.status === "cancelled") && r.status !== updates.status) ||
+        (updates.scheduled_date !== undefined && r.scheduled_date !== updates.scheduled_date)
+    );
+    for (const { clientId, visitDate } of visitDaysOf(leftDay)) {
+      await fireVisitDayCompletedTriggers(supabase, { orgId, clientId, visitDate, processImmediately: budgetLeft() > 0 });
     }
   }
 

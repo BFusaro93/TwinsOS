@@ -7,7 +7,7 @@ import { isoInZone } from "@/lib/time/zone";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
 import { createServiceClient } from "@/lib/supabase/server";
 import { assertOrgWritable } from "@/lib/org-writable";
-import { JOB_VISIT_READ_COLUMNS } from "@/lib/visits/visit-columns";
+import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
 
 /** Visits a crew can no longer start. Same set the stop clock-in excludes. */
 const TERMINAL_STATUSES = ["completed", "cancelled", "skipped"];
@@ -116,7 +116,7 @@ export async function POST(
     .not("status", "in", TERMINAL_STATUS_FILTER)
     // Not moved to a later day since the check above (see the stop clock-in route).
     .lte("scheduled_date", orgToday)
-    .select(JOB_VISIT_READ_COLUMNS)
+    .select(CREW_VISIT_RESPONSE_COLUMNS)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

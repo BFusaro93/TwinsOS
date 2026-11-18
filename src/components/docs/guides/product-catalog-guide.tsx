@@ -414,6 +414,12 @@ export function ProductCatalogGuide() {
             Products-page importer doesn&apos;t require Part Number, the Settings-tab importer does
             — even though both run identical logic underneath.
           </li>
+          <li>
+            <strong>Crew logins can&apos;t read the catalog.</strong> Unit cost, sale price and stock
+            on hand stay with the office. A crew sees only what a stop needs &mdash; product names,
+            quantities and chemical label details &mdash; and can&apos;t add or change products. Product
+            reports on a crew-visible dashboard show a crew nothing.
+          </li>
         </ul>
       </Section>
     </DocsFontScope>

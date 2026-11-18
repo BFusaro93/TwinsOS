@@ -28,7 +28,9 @@ export function CrewSyncBanner() {
     };
   }, []);
 
-  if (online && paused === 0) return null;
+  // Crew actions share one TanStack scope (see CREW_ACTIONS_SCOPE), so while online a tap that
+  // waits its turn behind the previous one is also "paused" for a moment — that's not "no signal".
+  if (online) return null;
   return (
     <div
       role="status"

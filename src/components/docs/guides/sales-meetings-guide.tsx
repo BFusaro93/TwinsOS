@@ -253,6 +253,12 @@ export function SalesMeetingsGuide() {
           <li>
             <strong>Demo companies.</strong> Meeting reminders aren&apos;t emailed for demo or sandbox companies.
           </li>
+          <li>
+            <strong>Crew logins can&apos;t see meetings.</strong> Sales meetings are office-only: crew logins can&apos;t read, book or change them.
+          </li>
+          <li>
+            <strong>Plans without Landscapt.</strong> On the Equipt plan, meeting reminders aren&apos;t sent; they resume once the plan includes Landscapt.
+          </li>
         </ul>
       </Section>
     </DocsFontScope>

@@ -230,8 +230,8 @@ async function runAction(
           for (const r of data ?? []) updated.add(r.id);
         }
       }
-      // The single-client edit fires client_source_updated / has_opted_in_emails
-      // when those values actually change, so compare against the prior values.
+      // The single-client edit fires client_source_updated when the source actually
+      // changes, so compare against the prior values.
       const changed = owned.filter((c) => updated.has(c.id));
       const events: ClientTriggerEvent[] = [];
       if ("source" in body.patch) {
@@ -242,9 +242,9 @@ async function runAction(
           matchValues: newSource ? [newSource] : undefined,
         });
       }
-      if (body.patch.ok_to_email === true) {
-        events.push({ triggerType: "has_opted_in_emails", clientIds: changed.filter((c) => c.ok_to_email !== true).map((c) => c.id) });
-      }
+      // has_opted_in_emails is "Re-subscribed to emails" (Do Not Market true → false), and
+      // bulk edit can only turn Do Not Market ON — so no bulk change fires it. Ticking OK to
+      // Email no longer does either.
       return { affected: updated.size, events, activity: [] };
     }
 

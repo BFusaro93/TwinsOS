@@ -23,13 +23,30 @@ import {
 } from "@/components/ui/select";
 import type {
   AutomationRule,
+  AutomationPriority,
   TriggerType,
   ActionType,
 } from "@/types/automation";
+import type { POStatus } from "@/types/purchase-order";
+import { PO_STATUS_LABELS, WO_PRIORITY_LABELS } from "@/lib/constants";
+import { isValidEmail } from "@/lib/utils/email";
 import { useMeters } from "@/lib/hooks/use-meters";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCreateAutomation, useUpdateAutomation } from "@/lib/hooks/use-automations";
 import { useQueryClient } from "@tanstack/react-query";
+
+const PRIORITY_OPTIONS: AutomationPriority[] = ["low", "medium", "high", "critical"];
+
+/** Every real purchase_orders.status, in the order a PO moves through them. */
+const PO_TRIGGER_STATUS_OPTIONS: POStatus[] = [
+  "requested", "pending", "approved", "rejected", "ordered", "partially_fulfilled", "completed", "canceled",
+];
+const PO_TRIGGER_STATUS_LABELS: Record<POStatus, string> = {
+  ...PO_STATUS_LABELS,
+  // A new PO starts as Requested without a status change, so this only fires on a reset.
+  requested: "Requested (after a reset)",
+  pending: "Pending Approval",
+};
 
 interface AutomationDialogProps {
   open: boolean;
@@ -62,7 +79,7 @@ export function AutomationDialog({
   const [pmDaysAhead, setPmDaysAhead] = useState("7");
   const [woDaysOverdue, setWoDaysOverdue] = useState("1");
   const [woTargetStatus, setWoTargetStatus] = useState<"open" | "in_progress" | "on_hold" | "done">("open");
-  const [poTargetStatus, setPoTargetStatus] = useState<"draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed">("approved");
+  const [poTargetStatus, setPoTargetStatus] = useState<POStatus>("approved");
   const [faultCelOnly, setFaultCelOnly] = useState(false);
 
   const [intervalValue, setIntervalValue] = useState("");
@@ -77,7 +94,7 @@ export function AutomationDialog({
   // Action type + config
   const [actionType, setActionType] = useState<ActionType>("send_notification");
   const [woTitle, setWoTitle] = useState("");
-  const [woPriority, setWoPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
+  const [woPriority, setWoPriority] = useState<AutomationPriority>("medium");
   const [woAssignedToId, setWoAssignedToId] = useState("");
   // Name snapshot; for legacy unmatched rows it holds the old free text.
   const [woAssignedToName, setWoAssignedToName] = useState("");
@@ -94,6 +111,7 @@ export function AutomationDialog({
   const [notifRole, setNotifRole] = useState<"admin" | "manager" | "technician" | "purchaser" | "all">("manager");
   const [notifMessage, setNotifMessage] = useState("");
   const [emailRecipient, setEmailRecipient] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
 
   // Seed state from initialData when dialog opens
   useEffect(() => {
@@ -124,6 +142,7 @@ export function AutomationDialog({
       setNotifRole("manager");
       setNotifMessage("");
       setEmailRecipient("");
+      setEmailMessage("");
       return;
     }
 
@@ -193,6 +212,7 @@ export function AutomationDialog({
         break;
       case "send_email":
         setEmailRecipient(a.recipient);
+        setEmailMessage(a.message);
         break;
     }
   }, [open, initialData]);
@@ -224,6 +244,7 @@ export function AutomationDialog({
     setNotifRole("manager");
     setNotifMessage("");
     setEmailRecipient("");
+    setEmailMessage("");
   }
 
   function buildTrigger(): AutomationRule["trigger"] {
@@ -265,7 +286,7 @@ export function AutomationDialog({
       case "send_notification":
         return { type: "send_notification", recipientRole: notifRole, message: notifMessage };
       case "send_email":
-        return { type: "send_email", recipient: emailRecipient };
+        return { type: "send_email", recipient: emailRecipient.trim(), message: emailMessage };
     }
   }
 
@@ -298,7 +319,8 @@ export function AutomationDialog({
         // message is optional — no validation needed
         break;
       case "send_email":
-        if (!emailRecipient.trim()) return false;
+        // One address — Resend rejects a name, so a rule saved with one never sent.
+        if (!isValidEmail(emailRecipient)) return false;
         break;
     }
 
@@ -504,6 +526,9 @@ export function AutomationDialog({
                     value={pmDaysAhead}
                     onChange={(e) => setPmDaysAhead(e.target.value)}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Fires once for each PM schedule as it comes due (and again the next time it comes due), naming its asset.
+                  </p>
                 </div>
               )}
 
@@ -517,6 +542,9 @@ export function AutomationDialog({
                     value={woDaysOverdue}
                     onChange={(e) => setWoDaysOverdue(e.target.value)}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Fires once for each open work order that becomes this many days overdue, naming the work order.
+                  </p>
                 </div>
               )}
 
@@ -566,20 +594,15 @@ export function AutomationDialog({
                   <Label htmlFor="po-target-status">Target Status</Label>
                   <Select
                     value={poTargetStatus}
-                    onValueChange={(v) =>
-                      setPoTargetStatus(v as "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed")
-                    }
+                    onValueChange={(v) => setPoTargetStatus(v as POStatus)}
                   >
                     <SelectTrigger id="po-target-status">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="pending_approval">Pending Approval</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="ordered">Ordered</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
+                      {PO_TRIGGER_STATUS_OPTIONS.map((st) => (
+                        <SelectItem key={st} value={st}>{PO_TRIGGER_STATUS_LABELS[st]}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -628,18 +651,15 @@ export function AutomationDialog({
                     <Label htmlFor="wo-priority">Priority</Label>
                     <Select
                       value={woPriority}
-                      onValueChange={(v) =>
-                        setWoPriority(v as "low" | "medium" | "high" | "urgent")
-                      }
+                      onValueChange={(v) => setWoPriority(v as AutomationPriority)}
                     >
                       <SelectTrigger id="wo-priority">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="urgent">Urgent</SelectItem>
+                        {PRIORITY_OPTIONS.map((p) => (
+                          <SelectItem key={p} value={p}>{WO_PRIORITY_LABELS[p]}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -690,18 +710,15 @@ export function AutomationDialog({
                     <Label htmlFor="wo-priority">Priority</Label>
                     <Select
                       value={woPriority}
-                      onValueChange={(v) =>
-                        setWoPriority(v as "low" | "medium" | "high" | "urgent")
-                      }
+                      onValueChange={(v) => setWoPriority(v as AutomationPriority)}
                     >
                       <SelectTrigger id="wo-priority">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="urgent">Urgent</SelectItem>
+                        {PRIORITY_OPTIONS.map((p) => (
+                          <SelectItem key={p} value={p}>{WO_PRIORITY_LABELS[p]}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -789,14 +806,34 @@ export function AutomationDialog({
               )}
 
               {actionType === "send_email" && (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="email-recipient">Recipient (name or email)</Label>
-                  <Input
-                    id="email-recipient"
-                    placeholder="e.g. manager@example.com"
-                    value={emailRecipient}
-                    onChange={(e) => setEmailRecipient(e.target.value)}
-                  />
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="email-recipient">Recipient Email</Label>
+                    <Input
+                      id="email-recipient"
+                      type="email"
+                      placeholder="e.g. manager@example.com"
+                      value={emailRecipient}
+                      onChange={(e) => setEmailRecipient(e.target.value)}
+                      aria-invalid={emailRecipient.trim() !== "" && !isValidEmail(emailRecipient)}
+                    />
+                    {emailRecipient.trim() !== "" && !isValidEmail(emailRecipient) && (
+                      <p className="text-xs text-red-600 dark:text-red-400">Enter one email address, e.g. manager@example.com.</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="email-message">
+                      Message{" "}
+                      <span className="font-normal text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Textarea
+                      id="email-message"
+                      placeholder="e.g. A work order is past its due date and needs attention."
+                      value={emailMessage}
+                      onChange={(e) => setEmailMessage(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
                 </div>
               )}
             </div>

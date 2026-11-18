@@ -41,6 +41,7 @@ import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
 import { availableRecordKinds } from "@/lib/automations/condition-applicability";
 import type { TriggerType, TriggerConfig } from "@/types/crm-automations";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { DEFAULT_DATE_GAP_DAYS, resolveDateGapDays } from "@/lib/automations/activation-warnings";
 
 // Trigger types that fire off a day-count gap rather than an event — the
 // builder shows a "days" input for these instead of just the type selector.
@@ -130,7 +131,8 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "credit_card_charge_failed", label: "Credit card charge failed" },
       { value: "credit_card_about_to_expire", label: "Credit card is about to expire" },
       { value: "credit_card_updated", label: "Credit card was updated" },
-      { value: "has_opted_in_emails", label: "Has opted in for emails" },
+      // Key kept for saved automations; fires when Do Not Market goes on → off.
+      { value: "has_opted_in_emails", label: "Re-subscribed to emails" },
       { value: "has_opted_in_sms", label: "Has opted in for texts" },
       { value: "payment_method_updated", label: "Payment method updated" },
     ],
@@ -374,7 +376,9 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   }
 
   function updateTriggerType(key: string, type: TriggerType) {
-    setTriggers((prev) => prev.map((t) => t._key === key ? { ...t, triggerType: type, config: {} } : t));
+    // Date-gap triggers start with the default day count, so a box left untouched still saves a value.
+    const config: TriggerConfig = DATE_GAP_TRIGGER_TYPES.has(type) ? { days: DEFAULT_DATE_GAP_DAYS } : {};
+    setTriggers((prev) => prev.map((t) => t._key === key ? { ...t, triggerType: type, config } : t));
   }
 
   function updateTriggerConfig(key: string, patch: TriggerConfig) {
@@ -440,7 +444,11 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                 sequence_id: sequenceId,
                 trigger_type: t.triggerType,
                 position: i,
-                config: t.config,
+                // A date-gap trigger saved with its "days" box blank gets the default (7, the
+                // placeholder) — a missing value used to mean the trigger never fired.
+                config: DATE_GAP_TRIGGER_TYPES.has(t.triggerType)
+                  ? { ...t.config, days: resolveDateGapDays(t.config) ?? t.config.days }
+                  : t.config,
               }))
             )
             .select("id, position");
@@ -551,6 +559,12 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
               Allow Re-Entry
             </Label>
           </div>
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500 -mt-1">
+            Visit triggers run once per client per service day — all of a client&apos;s visits that day (every service, crew
+            and property) share one run, and another day starts a new one. Job and package triggers run once per job;
+            estimate, invoice, ticket and meeting triggers once per record; every other trigger once per client. Re-entry
+            lets the same day, record or client start it again after the delay below.
+          </p>
 
           {allowReentry && (
             <div className="flex items-center gap-2">

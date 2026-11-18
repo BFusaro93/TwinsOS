@@ -394,7 +394,10 @@ export function InvoicingGuide() {
             draft if it isn&apos;t owed again. Lines that were hidden on print stay hidden, and a
             period draft keeps collecting that period&apos;s later visits (unless another open draft
             already holds the period). Merged (consolidated) invoices can&apos;t be duplicated:
-            their lines already live on the invoice they were merged into.
+            their lines already live on the invoice they were merged into. A voided contract invoice
+            can be duplicated the same day it was dated &mdash; the void one doesn&apos;t count against
+            the contract&apos;s one-invoice-per-date rule &mdash; and voiding never makes the contract bill
+            that period again on its own.
           </li>
           <li>
             <strong>Every issued invoice has a number.</strong> A draft that was never saved (for
@@ -893,6 +896,19 @@ export function InvoicingGuide() {
           employee rates — keep exactly what you type while you&apos;re in the field and format it
           (e.g. <code>55</code> → <code>$55.00</code>) when you leave it. Nothing is reformatted
           mid-keystroke, so &quot;55&quot; can&apos;t turn into $5.01 on the way in.
+        </p>
+        <p>
+          <strong>Money changes only through the payment tools.</strong> A payment&apos;s amount, its
+          refunds and its online-payment details, how it is split across invoices, and an invoice&apos;s
+          paid amount, balance and Paid / Partial status change only through{" "}
+          <strong>Enter Payment</strong> / <strong>Edit Payment</strong>, <strong>Apply Credit</strong>,{" "}
+          <strong>Refund</strong> and the invoice editor (which recalculates the balance from the
+          lines). Writing those figures any other way &mdash; through the API or an integration, say &mdash;
+          is refused, even for an admin, so a balance can never disagree with the payments behind it. A
+          payment&apos;s date, method, reference and notes can still be edited. The only payment that can be
+          deleted is an unapplied manual payment (nothing applied, nothing refunded, not taken online), and
+          only by a role with Delete Card Payments or Delete ACH Payments; for anything else, edit the payment
+          or issue a refund.
         </p>
         <p>
           Applying (or un-applying, if a payment gets

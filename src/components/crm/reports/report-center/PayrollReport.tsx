@@ -64,6 +64,14 @@ export function PayrollReport() {
   const rows = useMemo(() => report?.rows ?? [], [report]);
   const overtimeLabel = report ? describeOvertimeRule(report.overtime) : null;
   const members = useMemo(() => groupPayrollByMember(rows), [rows]);
+  // Roster rows with no linked employee are payrolled as their own person
+  // (payrollPersonKey falls back to the crew membership), so the same person on
+  // two crews by name is two people here and never reaches the overtime
+  // threshold. Named so the office can link them to an employee.
+  const unlinkedNames = useMemo(
+    () => [...new Set(rows.filter((r) => !r.employeeId).map((r) => r.memberName))].sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
   const { data: lockedThrough = null } = usePayrollLock();
 
   const setRange = (r: { from: string; to: string }) => { setFrom(r.from); setTo(r.to); };
@@ -172,6 +180,15 @@ export function PayrollReport() {
         <p className="flex items-center gap-1.5 text-xs text-amber-600">
           <AlertTriangle className="h-3.5 w-3.5" />
           {flagged} day{flagged === 1 ? "" : "s"} need a look: a day was never ended, a job punch is still open, no one started the day, or a break is over {LONG_BREAK_MINUTES / 60} hours. Expand a person to see which.
+        </p>
+      )}
+      {unlinkedNames.length > 0 && (
+        <p className="flex items-start gap-1.5 text-xs text-amber-600">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Not linked to an employee: {unlinkedNames.join(", ")}. Overtime can&apos;t be combined across crews for these people —
+            pick the employee for each of them in Team → Crews so someone on two crews is counted as one person.
+          </span>
         </p>
       )}
 

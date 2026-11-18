@@ -143,7 +143,7 @@ export async function POST(request: Request) {
   // only pays what is still owed. Service role: portal customers have no
   // profile, so the user-session RPC guard would reject them.
   try {
-    invoice.balance_cents = await applyCreditBeforeCharge(createServiceClient(), invoice);
+    invoice.balance_cents = await applyCreditBeforeCharge(service, invoice, { serviceDb: service, orgId: invoice.org_id });
   } catch {
     return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
   }

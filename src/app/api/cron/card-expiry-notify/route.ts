@@ -28,9 +28,10 @@ const TIME_BUDGET_MS = 270_000;
  * each check is a live Stripe API call.
  *
  * Firing daily for every day a card falls in the window is intentional, not
- * a bug — isEligibleForEnrollment's per-client dedup (already-enrolled clients
- * aren't re-enrolled) is what keeps this from spamming, exactly like
- * contract_about_to_expire's daily 3-day window does today.
+ * a bug — the run is scoped to the CARD (payment method id + expiry month,
+ * enrollment-scope.ts RECORD_SCOPED_TRIGGERS) and that is also its re-entry
+ * anchor, so each expiring card gets one run however many days it sits in the
+ * window (even with Allow Re-Entry on); a replacement card is a new run.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
   let fired = 0;
   let stoppedEarly = false;
   const startedAt = Date.now();
-  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt sends paused
 
   // Group by org and skip orgs with no live credit_card_about_to_expire trigger before any
   // Stripe call: one retrieve per card-on-file client across every org, one at a time, ran
@@ -132,10 +133,13 @@ export async function GET(request: Request) {
           (card.exp_month === nextMonth.month && card.exp_year === nextMonth.year);
         if (!expiresThisOrNextMonth) continue;
 
+        const cardKey = `${pm.id}:${card.exp_year}-${String(card.exp_month).padStart(2, "0")}`;
         await fireSimpleTrigger(supabase, {
           orgId: client.org_id,
           clientId: client.id,
           triggerType: "credit_card_about_to_expire",
+          recordKey: cardKey,
+          anchorKey: cardKey,
         });
         fired++;
       } catch (err) {

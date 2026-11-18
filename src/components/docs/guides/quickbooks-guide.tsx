@@ -418,6 +418,9 @@ export function QuickBooksGuide() {
             <strong>Editing a payment.</strong> Changing a payment&apos;s amount, date, reference or split keeps its link to the QuickBooks payment, which is updated rather than sent a second time. An invoice taken out of the split has its QuickBooks payment voided.
           </li>
           <li>
+            <strong>Plans without Landscapt.</strong> On the Equipt plan, the 15-minute safety-net sync of Landscapt invoices and payments is paused; it picks up again once the plan includes Landscapt.
+          </li>
+          <li>
             <strong>Several companies, one Landscapt.</strong> Each Landscapt company keeps its own QuickBooks links. Two companies connected to two different QuickBooks files never collide, even when QuickBooks gives their payments the same number.
           </li>
         </ul>

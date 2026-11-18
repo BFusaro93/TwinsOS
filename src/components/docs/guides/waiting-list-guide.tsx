@@ -308,6 +308,9 @@ export function WaitingListGuide() {
           <li>
             <strong>Skipped visits come back.</strong> A waiting-list service whose visit was skipped is offered again under the client&apos;s Schedule Job menu, the same as on the Waiting List page.
           </li>
+          <li>
+            <strong>Returning a two-crew stop.</strong> <strong>Return to Waiting List</strong> on a stop that several crews share sends every crew&apos;s visit back at once, so the job reappears here as one waiting job instead of half-dispatched. It is refused while any crew on the stop is clocked in.
+          </li>
         </ul>
       </Section>
     </DocsFontScope>

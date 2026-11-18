@@ -11,10 +11,11 @@ type RpcClient = Parameters<typeof hasAnySettingsPermission>[0];
  * and rules by calling the routes directly, and any role lacking
  * `forms_view_submit` could read every submission (names, emails, answers).
  *
- *   edit - build/publish/delete forms (forms_edit)
- *   view - read or work submissions, and fill out the internal test form
- *          (forms_view_submit; forms_edit implies it, matching the UI where an
- *          editor always sees the Responses tab)
+ *   edit - build/publish/delete forms, and fill out the internal test form
+ *          (forms_edit — a test submission creates real leads/tickets and fires
+ *          live automations)
+ *   view - read or work submissions (forms_view_submit; forms_edit implies it,
+ *          matching the UI where an editor always sees the Responses tab)
  *
  * Returns a 403 response to hand back, or null when allowed.
  */

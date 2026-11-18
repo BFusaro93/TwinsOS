@@ -262,6 +262,23 @@ export function ContractsGuide() {
           dialog says so, and saving replaces them with the one amount.
         </p>
         <p>
+          <strong>Changing the frequency or start date after the contract has billed.</strong> The
+          period already invoiced runs out first, then the new schedule begins with its first cycle after
+          that &mdash; nothing is billed twice and no month is skipped. Switching a quarterly contract
+          billed through March to monthly starts the monthly invoices in April; switching monthly to
+          quarterly starts the first quarter with the next month. Before you save, the Contract Details tab
+          shows an amber note such as &quot;The new schedule takes effect after the period already billed,
+          ending Mar 31 &mdash; its first cycle starts Apr 1.&quot; A contract that has never billed simply
+          uses the new settings from the start.
+        </p>
+        <p>
+          <strong>Weekly and every-2-weeks contracts keep their weekday.</strong> Once one of these has
+          billed, its 7- or 14-day cycle is fixed to the day it started billing on, so editing the start
+          date later doesn&apos;t slide the cycle or bill days an earlier invoice already covered. The dialog
+          names that date (&quot;counted from &hellip;, the period it is already billing on&quot;). Changing the
+          frequency itself follows the rule above.
+        </p>
+        <p>
           If a billing day is missed (an outage, or the cron failing that morning), the contract is
           billed later in the same period rather than skipped &mdash; for Weekly, Biweekly, Monthly,
           Quarterly and Annual contracts alike, as long as that period hasn&apos;t already been invoiced.

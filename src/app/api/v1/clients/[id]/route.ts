@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { isUuid } from "../../id-param";
 import { clientNotFoundResponse, jsonError, jsonServerError } from "@/lib/api/route-helpers";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { CLIENT_SELECT, shapeClient } from "../shape";
@@ -90,13 +90,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const addressTouched = ADDRESS_KEYS.some(([k]) => body[k] !== undefined);
   let previousStatus: string | null = null;
   let previousSmsOptIn = false;
+  let previousSource: string | null = null;
+  let previousReferrerId: string | null = null;
+  let previousDoNotMarket = false;
   let phoneChanged = false;
   let addressStale = false;
-  if (body.status !== undefined || body.smsOptIn !== undefined || body.primaryPhone !== undefined || addressTouched) {
+  if (
+    body.status !== undefined || body.smsOptIn !== undefined || body.primaryPhone !== undefined || addressTouched ||
+    body.source !== undefined || body.referredByClientId !== undefined || body.doNotMarket !== undefined
+  ) {
     const { data: current } = await db
       .from("clients")
       .select(
-        "status, sms_opt_in, primary_phone, billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip"
+        "status, sms_opt_in, source, referred_by_client_id, do_not_market, primary_phone, billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip"
       )
       .eq("org_id", auth.orgId)
       .eq("id", id)
@@ -105,6 +111,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!current) return clientNotFoundResponse(db, auth.orgId, id);
     previousStatus = current.status as string;
     previousSmsOptIn = (current.sms_opt_in as boolean | null) ?? false;
+    previousSource = (current.source as string | null) || null;
+    previousReferrerId = (current.referred_by_client_id as string | null) ?? null;
+    previousDoNotMarket = (current.do_not_market as boolean | null) === true;
     const lastDigits = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(-10);
     phoneChanged = body.primaryPhone !== undefined && lastDigits(body.primaryPhone) !== lastDigits(current.primary_phone);
     const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
@@ -118,10 +127,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return jsonError("Only a lead can be closed as lost — use status 'cancelled' for a client", 400);
   }
   const smsOptInJustEnabled = body.smsOptIn === true && !previousSmsOptIn;
-  // lead (or lost lead) -> active is a conversion: stamp client_since (the
-  // conversion date) exactly as useUpdateClient / useConvertLeadToClient do,
-  // since reports key off it.
-  const convertingLead = statusChanged && body.status === "active" && (previousStatus === "lead" || previousStatus === "lost");
+  // "" and null are both "no source", as in useUpdateClient.
+  const sourceChanged = body.source !== undefined && (body.source || null) !== previousSource;
+  // A referrer newly set (or changed) — not a re-send of the same one, not a clear.
+  const newReferrerId = body.referredByClientId && body.referredByClientId !== previousReferrerId ? body.referredByClientId : null;
+  // Whether this account was never a client (no client_since, job or invoice) — the same
+  // crm_clients_never_converted rule the app and the bulk route use, read BEFORE the update
+  // (a conversion stamps client_since). Moving such an account to Active is a lead
+  // CONVERSION, whatever its status says (a lead once set Inactive still converts);
+  // closing it is a lead cancellation, not a client cancellation.
+  let neverConverted = false;
+  if (statusChanged && (body.status === "active" || body.status === "cancelled" || body.status === "lost")) {
+    const { data: neverIds, error: neverErr } = await db.rpc("crm_clients_never_converted", { p_client_ids: [id] });
+    if (neverErr) return jsonServerError("PATCH /api/v1/clients/[id]", neverErr);
+    neverConverted = ((neverIds ?? []) as string[]).includes(id);
+  }
+  // A conversion stamps client_since (the conversion date) exactly as useUpdateClient /
+  // useActivateClient do, since reports key off it.
+  const convertingLead = statusChanged && body.status === "active" && neverConverted;
   const clientSince = convertingLead
     ? todayInZone(await getOrgTimeZone(db, auth.orgId))
     : null;
@@ -219,18 +242,43 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       subject: `Status changed: ${previousStatus} → ${body.status}`,
     });
 
-    // Same status-transition triggers useUpdateClient fires. Narrower than
-    // the app (skips tag/opt-in-specific triggers, which aren't tied to a
-    // status change) but covers the meaningful lifecycle transitions.
-    if (previousStatus === "lead" && (body.status === "cancelled" || body.status === "lost")) {
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "lead_cancelled" });
+    // Same status-transition triggers the app fires (useUpdateClient / useActivateClient /
+    // useCancelClient / the bulk route): to Active = conversion for a never-converted
+    // account, else reactivation; closing a never-converted account (or a lead / lost lead)
+    // = lead_cancelled, else cancelling = client_cancelled.
+    const closingLead = closing && (neverConverted || previousStatus === "lead" || previousStatus === "lost");
+    if (closingLead) {
+      await fireServerTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "lead_cancelled" });
     } else if (convertingLead) {
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "lead_converted_to_client" });
+      await fireServerTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "lead_converted_to_client" });
     } else if (body.status === "cancelled") {
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "client_cancelled" });
-    } else if ((previousStatus === "inactive" || previousStatus === "cancelled") && body.status === "active") {
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "client_reactivated" });
+      await fireServerTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "client_cancelled" });
+    } else if (body.status === "active") {
+      await fireServerTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "client_reactivated" });
     }
+  }
+
+  // The same field-change triggers useUpdateClient fires. org and client ids are the
+  // API key's org and a row this update just matched in it; the referrer was verified above.
+  if (sourceChanged) {
+    const newSource = body.source || null;
+    await fireServerTrigger(db, {
+      orgId: auth.orgId,
+      clientId: id,
+      triggerType: "client_source_updated",
+      matchValues: newSource ? [newSource] : undefined,
+    });
+  }
+  if (smsOptInJustEnabled) {
+    await fireServerTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "has_opted_in_sms" });
+  }
+  // "Re-subscribed to emails" (key has_opted_in_emails): Do Not Market turned off.
+  if (body.doNotMarket === false && previousDoNotMarket) {
+    await fireServerTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "has_opted_in_emails" });
+  }
+  if (newReferrerId) {
+    // For the REFERRER's record, as in the app — the sequence thanks whoever made the referral.
+    await fireServerTrigger(db, { orgId: auth.orgId, clientId: newReferrerId, triggerType: "client_referred" });
   }
 
   return NextResponse.json(shapeClient(data));

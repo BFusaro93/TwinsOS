@@ -1,7 +1,7 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep, isMarketingEmailCategory } from "./sequence-email";
 import { logger } from "@/lib/logger";
-import { isOrgInactive, isOrgDemo } from "@/lib/orgs/org-canceled";
-import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
+import { isOrgInactive, isOrgDemo, orgLacksModule } from "@/lib/orgs/org-canceled";
+import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime, isMarketingSequence } from "./sequence-sms";
 import { SMS_NOT_REGISTERED_REASON } from "@/lib/sms/send";
 import { phoneLast10 } from "@/lib/sms/opt-outs";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
@@ -26,6 +26,10 @@ export interface DueEnrollmentRow {
   meeting_id: string | null;
   /** The visit a visit-event trigger fired for (snow merge tags read it). */
   visit_id?: string | null;
+  /** A visit-scoped run's service day — the service merge tags read that day's visits. */
+  visit_date?: string | null;
+  /** The trigger that started the run. */
+  trigger_type?: string | null;
   next_event_position: number;
 }
 
@@ -368,6 +372,10 @@ async function notifyApproversOfParkedStep(
  * the immediate-send path fired right when a client is enrolled — this is the
  * single source of truth for "what happens when a sequence step comes due" so
  * both call sites stay in lockstep.
+ *
+ * Steps never chain-fire (owner decision): the record changes a step makes (tags,
+ * client source / sales person / terms, tickets, notes) are plain writes that do NOT
+ * fire start triggers, so one automation can't start another — and two can't loop.
  */
 export async function processDueEnrollment(
   adminClient: AnyClient,
@@ -381,7 +389,10 @@ export async function processDueEnrollment(
     .select("plan, trial_ends_at, is_platform_staff_org")
     .eq("id", enrollment.org_id)
     .maybeSingle();
-  if (isOrgInactive(org)) {
+  // An org whose plan doesn't include Landscapt (Equipt-only) is paused the same way: its
+  // users can't use Landscapt, so its sequences hold their current step until it upgrades, like a canceled org.
+  const lacksLandscapt = orgLacksModule(org, "landscapt");
+  if (isOrgInactive(org) || lacksLandscapt) {
     // Move the row off the head of the queue (oldest-due first) so a large inactive org can't
     // starve every other org; it is re-checked tomorrow and resumes if the org resubscribes.
     await adminClient
@@ -390,7 +401,10 @@ export async function processDueEnrollment(
       .eq("id", enrollment.id)
       .is("completed_at", null)
       .is("stopped_at", null);
-    return { skipped: { enrollmentId: enrollment.id, reason: org?.plan === "trial" ? "org trial has ended" : "org subscription is canceled" } };
+    const reason = lacksLandscapt
+      ? "org plan does not include Landscapt"
+      : org?.plan === "trial" ? "org trial has ended" : "org subscription is canceled";
+    return { skipped: { enrollmentId: enrollment.id, reason } };
   }
   if (!(await claimEnrollmentStep(adminClient, enrollment))) {
     return { skipped: { enrollmentId: enrollment.id, reason: "already claimed by another run (or no longer due)" } };
@@ -463,6 +477,8 @@ export interface EnrollmentGateRow {
   ticket_id: string | null;
   invoice_id: string | null;
   meeting_id: string | null;
+  /** A visit-day run's service day — the run ends when the client has no visit left on it. */
+  visit_date?: string | null;
 }
 
 /**
@@ -472,7 +488,9 @@ export interface EnrollmentGateRow {
  *  - its sequence or parent automation was turned off or deleted,
  *  - its client was deleted,
  *  - its meeting was cancelled, completed, deleted or moved,
- *  - its invoice/estimate/ticket left the state the start trigger implies.
+ *  - its invoice/estimate/ticket left the state the start trigger implies (incl. past due
+ *    no longer past due, an estimate change request, a ticket on hold),
+ *  - its service day has no visit left (all cancelled / skipped / moved off the day).
  * Stop conditions are checked separately (shouldStopSequence) because the
  * processor completes a run with no steps left before evaluating them.
  */
@@ -532,7 +550,7 @@ export async function enrollmentEndReason(
     if (meetingStop) return { action: "stopped_meeting_changed", detail: meetingStop };
   }
 
-  if (enrollment.invoice_id || enrollment.estimate_id || enrollment.ticket_id) {
+  if (enrollment.invoice_id || enrollment.estimate_id || enrollment.ticket_id || enrollment.visit_date) {
     const recordStop = await recordNoLongerMatches(adminClient, enrollment.id);
     if (recordStop) return { action: "stopped_record_changed", detail: recordStop };
   }
@@ -564,7 +582,7 @@ async function runClaimedStep(
   enrollment: DueEnrollmentRow
 ): Promise<ProcessOutcome> {
   const nowIso = new Date().toISOString();
-  const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, visit_id } = enrollment;
+  const { id: enrollId, org_id: orgId, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, visit_id, visit_date, trigger_type } = enrollment;
 
   const { data: events } = await adminClient
     .from("crm_sequence_events")
@@ -698,6 +716,8 @@ async function runClaimedStep(
       invoiceId: invoice_id ?? null,
       meetingId: meeting_id ?? null,
       visitId: visit_id ?? null,
+      visitDate: visit_date ?? null,
+      triggerType: trigger_type ?? null,
       subjectTemplate: eventConfig.subject ?? "",
       bodyTemplate: eventConfig.bodyHtml ?? eventConfig.body ?? "",
       toSelection: eventConfig.to,
@@ -851,9 +871,13 @@ async function runClaimedStep(
       meetingId: meeting_id ?? null,
       invoiceId: invoice_id ?? null,
       visitId: visit_id ?? null,
+      visitDate: visit_date ?? null,
+      triggerType: trigger_type ?? null,
       bodyTemplate: eventConfig.message ?? "",
       toSelection: eventConfig.to,
       cardExpiryContext,
+      // A marketing sequence's texts skip Do Not Market clients, as its emails do.
+      marketing: isMarketingSequence(events ?? []),
     });
     const failureCtx: SendFailureContext = {
       orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
@@ -1137,6 +1161,8 @@ async function runClaimedStep(
       ({ error: updateErr } = await adminClient
         .from("clients").update({ sales_rep_id: value || null }).eq("id", client_id).eq("org_id", orgId));
     } else if (field === "client_source") {
+      // NO CHAIN-FIRING (owner decision): this direct write does not fire
+      // client_source_updated (or any other trigger) — a step never starts another automation.
       ({ error: updateErr } = await adminClient
         .from("clients").update({ source: value || null }).eq("id", client_id).eq("org_id", orgId));
     } else if (field === "billing_term") {
@@ -1202,6 +1228,10 @@ async function runClaimedStep(
   }
 
   if (currentEvent.event_type === "tags") {
+    // NO CHAIN-FIRING (owner decision): adding/removing a tag here writes client_tags
+    // directly and does NOT fire tag_added / tag_removed (or any other) trigger, so one
+    // automation's step never starts another automation. Only a person's action (or an
+    // import / Zapier / form) fires tag triggers.
     const addTags: string[] = Array.isArray(eventConfig.add_tags) ? eventConfig.add_tags : [];
     const removeTags: string[] = Array.isArray(eventConfig.remove_tags) ? eventConfig.remove_tags : [];
 
@@ -1220,12 +1250,29 @@ async function runClaimedStep(
       }
     }
     if (removeTags.length > 0) {
-      const { error: removeErr } = await adminClient
+      // Case-insensitive: the step is configured from a picker, but the client's tag may
+      // have been typed as "VIP" vs "vip" — an exact match silently removed nothing (tag
+      // conditions already compare case-insensitively). Delete the client's actual
+      // spellings that match.
+      const wanted = new Set(removeTags.map((t) => t.trim().toLowerCase()).filter(Boolean));
+      const { data: current, error: readErr } = await adminClient
         .from("client_tags")
-        .delete()
+        .select("tag")
         .eq("client_id", client_id)
-        .eq("org_id", orgId)
-        .in("tag", removeTags);
+        .eq("org_id", orgId);
+      const matching = ((current ?? []) as { tag: string }[])
+        .map((r) => r.tag)
+        .filter((t) => wanted.has(t.trim().toLowerCase()));
+      const { error: removeErr } = readErr
+        ? { error: readErr }
+        : matching.length === 0
+          ? { error: null }
+          : await adminClient
+              .from("client_tags")
+              .delete()
+              .eq("client_id", client_id)
+              .eq("org_id", orgId)
+              .in("tag", matching);
       if (removeErr) {
         return handleSendFailure(adminClient, {
           orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
@@ -1342,7 +1389,7 @@ export async function processEnrollmentImmediately(
   for (let i = 0; i < maxSteps; i++) {
     const { data: row } = await adminClient
       .from("crm_sequence_enrollments")
-      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, visit_id, next_event_position, next_fire_at, completed_at, stopped_at, awaiting_approval")
+      .select("id, org_id, sequence_id, client_id, estimate_id, ticket_id, invoice_id, meeting_id, visit_id, visit_date, trigger_type, next_event_position, next_fire_at, completed_at, stopped_at, awaiting_approval")
       .eq("id", enrollmentId)
       .maybeSingle();
 

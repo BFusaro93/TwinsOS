@@ -6,7 +6,7 @@ import { CONTRACT_SELECT, shapeContract } from "./shape";
 import { createContractSchema, signedAtToInstant, type CreateContractItem } from "./validation";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
-import { currentPeriodBillingDate } from "@/lib/contract-billing";
+import { currentPeriodBillingDate, pinsCycleGrid } from "@/lib/contract-billing";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
 import { withIdempotency } from "@/lib/api/idempotency";
 
@@ -169,7 +169,7 @@ export async function POST(request: Request) {
       last_billed_date: lastBilledDate,
       // Already billing: its last billed date pins a quarterly/annual cycle grid to the months
       // it was billed in (contract-billing.ts monthGrid), as the import does.
-      billing_anchor_date: lastBilledDate && (billingFrequency === "quarterly" || billingFrequency === "annual") ? lastBilledDate : null,
+      billing_anchor_date: lastBilledDate && pinsCycleGrid(billingFrequency) ? lastBilledDate : null,
       notes: c.notes ?? null,
       // A bare date / offset-less time is the org's own calendar, not UTC.
     signed_at: c.signedAt ? signedAtToInstant(c.signedAt, orgTimeZone) : null,
@@ -216,7 +216,8 @@ export async function POST(request: Request) {
         ref_id: row.id as string,
         ref_table: "crm_contracts",
       });
-      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId, triggerType: "contract_created" });
+      // Once per contract (the run is scoped to it — enrollment-scope.ts RECORD_SCOPED_TRIGGERS).
+      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId, triggerType: "contract_created", recordId: row.id as string });
       // A contract recorded as already signed also fires contract_signed —
       // the app fires it on the draft → signed transition, which this
       // endpoint's "record something already executed" path skips over.

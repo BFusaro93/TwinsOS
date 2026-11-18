@@ -9,6 +9,7 @@ import type {
   TriggerType,
   ActionType,
 } from "@/types/automation";
+import { normalizeAutomationPriority, normalizePOTriggerStatus } from "@/types/automation";
 
 type AutomationRow = Database["public"]["Tables"]["automations"]["Row"];
 
@@ -60,7 +61,9 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
     case "po_status_change":
       trigger = {
         type: "po_status_change",
-        toStatus: (tc.to_status as "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed") ?? "approved",
+        // Old rules may hold pending_approval / closed (mapped) or draft (never matched a PO;
+        // shown as Requested so the dialog has a real option selected).
+        toStatus: normalizePOTriggerStatus(tc.to_status) ?? (tc.to_status === "draft" ? "requested" : "approved"),
       };
       break;
     case "vehicle_fault_code":
@@ -76,7 +79,8 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
       action = {
         type: "create_work_order",
         title: (ac.title as string) ?? "",
-        priority: ((ac.priority as string) ?? "medium") as "low" | "medium" | "high" | "urgent",
+        // A saved "urgent" (never a valid WO/request priority) reads back as Critical.
+        priority: normalizeAutomationPriority(ac.priority ?? "medium") ?? "medium",
         assignedToId: (ac.assigned_to_id as string) ?? "",
         // Legacy rows that never matched an employee keep their free text here.
         assignedToName: (ac.assigned_to as string) ?? "",
@@ -86,7 +90,8 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
       action = {
         type: "create_wo_request",
         title: (ac.title as string) ?? "",
-        priority: ((ac.priority as string) ?? "medium") as "low" | "medium" | "high" | "urgent",
+        // A saved "urgent" (never a valid WO/request priority) reads back as Critical.
+        priority: normalizeAutomationPriority(ac.priority ?? "medium") ?? "medium",
         assignedToId: (ac.assigned_to_id as string) ?? "",
         assignedToName: (ac.assigned_to as string) ?? "",
       };
@@ -109,6 +114,7 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
       action = {
         type: "send_email",
         recipient: (ac.recipient as string) ?? "",
+        message: (ac.message as string) ?? "",
       };
       break;
     default:
@@ -178,7 +184,7 @@ function serialiseActionConfig(action: AutomationAction): Json {
     case "send_notification":
       return { recipient_role: action.recipientRole, message: action.message };
     case "send_email":
-      return { recipient: action.recipient };
+      return { recipient: action.recipient.trim(), message: action.message };
   }
 }
 

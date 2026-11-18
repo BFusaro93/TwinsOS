@@ -199,7 +199,7 @@ export async function GET(request: Request) {
   // is the only backstop against billing past a lapsed term).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dueTodayContracts: any[] = [];
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  const orgCanceled = createOrgCanceledResolver(supabase, { requireModule: "landscapt" }); // Equipt-only orgs: Landscapt work paused
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of ((contracts ?? []) as any[])) {
     if (await orgCanceled(c.org_id)) continue; // canceled orgs get no automated invoices

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { roundHours } from "@/lib/utils";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -290,10 +291,14 @@ export async function createCrmJob(
   // The in-app New Job dialog fires job_created (which also feeds Zapier REST
   // hooks); without it a job made through the API never enrolled in
   // job_created automations. Best-effort.
-  try {
-    await fireSimpleTrigger(db, { orgId, clientId: input.clientId, triggerType: "job_created", matchValues: [jobType], recordId: jobId });
-  } catch {
-    // enrollment failure must not fail the create
+  // Due steps are sent right away (fireServerTrigger), not left for the next cron
+  // sweep. A package job also fires package_created, as the app's New Job does
+  // (no package template is picked through the API, so there is no package id to
+  // match a filter on). `db` is the service-role client both callers pass.
+  // Best-effort: fireServerTrigger never throws.
+  await fireServerTrigger(db, { orgId, clientId: input.clientId, triggerType: "job_created", matchValues: [jobType], recordId: jobId, jobId });
+  if (jobType === "package") {
+    await fireServerTrigger(db, { orgId, clientId: input.clientId, triggerType: "package_created", jobId });
   }
 
   return { ok: true, job };

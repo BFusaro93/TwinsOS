@@ -6,6 +6,8 @@ import { logger } from "@/lib/logger";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import type { TriggerType } from "@/types/crm-automations";
+import { isJobScopedTrigger } from "@/lib/automations/enrollment-scope";
+import { CLIENT_STATE_TRIGGERS, type ClientStateRow } from "@/lib/automations/client-state-triggers";
 
 /**
  * POST /api/automations/fire-trigger — fired best-effort from client mutation
@@ -41,6 +43,7 @@ const ALLOWED_TRIGGER_TYPES: ReadonlySet<TriggerType> = new Set([
   "client_created",
   "lead_created",
   "invoice_created",
+  "invoice_sent",
   "job_cancelled",
   "package_created",
   "package_renewed",
@@ -99,20 +102,24 @@ const VERIFIED_TRIGGERS: Partial<Record<TriggerType, VerifiedTrigger>> = {
   },
 };
 
+// CLIENT_STATE_TRIGGERS (client-level premise checks) lives in client-state-triggers.ts:
+// the trigger-queue drain re-checks the same premise before firing a queued bulk event.
+
 /**
- * Client-level triggers whose premise is the client's own current state. These carry no
- * record id, so VERIFIED_TRIGGERS can't cover them — but without a check any org member
- * could send an active customer the "sorry to see you go" sequence.
+ * Per-invoice events that fire exactly once per invoice, whatever path got there:
+ * the crm_invoices trigger queues them (20270109000700) and the automations run
+ * drains the queue; an interactive path calls here to fire right away instead.
+ * claim_invoice_automation_event() hands each event out once — a claimed row is
+ * never fired again, by this route or by the drain.
  */
-type ClientStateRow = { status: string | null; ok_to_email: boolean | null; sms_opt_in: boolean | null };
-const CLIENT_STATE_TRIGGERS: Partial<Record<TriggerType, { isTrue: (c: ClientStateRow) => boolean; label: string }>> = {
-  client_cancelled: { isTrue: (c) => c.status === "cancelled", label: "the client is not cancelled" },
-  // A lead is cancelled from the Clients list (status cancelled) or closed as lost from the Leads page.
-  lead_cancelled: { isTrue: (c) => c.status === "cancelled" || c.status === "lost", label: "the lead is not cancelled or lost" },
-  lead_converted_to_client: { isTrue: (c) => c.status === "active", label: "the client is not active" },
-  client_reactivated: { isTrue: (c) => c.status === "active", label: "the client is not active" },
-  has_opted_in_emails: { isTrue: (c) => c.ok_to_email === true, label: "the client has not opted in to email" },
-  has_opted_in_sms: { isTrue: (c) => c.sms_opt_in === true, label: "the client has not opted in to texts" },
+const CLAIMED_INVOICE_TRIGGERS: Partial<Record<TriggerType, {
+  isTrue: (i: { status: string | null; invoice_number: number | null }) => boolean;
+  label: string;
+}>> = {
+  // "Invoice issued": it has its number.
+  invoice_created: { isTrue: (i) => i.invoice_number != null && i.status !== "void", label: "the invoice has no number yet" },
+  // Sent, printed, or anything after.
+  invoice_sent: { isTrue: (i) => i.status !== null && i.status !== "draft" && i.status !== "void", label: "the invoice has not been sent or printed" },
 };
 
 export async function POST(req: NextRequest) {
@@ -130,6 +137,9 @@ export async function POST(req: NextRequest) {
     invoiceId?: string;
     matchValues?: string[];
     visitId?: string;
+    jobId?: string;
+    /** The contract / damage case a record-scoped trigger is about (once per record). */
+    recordId?: string;
   };
   if (!body.triggerType || !ALLOWED_TRIGGER_TYPES.has(body.triggerType as TriggerType)) {
     return NextResponse.json({ error: "unsupported triggerType" }, { status: 400 });
@@ -155,7 +165,7 @@ export async function POST(req: NextRequest) {
   // still worth double-checking explicitly rather than trusting the body.
   const { data: client } = await db
     .from("clients")
-    .select("org_id, status, ok_to_email, sms_opt_in, deleted_at")
+    .select("org_id, status, ok_to_email, sms_opt_in, do_not_market, deleted_at")
     .eq("id", body.clientId)
     .maybeSingle();
   if (!client || client.org_id !== orgId || client.deleted_at) {
@@ -198,6 +208,24 @@ export async function POST(req: NextRequest) {
     visitId = body.visitId;
   }
 
+  // The job a job-event trigger is about (the run is scoped to it — once per job): kept
+  // only when it is this client's, in this org.
+  let jobId: string | null = null;
+  if (typeof body.jobId === "string" && body.jobId && isJobScopedTrigger(body.triggerType)) {
+    const { data: job } = await db.from("crm_jobs").select("org_id, client_id").eq("id", body.jobId).maybeSingle();
+    if (!job || job.org_id !== orgId || job.client_id !== body.clientId) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+    jobId = body.jobId;
+  }
+
+  // The contract / damage case a record-scoped trigger is about (verified below).
+  const scopeRecordId: string | null =
+    typeof body.recordId === "string" && body.recordId &&
+    (body.triggerType === "contract_created" || body.triggerType === "contract_signed" || body.triggerType === "damage_case_created")
+      ? body.recordId
+      : null;
+
   // Server-side check that the event actually happened, for the triggers
   // where the record can prove it (see VERIFIED_TRIGGERS).
   const verify = VERIFIED_TRIGGERS[body.triggerType as TriggerType];
@@ -220,29 +248,68 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
+  } else if (CLAIMED_INVOICE_TRIGGERS[body.triggerType as TriggerType]) {
+    const claimed = CLAIMED_INVOICE_TRIGGERS[body.triggerType as TriggerType]!;
+    if (!body.invoiceId) {
+      return NextResponse.json({ error: `invoiceId is required for ${body.triggerType}` }, { status: 400 });
+    }
+    const { data: inv } = await db
+      .from("crm_invoices")
+      .select("client_id, status, invoice_number, deleted_at")
+      .eq("id", body.invoiceId)
+      .maybeSingle();
+    if (!inv || inv.deleted_at || inv.client_id !== body.clientId) {
+      return NextResponse.json({ error: "Record does not belong to this client" }, { status: 409 });
+    }
+    if (!claimed.isTrue(inv)) {
+      return NextResponse.json({ error: `Cannot fire ${body.triggerType}: ${claimed.label}` }, { status: 409 });
+    }
+    // Once per invoice: whoever claims it fires it (this request, or the queue drain).
+    // Service-role only RPC, not in the generated types yet.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: won, error: claimErr } = await (createServiceClient() as unknown as any).rpc("claim_invoice_automation_event", {
+      p_invoice_id: body.invoiceId,
+      p_trigger_type: body.triggerType,
+    });
+    if (claimErr) {
+      logger.error("[fire-trigger] invoice event claim failed", { invoiceId: body.invoiceId, error: claimErr.message });
+      return NextResponse.json({ error: "Could not fire the automation" }, { status: 500 });
+    }
+    if (won !== true) return NextResponse.json({ ok: true, alreadyFired: true });
   } else {
     // Triggers the record can't prove still need their subject to exist in this org, and a
     // replay limit: each call can send the first step (an email/text) immediately.
     const matchValues = Array.isArray(body.matchValues) ? body.matchValues.filter((v) => typeof v === "string") : [];
-    if (body.triggerType === "invoice_created" && !body.invoiceId) {
-      return NextResponse.json({ error: "invoiceId is required for invoice_created" }, { status: 400 });
-    }
     if ((body.triggerType === "package_created" || body.triggerType === "package_renewed") && matchValues[0]) {
       const { data: pkg } = await db.from("crm_packages").select("org_id").eq("id", matchValues[0]).maybeSingle();
       if (!pkg || pkg.org_id !== orgId) return NextResponse.json({ error: "Package not found" }, { status: 404 });
     }
     if (body.triggerType === "contract_created" || body.triggerType === "contract_signed") {
       let q = db.from("crm_contracts").select("id").eq("client_id", body.clientId).is("deleted_at", null).limit(1);
+      // With the contract named, it must be THAT contract (this client's, this org's) —
+      // the run is scoped to it.
+      if (scopeRecordId) q = q.eq("id", scopeRecordId).eq("org_id", orgId);
       if (body.triggerType === "contract_signed") q = q.in("status", ["signed", "active"]);
       const { data: contracts } = await q;
       if (!contracts || contracts.length === 0) {
         return NextResponse.json({ error: `Cannot fire ${body.triggerType}: the client has no such contract` }, { status: 409 });
       }
     }
+    if (body.triggerType === "damage_case_created" && scopeRecordId) {
+      // damage_cases has no client FK: the case must be this org's and name this client.
+      const [{ data: dc }, { data: named }] = await Promise.all([
+        db.from("damage_cases").select("org_id, customer_name, deleted_at").eq("id", scopeRecordId).maybeSingle(),
+        db.from("clients").select("display_name").eq("id", body.clientId).maybeSingle(),
+      ]);
+      const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+      if (!dc || dc.org_id !== orgId || dc.deleted_at || !norm(dc.customer_name) || norm(dc.customer_name) !== norm(named?.display_name)) {
+        return NextResponse.json({ error: "Damage case not found for this client" }, { status: 404 });
+      }
+    }
     // Keyed per client AND record: with a match value alone (a tag name, a package)
     // tagging four different leads "Spring Promo" in ten minutes shared one key, so
     // the fourth lead's real event was refused (and the caller swallows the 429).
-    const recordKey = body.invoiceId ?? body.estimateId ?? body.ticketId ?? matchValues[0] ?? "client";
+    const recordKey = body.invoiceId ?? body.estimateId ?? body.ticketId ?? jobId ?? visitId ?? scopeRecordId ?? matchValues[0] ?? "client";
     if (!(await checkAuthRateLimit(`fire:${user.id}:${body.triggerType}:${body.clientId}:${recordKey}`, 3, 600))) {
       return NextResponse.json({ error: "This automation was just triggered for this record. Try again in a few minutes." }, { status: 429 });
     }
@@ -257,6 +324,12 @@ export async function POST(req: NextRequest) {
     triggerType: body.triggerType as TriggerType,
     matchValues: Array.isArray(body.matchValues) ? body.matchValues.filter((v) => typeof v === "string") : undefined,
     visitId,
+    jobId,
+    // The record the event is about, for Zapier's REST-hook payload (visit_dispatched
+    // sends that visit, job_created that job) — without it Zapier got the client's
+    // newest such record, not necessarily this one.
+    // contract_* / damage_case_created also scope the run to that record (once per record).
+    recordId: visitId ?? jobId ?? scopeRecordId,
   });
 
   // Send any step that's due right now (an email with no wait in front of

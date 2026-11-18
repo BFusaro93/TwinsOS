@@ -1568,9 +1568,9 @@ export function useUpdateClient() {
 
       // Fetch the "before" values for fields whose automation trigger only
       // fires on an actual change, not on every generic profile-edit save.
-      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null; primary_phone: string | null; client_since: string | null } | null = null;
-      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined || updates.status !== undefined || updates.primaryPhone !== undefined) {
-        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in, status, primary_phone, client_since").eq("id", id).single();
+      let before: { source: string | null; ok_to_email: boolean | null; do_not_market: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null; primary_phone: string | null; client_since: string | null } | null = null;
+      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.doNotMarket !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined || updates.status !== undefined || updates.primaryPhone !== undefined) {
+        const { data } = await supabase.from("clients").select("source, ok_to_email, do_not_market, referred_by_client_id, payment_method, sms_opt_in, status, primary_phone, client_since").eq("id", id).single();
         before = data;
       }
 
@@ -1729,7 +1729,9 @@ export function useUpdateClient() {
 
       // "" and null are both "no source" (the form posts "" for an empty select).
       const sourceChanged = updates.source !== undefined && before && (updates.source || null) !== (before.source || null);
-      const emailsOptedIn = updates.okToEmail === true && before && before.ok_to_email !== true;
+      // "Re-subscribed to emails" (trigger key has_opted_in_emails): Do Not Market turned
+      // OFF on a client who had it on — not merely ticking OK to Email.
+      const emailsOptedIn = updates.doNotMarket === false && before && before.do_not_market === true;
       const newReferrerId = updates.referredByClientId && before && updates.referredByClientId !== before.referred_by_client_id
         ? updates.referredByClientId
         : null;

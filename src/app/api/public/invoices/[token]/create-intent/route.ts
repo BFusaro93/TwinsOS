@@ -157,7 +157,7 @@ export async function POST(
   // credit/deposit already on the account first (service role: the token holder
   // has no session) so the card only pays what is still owed.
   try {
-    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
+    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice, { serviceDb: supabase, orgId: invoice.org_id });
   } catch {
     return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
   }

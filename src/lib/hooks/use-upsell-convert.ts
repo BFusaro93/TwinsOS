@@ -8,6 +8,7 @@ import { recalcEstimateTotals } from "@/lib/hooks/use-estimates";
 import type { CRMTicket } from "@/types/crm-tickets";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 
 /**
  * Turns a crew-submitted upsell ticket into a draft estimate in one click.
@@ -234,8 +235,14 @@ export function useCreateEstimateFromUpsell() {
         resumed,
       };
     },
-    onSuccess: (_res, ticket) => {
+    onSuccess: (res, ticket) => {
       qc.invalidateQueries({ queryKey: ["estimates"] });
+      // A converted upsell is a new estimate like any other, so it starts "Estimate Created"
+      // automations too. Only when this click created it — a resumed conversion picked up
+      // an estimate an earlier click already made (and fired for).
+      if (!res.resumed && ticket.clientId) {
+        fireAutomationTrigger({ triggerType: "estimate_created", clientId: ticket.clientId, estimateId: res.estimateId });
+      }
       qc.invalidateQueries({ queryKey: ["crm-ticket-links", ticket.id] });
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
     },

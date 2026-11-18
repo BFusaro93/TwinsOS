@@ -264,6 +264,17 @@ export function billingAnchor(contract: BillingContractRow, today: Date): Ymd {
 }
 
 /**
+ * The 7/14-day grid a weekly/biweekly contract bills on: `billing_anchor_date`
+ * once stamped (the first period it billed, or where a schedule change made
+ * billing resume — see rescheduledBillingAnchor), else billingAnchor. Pinning
+ * it means editing the start date of a contract that has already billed can
+ * no longer slide the grid and bill days an earlier invoice already covered.
+ */
+function subMonthlyAnchor(contract: BillingContractRow, today: Date): Ymd {
+  return parseYmd(contract.billing_anchor_date) ?? billingAnchor(contract, today);
+}
+
+/**
  * When the contract became billable (org calendar): `billable_since` if the
  * caller resolved it (the cron does, from the audit trail), else the later of
  * created_at and signed_at. Null when the row carries none of them.
@@ -360,7 +371,18 @@ function monthGrid(contract: BillingContractRow, frequency: BillingFrequency, to
  */
 export function billingAnchorStamp(contract: BillingContractRow, plan: BillingPlan): string | null {
   if (contract.billing_anchor_date) return null;
-  return plan.frequency === "quarterly" || plan.frequency === "annual" ? plan.cycleStart : null;
+  return pinsCycleGrid(plan.frequency) ? plan.cycleStart : null;
+}
+
+/**
+ * Cadences whose cycle grid is pinned by `billing_anchor_date` on the first
+ * invoice: quarterly/annual (which months cycles start in) and
+ * weekly/biweekly (which day the 7/14-day periods start on). Monthly bills on
+ * billing_day_of_month every month and one_time once, so neither needs it.
+ */
+export function pinsCycleGrid(frequency: string | null | undefined): boolean {
+  const f = normalizeBillingFrequency(frequency);
+  return f === "quarterly" || f === "annual" || f === "weekly" || f === "biweekly";
 }
 
 /**
@@ -508,6 +530,10 @@ export function isBillingDueOn(contract: BillingContractRow, today: Date): boole
       // Never bill a cycle that began before the contract did — that is what
       // the first-period stub (prorate mode) or nothing (first full cycle) is for.
       if (contract.start_date && fmt(cycleStart) < contract.start_date) return false;
+      // A stamped grid never bills a cycle before its first one — for monthly that
+      // stamp only exists after a schedule change, where the cycles before it were
+      // already paid for under the old schedule (rescheduledBillingAnchor).
+      if (contract.billing_anchor_date && target.windowIdx < g.originIdx) return false;
       if (target.via === "missed_first_cycle" || target.via === "missed_previous_run") return true;
 
       // Quarterly/annual fire only in the run months of their grid, and
@@ -546,7 +572,7 @@ export function isBillingDueOn(contract: BillingContractRow, today: Date): boole
     case "weekly":
     case "biweekly": {
       const step = frequency === "weekly" ? 7 : 14;
-      const anchor = billingAnchor(contract, today);
+      const anchor = subMonthlyAnchor(contract, today);
       const elapsed = dayDiff(anchor, now);
       if (elapsed < 0) return false;
       if (elapsed % step === 0) return true;
@@ -594,7 +620,7 @@ export function planContractBilling(
     // dated the day the run happens, and the window is the 7/14-day period
     // that day falls in.
     const step = frequency === "weekly" ? 7 : 14;
-    const anchor = billingAnchor(contract, today);
+    const anchor = subMonthlyAnchor(contract, today);
     const elapsed = dayDiff(anchor, now);
     const periodIndex = Math.floor(elapsed / step);
     const periodStart = addDays(anchor, periodIndex * step);
@@ -689,7 +715,7 @@ export function contractBilledThrough(
     case "weekly":
     case "biweekly": {
       const step = frequency === "weekly" ? 7 : 14;
-      const anchor = billingAnchor(contract, today);
+      const anchor = subMonthlyAnchor(contract, today);
       const periodStart = addDays(anchor, Math.floor(dayDiff(anchor, last) / step) * step);
       return fmt(addDays(periodStart, step - 1));
     }
@@ -702,6 +728,60 @@ export function contractBilledThrough(
       return fmt(addDays(billingDayOf(g, w + g.span), -1));
     }
   }
+}
+
+/**
+ * What `billing_anchor_date` must become when a contract's cadence
+ * (`billing_frequency`) or `start_date` is edited — "finish the old period":
+ * whatever the contract already billed under the OLD schedule runs out
+ * (contractBilledThrough, computed with the old values), and the new schedule
+ * starts with its first cycle that begins after that day (and on/after the
+ * new start date):
+ *  - weekly/biweekly: the first day of the new 7/14-day grid (counted from the
+ *    new start date) on/after it — at most step-1 unbilled days, never an
+ *    overlap;
+ *  - monthly/quarterly/annual: the first billing day (billing_day_of_month)
+ *    on/after it, which also becomes the first month of a quarterly/annual
+ *    grid, so switching monthly → quarterly bills the very next month instead
+ *    of skipping to the old quarter grid.
+ * Without this, weekly/biweekly re-billed days already invoiced (the grid is
+ * counted from start_date), quarterly → monthly billed months the quarter had
+ * already paid for, and monthly → quarterly skipped months.
+ *
+ * Returns `undefined` when nothing changed that affects the schedule (or the
+ * change can't use a grid: one_time either side), `null` to clear the stamp
+ * (never billed — the new settings define the grid from scratch, as for a new
+ * contract), or the date to stamp.
+ */
+export function rescheduledBillingAnchor(
+  before: BillingContractRow & { first_period_prorated_at?: string | null },
+  after: BillingContractRow,
+  today: Date = new Date(),
+): string | null | undefined {
+  const fBefore = normalizeBillingFrequency(before.billing_frequency);
+  const fAfter = normalizeBillingFrequency(after.billing_frequency);
+  const sameStart = (before.start_date || null) === (after.start_date || null);
+  if (fBefore === fAfter && sameStart) return undefined;
+  if (fBefore === "one_time" || fAfter === "one_time") return undefined;
+  // Monthly bills on billing_day_of_month whatever the start date, so moving the
+  // start of a monthly contract moves no cycle (the start rule still applies).
+  if (fBefore === "monthly" && fAfter === "monthly") return undefined;
+  const through = parseYmd(contractBilledThrough(before, today));
+  if (!through) return null;
+  let from = addDays(through, 1);
+  const start = parseYmd(after.start_date);
+  if (start && dayDiff(from, start) > 0) from = start;
+  if (fAfter === "weekly" || fAfter === "biweekly") {
+    const step = fAfter === "weekly" ? 7 : 14;
+    const grid = billingAnchor({ ...after, billing_anchor_date: null }, today);
+    const elapsed = dayDiff(grid, from);
+    return fmt(elapsed <= 0 ? grid : addDays(grid, Math.ceil(elapsed / step) * step));
+  }
+  const billingDay = Math.min(31, Math.max(1, after.billing_day_of_month ?? 1));
+  const sameMonth = clampedBoundary(from.y, from.m, billingDay);
+  if (dayDiff(from, sameMonth) >= 0) return fmt(sameMonth);
+  const next = fromMonthIndex(monthIndex(from.y, from.m) + 1);
+  return fmt(clampedBoundary(next.y, next.m, billingDay));
 }
 
 /**
@@ -719,8 +799,9 @@ export function currentPeriodBillingDate(contract: BillingContractRow, today: Da
   if (frequency === "one_time") return dayDiff(anchor, now) >= 0 ? fmt(anchor) : null;
   if (frequency === "weekly" || frequency === "biweekly") {
     const step = frequency === "weekly" ? 7 : 14;
-    const elapsed = dayDiff(anchor, now);
-    return elapsed < 0 ? null : fmt(addDays(anchor, Math.floor(elapsed / step) * step));
+    const grid = subMonthlyAnchor(contract, today);
+    const elapsed = dayDiff(grid, now);
+    return elapsed < 0 ? null : fmt(addDays(grid, Math.floor(elapsed / step) * step));
   }
   const g = monthGrid(contract, frequency, today);
   const nowIdx = monthIndex(now.y, now.m);
@@ -785,7 +866,7 @@ export function pendingLateCycle(contract: LateCycleContractRow, today: Date): L
   let billingDay: Ymd;
   if (frequency === "weekly" || frequency === "biweekly") {
     const step = frequency === "weekly" ? 7 : 14;
-    const elapsed = dayDiff(billingAnchor(contract, today), now);
+    const elapsed = dayDiff(subMonthlyAnchor(contract, today), now);
     if (elapsed % step === 0) return null; // today is the period's first day
     billingDay = addDays(now, -(elapsed % step));
   } else {
@@ -909,7 +990,7 @@ function firstCycleStartOnOrAfter(contract: BillingContractRow, from: Ymd, today
   if (frequency === "one_time") return null;
   if (frequency === "weekly" || frequency === "biweekly") {
     const step = frequency === "weekly" ? 7 : 14;
-    const anchor = billingAnchor(contract, today);
+    const anchor = subMonthlyAnchor(contract, today);
     const elapsed = dayDiff(anchor, from);
     if (elapsed <= 0) return fmt(anchor);
     return fmt(addDays(anchor, Math.ceil(elapsed / step) * step));
@@ -982,7 +1063,7 @@ export function unbilledContractCycles(contract: LateCycleContractRow, today: Da
 
   if (frequency === "weekly" || frequency === "biweekly") {
     const step = frequency === "weekly" ? 7 : 14;
-    const anchor = billingAnchor(contract, today);
+    const anchor = subMonthlyAnchor(contract, today);
     const elapsedNow = dayDiff(anchor, now);
     if (elapsedNow >= 0) naturalStart = fmt(addDays(anchor, Math.floor(elapsedNow / step) * step));
     let k = 0;
@@ -1010,7 +1091,7 @@ export function unbilledContractCycles(contract: LateCycleContractRow, today: Da
     const anchor = parseYmd(contract.start_date) ?? billingAnchor(contract, today);
     let w = windowStartIdx(g, monthIndex(anchor.y, anchor.m));
     for (let i = 0; i < 40 && dayDiff(anchor, billingDayOf(g, w)) < 0; i += 1) w += g.span;
-    if (g.span > 1 && w < g.originIdx) w = g.originIdx;
+    if ((g.span > 1 || contract.billing_anchor_date) && w < g.originIdx) w = g.originIdx;
     if (last) {
       const lastW = windowStartIdx(g, monthIndex(last.y, last.m));
       if (lastW + g.span > w) w = lastW + g.span;
@@ -1139,9 +1220,15 @@ export function alreadyBilledReason(plan: BillingPlan): string {
  */
 export function termSkipReason(
   plan: BillingPlan,
-  contract: { start_date?: string | null; end_date?: string | null },
+  contract: { start_date?: string | null; end_date?: string | null; billing_anchor_date?: string | null },
 ): string | null {
   const windowEnd = plan.periodEnd ?? plan.invoiceDate;
+  // A cycle before the pinned grid's first one: either it was paid for under an
+  // earlier schedule (the cadence or start date changed after billing — see
+  // rescheduledBillingAnchor), or billing simply began after it.
+  if (plan.frequency !== "one_time" && contract.billing_anchor_date && plan.cycleStart < contract.billing_anchor_date) {
+    return `the billing cycle starting ${plan.cycleStart} is before the contract's current billing schedule, which starts ${contract.billing_anchor_date}`;
+  }
   if (contract.start_date) {
     if (contract.start_date > windowEnd || plan.invoiceDate < contract.start_date) return "contract hasn't started yet";
     if (plan.cycleStart < contract.start_date) {

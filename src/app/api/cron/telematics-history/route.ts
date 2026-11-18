@@ -53,12 +53,14 @@ export async function GET(request: Request) {
   }
 
   const recordedAt = historyHour();
-  const orgCanceled = createOrgCanceledResolver(admin);
+  // Telematics (history + fault-code work orders) is Equipt's: an org whose plan lacks
+  // Equipt (Landscapt-only) is paused like a canceled one, same as the automations poll.
+  const orgCanceled = createOrgCanceledResolver(admin, { requireModule: "equipt" });
   const results: { orgId: string; recorded: number; faultsOpened?: number; error?: string }[] = [];
 
   for (const integration of integrations ?? []) {
     const orgId = integration.org_id as string;
-    // Canceled / expired-trial orgs get no background work.
+    // Canceled / expired-trial orgs, and orgs without Equipt, get no background work.
     if (await orgCanceled(orgId)) continue;
     try {
       const apiKey = integration.api_key as string;

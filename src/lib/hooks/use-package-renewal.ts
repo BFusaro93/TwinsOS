@@ -437,6 +437,7 @@ export function useRenewPackageJob() {
         triggerType: "package_renewed",
         clientId: plan.values.clientId,
         matchValues: plan.values.packageId ? [plan.values.packageId] : undefined,
+        jobId: created.id,
       });
       return {
         newJobId: created.id,

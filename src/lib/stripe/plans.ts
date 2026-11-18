@@ -84,6 +84,12 @@ export function planIncludesModule(plan: string, module: PlatformModule): boolea
   return getModulesForPlan(plan).includes(module);
 }
 
+/** The plan values that do NOT include `module` (e.g. ["cmms"] for "landscapt") — for
+ *  SQL-side filters of service-role sweeps that must skip those orgs. */
+export function plansWithoutModule(module: PlatformModule): string[] {
+  return BILLABLE_PLANS.filter((p) => !(p.modules as readonly PlatformModule[]).includes(module)).map((p) => p.plan);
+}
+
 /** Seat count and per-seat overage price for a plan, honoring an org's custom override (Enterprise deals) when set. */
 export function getSeatConfig(
   plan: string,

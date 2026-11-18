@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
+import { createServiceClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/crm/crew/drive/end — "Arrived". Closes the caller's crew's open
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
   if (!crewId) return NextResponse.json({ error: "Not a crew account" }, { status: 403 });
 
   // The moment of the "Arrived" tap (a queued offline tap replays later).
-  const result = await closeOpenDriveSegment(supabase, crewId, orgId, resolveOccurredAt(await readOccurredAt(request)));
+  // Service role: a crew login can't write crm_crew_drive_segments directly;
+  // crewId / orgId were resolved from the caller's own session above.
+  const result = await closeOpenDriveSegment(createServiceClient(), crewId, orgId, resolveOccurredAt(await readOccurredAt(request)));
   if (result.error) return NextResponse.json({ error: result.error }, { status: 500 });
 
   return NextResponse.json({ closed: result.closed });

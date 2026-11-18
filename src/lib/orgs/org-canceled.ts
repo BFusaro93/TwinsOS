@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { planIncludesModule, type PlatformModule } from "@/lib/stripe/plans";
 
 /**
  * A canceled org keeps READ-ONLY access to its data (20260926190000) but must
@@ -41,11 +42,29 @@ export function isOrgInactive(org: OrgPlanRow | null | undefined): boolean {
 export type OrgCanceledResolver = (orgId: string | null | undefined) => Promise<boolean>;
 
 /**
+ * True when the org's plan does not include `module` (e.g. an Equipt-only 'cmms' org and
+ * Landscapt). Such an org's users can't write to that product (plan_module_write_*
+ * policies), but crons and automation sends run as the service role and bypass those —
+ * so background work for the product the org doesn't pay for is PAUSED exactly like a
+ * canceled org's: skipped while the plan lacks it, resumed on upgrade, no catch-up.
+ */
+export function orgLacksModule(org: OrgPlanRow | null | undefined, module: PlatformModule): boolean {
+  if (!org || !org.plan) return false;
+  return !planIncludesModule(org.plan, module);
+}
+
+/** Options shared by the per-invocation resolvers below. */
+export interface OrgResolverOptions {
+  /** Also treat the org as paused when its plan doesn't include this product. */
+  requireModule?: PlatformModule;
+}
+
+/**
  * Returns a resolver for one cron invocation. Call it per row (it caches per
  * org for the life of the invocation, so a loop over many rows of one org costs
  * one query). A canceled flip mid-run is not a concern at cron granularity.
  */
-export function createOrgCanceledResolver(db: AnyClient): OrgCanceledResolver {
+export function createOrgCanceledResolver(db: AnyClient, opts: OrgResolverOptions = {}): OrgCanceledResolver {
   const cache = new Map<string, boolean>();
   return async (orgId) => {
     if (!orgId) return false;
@@ -57,7 +76,8 @@ export function createOrgCanceledResolver(db: AnyClient): OrgCanceledResolver {
       .eq("id", orgId)
       .maybeSingle();
     if (error) return false;
-    const canceled = isOrgInactive(data as OrgPlanRow | null);
+    const row = data as OrgPlanRow | null;
+    const canceled = isOrgInactive(row) || (!!opts.requireModule && orgLacksModule(row, opts.requireModule));
     cache.set(orgId, canceled);
     return canceled;
   };
@@ -76,7 +96,7 @@ export async function isOrgCanceled(db: AnyClient, orgId: string | null | undefi
  *
  * Fails open (not muted) on a lookup error, like the canceled resolver.
  */
-export function createOrgOutboundMutedResolver(db: AnyClient): OrgCanceledResolver {
+export function createOrgOutboundMutedResolver(db: AnyClient, opts: OrgResolverOptions = {}): OrgCanceledResolver {
   const cache = new Map<string, boolean>();
   return async (orgId) => {
     if (!orgId) return false;
@@ -89,7 +109,8 @@ export function createOrgOutboundMutedResolver(db: AnyClient): OrgCanceledResolv
       .maybeSingle();
     if (error) return false;
     const row = data as (OrgPlanRow & { is_demo?: boolean | null }) | null;
-    const muted = isOrgInactive(row) || row?.is_demo === true;
+    const muted =
+      isOrgInactive(row) || row?.is_demo === true || (!!opts.requireModule && orgLacksModule(row, opts.requireModule));
     cache.set(orgId, muted);
     return muted;
   };
