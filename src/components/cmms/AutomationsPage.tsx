@@ -102,6 +102,10 @@ export function formatTrigger(
       };
       return `Purchase order status changes to "${label[trigger.toStatus] ?? trigger.toStatus}"`;
     }
+    case "vehicle_fault_code":
+      return trigger.onlyCheckEngineLight
+        ? "A vehicle reports a new fault code with the check-engine light on"
+        : "A vehicle reports a new fault code";
   }
 }
 

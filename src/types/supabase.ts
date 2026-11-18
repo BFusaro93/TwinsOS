@@ -17713,6 +17713,89 @@ export type Database = {
           },
         ]
       }
+      vehicle_fault_events: {
+        Row: {
+          check_engine_light: boolean | null
+          cleared_at: string | null
+          code: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          first_seen_at: string
+          id: string
+          org_id: string
+          source: string
+          status: string
+          updated_at: string
+          vehicle_id: string
+          work_order_id: string | null
+        }
+        Insert: {
+          check_engine_light?: boolean | null
+          cleared_at?: string | null
+          code: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          first_seen_at?: string
+          id?: string
+          org_id?: string
+          source: string
+          status: string
+          updated_at?: string
+          vehicle_id: string
+          work_order_id?: string | null
+        }
+        Update: {
+          check_engine_light?: boolean | null
+          cleared_at?: string | null
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          first_seen_at?: string
+          id?: string
+          org_id?: string
+          source?: string
+          status?: string
+          updated_at?: string
+          vehicle_id?: string
+          work_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_fault_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_fault_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_fault_events_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_fault_events_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicle_telematics_history: {
         Row: {
           battery_milli_volts: number | null
