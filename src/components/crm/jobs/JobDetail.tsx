@@ -124,6 +124,7 @@ import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { RenewPackageDialog } from "@/components/crm/jobs/RenewPackageDialog";
+import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
 import { useJobRenewalLinks, useSetPackageRenewalSetting } from "@/lib/hooks/use-package-renewal";
 
 
@@ -2279,9 +2280,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     <Button size="sm" disabled={!bulkNote.trim() || updateVisit.isPending} onClick={async () => {
                       const scheduled = visits.filter(v => v.status === "scheduled");
                       try {
-                        await Promise.all(scheduled.map(v =>
+                        await mapWithConcurrency(scheduled, 6, (v) =>
                           updateVisit.mutateAsync({ id: v.id, updates: { notes_to_crew: bulkNote.trim() } })
-                        ));
+                        );
                         setBulkNote("");
                         setAddingBulkNote(false);
                         toast.success(`Note added to ${scheduled.length} visits`);

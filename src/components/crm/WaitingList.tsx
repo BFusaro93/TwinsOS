@@ -64,6 +64,7 @@ import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
 import { packageStepEligibility } from "@/lib/package-step-eligibility";
 import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
 
 function toLocalDateString(date: Date): string {
   const y = date.getFullYear();
@@ -212,8 +213,11 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
     if (!date) return;
     setMinDaysRefusal(null);
     try {
-      await Promise.all(
-        items.map(({ job, service }) => {
+      // At most 6 in flight: a large waiting-list dispatch used to fire every write at once.
+      await mapWithConcurrency<DispatchItem, unknown>(
+        items,
+        6,
+        ({ job, service }) => {
           // A package service usually already has its season placeholder
           // visit (generated per service, status 'scheduled'). Inserting
           // another left the service listed — the list only drops a package
@@ -262,7 +266,7 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
             jobServiceId: service?.id ?? null,
             jobType: job.jobType,
           });
-        })
+        }
       );
     } catch (err) {
       // e.g. a package min-days spacing violation on the moved placeholder.
@@ -1117,7 +1121,7 @@ export function WaitingList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
+      <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full min-w-[900px] text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
             <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">

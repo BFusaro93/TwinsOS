@@ -2039,7 +2039,7 @@ import { applyRouteNumbers } from "@/lib/dispatch/apply-route-numbers";
 import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey, weekdayOfDate } from "@/lib/hooks/use-route-order";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { DispatchCalendar } from "@/components/crm/dispatch/DispatchCalendar";
-import { DispatchMap, type DispatchMapStop } from "@/components/crm/dispatch/DispatchMap";
+import { DispatchWorkMap, type DispatchWorkMapStop } from "@/components/crm/dispatch/DispatchWorkMap";
 import { DispatchWeather } from "@/components/crm/dispatch/DispatchWeather";
 import { CalendarRange, List as ListIcon, LayoutDashboard } from "lucide-react";
 
@@ -4458,6 +4458,8 @@ export function DispatchBoard() {
   const [statsOpen,       setStatsOpen]       = useState(false);
   const [loadListOpen,    setLoadListOpen]    = useState(false);
   const [mapOpen,         setMapOpen]         = useState(false);
+  // Map tool "Show only selected stops in the table".
+  const [mapTableOnlySelected, setMapTableOnlySelected] = useState(false);
   const { data: boardOrgSettings } = useOrgSettings();
   const [callAheadOpen,   setCallAheadOpen]   = useState(false);
   const [printOpen,       setPrintOpen]       = useState(false);
@@ -5051,7 +5053,7 @@ export function DispatchBoard() {
   // own priority/start_time/created_at order — this only groups, it doesn't
   // reorder inside a crew.
   const activeOrder = optimizedOrder ?? manualOrder;
-  const displayVisits = activeOrder
+  const orderedVisits = activeOrder
     ? [...filtered].sort((a, b) => {
         const ai = activeOrder.indexOf(a.id);
         const bi = activeOrder.indexOf(b.id);
@@ -5113,6 +5115,9 @@ export function DispatchBoard() {
           return 0;
         });
       })();
+  const displayVisits = mapTableOnlySelected && selectedIds.size > 0
+    ? orderedVisits.filter((v) => selectedIds.has(v.id))
+    : orderedVisits;
 
   const photoCountByVisitId = useVisitPhotoCounts(displayVisits.map((v) => v.id));
   const selectedChemicalVisits = displayVisits.filter(
@@ -5157,6 +5162,85 @@ export function DispatchBoard() {
       return next.size === prev.size ? prev : next;
     });
   }, [visibleIdsKey]);
+
+  // ── Map tools ────────────────────────────────────────────────────────────────
+  // The map's group panel (Assign crew, Move to date, Dispatch) and Route order mode act on the same
+  // selection as the table's Actions menu, through the same bulk endpoints, so every guard (completed
+  // visits keep their crew, the package min-days rule, the invoiced-visit lock) applies unchanged.
+  async function mapAssignCrew(ids: string[], crewId: string | null) {
+    const idSet = new Set(ids);
+    const targets = displayVisits
+      .filter((v) => idSet.has(v.id) && v.status !== "completed" && (crewId !== null || !!effectiveCrewId(v)))
+      .map((v) => v.id);
+    if (targets.length === 0) {
+      toast.info(crewId === null ? "None of the selected visits have a crew to remove" : "Completed visits can't be re-assigned to another crew");
+      return;
+    }
+    try {
+      const res = await postBulkVisitUpdate(
+        { ids: targets, updates: crewId ? { crew_id: crewId } : { crew_id: null, crew_unassigned: true } },
+        { isAdmin, confirm },
+      );
+      if (!res) return;
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      const name = crewId ? (crews ?? []).find((c) => c.id === crewId)?.name : null;
+      toast.success(name ? `Assigned ${targets.length} visit${targets.length > 1 ? "s" : ""} to ${name}` : `Unassigned ${targets.length} visit${targets.length > 1 ? "s" : ""}`);
+    } catch (err) {
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to reassign one or more visits");
+    }
+  }
+
+  async function mapDispatch(ids: string[]) {
+    const idSet = new Set(ids);
+    const targets = displayVisits.filter((v) => idSet.has(v.id) && v.status === "scheduled" && !!effectiveCrewId(v)).map((v) => v.id);
+    if (targets.length === 0) {
+      toast.info("Selected stops are already dispatched or have no crew.");
+      return;
+    }
+    try {
+      const res = await postBulkVisitUpdate({ ids: targets, updates: { status: "dispatched" } }, { isAdmin, confirm });
+      if (!res) return;
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      toast.success(`${targets.length} stop${targets.length > 1 ? "s" : ""} dispatched`);
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Dispatch failed");
+    }
+  }
+
+  async function mapMoveToDate(ids: string[], date: string) {
+    if (!date) return;
+    const dateById = new Map(displayVisits.map((v) => [v.id, v.scheduledDate]));
+    const targets = ids.filter((id) => dateById.has(id) && dateById.get(id) !== date);
+    if (targets.length === 0) {
+      toast.info(ids.length === 1 ? `That visit is already on ${date}` : `Those visits are already on ${date}`);
+      return;
+    }
+    try {
+      const res = await postBulkVisitUpdate({ ids: targets, updates: { scheduled_date: date } }, { isAdmin, confirm });
+      if (!res) return;
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      await qc.invalidateQueries({ queryKey: ["clients"] });
+      toast.success(`Moved ${targets.length} visit${targets.length > 1 ? "s" : ""} to ${date}`);
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to move one or more visits");
+    }
+  }
+
+  /** Route order mode: swaps a stop with its neighbour in its own crew's route (draft until Save Order). */
+  function mapMoveStop(id: string, dir: -1 | 1) {
+    const key = crewKeyOf(id);
+    const order = displayVisits.map((v) => v.id);
+    const crewIds = order.filter((x) => crewKeyOf(x) === key);
+    const i = crewIds.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= crewIds.length) return;
+    const swapped = [...crewIds];
+    [swapped[i], swapped[j]] = [swapped[j], swapped[i]];
+    setManualOrder(reorderWithinCrews(order, (ids) => (ids.length > 0 && crewKeyOf(ids[0]) === key ? swapped : ids)));
+    if (optimizedOrder) { setOptimizedOrder(null); setDriveTimeMap(new Map()); setTotalDriveMins(null); }
+  }
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -6427,24 +6511,45 @@ export function DispatchBoard() {
       <div className={`-mt-2 flex min-h-0 flex-1 flex-col ${mapOpen ? "overflow-y-auto" : ""}`}>
       {mapOpen && (
         boardOrgSettings?.googleMapsApiKey ? (
-          <DispatchMap
+          <DispatchWorkMap
             apiKey={boardOrgSettings.googleMapsApiKey}
-            stops={displayVisits.map((v, i): DispatchMapStop => {
+            stops={displayVisits.map((v): DispatchWorkMapStop => {
               const crewId = effectiveCrewIdOf(v);
               const job = v.job;
               return {
                 visitId: v.id,
                 jobId: v.jobId,
-                order: i + 1,
+                // Position in the stop's own crew route (the table's # column), so Route order moves match it.
+                order: crewOrderNumById.get(v.id) ?? 0,
                 clientName: v.clientName ?? "Unknown client",
                 address: [job?.serviceAddress, job?.serviceCity].filter(Boolean).join(", "),
+                serviceName: visitServiceLabel(v, serviceCodeById),
                 crewKey: crewId ?? "__none__",
                 crewLabel: (crewId && crewCodeById.get(crewId)) || v.crewName || job?.crewName || "Unassigned",
-                statusLabel: VISIT_STATUS_LABELS[v.status] ?? v.status,
+                status: v.status,
+                priority: v.clientPriority ?? null,
+                amountCents: visitAmountCents(v),
+                budgetedHours: v.budgetedHours ?? 0,
+                date: v.scheduledDate ?? null,
                 lat: job?.lat ?? null,
                 lng: job?.lng ?? null,
               };
             })}
+            selectedIds={selectedIds}
+            canManage
+            crews={(crews ?? []).map((c) => ({ id: c.id, name: c.name }))}
+            tableOnlySelected={mapTableOnlySelected}
+            reordering={false}
+            onToggle={toggleSelect}
+            onSelectMany={(ids) => setSelectedIds((prev) => new Set([...prev, ...ids]))}
+            onSelectOnly={(ids) => setSelectedIds(new Set(ids))}
+            onClearSelection={() => { setSelectedIds(new Set()); setMapTableOnlySelected(false); }}
+            onMoveStop={mapMoveStop}
+            onAssignCrew={(ids, crewId) => mapAssignCrew(ids, crewId)}
+            onDispatch={mapDispatch}
+            onOpenMultiCrew={() => setBulkMultiCrewOpen(true)}
+            onMoveToDate={mapMoveToDate}
+            onTableOnlySelected={setMapTableOnlySelected}
           />
         ) : (
           <p className="border-b bg-card px-4 py-6 text-center text-sm text-muted-foreground">

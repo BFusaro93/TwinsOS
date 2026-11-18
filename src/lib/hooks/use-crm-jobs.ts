@@ -1,7 +1,7 @@
 "use client";
 
 import { isBlankRich, composeVisitNote } from "@/lib/utils/visit-note";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -1446,6 +1446,61 @@ export function useUpdateVisitStatus() {
   });
 }
 
+// A bulk board action (dispatch all, change crew on 500 stops, reorder) runs one
+// useUpdateVisit per stop, and each used to invalidate the visit/job/client lists on
+// success. Every invalidation refetches the board's full list (hundreds of rows with
+// embedded job, services and client data), so 500 stops meant hundreds of heavy
+// refetches in a few seconds: on 2026-11-17 that saturated the database and slowed the
+// whole app for 10+ minutes. Leading + trailing throttle: a single edit still refreshes
+// immediately; a burst collapses to one refresh now and one more once it settles.
+const VISIT_INVALIDATE_THROTTLE_MS = 2000;
+let lastVisitListInvalidate = 0;
+let visitListInvalidateTimer: ReturnType<typeof setTimeout> | null = null;
+function invalidateVisitListsThrottled(qc: QueryClient) {
+  const run = () => {
+    lastVisitListInvalidate = Date.now();
+    qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+    qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    qc.invalidateQueries({ queryKey: ['clients'] });
+  };
+  const wait = lastVisitListInvalidate + VISIT_INVALIDATE_THROTTLE_MS - Date.now();
+  if (wait <= 0) {
+    run();
+  } else if (!visitListInvalidateTimer) {
+    visitListInvalidateTimer = setTimeout(() => {
+      visitListInvalidateTimer = null;
+      run();
+    }, wait);
+  }
+}
+
+// Crew push notifications are fire-and-forget, but each one is a server round trip (auth,
+// permission, rate-limit and visit lookups). Re-crewing 500 stops fired 500 of them at once;
+// this queue keeps at most a few in flight, in order, and still never blocks the write.
+const VISIT_NOTIFY_CONCURRENCY = 3;
+const visitNotifyQueue: { id: string; kind: 'assigned' | 'note' }[] = [];
+let visitNotifyInFlight = 0;
+function enqueueVisitNotify(id: string, kind: 'assigned' | 'note') {
+  visitNotifyQueue.push({ id, kind });
+  pumpVisitNotifyQueue();
+}
+function pumpVisitNotifyQueue() {
+  while (visitNotifyInFlight < VISIT_NOTIFY_CONCURRENCY && visitNotifyQueue.length > 0) {
+    const next = visitNotifyQueue.shift()!;
+    visitNotifyInFlight++;
+    fetch(`/api/crm/visits/${next.id}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: next.kind }),
+    })
+      .catch(() => {})
+      .finally(() => {
+        visitNotifyInFlight--;
+        pumpVisitNotifyQueue();
+      });
+  }
+}
+
 export function useUpdateVisit() {
   const qc = useQueryClient();
   return useMutation({
@@ -1705,18 +1760,10 @@ export function useUpdateVisit() {
       // included) on each Save, which used to re-send "assigned" to the same
       // crew every time anything on the visit was edited.
       if (updates.crew_id && updates.crew_id !== (before?.crew_id ?? null)) {
-        fetch(`/api/crm/visits/${id}/notify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind: 'assigned' }),
-        }).catch(() => {});
+        enqueueVisitNotify(id, 'assigned');
       }
       if (updates.notes_to_crew && updates.notes_to_crew !== (before?.notes_to_crew ?? null)) {
-        fetch(`/api/crm/visits/${id}/notify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind: 'note' }),
-        }).catch(() => {});
+        enqueueVisitNotify(id, 'note');
       }
 
       return {
@@ -1727,8 +1774,7 @@ export function useUpdateVisit() {
       };
     },
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
-      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      invalidateVisitListsThrottled(qc);
       const clientId = data?.clientId;
       if (clientId) {
         qc.invalidateQueries({ queryKey: ['clients', clientId, 'activity'] });
@@ -1736,7 +1782,6 @@ export function useUpdateVisit() {
         qc.invalidateQueries({ queryKey: ['crm-invoices'] });
       }
       if (data?.activityClientId) qc.invalidateQueries({ queryKey: ['clients', data.activityClientId, 'activity'] });
-      qc.invalidateQueries({ queryKey: ['clients'] });
       if (data?.statusTrigger && data.statusTriggerClientId) {
         fireAutomationTrigger({
           triggerType: data.statusTrigger,
@@ -2744,8 +2789,11 @@ export function useCreateJobsFromEstimate() {
           project_id: jobType === "project" ? (projectId ?? null) : null,
           // A package job has no single date: it sits on the Waiting List inside
           // its program window ('hold' would hide it from there), and each
-          // step's visit is created below.
-          status: scheduledDate || isPackageJob ? "scheduled" : "hold",
+          // step's visit is created below. A waiting-list job is dateless by design
+          // and must stay visible there, so it's 'scheduled' too — 'hold' is hidden
+          // from the Waiting List and dispatch. A recurring job's visits come from its
+          // Schedule (generate-visits below starts from today), so it needs no date.
+          status: scheduledDate || isPackageJob || jobType === "waiting_list" || (jobType === "recurring" && schedule) ? "scheduled" : "hold",
           scheduled_date: isPackageJob ? null : scheduledDate,
           ...(isPackageJob
             ? {
@@ -2971,10 +3019,13 @@ export function useCreateJobsFromEstimate() {
             throw new Error(`The package job's visits could not be created (${stepErr.message}). Nothing was converted.`);
           }
         }
-      } else if (scheduledDate) {
+      } else if (scheduledDate && jobType !== "recurring") {
+        // Recurring jobs get no hand-placed first visit: the date is only the earliest
+        // the schedule may start, and generate-visits (below) creates every visit —
+        // including the first — on the schedule's own days.
         const noteBySid = new Map<string, string | null>();
         insertedServiceIds.forEach((sid, i) => noteBySid.set(sid, serviceRows[i]?.sv.jobNote ?? null));
-        const firstVisit = (jobServiceId: string | null, occurrence: boolean) => ({
+        const firstVisit = (jobServiceId: string | null) => ({
           job_id: jobId,
           client_id: clientId,
           scheduled_date: scheduledDate,
@@ -2984,18 +3035,9 @@ export function useCreateJobsFromEstimate() {
           // An unlinked visit does the whole job, so it carries every service's crew note.
           notes_to_crew: composeVisitNote(notesToCrew, jobServiceId ? noteBySid.get(jobServiceId) : Array.from(noteBySid.values())),
           job_service_id: jobServiceId,
-          ...(occurrence ? { occurrence_date: scheduledDate } : {}),
         });
-        // Recurring: one first visit PER SERVICE, linked and carrying its
-        // occurrence_date — exactly what generate-visits creates. A single
-        // unlinked first visit on a multi-service job made the generator
-        // skip that date for every service while no service's max_visits
-        // counted it, so the client was billed one extra visit per service.
-        // Other types keep one visit (linked when there's a single service):
-        // that one visit does the whole job.
-        const rows = jobType === "recurring" && insertedServiceIds.length > 0
-          ? insertedServiceIds.map((sid) => firstVisit(sid, true))
-          : [firstVisit(insertedServiceIds.length === 1 ? insertedServiceIds[0] : null, false)];
+        // One visit (linked when there's a single service): that visit does the whole job.
+        const rows = [firstVisit(insertedServiceIds.length === 1 ? insertedServiceIds[0] : null)];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: visitErr } = await (supabase as any).from("crm_job_visits").insert(rows);
         if (visitErr) log.error("first visit insert failed", { jobId, error: visitErr.message });
@@ -3005,8 +3047,7 @@ export function useCreateJobsFromEstimate() {
       // recurring job created from Add Job (useCreateJob) does. Without this a
       // converted 28-visit weekly mow landed on the board as a single visit
       // and the rest of the season silently never appeared. generate-visits
-      // starts from scheduled_date and skips the date of the visit inserted
-      // above. Best-effort — the "Generate Visits" button still works.
+      // starts from scheduled_date (or today). Best-effort — the "Generate Visits" button still works.
       if (jobType === "recurring" && schedule) {
         await fetch("/api/crm/jobs/generate-visits", {
           method: "POST",

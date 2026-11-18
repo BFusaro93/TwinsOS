@@ -674,3 +674,30 @@ export function useSaveStormOrderToRoutes() {
     },
   });
 }
+
+/**
+ * "Permanent" crew assignment: puts the jobs on the crew's Master Route (or, with a null crew,
+ * takes them off their routes) so later storms pick the crew up from the route. `routeId` names
+ * which of the crew's routes (a crew can have a plow route and a salt route). Resolves to how many
+ * jobs were placed or removed.
+ */
+export function useAssignJobsToRouteCrew() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ jobIds, crewId, routeId = null }: { jobIds: string[]; crewId: string | null; routeId?: string | null }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("assign_jobs_to_snow_route_crew", {
+        p_job_ids: jobIds,
+        p_crew_id: crewId,
+        p_route_id: routeId,
+      });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["snow-route-stops"] });
+      qc.invalidateQueries({ queryKey: ["snow-routes"] });
+    },
+  });
+}

@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
+import { parseAssignTarget, type PermanentAssignTarget } from "@/components/crm/snow/snow-board-actions";
 import { useJobCoords, type JobCoord } from "@/lib/hooks/use-job-coords";
 
-export interface SnowMapStop {
+export interface DispatchWorkMapStop {
   visitId: string;
   jobId: string;
   /** Position within the stop's crew route (1-based). */
@@ -36,7 +37,7 @@ const CREW_COLORS = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#08
 const UNASSIGNED_COLOR = "#64748b";
 
 /**
- * The snow board's working map: every stop plotted and numbered in route order,
+ * The working map shared by the Snow board and the Dispatch Board: every stop plotted and numbered in route order,
  * coloured by crew, with the tools a dispatcher needs without leaving it —
  *   Select       click stops to pick them; a group panel acts on the picks
  *   Route order  left-click a stop to move it later in its crew's route,
@@ -46,7 +47,7 @@ const UNASSIGNED_COLOR = "#64748b";
  * Selection is shared with the board's table, so Dispatch / Close Out / Skip
  * there act on what was picked here.
  */
-export function SnowWorkMap({
+export function DispatchWorkMap({
   apiKey,
   stops,
   selectedIds,
@@ -60,13 +61,14 @@ export function SnowWorkMap({
   onClearSelection,
   onMoveStop,
   onAssignCrew,
+  permanentTargets,
   onDispatch,
   onOpenMultiCrew,
   onMoveToDate,
   onTableOnlySelected,
 }: {
   apiKey: string;
-  stops: SnowMapStop[];
+  stops: DispatchWorkMapStop[];
   selectedIds: Set<string>;
   canManage: boolean;
   crews: { id: string; name: string }[];
@@ -79,7 +81,11 @@ export function SnowWorkMap({
   onSelectOnly: (visitIds: string[]) => void;
   onClearSelection: () => void;
   onMoveStop: (visitId: string, dir: -1 | 1) => void;
-  onAssignCrew: (visitIds: string[], crewId: string | null) => Promise<void>;
+  /** `permanent` also saves the crew onto the Master Routes (future storms). */
+  onAssignCrew: (visitIds: string[], crewId: string | null, permanent: boolean, routeId: string | null) => Promise<void>;
+  /** Snow board only: crew + Master Route choices shown when Permanent is ticked (a crew can have a plow
+   *  and a salt route). Omit it (Dispatch Board) and the Permanent checkbox is not shown. */
+  permanentTargets?: PermanentAssignTarget[];
   onDispatch: (visitIds: string[]) => Promise<void>;
   onOpenMultiCrew: () => void;
   onMoveToDate: (visitIds: string[], date: string) => Promise<void>;
@@ -94,6 +100,7 @@ export function SnowWorkMap({
   const [showRoutes, setShowRoutes] = useState(false);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [assignCrewId, setAssignCrewId] = useState("");
+  const [assignPermanent, setAssignPermanent] = useState(false);
   const [moveDate, setMoveDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [drawPoints, setDrawPoints] = useState<google.maps.LatLngLiteral[]>([]);
@@ -416,21 +423,36 @@ export function SnowWorkMap({
               <>
                 <div className="flex gap-1.5">
                   <Select value={assignCrewId || undefined} onValueChange={setAssignCrewId}>
-                    <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue placeholder="Assign to crew…" /></SelectTrigger>
+                    <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue placeholder={permanentTargets && assignPermanent ? "Assign crew + route…" : "Assign to crew…"} /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Unassigned</SelectItem>
-                      {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      {permanentTargets && assignPermanent
+                        ? permanentTargets.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
+                        : crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <Button
                     size="sm"
                     className="h-7 text-xs"
                     disabled={busy || !assignCrewId}
-                    onClick={() => void run(async () => { await onAssignCrew([...selectedIds], assignCrewId === "none" ? null : assignCrewId); setAssignCrewId(""); })}
+                    onClick={() => void run(async () => {
+                      const t = permanentTargets && assignPermanent ? parseAssignTarget(assignCrewId) : { crewId: assignCrewId === "none" ? null : assignCrewId, routeId: null };
+                      await onAssignCrew([...selectedIds], t.crewId, !!permanentTargets && assignPermanent, t.routeId);
+                      setAssignCrewId("");
+                    })}
                   >
                     Update
                   </Button>
                 </div>
+                {permanentTargets && (
+                  <label
+                    className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground"
+                    title="Also save this crew onto the Master Routes, so future storms assign these jobs to it"
+                  >
+                    <Checkbox checked={assignPermanent} onCheckedChange={(c) => { setAssignPermanent(c === true); setAssignCrewId(""); }} />
+                    Permanent
+                  </label>
+                )}
                 <div className="flex gap-1.5">
                   <Input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} className="h-7 flex-1 text-xs" aria-label="Move selected stops to date" />
                   <Button

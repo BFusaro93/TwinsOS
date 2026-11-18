@@ -78,7 +78,7 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background print:h-auto print:overflow-visible">
-      <RealtimeSync />
+      <RealtimeSync scope="shared" />
       <SettingsLoader />
 
       {/* Docked sidebar — lg+ only. Below that (phones and portrait tablets)

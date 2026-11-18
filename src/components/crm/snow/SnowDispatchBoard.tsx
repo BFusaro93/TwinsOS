@@ -11,6 +11,7 @@ import {
   useSnowRouteStops,
   useMasterRouteSlots,
   useSaveStormOrderToRoutes,
+  useAssignJobsToRouteCrew,
   useSnowJobs,
   useStormEventVisits,
   useAddJobsToStormEvent,
@@ -19,12 +20,17 @@ import {
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/use-crm-jobs";
+import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
+
+/** Max per-stop writes in flight from one bulk board action. A storm has hundreds of stops, and
+ *  firing them all at once (Promise.all) saturated the database for every user on 2026-11-17. */
+const BULK_WRITE_CONCURRENCY = 6;
 import { printSnowRouteSheets } from "@/lib/print";
 import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DispatchWeather } from "@/components/crm/dispatch/DispatchWeather";
 import { SearchInput } from "@/components/shared/SearchInput";
-import { SnowWorkMap, type SnowMapStop } from "@/components/crm/snow/SnowWorkMap";
+import { DispatchWorkMap, type DispatchWorkMapStop } from "@/components/crm/dispatch/DispatchWorkMap";
 import { MasterRoutesDialog } from "@/components/crm/snow/MasterRoutesDialog";
 import { SnowMessageDialog, type SnowMessageChannel } from "@/components/crm/snow/SnowMessageDialog";
 import { SnowNoEmailDialog } from "@/components/crm/snow/SnowNoEmailDialog";
@@ -65,7 +71,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
-import { buildSnowStopsCsv, downloadCsv, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
+import { buildPermanentAssignTargets, buildSnowStopsCsv, downloadCsv, parseAssignTarget, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDialog";
 import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
@@ -1298,6 +1304,12 @@ export function SnowDispatchBoard() {
   const [driveMins, setDriveMins] = useState<Map<string, { mins: number; fromShop: boolean }>>(new Map());
   const { mutateAsync: updateVisitMutation } = useUpdateVisit();
   const { mutateAsync: saveOrderToRoutes, isPending: savingOrder } = useSaveStormOrderToRoutes();
+  const { mutateAsync: assignJobsToRouteCrew } = useAssignJobsToRouteCrew();
+  const { data: snowRoutes = [] } = useSnowRoutes();
+  // "Permanent" checkbox beside the crew pickers: also save the crew onto the Master Routes.
+  const [permanentCrew, setPermanentCrew] = useState(false);
+  // With Permanent on, the picker lists each crew's Master Routes (a crew may have a plow and a salt route).
+  const permanentTargets = useMemo(() => buildPermanentAssignTargets(crews, snowRoutes), [crews, snowRoutes]);
   const { mutateAsync: addStormPush, isPending: addingPush } = useAddStormPush();
 
   // Inactive storms are hidden from the picker unless asked for (or currently open).
@@ -1582,11 +1594,11 @@ export function SnowDispatchBoard() {
       return;
     }
     try {
-      await Promise.all(targets.map((v) => updateVisitMutation({
+      await mapWithConcurrency(targets, BULK_WRITE_CONCURRENCY, (v) => updateVisitMutation({
         id: v.id,
         updates: { status: "dispatched", dispatched_at: new Date().toISOString() },
         jobId: v.jobId,
-      })));
+      }));
       toast.success(`${targets.length} stop${targets.length !== 1 ? "s" : ""} dispatched`);
     } catch {
       toast.error("Dispatch failed");
@@ -1603,14 +1615,14 @@ export function SnowDispatchBoard() {
       return;
     }
     try {
-      await Promise.all(cancellable.map((v) => updateVisitMutation({
+      await mapWithConcurrency(cancellable, BULK_WRITE_CONCURRENCY, (v) => updateVisitMutation({
         id: v.id,
         updates: { status: "scheduled", dispatched_at: null },
         jobId: v.jobId,
         // Re-checked against the database, not this board's cached rows: a crew may have
         // clocked in since the last refresh.
         onlyIfNotStarted: true,
-      })));
+      }));
       const skipped = started.length + notDispatched.length;
       toast.success(
         `${cancellable.length} stop${cancellable.length !== 1 ? "s" : ""} back to scheduled` +
@@ -1637,10 +1649,10 @@ export function SnowDispatchBoard() {
     if (!outcomeDialog) return;
     const { ids, status } = outcomeDialog;
     try {
-      await Promise.all(ids.map((id) => {
+      await mapWithConcurrency(ids, BULK_WRITE_CONCURRENCY, (id) => {
         const v = visits.find((x) => x.id === id);
         return updateVisitStatus({ id, status, reason, jobId: v?.jobId, jobType: v?.job?.jobType });
-      }));
+      });
       toast.success(`${ids.length} stop${ids.length !== 1 ? "s" : ""} ${status === "skipped" ? "skipped" : "cancelled"}`);
       setSelectedVisitIds(new Set());
       setOutcomeDialog(null);
@@ -1657,7 +1669,7 @@ export function SnowDispatchBoard() {
     const changes = orderedIds
       .map((id, i) => ({ id, i, v: byId.get(id) }))
       .filter((x) => x.v && x.v.orderNum !== x.i);
-    await Promise.all(changes.map((x) => updateVisitMutation({ id: x.id, updates: { order_num: x.i }, jobId: x.v!.jobId })));
+    await mapWithConcurrency(changes, BULK_WRITE_CONCURRENCY, (x) => updateVisitMutation({ id: x.id, updates: { order_num: x.i }, jobId: x.v!.jobId }));
   }
 
   async function saveOrderToMasterRoutes() {
@@ -1695,7 +1707,13 @@ export function SnowDispatchBoard() {
     const targets = visitIds
       .map((id) => visits.find((x) => x.id === id))
       .filter((v): v is CRMJobVisit => !!v && v.status !== "completed" && v.status !== "cancelled" && v.scheduledDate !== date);
-    const results = await Promise.allSettled(targets.map((v) => updateVisitMutation({ id: v.id, updates: { scheduled_date: date }, jobId: v.jobId })));
+    // Each write is settled on its own so one refused stop (e.g. a crew is clocked in) doesn't stop the rest.
+    const results = await mapWithConcurrency(targets, BULK_WRITE_CONCURRENCY, (v) =>
+      updateVisitMutation({ id: v.id, updates: { scheduled_date: date }, jobId: v.jobId }).then(
+        (value): PromiseSettledResult<unknown> => ({ status: "fulfilled", value }),
+        (reason): PromiseSettledResult<unknown> => ({ status: "rejected", reason }),
+      ),
+    );
     const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
     setDriveMins(new Map());
     return {
@@ -1719,9 +1737,11 @@ export function SnowDispatchBoard() {
     if (r.error) { toast.error(r.error); throw new Error(r.error); }
   }
 
-  async function changeCrew(visitIds: string[], crewId: string | null) {
+  /** `permanent` also moves the stops' jobs onto the crew's Master Route (or off their routes when
+   *  unassigning), so later storms start with this crew; without it only this storm changes. */
+  async function changeCrew(visitIds: string[], crewId: string | null, permanent = false, routeId: string | null = null) {
     try {
-      await Promise.all(visitIds.map((id) => {
+      await mapWithConcurrency(visitIds, BULK_WRITE_CONCURRENCY, (id) => {
         const v = visits.find((x) => x.id === id);
         return updateVisitMutation({
           id,
@@ -1729,10 +1749,25 @@ export function SnowDispatchBoard() {
           updates: crewId ? { crew_id: crewId, crew_unassigned: false } : { crew_id: null, crew_unassigned: true },
           jobId: v?.jobId,
         });
-      }));
+      });
       setDriveMins(new Map());
     } catch {
       toast.error("Failed to change crew");
+      return;
+    }
+    if (!permanent) return;
+    try {
+      const jobIds = [...new Set(visitIds.map((id) => visits.find((x) => x.id === id)?.jobId).filter((j): j is string => !!j))];
+      const n = await assignJobsToRouteCrew({ jobIds, crewId, routeId });
+      const crewName = crewId ? crews.find((c) => c.id === crewId)?.name ?? "the crew" : null;
+      const routeName = routeId ? snowRoutes.find((r) => r.id === routeId)?.name : null;
+      toast.success(
+        crewName
+          ? `${n} job${n === 1 ? "" : "s"} saved to ${routeName ? `the ${routeName} Master Route` : `${crewName}'s Master Route`}. Future storms will assign them to ${crewName}.`
+          : `${n} job${n === 1 ? "" : "s"} removed from their Master Routes. Future storms won't pre-assign them.`,
+      );
+    } catch {
+      toast.error("The crew changed for this storm, but saving it to the Master Routes failed");
     }
   }
 
@@ -2171,7 +2206,7 @@ export function SnowDispatchBoard() {
       )}
 
       {statsOpen && activeEvent && (
-        <div className="mx-4 shrink-0 rounded-lg border bg-card p-3">
+        <div className="-mt-4 shrink-0 border-b bg-card px-4 py-3">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {crewStats.map((c) => (
               <div key={c.key} className="rounded border px-3 py-2">
@@ -2187,69 +2222,36 @@ export function SnowDispatchBoard() {
         </div>
       )}
 
-      {mapOpen && activeEvent && (
-        <div className="mx-4 overflow-hidden rounded-lg border shrink-0">
-          {orgSettings?.googleMapsApiKey ? (
-            <SnowWorkMap
-              apiKey={orgSettings.googleMapsApiKey}
-              stops={filteredVisits.map((v): SnowMapStop => {
-                const crewId = effectiveCrewIdOf(v);
-                return {
-                  visitId: v.id,
-                  jobId: v.jobId,
-                  order: stopNumberById.get(v.id) ?? 0,
-                  clientName: v.clientName ?? "Unknown client",
-                  address: [v.job?.serviceAddress, v.job?.serviceCity].filter(Boolean).join(", "),
-                  serviceName: visitServiceName(v),
-                  crewKey: crewId ?? "__none__",
-                  crewLabel: (crewId && crewNameById.get(crewId)) || "Unassigned",
-                  status: v.status,
-                  priority: v.clientPriority ?? null,
-                  amountCents: amountByVisitId.get(v.id) ?? 0,
-                  budgetedHours: v.budgetedHours ?? 0,
-                  date: v.scheduledDate ?? null,
-                  lat: v.job?.lat ?? null,
-                  lng: v.job?.lng ?? null,
-                };
-              })}
-              selectedIds={selectedVisitIds}
-              canManage={canManage}
-              crews={crews}
-              tableOnlySelected={tableOnlySelected}
-              reordering={reordering}
-              onToggle={toggleSelect}
-              onSelectMany={(ids) => setSelectedVisitIds((prev) => new Set([...prev, ...ids]))}
-              onSelectOnly={(ids) => setSelectedVisitIds(new Set(ids))}
-              onClearSelection={() => { setSelectedVisitIds(new Set()); setTableOnlySelected(false); }}
-              onMoveStop={(id, dir) => { const v = visits.find((x) => x.id === id); if (v) void moveStop(v, dir); }}
-              onAssignCrew={changeCrew}
-              onDispatch={(ids) => dispatchVisits(ids)}
-              onOpenMultiCrew={() => setMultiCrewOpen(true)}
-              onMoveToDate={moveToDate}
-              onTableOnlySelected={setTableOnlySelected}
-            />
-          ) : (
-            <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-              Google Maps API key not configured. Add it in Settings → Integrations.
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Selected-visit actions */}
       {selectedVisitIds.size > 0 && (
-        <div className="mx-4 flex flex-wrap items-center gap-2 rounded border bg-brand-50 dark:bg-brand-900/30 px-3 py-2 shrink-0">
+        <div className="-mt-4 flex flex-wrap items-center gap-2 border-b bg-brand-50 dark:bg-brand-900/30 px-4 py-2 shrink-0">
           <ListChecks className="h-4 w-4 text-brand-600 dark:text-brand-400" />
           <span className="text-xs font-medium text-brand-700 dark:text-brand-400">{selectedVisitIds.size} selected</span>
           {canManage && (
             <>
-              <Select value="" onValueChange={(v) => void changeCrew([...selectedVisitIds], v === "none" ? null : v)}>
-                <SelectTrigger className="h-7 w-40 text-xs ml-2"><SelectValue placeholder="Assign crew…" /></SelectTrigger>
+              <Select
+                value=""
+                onValueChange={(v) => {
+                  if (!permanentCrew) { void changeCrew([...selectedVisitIds], v === "none" ? null : v); return; }
+                  const t = parseAssignTarget(v);
+                  void changeCrew([...selectedVisitIds], t.crewId, true, t.routeId);
+                }}
+              >
+                <SelectTrigger className="h-7 w-40 text-xs ml-2"><SelectValue placeholder={permanentCrew ? "Assign crew + route…" : "Assign crew…"} /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Unassigned</SelectItem>
-                  {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {permanentCrew
+                    ? permanentTargets.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
+                    : crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <label
+                className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+                title="Also save this crew onto the Master Routes, so future storms assign these jobs to it"
+              >
+                <Checkbox checked={permanentCrew} onCheckedChange={(c) => setPermanentCrew(c === true)} />
+                Permanent
+              </label>
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMultiCrewOpen(true)}>
                 <Users className="mr-1 h-3 w-3" />Assign crews…
               </Button>
@@ -2272,241 +2274,297 @@ export function SnowDispatchBoard() {
         </div>
       )}
 
-      {/* Visit table */}
-      <div className="flex-1 overflow-auto overscroll-x-contain bg-card mx-4 rounded-lg border shadow-sm max-lg:min-h-[60dvh]">
-        {!activeEvent ? (
-          <p className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
-            {eventsLoading ? "Loading…" : "No storm events yet — create one to start dispatching."}
-          </p>
-        ) : (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
-              <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                <th className="w-8 px-2 py-2.5">
-                  <Checkbox
-                    checked={allShownSelected ? true : someShownSelected ? "indeterminate" : false}
-                    onCheckedChange={toggleSelectAllShown}
-                    disabled={filteredVisits.length === 0}
-                    aria-label="Select all shown stops"
-                    className="h-3.5 w-3.5"
-                  />
-                </th>
-                <th className="w-12 px-2 py-2.5">
-                  <button
-                    type="button"
-                    className={cn("inline-flex items-center gap-0.5 hover:text-slate-600 dark:hover:text-neutral-300", !sort && "text-slate-700 dark:text-neutral-200")}
-                    onClick={() => setSort(null)}
-                    title={sort ? "Back to route order (crew, then stop #)" : "Route order: crew, then stop #"}
-                    aria-label="Sort by route order"
-                  >
-                    # {!sort && <ArrowDown className="h-3 w-3" />}
-                  </button>
-                </th>
-                <th className="w-8 px-2 py-2.5">St</th>
-                <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 uppercase hover:text-slate-600 dark:hover:text-neutral-300"
-                    onClick={() => cycleSort("client")}
-                    title={sortTitle("client", "client name")}
-                    aria-label="Sort by client name"
-                  >
-                    Client {sortIcon("client")}
-                  </button>
-                </th>
-                {isVisible("date") && <th className="px-2 py-2.5">Date</th>}
-                {isVisible("service") && <th className="px-2 py-2.5">Service</th>}
-                {isVisible("address") && <th className="px-2 py-2.5">Address</th>}
-                {isVisible("city") && <th className="px-2 py-2.5">City</th>}
-                {isVisible("state") && <th className="px-2 py-2.5">State</th>}
-                {isVisible("zip") && <th className="px-2 py-2.5">Zip</th>}
-                {isVisible("priority") && <th className="px-2 py-2.5">Priority</th>}
-                {isVisible("trigger") && <th className="px-2 py-2.5">Trigger</th>}
-                {isVisible("crew") && (
-                  <th className="px-2 py-2.5">
+      {/* Same layout as the Dispatch Board: the header, filter strip, dark bar and selected-stops bar stay put,
+          and only the area below scrolls. With the map open the map and table share one scroller (the table
+          alone has only a sliver of height left); without it the table scrolls on its own, so its header
+          stays sticky. The panels are flush under the dark bar, like the Dispatch Board's, not separate boxes. */}
+      <div className={cn("flex min-h-0 flex-1 flex-col", activeEvent && "-mt-4", mapOpen && "overflow-y-auto")}>
+        {mapOpen && activeEvent && (
+          <div className="shrink-0 overflow-hidden">
+            {orgSettings?.googleMapsApiKey ? (
+              <DispatchWorkMap
+                apiKey={orgSettings.googleMapsApiKey}
+                stops={filteredVisits.map((v): DispatchWorkMapStop => {
+                  const crewId = effectiveCrewIdOf(v);
+                  return {
+                    visitId: v.id,
+                    jobId: v.jobId,
+                    order: stopNumberById.get(v.id) ?? 0,
+                    clientName: v.clientName ?? "Unknown client",
+                    address: [v.job?.serviceAddress, v.job?.serviceCity].filter(Boolean).join(", "),
+                    serviceName: visitServiceName(v),
+                    crewKey: crewId ?? "__none__",
+                    crewLabel: (crewId && crewNameById.get(crewId)) || "Unassigned",
+                    status: v.status,
+                    priority: v.clientPriority ?? null,
+                    amountCents: amountByVisitId.get(v.id) ?? 0,
+                    budgetedHours: v.budgetedHours ?? 0,
+                    date: v.scheduledDate ?? null,
+                    lat: v.job?.lat ?? null,
+                    lng: v.job?.lng ?? null,
+                  };
+                })}
+                selectedIds={selectedVisitIds}
+                canManage={canManage}
+                crews={crews}
+                tableOnlySelected={tableOnlySelected}
+                reordering={reordering}
+                onToggle={toggleSelect}
+                onSelectMany={(ids) => setSelectedVisitIds((prev) => new Set([...prev, ...ids]))}
+                onSelectOnly={(ids) => setSelectedVisitIds(new Set(ids))}
+                onClearSelection={() => { setSelectedVisitIds(new Set()); setTableOnlySelected(false); }}
+                onMoveStop={(id, dir) => { const v = visits.find((x) => x.id === id); if (v) void moveStop(v, dir); }}
+                permanentTargets={permanentTargets}
+                onAssignCrew={(ids, crewId, permanent, routeId) => changeCrew(ids, crewId, permanent, routeId)}
+                onDispatch={(ids) => dispatchVisits(ids)}
+                onOpenMultiCrew={() => setMultiCrewOpen(true)}
+                onMoveToDate={moveToDate}
+                onTableOnlySelected={setTableOnlySelected}
+              />
+            ) : (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                Google Maps API key not configured. Add it in Settings → Integrations.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Visit table */}
+        <div className={cn("overscroll-x-contain bg-card max-lg:min-h-[60dvh]", mapOpen ? "shrink-0 overflow-x-auto" : "flex-1 overflow-auto")}>
+          {!activeEvent ? (
+            <p className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
+              {eventsLoading ? "Loading…" : "No storm events yet — create one to start dispatching."}
+            </p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
+                <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                  <th className="w-8 px-2 py-2.5">
+                    <Checkbox
+                      checked={allShownSelected ? true : someShownSelected ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAllShown}
+                      disabled={filteredVisits.length === 0}
+                      aria-label="Select all shown stops"
+                      className="h-3.5 w-3.5"
+                    />
+                  </th>
+                  <th className="w-12 px-2 py-2.5">
+                    <button
+                      type="button"
+                      className={cn("inline-flex items-center gap-0.5 hover:text-slate-600 dark:hover:text-neutral-300", !sort && "text-slate-700 dark:text-neutral-200")}
+                      onClick={() => setSort(null)}
+                      title={sort ? "Back to route order (crew, then stop #)" : "Route order: crew, then stop #"}
+                      aria-label="Sort by route order"
+                    >
+                      # {!sort && <ArrowDown className="h-3 w-3" />}
+                    </button>
+                  </th>
+                  <th className="w-8 px-2 py-2.5">St</th>
+                  <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 uppercase hover:text-slate-600 dark:hover:text-neutral-300"
-                      onClick={() => cycleSort("crew")}
-                      title={sortTitle("crew", "crew")}
-                      aria-label="Sort by crew"
+                      onClick={() => cycleSort("client")}
+                      title={sortTitle("client", "client name")}
+                      aria-label="Sort by client name"
                     >
-                      Crew {sortIcon("crew")}
+                      Client {sortIcon("client")}
                     </button>
                   </th>
-                )}
-                {isVisible("depth") && <th className="px-2 py-2.5 text-right">Depth</th>}
-                {isVisible("temp") && <th className="px-2 py-2.5 text-right">Temp</th>}
-                {isVisible("notes") && <th className="px-2 py-2.5">Notes to Crew</th>}
-                {isVisible("amt") && <th className="px-2 py-2.5 text-right">Amt</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {visitsLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b">
-                    {Array.from({ length: 4 + visibleKeys.length }).map((__, j) => <td key={j} className="px-2 py-2.5"><Skeleton className="h-3 w-full" /></td>)}
-                  </tr>
-                ))
-              ) : visits.length === 0 ? (
-                <tr><td colSpan={4 + visibleKeys.length} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No jobs dispatched to this storm event yet.</td></tr>
-              ) : filteredVisits.length === 0 ? (
-                <tr><td colSpan={4 + visibleKeys.length} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No stops match the current filters.</td></tr>
-              ) : (
-                <>
-                  <tr className="bg-muted text-[10px] font-semibold text-slate-700 dark:text-neutral-300">
-                    <td colSpan={isVisible("amt") ? 3 + visibleKeys.length : 4 + visibleKeys.length} className="px-2 py-1.5 text-right text-muted-foreground">Totals</td>
-                    {isVisible("amt") && (
-                      <td className="px-2 py-1.5 text-right">{(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) > 0 ? formatCurrency(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) : "—"}</td>
-                    )}
-                  </tr>
-                  {displayVisits.map((v) => (
-                    <tr
-                      key={v.id}
-                      className="border-b border-slate-100 dark:border-neutral-800 bg-card hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
-                      onClick={() => setSelectedJobId(v.jobId)}
-                    >
-                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                        {/* ~42px touch target on phones; display:contents on desktop */}
-                        <label className="-m-3.5 flex cursor-pointer items-center justify-center p-3.5 lg:contents">
-                          <Checkbox checked={selectedVisitIds.has(v.id)} onCheckedChange={() => toggleSelect(v.id)} className="h-3.5 w-3.5" />
-                        </label>
-                      </td>
-                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-0.5">
-                          <span className="w-4 text-center text-[11px] text-slate-500 dark:text-neutral-400">{stopNumberById.get(v.id)}</span>
-                          {canManage && (
-                            <span className="flex flex-col">
-                              <button type="button" title="Move up in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40" disabled={reordering} onClick={() => void moveStop(v, -1)}><ArrowUp className="h-3 w-3" /></button>
-                              <button type="button" title="Move down in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40" disabled={reordering} onClick={() => void moveStop(v, 1)}><ArrowDown className="h-3 w-3" /></button>
-                            </span>
-                          )}
-                        </div>
-                        {driveMins.get(v.id) && (
-                          <div
-                            className="text-[9px] leading-tight text-blue-500 dark:text-blue-400 whitespace-nowrap"
-                            title={driveMins.get(v.id)!.fromShop ? "Drive time from the shop" : "Drive time from the previous stop"}
-                          >
-                            {driveMins.get(v.id)!.fromShop ? "⌂" : "↑"}{driveMins.get(v.id)!.mins}m
+                  {isVisible("date") && <th className="px-2 py-2.5">Date</th>}
+                  {isVisible("service") && <th className="px-2 py-2.5">Service</th>}
+                  {isVisible("address") && <th className="px-2 py-2.5">Address</th>}
+                  {isVisible("city") && <th className="px-2 py-2.5">City</th>}
+                  {isVisible("state") && <th className="px-2 py-2.5">State</th>}
+                  {isVisible("zip") && <th className="px-2 py-2.5">Zip</th>}
+                  {isVisible("priority") && <th className="px-2 py-2.5">Priority</th>}
+                  {isVisible("trigger") && <th className="px-2 py-2.5">Trigger</th>}
+                  {isVisible("crew") && (
+                    <th className="px-2 py-2.5">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 uppercase hover:text-slate-600 dark:hover:text-neutral-300"
+                        onClick={() => cycleSort("crew")}
+                        title={sortTitle("crew", "crew")}
+                        aria-label="Sort by crew"
+                      >
+                        Crew {sortIcon("crew")}
+                      </button>
+                    </th>
+                  )}
+                  {isVisible("depth") && <th className="px-2 py-2.5 text-right">Depth</th>}
+                  {isVisible("temp") && <th className="px-2 py-2.5 text-right">Temp</th>}
+                  {isVisible("notes") && <th className="px-2 py-2.5">Notes to Crew</th>}
+                  {isVisible("amt") && <th className="px-2 py-2.5 text-right">Amt</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {visitsLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="border-b">
+                      {Array.from({ length: 4 + visibleKeys.length }).map((__, j) => <td key={j} className="px-2 py-2.5"><Skeleton className="h-3 w-full" /></td>)}
+                    </tr>
+                  ))
+                ) : visits.length === 0 ? (
+                  <tr><td colSpan={4 + visibleKeys.length} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No jobs dispatched to this storm event yet.</td></tr>
+                ) : filteredVisits.length === 0 ? (
+                  <tr><td colSpan={4 + visibleKeys.length} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No stops match the current filters.</td></tr>
+                ) : (
+                  <>
+                    <tr className="bg-muted text-[10px] font-semibold text-slate-700 dark:text-neutral-300">
+                      <td colSpan={isVisible("amt") ? 3 + visibleKeys.length : 4 + visibleKeys.length} className="px-2 py-1.5 text-right text-muted-foreground">Totals</td>
+                      {isVisible("amt") && (
+                        <td className="px-2 py-1.5 text-right">{(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) > 0 ? formatCurrency(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) : "—"}</td>
+                      )}
+                    </tr>
+                    {displayVisits.map((v) => (
+                      <tr
+                        key={v.id}
+                        className="border-b border-slate-100 dark:border-neutral-800 bg-card hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
+                        onClick={() => setSelectedJobId(v.jobId)}
+                      >
+                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                          {/* ~42px touch target on phones; display:contents on desktop */}
+                          <label className="-m-3.5 flex cursor-pointer items-center justify-center p-3.5 lg:contents">
+                            <Checkbox checked={selectedVisitIds.has(v.id)} onCheckedChange={() => toggleSelect(v.id)} className="h-3.5 w-3.5" />
+                          </label>
+                        </td>
+                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-0.5">
+                            <span className="w-4 text-center text-[11px] text-slate-500 dark:text-neutral-400">{stopNumberById.get(v.id)}</span>
+                            {canManage && (
+                              <span className="flex flex-col">
+                                <button type="button" title="Move up in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40" disabled={reordering} onClick={() => void moveStop(v, -1)}><ArrowUp className="h-3 w-3" /></button>
+                                <button type="button" title="Move down in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40" disabled={reordering} onClick={() => void moveStop(v, 1)}><ArrowDown className="h-3 w-3" /></button>
+                              </span>
+                            )}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><StatusCycleButton visit={v} /></td>
-                      <td className="px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
-                        <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{v.clientName ?? "—"}</Link>
-                        {(v.pushNumber ?? 1) > 1 && (
-                          <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
-                        )}
-                        {(invoiceLinksByVisit?.get(v.id) ?? []).slice(0, 1).map((inv) => (
-                          <button
-                            key={inv.invoiceId}
-                            type="button"
-                            onClick={() => setOpenInvoiceId(inv.invoiceId)}
-                            className="ml-1.5 inline-flex rounded border border-blue-300 px-1.5 py-0 text-[9px] text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/30"
-                            title={`Billed on invoice #${inv.invoiceNumber ?? "—"} (${inv.status.replace(/_/g, " ")}) — click to open it`}
-                          >
-                            Invoiced #{inv.invoiceNumber ?? "—"}
-                          </button>
-                        ))}
-                        {capFlags?.get(v.jobId)?.over && v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled" && (
-                          <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`${capFlags.get(v.jobId)!.label} — this stop bills as overage, not under the contract price`}>
-                            Overage
-                          </Badge>
-                        )}
-                        {v.handedOffFromCrewId && (
-                          <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`The crew app handed this stop off from ${crewNameById.get(v.handedOffFromCrewId) ?? "another crew"} — they couldn't make it`}>
-                            Handed off from {crewNameById.get(v.handedOffFromCrewId) ?? "another crew"}
-                          </Badge>
-                        )}
-                        {v.crewGroupId && (
-                          <Badge variant="outline" className="ml-1.5 px-1.5 py-0 text-[9px]" title={v.crewGroupSecondary ? "Extra crew on this stop — the lead crew's visit carries the charge" : "Lead crew on a stop with more than one crew — bills the stop"}>
-                            {v.crewGroupSecondary ? "Extra crew" : "Lead"}
-                          </Badge>
-                        )}
-                        {canManage && !stormComplete && latestPushVisitIdByJob.get(v.jobId) === v.id && (
-                          isFlatPerEvent(v) ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  title="Another visit to this site on this storm"
-                                  disabled={addingPush}
-                                  className="ml-1.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 max-lg:py-1.5"
-                                >
-                                  <Plus className="h-2.5 w-2.5" />Add push<ChevronDown className="h-2.5 w-2.5 opacity-60" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" className="w-64">
-                                <DropdownMenuItem onSelect={() => void addPush(v, false)}>
-                                  No charge — record the visit only
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => void addPush(v, true)}>
-                                  Bill it — its own charge (e.g. a second salting)
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : (
+                          {driveMins.get(v.id) && (
+                            <div
+                              className="text-[9px] leading-tight text-blue-500 dark:text-blue-400 whitespace-nowrap"
+                              title={driveMins.get(v.id)!.fromShop ? "Drive time from the shop" : "Drive time from the previous stop"}
+                            >
+                              {driveMins.get(v.id)!.fromShop ? "⌂" : "↑"}{driveMins.get(v.id)!.mins}m
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><StatusCycleButton visit={v} /></td>
+                        <td className="px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
+                          <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{v.clientName ?? "—"}</Link>
+                          {(v.pushNumber ?? 1) > 1 && (
+                            <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
+                          )}
+                          {(invoiceLinksByVisit?.get(v.id) ?? []).slice(0, 1).map((inv) => (
+                            <button
+                              key={inv.invoiceId}
+                              type="button"
+                              onClick={() => setOpenInvoiceId(inv.invoiceId)}
+                              className="ml-1.5 inline-flex rounded border border-blue-300 px-1.5 py-0 text-[9px] text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                              title={`Billed on invoice #${inv.invoiceNumber ?? "—"} (${inv.status.replace(/_/g, " ")}) — click to open it`}
+                            >
+                              Invoiced #{inv.invoiceNumber ?? "—"}
+                            </button>
+                          ))}
+                          {capFlags?.get(v.jobId)?.over && v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled" && (
+                            <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`${capFlags.get(v.jobId)!.label} — this stop bills as overage, not under the contract price`}>
+                              Overage
+                            </Badge>
+                          )}
+                          {v.handedOffFromCrewId && (
+                            <Badge variant="outline" className="ml-1.5 border-amber-300 px-1.5 py-0 text-[9px] text-amber-700 dark:border-amber-700 dark:text-amber-400" title={`The crew app handed this stop off from ${crewNameById.get(v.handedOffFromCrewId) ?? "another crew"} — they couldn't make it`}>
+                              Handed off from {crewNameById.get(v.handedOffFromCrewId) ?? "another crew"}
+                            </Badge>
+                          )}
+                          {v.crewGroupId && (
+                            <Badge variant="outline" className="ml-1.5 px-1.5 py-0 text-[9px]" title={v.crewGroupSecondary ? "Extra crew on this stop — the lead crew's visit carries the charge" : "Lead crew on a stop with more than one crew — bills the stop"}>
+                              {v.crewGroupSecondary ? "Extra crew" : "Lead"}
+                            </Badge>
+                          )}
+                          {canManage && !stormComplete && latestPushVisitIdByJob.get(v.jobId) === v.id && (
+                            isFlatPerEvent(v) ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    title="Another visit to this site on this storm"
+                                    disabled={addingPush}
+                                    className="ml-1.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 max-lg:py-1.5"
+                                  >
+                                    <Plus className="h-2.5 w-2.5" />Add push<ChevronDown className="h-2.5 w-2.5 opacity-60" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="w-64">
+                                  <DropdownMenuItem onSelect={() => void addPush(v, false)}>
+                                    No charge — record the visit only
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => void addPush(v, true)}>
+                                    Bill it — its own charge (e.g. a second salting)
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : (
+                              <button
+                                type="button"
+                                title={v.job?.invoiceType === "per_event_per_inch" ? "Add another visit on this storm — part of the event: its depth counts toward the storm's deepest reading, no separate charge" : "Add another push for this job on this storm — billed on its own depth"}
+                                disabled={addingPush}
+                                onClick={() => void addPush(v)}
+                                className="ml-1.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 max-lg:py-1.5"
+                              >
+                                <Plus className="h-2.5 w-2.5" />Add push
+                              </button>
+                            )
+                          )}
+                          {(v.pushNumber ?? 1) > 1 && isFlatPerEvent(v) && !v.crewGroupSecondary && (
                             <button
                               type="button"
-                              title={v.job?.invoiceType === "per_event_per_inch" ? "Add another visit on this storm — part of the event: its depth counts toward the storm's deepest reading, no separate charge" : "Add another push for this job on this storm — billed on its own depth"}
-                              disabled={addingPush}
-                              onClick={() => void addPush(v)}
-                              className="ml-1.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 max-lg:py-1.5"
+                              disabled={!canManage}
+                              onClick={() => void updateVisitMutation({ id: v.id, updates: { bill_push: !v.billPush }, jobId: v.jobId }).catch(() => toast.error("Failed to change billing"))}
+                              title={v.billPush ? "Charged as its own job — click to make it no charge" : "No charge (the storm's first push carries the price) — click to charge it"}
+                              className={cn("ml-1.5 rounded border px-1.5 py-0 text-[9px] disabled:opacity-60", v.billPush ? "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400" : "text-muted-foreground")}
                             >
-                              <Plus className="h-2.5 w-2.5" />Add push
+                              {v.billPush ? "Charge" : "No charge"}
                             </button>
-                          )
-                        )}
-                        {(v.pushNumber ?? 1) > 1 && isFlatPerEvent(v) && !v.crewGroupSecondary && (
-                          <button
-                            type="button"
-                            disabled={!canManage}
-                            onClick={() => void updateVisitMutation({ id: v.id, updates: { bill_push: !v.billPush }, jobId: v.jobId }).catch(() => toast.error("Failed to change billing"))}
-                            title={v.billPush ? "Charged as its own job — click to make it no charge" : "No charge (the storm's first push carries the price) — click to charge it"}
-                            className={cn("ml-1.5 rounded border px-1.5 py-0 text-[9px] disabled:opacity-60", v.billPush ? "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400" : "text-muted-foreground")}
-                          >
-                            {v.billPush ? "Charge" : "No charge"}
-                          </button>
-                        )}
-                      </td>
-                      {isVisible("date") && (
-                        <td className="px-2 py-2 text-muted-foreground whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          <VisitDateCell visit={v} canEdit={canManage} onSave={saveVisitDate} />
+                          )}
                         </td>
-                      )}
-                      {isVisible("service") && <td className="px-2 py-2 text-muted-foreground">{visitServiceName(v)}</td>}
-                      {isVisible("address") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceAddress ?? "—"}</td>}
-                      {isVisible("city") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceCity ?? "—"}</td>}
-                      {isVisible("state") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceState ?? "—"}</td>}
-                      {isVisible("zip") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceZip ?? "—"}</td>}
-                      {isVisible("priority") && <td className="px-2 py-2 text-muted-foreground capitalize">{v.clientPriority ?? "—"}</td>}
-                      {isVisible("trigger") && <td className="px-2 py-2 text-muted-foreground">{v.job?.inchTrigger != null ? `${v.job.inchTrigger}"` : "—"}</td>}
-                      {isVisible("crew") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                        {canManage ? (
-                          <Select value={effectiveCrewIdOf(v) ?? "none"} onValueChange={(c) => void changeCrew([v.id], c === "none" ? null : c)}>
-                            <SelectTrigger className="h-7 w-32 text-[11px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Unassigned</SelectItem>
-                              {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        ) : effectiveCrewIdOf(v) ? (
-                          <Badge variant="secondary" className="text-[10px]">{crewNameById.get(effectiveCrewIdOf(v)!) ?? v.crewName}</Badge>
-                        ) : <span className="text-slate-300 dark:text-neutral-500 italic">—</span>}
-                      </td>}
-                      {isVisible("depth") && <td className="px-2 py-2 text-right text-muted-foreground">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>}
-                      {isVisible("temp") && <td className="px-2 py-2 text-right text-muted-foreground">{v.temperature != null ? `${v.temperature}°` : "—"}</td>}
-                      {isVisible("notes") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><NotesToCrewCell visit={v} canEdit={canManage} /></td>}
-                      {isVisible("amt") && <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
-                        {amountByVisitId.has(v.id) ? formatCurrency(amountByVisitId.get(v.id) ?? 0) : "—"}
-                      </td>}
-                    </tr>
-                  ))}
-                </>
-              )}
-            </tbody>
-          </table>
-        )}
+                        {isVisible("date") && (
+                          <td className="px-2 py-2 text-muted-foreground whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <VisitDateCell visit={v} canEdit={canManage} onSave={saveVisitDate} />
+                          </td>
+                        )}
+                        {isVisible("service") && <td className="px-2 py-2 text-muted-foreground">{visitServiceName(v)}</td>}
+                        {isVisible("address") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceAddress ?? "—"}</td>}
+                        {isVisible("city") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceCity ?? "—"}</td>}
+                        {isVisible("state") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceState ?? "—"}</td>}
+                        {isVisible("zip") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceZip ?? "—"}</td>}
+                        {isVisible("priority") && <td className="px-2 py-2 text-muted-foreground capitalize">{v.clientPriority ?? "—"}</td>}
+                        {isVisible("trigger") && <td className="px-2 py-2 text-muted-foreground">{v.job?.inchTrigger != null ? `${v.job.inchTrigger}"` : "—"}</td>}
+                        {isVisible("crew") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                          {canManage ? (
+                            <Select value={effectiveCrewIdOf(v) ?? "none"} onValueChange={(c) => void changeCrew([v.id], c === "none" ? null : c)}>
+                              <SelectTrigger className="h-7 w-32 text-[11px]"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Unassigned</SelectItem>
+                                {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ) : effectiveCrewIdOf(v) ? (
+                            <Badge variant="secondary" className="text-[10px]">{crewNameById.get(effectiveCrewIdOf(v)!) ?? v.crewName}</Badge>
+                          ) : <span className="text-slate-300 dark:text-neutral-500 italic">—</span>}
+                        </td>}
+                        {isVisible("depth") && <td className="px-2 py-2 text-right text-muted-foreground">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>}
+                        {isVisible("temp") && <td className="px-2 py-2 text-right text-muted-foreground">{v.temperature != null ? `${v.temperature}°` : "—"}</td>}
+                        {isVisible("notes") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><NotesToCrewCell visit={v} canEdit={canManage} /></td>}
+                        {isVisible("amt") && <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
+                          {amountByVisitId.has(v.id) ? formatCurrency(amountByVisitId.get(v.id) ?? 0) : "—"}
+                        </td>}
+                      </tr>
+                    ))}
+                  </>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       <OutcomeDialog state={outcomeDialog} onClose={() => setOutcomeDialog(null)} onConfirm={applyOutcome} />
