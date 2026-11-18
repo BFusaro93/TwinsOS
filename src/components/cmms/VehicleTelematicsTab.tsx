@@ -200,6 +200,19 @@ function compass(deg: number): string {
   return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
 }
 
+/**
+ * OpenStreetMap embed centred on the vehicle with a pin. Chosen over Google
+ * because it needs no API key — Equipt's Google key routing belongs to the
+ * Landscapt Route Optimization add-on, and this tab shouldn't depend on it.
+ * Don't set referrerPolicy="no-referrer" on the iframe: OSM's tile servers
+ * require a Referer and the map renders blank without one.
+ */
+function mapEmbedUrl(lat: number, lng: number): string {
+  const d = 0.004; // ≈ 450 m each way
+  const bbox = [lng - d, lat - d, lng + d, lat + d].map((n) => n.toFixed(6)).join(",");
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat.toFixed(6)},${lng.toFixed(6)}`;
+}
+
 function Location({ s }: { s: VehicleTelematicsSnapshot }) {
   const has = s.latitude !== null && s.longitude !== null;
   const moving = (s.speedMph ?? 0) >= 1;
@@ -215,6 +228,15 @@ function Location({ s }: { s: VehicleTelematicsSnapshot }) {
           </Badge>
         )}
       </div>
+      {has && s.latitude !== null && s.longitude !== null && (
+        <iframe
+          title="Vehicle location map"
+          src={mapEmbedUrl(s.latitude, s.longitude)}
+          loading="lazy"
+          sandbox="allow-scripts allow-same-origin"
+          className="h-56 w-full border-b border-slate-100 dark:border-neutral-800"
+        />
+      )}
       {has ? (
         <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
