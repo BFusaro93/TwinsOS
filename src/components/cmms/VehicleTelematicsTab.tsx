@@ -410,9 +410,9 @@ export function VehicleTelematicsTab({ vehicleId }: { vehicleId: string }) {
         </div>
       </div>
 
-      <TelematicsHistory vehicleId={vehicleId} />
-
       <Location s={snapshot} />
+
+      <TelematicsHistory vehicleId={vehicleId} />
 
       <FaultCodes s={snapshot} vehicleId={vehicleId} />
     </div>
