@@ -103,10 +103,10 @@ export function RingGauge({ label, value, unit, percent, tone, title, icon: Icon
         )}
         {endLabels && (
           <>
-            <span className="absolute bottom-[8px] left-[17px] text-[10px] font-medium leading-none text-slate-400 dark:text-neutral-500">
+            <span className="absolute bottom-[9px] left-[31px] text-[10px] font-medium leading-none text-slate-400 dark:text-neutral-500">
               {endLabels[0]}
             </span>
-            <span className="absolute bottom-[8px] right-[17px] text-[10px] font-medium leading-none text-slate-400 dark:text-neutral-500">
+            <span className="absolute bottom-[9px] right-[31px] text-[10px] font-medium leading-none text-slate-400 dark:text-neutral-500">
               {endLabels[1]}
             </span>
           </>
