@@ -15,6 +15,9 @@ import { FAULT_BASELINE_KEY, hasFaultBaseline, syncVehicleFaultEvents } from "@/
 
 const log = logger.child("telematics-history cron");
 
+// One Samsara round trip (plus DB work per vehicle) per org: give the sweep the same ceiling as the other crons.
+export const maxDuration = 300;
+
 /**
  * GET /api/cron/telematics-history — called hourly by Vercel Cron.
  *
@@ -95,13 +98,14 @@ export async function GET(request: Request) {
       let faultsOpened = 0;
       try {
         const baseline = hasFaultBaseline(integration.config);
+        let sweepClean = true;
         const faultStats = await fetchFleetFaultCodes(apiKey);
         for (const sv of faultStats) {
           const vehicle = matchVehicle(sv);
           // No faultCodes stat = unknown, not "no faults" — leave that vehicle's events alone.
           if (!vehicle || !sv.faultCodes) continue;
           const t = normalizeVehicleStats([sv]);
-          const { opened } = await syncVehicleFaultEvents(admin as unknown as AdminClient, {
+          const { opened, ok } = await syncVehicleFaultEvents(admin as unknown as AdminClient, {
             orgId,
             vehicle: { id: vehicle.id, name: vehicle.name },
             faults: t.faultCodes,
@@ -109,11 +113,21 @@ export async function GET(request: Request) {
             fire: baseline,
           });
           faultsOpened += opened;
+          if (!ok) sweepClean = false;
         }
-        if (!baseline) {
+        // The baseline is only recorded after a clean first sweep: if some pre-existing faults failed to
+        // open, the next sweep would treat them as new and raise a burst of work orders.
+        if (!baseline && sweepClean) {
+          // Re-read the config so a setting changed during this run isn't overwritten.
+          const { data: fresh } = await admin
+            .from("integrations")
+            .select("config")
+            .eq("org_id", orgId)
+            .eq("provider", "samsara")
+            .maybeSingle();
           await admin
             .from("integrations")
-            .update({ config: { ...((integration.config as Record<string, unknown> | null) ?? {}), [FAULT_BASELINE_KEY]: new Date().toISOString() } })
+            .update({ config: { ...(((fresh?.config ?? integration.config) as Record<string, unknown> | null) ?? {}), [FAULT_BASELINE_KEY]: new Date().toISOString() } })
             .eq("org_id", orgId)
             .eq("provider", "samsara");
         }

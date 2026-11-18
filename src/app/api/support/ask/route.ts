@@ -38,6 +38,32 @@ function retrievalQuery(question: string, history: ChatTurn[]): string {
   return [...earlier, ...lastReply, question].join(" ");
 }
 
+/**
+ * A question with enough words of its own ("If I receive a part at $0, what does Add Part use?")
+ * is searched on its own FIRST. Folding the previous turns into the query is right for a terse
+ * follow-up, but on a change of topic the earlier snow answer outweighed the new question and the
+ * real guide was never retrieved. Passages from the history-aware query still follow, de-duplicated.
+ */
+const OWN_QUERY_MIN_WORDS = 6;
+
+function retrieveDocs(question: string, query: string, hasHistory: boolean): DocSearchResult[] {
+  const ownWords = question.trim().split(/\s+/).filter(Boolean).length;
+  if (!hasHistory || ownWords < OWN_QUERY_MIN_WORDS) return searchDocPassages(query, { limit: 8, maxChars: 9000, perDoc: 3 });
+  const own = searchDocPassages(question, { limit: 6, maxChars: 6500, perDoc: 3 });
+  const withHistory = searchDocPassages(query, { limit: 8, maxChars: 9000, perDoc: 3 });
+  const seen = new Set(own.map((r) => `${r.path}|${r.excerpt}`));
+  const merged = [...own];
+  for (const r of withHistory) {
+    if (merged.length >= 9) break;
+    const k = `${r.path}|${r.excerpt}`;
+    if (!seen.has(k)) {
+      seen.add(k);
+      merged.push(r);
+    }
+  }
+  return merged;
+}
+
 function formatDocsContext(results: DocSearchResult[]): string {
   if (results.length === 0) return "(no matching help articles or guides found)";
   return results
@@ -176,7 +202,7 @@ export async function POST(req: NextRequest) {
   }
 
   const query = retrievalQuery(question, history);
-  const docPassages = searchDocPassages(query, { limit: 8, maxChars: 9000, perDoc: 3 });
+  const docPassages = retrieveDocs(question, query, history.length > 0);
   const staffAnswers = matchStaffAnswers(question, await loadStaffAnswers());
 
   const systemPrompt = `You are the in-app help assistant for Landscapt (field service / CRM for landscaping and snow) and Equipt (CMMS and purchasing). Your goal is to fully answer the user's question yourself so they don't need to email support. Build your answer from the context sections below — help-guide passages, answers the support team has already written for the same question, and data-model entries (what is actually tracked in the database).
@@ -189,6 +215,7 @@ How to answer:
 - Answer only what the context supports. Never invent menu paths, buttons, settings, limits or behaviors. If the context covers part of the question, answer that part and name exactly what it doesn't cover.
 - If the question is ambiguous, ask ONE short clarifying question (which module, which role, which step they're stuck on) instead of guessing or sending them away.
 - Only when the context truly doesn't cover it, or it needs something only the support team can do (billing changes, restoring or fixing data, a suspected bug, account-specific access), say so plainly and tell them to press the "Send this conversation to support" button under this chat — the whole conversation goes to the team, so they don't need to retype anything. Offer the closest related guide first if one exists.
+- The context sections below were retrieved for the LATEST question only. Earlier answers in this conversation were built from different passages, so never retract, "correct" or contradict something you said earlier just because it is not in the current context. Only correct an earlier answer when the current context directly contradicts it.
 - Be concise and plain-spoken, no jargon. Don't repeat the question back.
 
 Finish EVERY reply with one last line, exactly one of the following, and nothing after it. It is removed before the user sees the reply and is used to track gaps in the help docs:
