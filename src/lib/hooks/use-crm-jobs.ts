@@ -1413,8 +1413,8 @@ export function useUpdateVisitStatus() {
       };
     },
     onSuccess: async (data) => {
-      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
-      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+      // Throttled like useUpdateVisit: skipping/cancelling hundreds of stops must not refetch the board per stop.
+      invalidateVisitListsThrottled(qc);
       const clientId = data?.clientId;
       const status = data?.status;
       if (clientId) {
@@ -1439,7 +1439,6 @@ export function useUpdateVisitStatus() {
           }
         }
       }
-      qc.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 }
@@ -2070,11 +2069,12 @@ export function useCreateClientJob() {
       // the job with zero visits until someone finds "Generate Visits".
       // Best-effort — the job exists either way and the button still works.
       if (values.jobType === 'recurring' && values.schedule && values.startDateWindow) {
-        await fetch('/api/crm/jobs/generate-visits', {
+        const generated = await fetch('/api/crm/jobs/generate-visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jobId: job.id, lookaheadDays: 365 }),
-        }).catch(() => {});
+        }).then((r) => r.ok).catch(() => false);
+        if (!generated) toast.warning('The job was created, but its visits could not be generated. Open the job and use Generate Visits.');
       }
 
       // The "already completed" checkbox (one-time jobs only) logs work that's
@@ -3044,11 +3044,13 @@ export function useCreateJobsFromEstimate() {
       // and the rest of the season silently never appeared. generate-visits
       // starts from scheduled_date (or today). Best-effort — the "Generate Visits" button still works.
       if (jobType === "recurring" && schedule) {
-        await fetch("/api/crm/jobs/generate-visits", {
+        // A failed generation leaves a scheduled job with NO visits (it appears nowhere), so say so.
+        const generated = await fetch("/api/crm/jobs/generate-visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobId, lookaheadDays: 365 }),
-        }).catch(() => {});
+        }).then((r) => r.ok).catch(() => false);
+        if (!generated) toast.warning("The job was created, but its visits could not be generated. Open the job and use Generate Visits.");
       }
 
       let materialsFailed = false;

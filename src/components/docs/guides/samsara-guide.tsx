@@ -30,6 +30,8 @@ export function SamsaraGuide() {
           <TOCLink href="#how-readings-are-written">How a reading turns into a meter update</TOCLink>
           <TOCLink href="#status-and-errors">Sync status and errors</TOCLink>
           <TOCLink href="#meters-and-automations">Meters and automations</TOCLink>
+          <TOCLink href="#telematics-tab">The vehicle Telematics tab</TOCLink>
+          <TOCLink href="#fault-codes">Fault codes, work orders and automations</TOCLink>
         </div>
       </div>
 
@@ -44,13 +46,14 @@ export function SamsaraGuide() {
           data) — and converts whichever value is present into miles.
         </p>
         <p>
-          That&apos;s the entire scope today. Engine hours, fuel level, driver behavior/safety
-          events, fault codes, and live GPS location are all things Samsara&apos;s API exposes, but
-          this integration doesn&apos;t request or store any of them — the sync route only calls the{" "}
-          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">
-            /fleet/vehicles/stats?types=obdOdometerMeters,gpsDistanceMeters
-          </code>{" "}
-          endpoint.
+          That is what the daily <strong>meter sync</strong> does, and it is the only thing that
+          writes to your meters. Separately, each vehicle&apos;s <strong>Telematics</strong> tab reads
+          live sensor data from Samsara (fuel, battery, tires, fault codes, location) for display
+          and for fault-code work orders — see{" "}
+          <GuideLink href="#telematics-tab" className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline">
+            The vehicle Telematics tab
+          </GuideLink>
+          . Engine hours and driver behavior/safety events are not requested.
         </p>
       </Section>
 
@@ -266,6 +269,68 @@ export function SamsaraGuide() {
           in the Meters guide for how that firing, Pending Reset, and Service Interval logic works
           — none of it is re-explained here since it doesn&apos;t change based on where the reading
           came from.
+        </p>
+      </Section>
+
+      <Section id="telematics-tab" title="The vehicle Telematics tab">
+        <p>
+          Once an admin has connected Samsara (Settings &gt; Integrations), every vehicle in{" "}
+          <strong>Equipt &gt; Vehicles</strong> gets a <strong>Telematics</strong> tab. It does not
+          appear while Samsara is not connected. Opening the tab pulls the latest readings from
+          Samsara, and the <strong>Refresh</strong> button pulls them again.
+        </p>
+        <ul className="list-disc space-y-1 pl-6">
+          <li>
+            <strong>Sensor readings:</strong> engine state, battery voltage, tire pressure at each
+            corner, fuel level, coolant temperature and DEF level. A reading the vehicle does not
+            report shows <em>Not reported</em>, not zero.
+          </li>
+          <li>
+            <strong>Location:</strong> a map with the vehicle&apos;s address, speed and heading.
+          </li>
+          <li>
+            <strong>History:</strong> fuel and battery charts over 7, 30 or 90 days. An hourly job
+            records one sample per vehicle per hour, so a chart starts filling from the first hour after
+            Samsara is connected.
+          </li>
+        </ul>
+        <p>
+          The tab explains why it is empty instead of failing: <em>Samsara isn&apos;t connected</em>{" "}
+          (an admin adds the API key under Settings &gt; Integrations), <em>This vehicle isn&apos;t
+          linked to Samsara</em> (set its Samsara Vehicle ID on the Details tab, or name it exactly as
+          it appears in Samsara, then reopen the tab) or <em>No telematics yet</em> (use Try again).
+        </p>
+      </Section>
+
+      <Section id="fault-codes" title="Fault codes, work orders and automations">
+        <p>
+          The <strong>Fault Codes</strong> card lists the vehicle&apos;s current codes, each marked{" "}
+          <em>Confirmed</em>, <em>Pending</em> or <em>Permanent</em>. Pending codes are shown for
+          information only: they flicker on and off while the engine computer decides whether a fault is
+          real, so they never raise work. A confirmed or permanent code can become a work order in two
+          ways.
+        </p>
+        <ul className="list-disc space-y-1 pl-6">
+          <li>
+            <strong>By hand:</strong> click <strong>Create work order</strong> beside the code (you
+            need permission to edit work orders). The work order carries the code, its description and
+            the check-engine-light state, and is high priority when the light is on. Once raised, the
+            work order number replaces the button and links to it. Clicking again for the same open
+            code returns the existing work order instead of making a second one.
+          </li>
+          <li>
+            <strong>Automatically:</strong> in <strong>Equipt &gt; Automations</strong> choose the{" "}
+            <strong>Vehicle Fault Code</strong> trigger. It fires once when a connected vehicle reports a
+            new confirmed fault code, and can be limited to{" "}
+            <em>Only when the check-engine light is on</em>. Its actions (create a work order, a request
+            or a notification) include the code and description.
+          </li>
+        </ul>
+        <p>
+          The first hourly check after Samsara is connected records the codes a vehicle already has{" "}
+          <em>without</em> firing automations, so switching the feature on does not create a burst of
+          work orders. Only codes that appear after that fire. When a code stops being reported it is
+          cleared; if it comes back later it counts as a new occurrence.
         </p>
       </Section>
     </DocsFontScope>

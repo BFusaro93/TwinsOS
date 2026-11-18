@@ -20,7 +20,7 @@ import {
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/use-crm-jobs";
-import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
+import { mapWithConcurrency, settleWithConcurrency, firstFailureMessage } from "@/lib/utils/map-with-concurrency";
 
 /** Max per-stop writes in flight from one bulk board action. A storm has hundreds of stops, and
  *  firing them all at once (Promise.all) saturated the database for every user on 2026-11-17. */
@@ -1593,16 +1593,13 @@ export function SnowDispatchBoard() {
       toast.info(ids ? "Selected stops are already dispatched or have no crew." : "No scheduled stops with a crew to dispatch.");
       return;
     }
-    try {
-      await mapWithConcurrency(targets, BULK_WRITE_CONCURRENCY, (v) => updateVisitMutation({
-        id: v.id,
-        updates: { status: "dispatched", dispatched_at: new Date().toISOString() },
-        jobId: v.jobId,
-      }));
-      toast.success(`${targets.length} stop${targets.length !== 1 ? "s" : ""} dispatched`);
-    } catch {
-      toast.error("Dispatch failed");
-    }
+    const { done, failed } = await settleWithConcurrency(targets, BULK_WRITE_CONCURRENCY, (v) => updateVisitMutation({
+      id: v.id,
+      updates: { status: "dispatched", dispatched_at: new Date().toISOString() },
+      jobId: v.jobId,
+    }));
+    if (failed.length === 0) toast.success(`${done.length} stop${done.length !== 1 ? "s" : ""} dispatched`);
+    else toast.error(`${done.length} dispatched, ${failed.length} failed: ${firstFailureMessage(failed, "Dispatch failed")}`);
   }
 
   /** Puts dispatched stops the crew hasn't started back to scheduled; started stops are refused. */
@@ -1614,24 +1611,24 @@ export function SnowDispatchBoard() {
         : "None of the selected stops are dispatched.");
       return;
     }
-    try {
-      await mapWithConcurrency(cancellable, BULK_WRITE_CONCURRENCY, (v) => updateVisitMutation({
-        id: v.id,
-        updates: { status: "scheduled", dispatched_at: null },
-        jobId: v.jobId,
-        // Re-checked against the database, not this board's cached rows: a crew may have
-        // clocked in since the last refresh.
-        onlyIfNotStarted: true,
-      }));
-      const skipped = started.length + notDispatched.length;
-      toast.success(
-        `${cancellable.length} stop${cancellable.length !== 1 ? "s" : ""} back to scheduled` +
-        (started.length > 0 ? ` — ${started.length} already started, left as is` : "") +
-        (skipped > started.length ? ` (${notDispatched.length} weren't dispatched)` : "")
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Cancel dispatch failed");
+    const { done, failed } = await settleWithConcurrency(cancellable, BULK_WRITE_CONCURRENCY, (v) => updateVisitMutation({
+      id: v.id,
+      updates: { status: "scheduled", dispatched_at: null },
+      jobId: v.jobId,
+      // Re-checked against the database, not this board's cached rows: a crew may have
+      // clocked in since the last refresh.
+      onlyIfNotStarted: true,
+    }));
+    if (failed.length > 0) {
+      toast.error(`${done.length} back to scheduled, ${failed.length} failed: ${firstFailureMessage(failed, "Cancel dispatch failed")}`);
+      return;
     }
+    const skipped = started.length + notDispatched.length;
+    toast.success(
+      `${done.length} stop${done.length !== 1 ? "s" : ""} back to scheduled` +
+      (started.length > 0 ? ` — ${started.length} already started, left as is` : "") +
+      (skipped > started.length ? ` (${notDispatched.length} weren't dispatched)` : "")
+    );
   }
 
   function exportStops() {
@@ -1648,17 +1645,23 @@ export function SnowDispatchBoard() {
   async function applyOutcome(reason: string) {
     if (!outcomeDialog) return;
     const { ids, status } = outcomeDialog;
-    try {
-      await mapWithConcurrency(ids, BULK_WRITE_CONCURRENCY, (id) => {
-        const v = visits.find((x) => x.id === id);
-        return updateVisitStatus({ id, status, reason, jobId: v?.jobId, jobType: v?.job?.jobType });
-      });
-      toast.success(`${ids.length} stop${ids.length !== 1 ? "s" : ""} ${status === "skipped" ? "skipped" : "cancelled"}`);
+    const { done, failed } = await settleWithConcurrency(ids, BULK_WRITE_CONCURRENCY, (id) => {
+      const v = visits.find((x) => x.id === id);
+      return updateVisitStatus({ id, status, reason, jobId: v?.jobId, jobType: v?.job?.jobType });
+    });
+    const verb = status === "skipped" ? "skipped" : "cancelled";
+    if (failed.length === 0) {
+      toast.success(`${done.length} stop${done.length !== 1 ? "s" : ""} ${verb}`);
       setSelectedVisitIds(new Set());
       setOutcomeDialog(null);
-    } catch {
-      toast.error("Failed to update stops");
+      return;
     }
+    // Keep only the stops that failed selected and in the dialog: a retry must not re-send the status
+    // (and log another timeline entry) for the ones that already went through.
+    const failedIds = failed.map((f) => f.item);
+    toast.error(`${done.length} ${verb}, ${failed.length} failed: ${firstFailureMessage(failed, "Failed to update stops")}`);
+    setSelectedVisitIds(new Set(failedIds));
+    setOutcomeDialog({ ...outcomeDialog, ids: failedIds });
   }
 
   const [reordering, setReordering] = useState(false);
@@ -1740,24 +1743,23 @@ export function SnowDispatchBoard() {
   /** `permanent` also moves the stops' jobs onto the crew's Master Route (or off their routes when
    *  unassigning), so later storms start with this crew; without it only this storm changes. */
   async function changeCrew(visitIds: string[], crewId: string | null, permanent = false, routeId: string | null = null) {
-    try {
-      await mapWithConcurrency(visitIds, BULK_WRITE_CONCURRENCY, (id) => {
-        const v = visits.find((x) => x.id === id);
-        return updateVisitMutation({
-          id,
-          // Unassign pins the visit to no crew so it doesn't fall back to the job's crew.
-          updates: crewId ? { crew_id: crewId, crew_unassigned: false } : { crew_id: null, crew_unassigned: true },
-          jobId: v?.jobId,
-        });
+    const { done, failed } = await settleWithConcurrency(visitIds, BULK_WRITE_CONCURRENCY, (id) => {
+      const v = visits.find((x) => x.id === id);
+      return updateVisitMutation({
+        id,
+        // Unassign pins the visit to no crew so it doesn't fall back to the job's crew.
+        updates: crewId ? { crew_id: crewId, crew_unassigned: false } : { crew_id: null, crew_unassigned: true },
+        jobId: v?.jobId,
       });
-      setDriveMins(new Map());
-    } catch {
-      toast.error("Failed to change crew");
-      return;
+    });
+    setDriveMins(new Map());
+    if (failed.length > 0) {
+      toast.error(`Crew changed for ${done.length} stop${done.length !== 1 ? "s" : ""}, ${failed.length} failed: ${firstFailureMessage(failed, "Failed to change crew")}`);
     }
-    if (!permanent) return;
+    // The Master Route follows the stops that actually changed.
+    if (!permanent || done.length === 0) return;
     try {
-      const jobIds = [...new Set(visitIds.map((id) => visits.find((x) => x.id === id)?.jobId).filter((j): j is string => !!j))];
+      const jobIds = [...new Set(done.map((id) => visits.find((x) => x.id === id)?.jobId).filter((j): j is string => !!j))];
       const n = await assignJobsToRouteCrew({ jobIds, crewId, routeId });
       const crewName = crewId ? crews.find((c) => c.id === crewId)?.name ?? "the crew" : null;
       const routeName = routeId ? snowRoutes.find((r) => r.id === routeId)?.name : null;

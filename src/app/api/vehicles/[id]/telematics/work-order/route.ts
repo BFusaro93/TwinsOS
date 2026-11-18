@@ -57,6 +57,11 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const fault = faults.find((f) => f.source === source && f.code === code);
   if (!fault) return NextResponse.json({ error: "That fault code isn't active on this vehicle" }, { status: 404 });
   const checkEngineLight = snapshot?.check_engine_light ?? null;
+  // Pending codes flicker while the ECU decides whether the fault is real and have no fault event to
+  // link a work order to, so a second click would raise a duplicate. Only confirmed / permanent codes raise work.
+  if (fault.status === "pending") {
+    return NextResponse.json({ error: "This code is still pending. A work order can be raised once the vehicle confirms it." }, { status: 409 });
+  }
 
   // The open occurrence of this code (if the sweep has recorded it) and any work order already raised for it.
   const { data: event } = await supabase
@@ -119,7 +124,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       .from("vehicle_fault_events")
       .update({ work_order_id: wo.id })
       .eq("id", event.id)
-      .eq("org_id", orgId);
+      .eq("org_id", orgId)
+      // Don't overwrite a work order an automation linked while this request was running.
+      .is("work_order_id", null);
     if (linkErr) log.warn("could not link work order to fault event", { error: linkErr, workOrderId: wo.id });
   }
 
