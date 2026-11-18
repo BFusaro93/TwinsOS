@@ -348,13 +348,13 @@ export function historyHour(now: Date = new Date()): string {
   return d.toISOString();
 }
 
-/** Latest fuel / battery / engine state for EVERY vehicle in the org (one paginated call set). */
-export async function fetchFleetFuelBattery(apiKey: string): Promise<SamsaraVehicleStats[]> {
+/** Latest values of up to 3 stat `types` for EVERY vehicle in the org (paginated). */
+export async function fetchFleetStats(apiKey: string, types: string): Promise<SamsaraVehicleStats[]> {
   const out: SamsaraVehicleStats[] = [];
   let after: string | null = null;
   do {
     const body = (await samsaraGet(apiKey, "/fleet/vehicles/stats", {
-      types: "engineStates,fuelPercents,batteryMilliVolts",
+      types,
       ...(after ? { after } : {}),
     })) as {
       data?: SamsaraVehicleStats[];
@@ -365,6 +365,13 @@ export async function fetchFleetFuelBattery(apiKey: string): Promise<SamsaraVehi
   } while (after);
   return out;
 }
+
+/** Latest fuel / battery / engine state for EVERY vehicle in the org. */
+export const fetchFleetFuelBattery = (apiKey: string) =>
+  fetchFleetStats(apiKey, "engineStates,fuelPercents,batteryMilliVolts");
+
+/** Latest fault codes (and check-engine light) for EVERY vehicle in the org. */
+export const fetchFleetFaultCodes = (apiKey: string) => fetchFleetStats(apiKey, "faultCodes");
 
 export function historyRow(
   orgId: string,

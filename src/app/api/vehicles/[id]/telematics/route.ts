@@ -5,6 +5,8 @@ import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { logger } from "@/lib/logger";
+import type { AdminClient } from "@/lib/automations/cmms-automation-actions";
+import { hasFaultBaseline, syncVehicleFaultEvents } from "@/lib/samsara/fault-events";
 import {
   SamsaraApiError,
   fetchVehicleTelematics,
@@ -64,7 +66,7 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
 
   const { data: integration } = await admin
     .from("integrations")
-    .select("api_key, enabled")
+    .select("api_key, enabled, config")
     .eq("org_id", orgId)
     .eq("provider", "samsara")
     .maybeSingle();
@@ -104,6 +106,22 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
           ignoreDuplicates: true,
         });
       if (historyErr) log.warn("history sample failed", { vehicleId, error: historyErr });
+    }
+
+    // Fault codes -> events (-> automations once the org has its baseline). Skipped when
+    // Samsara didn't report the stat: absent means unknown, not "no faults".
+    if (telematics.statTimes.faultCodes) {
+      try {
+        await syncVehicleFaultEvents(admin as unknown as AdminClient, {
+          orgId,
+          vehicle: { id: vehicleId, name: vehicle.name as string },
+          faults: telematics.faultCodes,
+          checkEngineLight: telematics.checkEngineLight,
+          fire: hasFaultBaseline(integration.config),
+        });
+      } catch (faultErr) {
+        log.warn("fault event sync failed", { vehicleId, err: faultErr });
+      }
     }
 
     return NextResponse.json({

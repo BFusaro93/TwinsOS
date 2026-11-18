@@ -63,6 +63,9 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
         toStatus: (tc.to_status as "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed") ?? "approved",
       };
       break;
+    case "vehicle_fault_code":
+      trigger = { type: "vehicle_fault_code", onlyCheckEngineLight: tc.only_check_engine_light === true };
+      break;
     default:
       trigger = { type: "request_submitted" };
   }
@@ -149,6 +152,8 @@ function serialiseTriggerConfig(trigger: AutomationTrigger): Json {
       return { to_status: trigger.toStatus };
     case "po_status_change":
       return { to_status: trigger.toStatus };
+    case "vehicle_fault_code":
+      return { only_check_engine_light: trigger.onlyCheckEngineLight };
   }
 }
 

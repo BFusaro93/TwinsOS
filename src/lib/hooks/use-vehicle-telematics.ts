@@ -96,3 +96,59 @@ export function useSamsaraEnabled() {
     staleTime: 5 * 60_000,
   });
 }
+
+export interface FaultWorkOrderLink {
+  workOrderId: string;
+  workOrderNumber: string;
+  status: string;
+}
+
+/**
+ * Open work orders already raised for this vehicle's current fault codes, keyed
+ * `${source}:${code}`. A finished work order isn't a link: the fault is still
+ * there, so the card offers a new one.
+ */
+export function useVehicleFaultWorkOrders(vehicleId: string) {
+  return useQuery<Record<string, FaultWorkOrderLink>>({
+    queryKey: ["vehicle-fault-work-orders", vehicleId],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("vehicle_fault_events")
+        .select("source, code, work_orders(id, work_order_number, status, deleted_at)")
+        .eq("vehicle_id", vehicleId)
+        .is("cleared_at", null)
+        .is("deleted_at", null)
+        .not("work_order_id", "is", null);
+      if (error) throw error;
+      const out: Record<string, FaultWorkOrderLink> = {};
+      for (const row of data ?? []) {
+        const wo = row.work_orders as { id: string; work_order_number: string; status: string; deleted_at: string | null } | null;
+        if (!wo || wo.deleted_at || wo.status === "done" || wo.status === "skipped") continue;
+        out[`${row.source}:${row.code}`] = { workOrderId: wo.id, workOrderNumber: wo.work_order_number, status: wo.status };
+      }
+      return out;
+    },
+  });
+}
+
+/** "Create work order" on a fault code. Returns the new (or already-open) work order. */
+export function useCreateFaultWorkOrder(vehicleId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<{ status: "created" | "exists"; workOrder: { id: string; number: string } }, Error, { source: string; code: string }>({
+    mutationFn: async (input) => {
+      const res = await fetch(`/api/vehicles/${vehicleId}/telematics/work-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? "Could not create the work order");
+      return body as { status: "created" | "exists"; workOrder: { id: string; number: string } };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vehicle-fault-work-orders", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+    },
+  });
+}

@@ -2,12 +2,18 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, ExternalLink, MapPin, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, MapPin, RefreshCw, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TelematicsHistory } from "@/components/cmms/TelematicsHistory";
 import { RingGauge, TruckTires, type GaugeTone, type TireReading } from "@/components/cmms/TelematicsGauges";
-import { useRefreshVehicleTelematics, useVehicleTelematics } from "@/lib/hooks/use-vehicle-telematics";
+import {
+  useCreateFaultWorkOrder,
+  useRefreshVehicleTelematics,
+  useVehicleFaultWorkOrders,
+  useVehicleTelematics,
+} from "@/lib/hooks/use-vehicle-telematics";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { cn, relativeTime } from "@/lib/utils";
 import type { TelematicsFaultCode, VehicleTelematicsSnapshot } from "@/types/telematics";
 
@@ -149,7 +155,10 @@ const FAULT_STATUS_LABEL: Record<TelematicsFaultCode["status"], string> = {
   permanent: "Permanent",
 };
 
-function FaultCodes({ s }: { s: VehicleTelematicsSnapshot }) {
+function FaultCodes({ s, vehicleId }: { s: VehicleTelematicsSnapshot; vehicleId: string }) {
+  const { canEditWorkOrders } = useRoleCapabilities();
+  const { data: workOrders = {} } = useVehicleFaultWorkOrders(vehicleId);
+  const createWorkOrder = useCreateFaultWorkOrder(vehicleId);
   const cel = s.checkEngineLight;
   const hasCodes = s.faultCodes.length > 0;
   const reported = cel !== null || s.statTimes.faultCodes !== undefined;
@@ -171,6 +180,10 @@ function FaultCodes({ s }: { s: VehicleTelematicsSnapshot }) {
         )}
       </div>
 
+      {createWorkOrder.error && (
+        <p role="alert" className="border-b px-5 py-2 text-xs text-red-600 dark:text-red-400">{createWorkOrder.error.message}</p>
+      )}
+
       {hasCodes ? (
         <ul className="divide-y divide-slate-100 dark:divide-neutral-800">
           {s.faultCodes.map((f) => (
@@ -182,9 +195,31 @@ function FaultCodes({ s }: { s: VehicleTelematicsSnapshot }) {
                   {f.description && <span className="text-slate-600 dark:text-neutral-400"> — {f.description}</span>}
                 </p>
               </div>
-              <Badge variant="outline" className="shrink-0 text-xs text-slate-600 dark:text-neutral-400">
-                {FAULT_STATUS_LABEL[f.status]}
-              </Badge>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <Badge variant="outline" className="text-xs text-slate-600 dark:text-neutral-400">
+                  {FAULT_STATUS_LABEL[f.status]}
+                </Badge>
+                {workOrders[`${f.source}:${f.code}`] ? (
+                  <Link
+                    href={`/cmms/work-orders?id=${workOrders[`${f.source}:${f.code}`].workOrderId}`}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                  >
+                    <Wrench className="h-3 w-3" />
+                    {workOrders[`${f.source}:${f.code}`].workOrderNumber}
+                  </Link>
+                ) : canEditWorkOrders ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 px-2 text-xs"
+                    disabled={createWorkOrder.isPending}
+                    onClick={() => createWorkOrder.mutate({ source: f.source, code: f.code })}
+                  >
+                    <Wrench className="h-3 w-3" />
+                    Create work order
+                  </Button>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -379,7 +414,7 @@ export function VehicleTelematicsTab({ vehicleId }: { vehicleId: string }) {
 
       <Location s={snapshot} />
 
-      <FaultCodes s={snapshot} />
+      <FaultCodes s={snapshot} vehicleId={vehicleId} />
     </div>
   );
 }
