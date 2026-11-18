@@ -98,15 +98,15 @@ export function RingGauge({ label, value, unit, percent, tone, title, icon: Icon
         {Icon && (
           <Icon
             aria-hidden="true"
-            className="absolute bottom-[8px] left-1/2 h-5 w-5 -translate-x-1/2 text-slate-500 dark:text-neutral-400"
+            className="absolute bottom-[6px] left-1/2 h-6 w-6 -translate-x-1/2 text-slate-500 dark:text-neutral-400"
           />
         )}
         {endLabels && (
           <>
-            <span className="absolute bottom-[9px] left-[31px] text-[10px] font-medium leading-none text-slate-400 dark:text-neutral-500">
+            <span className="absolute bottom-[8px] left-[24px] text-sm font-semibold leading-none text-slate-500 dark:text-neutral-400">
               {endLabels[0]}
             </span>
-            <span className="absolute bottom-[9px] right-[31px] text-[10px] font-medium leading-none text-slate-400 dark:text-neutral-500">
+            <span className="absolute bottom-[8px] right-[24px] text-sm font-semibold leading-none text-slate-500 dark:text-neutral-400">
               {endLabels[1]}
             </span>
           </>
@@ -140,7 +140,7 @@ export function TruckTires({ frontLeft, frontRight, backLeft, backRight }: Truck
         y={y}
         textAnchor={anchor}
         className={cn(
-          "text-[22px] font-semibold tabular-nums",
+          "text-[30px] font-semibold tabular-nums",
           t.value === null
             ? "fill-slate-300 dark:fill-neutral-600"
             : t.tone === "warn"
@@ -152,7 +152,7 @@ export function TruckTires({ frontLeft, frontRight, backLeft, backRight }: Truck
       >
         {t.value ?? "—"}
       </text>
-      <text x={x} y={y + 15} textAnchor={anchor} className="fill-slate-400 text-[11px] dark:fill-neutral-500">
+      <text x={x} y={y + 20} textAnchor={anchor} className="fill-slate-500 text-[16px] font-medium dark:fill-neutral-400">
         PSI
       </text>
     </g>
@@ -162,23 +162,23 @@ export function TruckTires({ frontLeft, frontRight, backLeft, backRight }: Truck
     <svg viewBox="0 0 300 330" className="mx-auto h-auto w-full max-w-[300px]" role="img" aria-label="Tire pressure by wheel">
       {/* Tires */}
       {[
-        [96, 40],
-        [192, 40],
-        [96, 232],
-        [192, 232],
+        [76, 40],
+        [210, 40],
+        [76, 232],
+        [210, 232],
       ].map(([x, y]) => (
-        <rect key={`${x}-${y}`} x={x} y={y} width={12} height={58} rx={4} className="fill-slate-700 dark:fill-neutral-500" />
+        <rect key={`${x}-${y}`} x={x} y={y} width={14} height={58} rx={4} className="fill-slate-700 dark:fill-neutral-500" />
       ))}
       {/* Body: hood + cab + bed */}
-      <rect x={104} y={14} width={92} height={300} rx={22} className="fill-slate-200 stroke-slate-300 dark:fill-neutral-700 dark:stroke-neutral-600" strokeWidth={1.5} />
-      <rect x={112} y={26} width={76} height={74} rx={12} className="fill-slate-100 dark:fill-neutral-600" />
-      <rect x={114} y={108} width={72} height={34} rx={6} className="fill-slate-400/70 dark:fill-neutral-900" />
-      <rect x={116} y={148} width={68} height={22} rx={5} className="fill-slate-300 dark:fill-neutral-800" />
-      <rect x={114} y={186} width={72} height={116} rx={8} className="fill-slate-100 stroke-slate-300 dark:fill-neutral-600 dark:stroke-neutral-500" strokeWidth={1.5} />
-      {reading(frontLeft, 84, 62, "end")}
-      {reading(frontRight, 216, 62, "start")}
-      {reading(backLeft, 84, 254, "end")}
-      {reading(backRight, 216, 254, "start")}
+      <rect x={90} y={14} width={120} height={300} rx={24} className="fill-slate-200 stroke-slate-300 dark:fill-neutral-700 dark:stroke-neutral-600" strokeWidth={1.5} />
+      <rect x={98} y={26} width={104} height={74} rx={12} className="fill-slate-100 dark:fill-neutral-600" />
+      <rect x={100} y={108} width={100} height={34} rx={6} className="fill-slate-400/70 dark:fill-neutral-900" />
+      <rect x={102} y={148} width={96} height={22} rx={5} className="fill-slate-300 dark:fill-neutral-800" />
+      <rect x={100} y={186} width={100} height={116} rx={8} className="fill-slate-100 stroke-slate-300 dark:fill-neutral-600 dark:stroke-neutral-500" strokeWidth={1.5} />
+      {reading(frontLeft, 66, 64, "end")}
+      {reading(frontRight, 234, 64, "start")}
+      {reading(backLeft, 66, 256, "end")}
+      {reading(backRight, 234, 256, "start")}
     </svg>
   );
 }
