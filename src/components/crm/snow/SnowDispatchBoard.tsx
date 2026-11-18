@@ -365,6 +365,12 @@ function AddJobsDialog({
 
   const { data: masterSlots } = useMasterRouteSlots();
   const selectedRoute = routes.find((r) => r.id === routeId);
+  // A shared route (no default crew) keeps each stop's crew on the stop.
+  const routeStopCrew = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of routeStops) if (s.crewId) m.set(s.jobId, s.crewId);
+    return m;
+  }, [routeStops]);
 
   // With no route picked, keep the saved Master Route order (route by route,
   // stop by stop) rather than arbitrary job order, so every storm comes up in
@@ -465,7 +471,7 @@ function AddJobsDialog({
         date: rowDates.get(c.job.id) ?? null,
         // Explicit crew pick, else the job's Master Route crew, else the job's own crew.
         crewId: defaultCrewId
-          || (routeId ? selectedRoute?.defaultCrewId : masterSlots?.get(c.job.id)?.routeCrewId)
+          || (routeId ? (routeStopCrew.get(c.job.id) ?? selectedRoute?.defaultCrewId) : masterSlots?.get(c.job.id)?.routeCrewId)
           || c.job.crewId
           || null,
       }));

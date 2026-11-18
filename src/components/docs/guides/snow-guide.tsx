@@ -109,8 +109,8 @@ export function SnowGuide() {
           Click <strong>Add Jobs</strong> on an open storm event to bring up the candidate list —
           every client with a snow job, or just the stops on a chosen master route. With no route
           chosen, the list follows your saved master-route order (route by route, stop by stop), with
-          jobs on no route after them, and each stop picks up its route&apos;s default crew unless
-          you choose a crew in the dialog. Each candidate
+          jobs on no route after them, and each stop picks up its own saved crew (on a shared route) or its
+          route&apos;s default crew unless you choose a crew in the dialog. Each candidate
           shows its trigger depth, its client&apos;s priority, and its assigned crew, and the list
           filters itself with three controls:
         </p>
@@ -346,12 +346,17 @@ export function SnowGuide() {
           <li>
             <strong>Keeping the same order storm to storm.</strong> Once you&apos;ve ordered the
             stops the way you want them (by hand or with Optimize), choose Actions &gt;{" "}
-            <em>Save Order to Master Routes</em>. Each crew&apos;s order is written onto its master
-            route (the active route whose default crew is that crew, created and named after the crew
-            if there isn&apos;t one), so the next storm&apos;s Add Jobs comes up in that sequence.
-            Stops that weren&apos;t on this storm keep their place on the route, jobs new to the route
-            go on the end, and a job moved to another crew moves to that crew&apos;s route (a job is
-            on only one route). You can also edit the routes directly with the <strong>Master Routes</strong>
+            <em>Save Order to Master Routes</em>. A job already on a master route is written back to
+            that route, so the next storm&apos;s Add Jobs comes up in that sequence. On a shared route
+            (one with no default crew, such as <em>All Plow Jobs</em> or <em>All Salt Jobs</em>) the
+            stops are grouped by crew and each stop remembers the crew it ran under, so you regroup
+            the crews once instead of every storm. On a per-crew route (one with a default crew) the
+            crew&apos;s order is written onto it. A job on no route goes to its crew&apos;s own route
+            (created and named after the crew if there isn&apos;t one), unless your company uses shared
+            routes: then it is left alone until you add it to a route in the Master Routes editor.
+            Stops that weren&apos;t on this storm keep their place and crew, and jobs new to the route
+            go on the end (a job is on only one route, so plowing and salting should be separate
+            snow jobs). You can also edit the routes directly with the <strong>Master Routes</strong>
             button next to New Storm Event (the same editor is in Settings &gt; Services &gt;
             Snow Routes).
           </li>
@@ -360,17 +365,20 @@ export function SnowGuide() {
             selection bar&apos;s <em>Assign crew…</em> (or the map panel&apos;s <em>Assign to crew…</em>)
             changes this storm&apos;s stops only; next storm they come back on the crew their Master
             Route has. Tick <strong>Permanent</strong> beside the picker to also save the crew onto
-            the Master Routes. The picker then lists each crew&apos;s active routes (a crew with
-            several shows as <em>Crew name - Route name</em>, for example a plowing route and a salting
-            route), so you pick the crew and the route in one step. A job already on the route you
+            the Master Routes. The picker then lists each crew&apos;s active routes plus every shared route (shown
+            as <em>Crew name - Route name</em>, for example <em>Crew 1 - All Plow Jobs</em>), so you
+            pick the crew and the route in one step. A job already on the route you
             pick keeps its place, others go on the end, and if the crew has no route yet one is created
-            and named after the crew. Choosing <em>Unassigned</em> with Permanent ticked also takes the
-            stops off their Master Routes. Many crews keep one route for plowing and another for
+            and named after the crew. Choosing <em>Unassigned</em> with Permanent ticked takes the
+            stops off their crew&apos;s Master Route, or just clears the crew on a shared route. Many crews keep one route for plowing and another for
             salting so a salt-only storm loads only the salt route.
           </li>
           <li>
             <strong>Building Master Routes.</strong> Click <em>Master Routes</em> on the Snow Jobs
             board, pick a route (or add one, then set its name, default crew and Active switch).
+            Leave the default crew empty to make a shared route that covers several crews (for example
+            one route for every plow job and one for every salt job); each stop then has its own crew
+            picker.
             <em> Find jobs for this route</em> searches your snow jobs by client or address, service,
             zip code(s), and proximity (within 1–25 miles of an address you type or of one of the
             route&apos;s stops), with <em>Not already on a route</em> ticked by default. Tick the

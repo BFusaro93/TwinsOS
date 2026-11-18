@@ -23,6 +23,9 @@ export function RouteStopRow({
   address,
   service,
   priority,
+  crewId,
+  crews,
+  onSetCrew,
   canManage,
   busy,
   dragOver,
@@ -39,6 +42,11 @@ export function RouteStopRow({
   address: string;
   service: string;
   priority?: string | null;
+  /** The crew this stop runs under (null = the route's default crew). Shown only on routes that take a crew per stop. */
+  crewId?: string | null;
+  /** When set, the row shows a crew picker (shared routes). */
+  crews?: { id: string; name: string }[];
+  onSetCrew?: (crewId: string | null) => void;
   canManage: boolean;
   busy: boolean;
   dragOver: boolean;
@@ -87,6 +95,21 @@ export function RouteStopRow({
         </div>
         <p className="truncate text-xs text-slate-500 dark:text-neutral-400">{address || "No address"}{service ? ` · ${service}` : ""}</p>
       </div>
+      {crews && (
+        canManage && onSetCrew ? (
+          <select
+            value={crewId ?? ""}
+            onChange={(e) => onSetCrew(e.target.value || null)}
+            aria-label={`Crew for ${clientName}`}
+            className="h-7 w-28 shrink-0 rounded border bg-transparent px-1 text-xs"
+          >
+            <option value="">No crew</option>
+            {crews.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        ) : (
+          <span className="w-28 shrink-0 truncate text-xs text-slate-500 dark:text-neutral-400">{crews.find((c) => c.id === crewId)?.name ?? "No crew"}</span>
+        )
+      )}
       {canManage && (
         <>
           <div className="flex flex-col">

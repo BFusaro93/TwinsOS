@@ -10739,6 +10739,7 @@ export type Database = {
       crm_snow_route_stops: {
         Row: {
           created_at: string
+          crew_id: string | null
           id: string
           job_id: string
           org_id: string
@@ -10747,6 +10748,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          crew_id?: string | null
           id?: string
           job_id: string
           org_id?: string
@@ -10755,6 +10757,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          crew_id?: string | null
           id?: string
           job_id?: string
           org_id?: string
@@ -10762,6 +10765,13 @@ export type Database = {
           sort_order?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_snow_route_stops_crew_id_fkey"
+            columns: ["crew_id"]
+            isOneToOne: false
+            referencedRelation: "crm_crews"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_snow_route_stops_job_id_fkey"
             columns: ["job_id"]
