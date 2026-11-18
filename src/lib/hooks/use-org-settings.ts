@@ -38,6 +38,9 @@ export interface OrgSettingsData {
   /** Crew must add a Before photo before starting / an After photo before stopping a job. */
   crewRequireBeforePhoto: boolean;
   crewRequireAfterPhoto: boolean;
+  /** Snow services on/off. Off hides Snow Jobs / Snow Invoicing from the nav.
+   *  Stored in customizations.snow_enabled; a missing key means ON. */
+  snowEnabled: boolean;
   /** IANA name. The org's operating clock — what "today" and "this service
    *  day" mean for every user, regardless of where they're sitting. */
   timezone: string;
@@ -53,6 +56,7 @@ export interface UpdateOrgSettingsInput {
   customizations?: Record<string, unknown>;
   crewRequireBeforePhoto?: boolean;
   crewRequireAfterPhoto?: boolean;
+  snowEnabled?: boolean;
   googleMapsApiKey?: string | null;
   replyToEmail?: string | null;
   accountNumberPrefix?: string;
@@ -105,6 +109,7 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     crewHidePricing: typeof row.crew_hide_pricing === "boolean" ? row.crew_hide_pricing : false,
     crewRequireBeforePhoto: (row.customizations as Record<string, unknown>)?.crew_require_before_photo === true,
     crewRequireAfterPhoto: (row.customizations as Record<string, unknown>)?.crew_require_after_photo === true,
+    snowEnabled: (row.customizations as Record<string, unknown>)?.snow_enabled !== false,
     // coerce, don't trust: an org row predating the column reads back null,
     // and the whole point of this value is that nothing downstream has to
     // second-guess it.
@@ -194,6 +199,10 @@ export function useUpdateOrgSettings() {
       }
       if (input.crewRequireAfterPhoto !== undefined) {
         input = { ...input, customizations: { ...(input.customizations ?? {}), crew_require_after_photo: input.crewRequireAfterPhoto } };
+      }
+
+      if (input.snowEnabled !== undefined) {
+        input = { ...input, customizations: { ...(input.customizations ?? {}), snow_enabled: input.snowEnabled } };
       }
 
       // Surcharge mode lives in customizations too (no column to migrate).

@@ -66,9 +66,9 @@ export function JobPhotosGuide() {
           <li>
             <strong>Its own app shell</strong> at <code>/photos/jobs</code>, with a dedicated
             dark sidebar — this is
-            what crew accounts land on. The Home dashboard surfaces it as a &quot;Job Photos&quot;
-            tile (&quot;Field photo documentation &amp; field forms&quot;) whenever the org has the
-            add-on, both for crew accounts and everyone else.
+            what crew accounts land on. This area is called <strong>Field</strong>: the Home
+            dashboard shows a &quot;Field&quot; tile for everyone, and it opens Job Photos when the
+            org has the add-on (otherwise it opens the field forms, see below).
           </li>
           <li>
             <strong>Inside Landscapt/CRM</strong>, under Scheduling → Job Photos
@@ -76,6 +76,15 @@ export function JobPhotosGuide() {
             <code>/crm/scheduling/job-photos</code>).
           </li>
         </ul>
+        <Callout>
+          <strong>Without the add-on</strong>, the whole Job Photos feature is switched off: the
+          Job Photos link in the Landscapt and Field sidebars, the <strong>Photos</strong> tab on a
+          client, the Job Photos link on a project, and Photo Job results in search all disappear,
+          and opening a Job Photos page directly shows an &quot;add-on&quot; notice instead (admins
+          get a button to the subscription settings). The Field forms below are{" "}
+          <em>not</em> part of the add-on and stay available to everyone. Job Photos is included on
+          the Growth and Enterprise plans and during a trial.
+        </Callout>
         <p>
           A Photo Job can optionally link to an Equipt Project (for cost tracking) or a Landscapt
           Client — both links are visible and editable from the job detail pane. It is not tied to
@@ -278,11 +287,11 @@ export function JobPhotosGuide() {
 
       <Section id="field-forms" title="Field forms">
         <p>
-          The Job Photos sidebar has a second group, <strong>Field</strong>, of short forms meant to
+          The Field sidebar has a <strong>Field</strong> group of short forms meant to
           be filled out on a phone in the field. Each submission is attributed to the signed-in user:
         </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li><strong>Repair Request</strong> — creates a maintenance request / work order submission. It only appears for organizations with the Equipt module; without it the tile is hidden (in the Field sidebar and the crew quick-add) and the page sends you to Job Photos.</li>
+          <li><strong>Repair Request</strong> — creates a maintenance request / work order submission. It only appears for organizations with the Equipt module; without it the tile is hidden (in the Field sidebar and the crew quick-add) and the page sends you back to the Field home.</li>
           <li>
             <strong>Damage Report</strong> — opens a{" "}
             <GuideLink href="/settings/support/damage-cases-guide" className="text-[#60ab45] underline">Damage Case</GuideLink>{" "}

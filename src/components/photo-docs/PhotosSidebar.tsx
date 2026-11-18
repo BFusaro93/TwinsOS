@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useIsInternalOrg } from "@/lib/hooks/use-internal-org";
-import { useModuleAccess } from "@/lib/hooks/use-module-access";
+import { useModuleAccess, useAddonAccess } from "@/lib/hooks/use-module-access";
 import { Camera, FileImage, ArrowLeft, Leaf, Briefcase, Wrench, CalendarDays, ClipboardList, ShieldAlert, HeartPulse } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -18,10 +18,12 @@ interface PhotoNavItem {
   internalOnly?: boolean;
   /** Needs the Equipt module (a repair request becomes an Equipt work request). */
   requiresEquipt?: boolean;
+  /** Hidden without the paid Job Photos add-on. */
+  requiresJobPhotos?: boolean;
 }
 
 export const PHOTOS_NAV: PhotoNavItem[] = [
-  { label: "Job Photos", href: "/photos/jobs",     icon: FileImage },
+  { label: "Job Photos", href: "/photos/jobs",     icon: FileImage, requiresJobPhotos: true },
   { label: "Projects",   href: "/photos/projects", icon: Briefcase, requiresPoAccess: true },
 ];
 
@@ -44,6 +46,10 @@ export function PhotosSidebar() {
   const canSeeProjects = PO_ROLES.has(currentUser.role);
   const { isInternalOrg } = useIsInternalOrg();
   const { allowed: hasEquipt } = useModuleAccess("equipt");
+  const { allowed: hasJobPhotos } = useAddonAccess("job_photos");
+  const photoItems = PHOTOS_NAV.filter(
+    (item) => (!item.requiresPoAccess || canSeeProjects) && (!item.requiresJobPhotos || hasJobPhotos),
+  );
 
   return (
     <aside
@@ -59,14 +65,14 @@ export function PhotosSidebar() {
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={logoDataUrl} alt={orgName} className="h-7 w-7 shrink-0 rounded-md object-contain" />
-              {!sidebarCollapsed && <span className="truncate text-lg font-bold text-brand-400">Job Photos</span>}
+              {!sidebarCollapsed && <span className="truncate text-lg font-bold text-brand-400">Field</span>}
             </>
           ) : (
             <>
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-500">
                 <Camera className="h-4 w-4 text-white" />
               </div>
-              {!sidebarCollapsed && <span className="truncate text-lg font-bold text-brand-400">Job Photos</span>}
+              {!sidebarCollapsed && <span className="truncate text-lg font-bold text-brand-400">Field</span>}
             </>
           )}
         </div>
@@ -75,12 +81,12 @@ export function PhotosSidebar() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4">
         {/* Photos section */}
-        {!sidebarCollapsed && (
+        {!sidebarCollapsed && photoItems.length > 0 && (
           <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
             Photos
           </p>
         )}
-        {PHOTOS_NAV.filter((item) => !item.requiresPoAccess || canSeeProjects).map((item) => {
+        {photoItems.map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/po/projects" && pathname.startsWith(item.href + "/"));

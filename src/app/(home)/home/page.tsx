@@ -107,17 +107,17 @@ function CrewHome() {
           </div>
         </Link>
 
-        {hasJobPhotos && (
-          <Link href="/photos/jobs" className={CREW_BOX}>
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
-              <Camera className="h-8 w-8" />
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Job Photos</p>
-              <p className="mt-1 text-sm text-muted-foreground">Field photo documentation &amp; field forms</p>
-            </div>
-          </Link>
-        )}
+        <Link href={hasJobPhotos ? "/photos/jobs" : "/photos/field/damage-report"} className={CREW_BOX}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
+            <Camera className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Field</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {hasJobPhotos ? "Job photos & field forms" : "Field forms"}
+            </p>
+          </div>
+        </Link>
       </div>
 
     </div>
@@ -239,17 +239,17 @@ export default function HomePage() {
           </Link>
         )}
 
-        {hasJobPhotos && (
-          <Link href="/photos/jobs" className={INTERNAL_BOX}>
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
-              <Camera className="h-8 w-8" />
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Job Photos</p>
-              <p className="mt-1 text-sm text-muted-foreground">Field photo documentation &amp; field forms</p>
-            </div>
-          </Link>
-        )}
+        <Link href={hasJobPhotos ? "/photos/jobs" : "/photos/field/damage-report"} className={INTERNAL_BOX}>
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
+            <Camera className="h-8 w-8" />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Field</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {hasJobPhotos ? "Job photos & field forms" : "Field forms"}
+            </p>
+          </div>
+        </Link>
       </div>
 
       {/* External app shortcuts */}

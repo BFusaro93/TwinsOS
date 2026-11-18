@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { useRouter } from "next/navigation";
 import {
   Wrench,
@@ -107,7 +108,8 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   const { currentUser } = useCurrentUserStore();
 
   const isCrew = currentUser.role === "crew";
-  const hasPhotoAccess = isCrew || currentUser.role === "admin" || currentUser.photoModuleAccess;
+  const { allowed: hasJobPhotosAddon } = useAddonAccess("job_photos");
+  const hasPhotoAccess = hasJobPhotosAddon && (isCrew || currentUser.role === "admin" || currentUser.photoModuleAccess);
   // Crew only sees Photo Jobs — all other groups are hidden from them
   const showFullSearch = !isCrew;
 
