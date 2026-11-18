@@ -65,53 +65,26 @@ export function downloadCsv(filename: string, csv: string): void {
   URL.revokeObjectURL(url);
 }
 
-/** One choice in the crew picker when "Permanent" is on: a crew and the Master Route to save its stops to. */
-export interface PermanentAssignTarget {
-  /** `crewId|routeId` (routeId empty when the crew has no route yet), see parseAssignTarget. */
-  value: string;
-  label: string;
-  crewId: string;
+/** One Master Route a crew can be saved onto; `routeId` null = create a route named after the crew. */
+export interface CrewRouteOption {
   routeId: string | null;
+  label: string;
 }
 
 /**
- * A crew can have several Master Routes (e.g. one for plowing and one for salting, since some
- * storms only salt), so a permanent assignment has to name the route. One entry per route; a crew
- * with several routes shows "Crew - Route", a crew with one shows just its name, and a crew with
- * none is a single entry that creates its route. A shared route (no default crew, e.g. "All Plow
- * Jobs") is offered for every crew: the stop remembers which crew runs it.
+ * The Master Routes a "Permanent" crew assignment can save to for this crew: the crew's own routes
+ * (a crew may have a plow route and a salt route) and every shared route (no default crew, e.g.
+ * "All Plow Jobs"), where the stop remembers its crew. A crew with neither gets one entry that
+ * creates a route named after it.
  */
-export function buildPermanentAssignTargets(crews: { id: string; name: string }[], routes: SnowRoute[]): PermanentAssignTarget[] {
-  const out: PermanentAssignTarget[] = [];
-  const shared = routes
-    .filter((r) => r.isActive && !r.defaultCrewId)
-    .sort((a, b) => a.name.localeCompare(b.name));
-  for (const crew of crews) {
-    const own = routes
-      .filter((r) => r.isActive && r.defaultCrewId === crew.id)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    if (own.length === 0 && shared.length === 0) {
-      out.push({ value: `${crew.id}|`, label: crew.name, crewId: crew.id, routeId: null });
-      continue;
-    }
-    for (const r of own) {
-      out.push({
-        value: `${crew.id}|${r.id}`,
-        label: own.length === 1 && shared.length === 0 ? crew.name : `${crew.name} - ${r.name}`,
-        crewId: crew.id,
-        routeId: r.id,
-      });
-    }
-    for (const r of shared) {
-      out.push({ value: `${crew.id}|${r.id}`, label: `${crew.name} - ${r.name}`, crewId: crew.id, routeId: r.id });
-    }
-  }
-  return out;
-}
-
-/** Reads a crew picker value: "none" is Unassigned, otherwise `crewId` or `crewId|routeId`. */
-export function parseAssignTarget(value: string): { crewId: string | null; routeId: string | null } {
-  if (value === "none" || !value) return { crewId: null, routeId: null };
-  const [crewId, routeId] = value.split("|");
-  return { crewId: crewId || null, routeId: routeId || null };
+export function routesForCrew(crewId: string, routes: SnowRoute[]): CrewRouteOption[] {
+  const byName = (a: SnowRoute, b: SnowRoute) => a.name.localeCompare(b.name);
+  const own = routes.filter((r) => r.isActive && r.defaultCrewId === crewId).sort(byName);
+  const shared = routes.filter((r) => r.isActive && !r.defaultCrewId).sort(byName);
+  const options: CrewRouteOption[] = [
+    ...own.map((r) => ({ routeId: r.id, label: r.name })),
+    ...shared.map((r) => ({ routeId: r.id, label: `${r.name} (shared)` })),
+  ];
+  if (options.length === 0) options.push({ routeId: null, label: "New route for this crew" });
+  return options;
 }

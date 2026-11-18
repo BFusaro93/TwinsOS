@@ -365,9 +365,10 @@ export function SnowGuide() {
             selection bar&apos;s <em>Assign crew…</em> (or the map panel&apos;s <em>Assign to crew…</em>)
             changes this storm&apos;s stops only; next storm they come back on the crew their Master
             Route has. Tick <strong>Permanent</strong> beside the picker to also save the crew onto
-            the Master Routes. The picker then lists each crew&apos;s active routes plus every shared route (shown
-            as <em>Crew name - Route name</em>, for example <em>Crew 1 - All Plow Jobs</em>), so you
-            pick the crew and the route in one step. A job already on the route you
+            the Master Routes. The picker becomes two steps side by side: first
+            pick the crew, then pick the route to save to. The route list has that crew&apos;s own
+            routes plus every shared route (marked <em>(shared)</em>, for example <em>All Plow Jobs
+            (shared)</em>), and the assignment is saved when you pick the route. A job already on the route you
             pick keeps its place, others go on the end, and if the crew has no route yet one is created
             and named after the crew. Choosing <em>Unassigned</em> with Permanent ticked takes the
             stops off their crew&apos;s Master Route, or just clears the crew on a shared route. Many crews keep one route for plowing and another for
