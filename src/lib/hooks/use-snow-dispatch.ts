@@ -54,6 +54,7 @@ function mapSnowRouteStop(row: any): SnowRouteStop {
     routeId: row.route_id,
     jobId: row.job_id,
     sortOrder: row.sort_order ?? 0,
+    crewId: row.crew_id ?? null,
     clientName: row.crm_jobs?.clients?.display_name ?? null,
     serviceAddress: row.crm_jobs?.service_address ?? null,
     createdAt: row.created_at,
@@ -352,6 +353,20 @@ export function useAddRouteStop() {
   });
 }
 
+/** Sets (or clears, with null) the crew a stop runs under on a shared Master Route. */
+export function useSetRouteStopCrew() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, crewId }: { id: string; crewId: string | null; routeId: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("crm_snow_route_stops").update({ crew_id: crewId }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["snow-route-stops"] }),
+  });
+}
+
 export function useReorderRouteStops() {
   const qc = useQueryClient();
   return useMutation({
@@ -615,6 +630,7 @@ export function useAddStormPush() {
 export interface MasterRouteSlot {
   routeId: string;
   routeName: string;
+  /** The crew this stop runs under: its own saved crew, else the route's default crew. */
   routeCrewId: string | null;
   /** Position within its route. */
   sortOrder: number;
@@ -636,7 +652,7 @@ export function useMasterRouteSlots() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("crm_snow_route_stops")
-          .select("id, job_id, sort_order, route_id, crm_snow_routes!inner(name, default_crew_id, is_active, deleted_at)")
+          .select("id, job_id, sort_order, route_id, crew_id, crm_snow_routes!inner(name, default_crew_id, is_active, deleted_at)")
           .is("crm_snow_routes.deleted_at", null)
       );
       const map = new Map<string, MasterRouteSlot>();
@@ -646,7 +662,7 @@ export function useMasterRouteSlots() {
         map.set(row.job_id, {
           routeId: row.route_id,
           routeName: row.crm_snow_routes.name,
-          routeCrewId: row.crm_snow_routes.default_crew_id ?? null,
+          routeCrewId: row.crew_id ?? row.crm_snow_routes.default_crew_id ?? null,
           sortOrder: row.sort_order ?? 0,
         });
       }

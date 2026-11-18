@@ -483,6 +483,8 @@ export interface SnowRouteStop {
   routeId: string;
   jobId: string;
   sortOrder: number;
+  /** Crew this stop runs under on a shared route; null = the route's default crew. */
+  crewId?: string | null;
   clientName?: string | null;
   serviceAddress?: string | null;
   createdAt: string;
