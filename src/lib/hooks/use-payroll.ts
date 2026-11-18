@@ -68,6 +68,49 @@ export function useSavePayrollAdjustment() {
   });
 }
 
+/** Removes a member-day that shouldn't exist: its shift, job punches and adjustment. */
+export function useDeletePayrollDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { crewMemberId: string; workDate: string }) => {
+      const res = await fetch("/api/crm/reports/payroll", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+        throw new Error(typeof body?.error === "string" ? body.error : "Failed to delete the time entry");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payroll-report"] });
+      toast.success("Time entry deleted");
+    },
+    onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to delete the time entry"),
+  });
+}
+
+export interface PayrollCrewMember { id: string; name: string }
+
+/** Everyone who can be given a manual entry: the active roster, by name. */
+export function usePayrollCrewMembers() {
+  return useQuery<PayrollCrewMember[]>({
+    queryKey: ["payroll-crew-members"],
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (createClient() as any)
+        .from("crm_crew_members")
+        .select("id, name")
+        .is("deleted_at", null)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as PayrollCrewMember[];
+    },
+  });
+}
+
 const PAYROLL_LOCK_KEY = ["payroll-lock"] as const;
 
 /**

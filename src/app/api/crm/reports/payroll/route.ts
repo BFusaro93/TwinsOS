@@ -7,13 +7,21 @@ import { shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { applyOvertime, getOvertimeRule, overtimeComputeRange } from "@/lib/payroll/overtime";
+import { payrollPunchDate } from "@/lib/payroll/punch-date";
+import { recomputeStopLabor } from "@/lib/crew/visit-labor";
+import { createVisitWriter } from "@/lib/crew/visit-writer";
 
 /**
  * GET  /api/crm/reports/payroll?from=YYYY-MM-DD&to=YYYY-MM-DD — rows carry
  *      regular / overtime hours under the org's overtime rule (returned as
  *      `overtime`); a weekly rule is computed over whole weeks around the range
  *      so a pay period starting mid-week still counts the week's earlier days.
- * PUT  /api/crm/reports/payroll — upsert one member-day adjustment.
+ * PUT  /api/crm/reports/payroll — upsert one member-day adjustment. Also how the office ADDS a
+ *      day nobody clocked (forgot to clock in, paper timesheets): an adjustment with times or
+ *      hours for a member-day that has no shift is a complete entry.
+ * DELETE /api/crm/reports/payroll — remove one member-day that shouldn't exist (the leader
+ *      clocked in someone who never worked): soft-deletes the day's shift, job punches and
+ *      adjustment, then re-derives the affected visits' hours and labor cost.
  *
  * Requires the payroll_report permission (admins always have it). Crew logins
  * never hold it, and the crm_payroll_adjustments RLS policy enforces the same
@@ -161,4 +169,76 @@ export async function PUT(request: Request) {
   // A day inside the payroll lock (organizations.payroll_locked_through) is refused by the database.
   if (error) return NextResponse.json({ error: error.message }, { status: isPayrollLockedError(error.message) ? 409 : 500 });
   return NextResponse.json({ ok: true });
+}
+
+const DeleteBody = z.object({ crewMemberId: z.string().uuid(), workDate: Ymd });
+
+export async function DELETE(request: Request) {
+  const auth = await authorize(request);
+  if ("response" in auth) return auth.response;
+
+  const parsed = DeleteBody.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  const { crewMemberId, workDate } = parsed.data;
+
+  const { data: member } = await auth.db
+    .from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", auth.orgId).maybeSingle();
+  if (!member) return NextResponse.json({ error: "Crew member not found" }, { status: 404 });
+
+  const tz = await getOrgTimeZone(auth.db, auth.orgId);
+  const now = new Date().toISOString();
+  const fail = (message: string) =>
+    NextResponse.json({ error: message }, { status: isPayrollLockedError(message) ? 409 : 500 });
+
+  // Which punches belong to this day: the same rule payroll and the lock use.
+  const { data: shiftRows } = await auth.db
+    .from("crm_crew_day_shifts")
+    .select("work_date, started_at, ended_at")
+    .eq("org_id", auth.orgId)
+    .eq("crew_member_id", crewMemberId)
+    .is("deleted_at", null)
+    .gte("work_date", shiftYmd(workDate, -1))
+    .lte("work_date", workDate);
+  const shifts = (shiftRows ?? []) as { work_date: string; started_at: string; ended_at: string | null }[];
+  const shiftFor = (_m: string, d: string) => shifts.find((s) => s.work_date === d);
+
+  const { data: punchRows, error: punchReadErr } = await auth.db
+    .from("crm_crew_member_times")
+    .select("id, visit_id, clocked_in_at")
+    .eq("org_id", auth.orgId)
+    .eq("crew_member_id", crewMemberId)
+    .is("deleted_at", null)
+    .not("clocked_in_at", "is", null)
+    .gte("clocked_in_at", `${shiftYmd(workDate, -1)}T00:00:00Z`)
+    .lt("clocked_in_at", `${shiftYmd(workDate, 2)}T00:00:00Z`);
+  if (punchReadErr) return fail(punchReadErr.message);
+  const punches = ((punchRows ?? []) as { id: string; visit_id: string; clocked_in_at: string }[])
+    .filter((p) => payrollPunchDate(shiftFor, crewMemberId, p.clocked_in_at, tz) === workDate);
+
+  // Punches first: the payroll lock dates them by their shift, so removing the shift first
+  // would let an already-locked punch slip to a different date.
+  if (punches.length > 0) {
+    const { error } = await auth.db
+      .from("crm_crew_member_times")
+      .update({ deleted_at: now, updated_at: now })
+      .in("id", punches.map((p) => p.id));
+    if (error) return fail(error.message);
+  }
+  for (const table of ["crm_crew_day_shifts", "crm_payroll_adjustments"] as const) {
+    const { error } = await auth.db
+      .from(table)
+      .update({ deleted_at: now })
+      .eq("org_id", auth.orgId)
+      .eq("crew_member_id", crewMemberId)
+      .eq("work_date", workDate)
+      .is("deleted_at", null);
+    if (error) return fail(error.message);
+  }
+
+  // Job Costing: the visits that carried those punches lose the hours and labor.
+  const writer = createVisitWriter(auth.user.id);
+  for (const visitId of new Set(punches.map((p) => p.visit_id))) {
+    await recomputeStopLabor(auth.db, visitId, writer);
+  }
+  return NextResponse.json({ ok: true, removedPunches: punches.length });
 }
