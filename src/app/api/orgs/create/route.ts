@@ -5,6 +5,7 @@ import { getPriceIdForPlan, isBillablePlan } from "@/lib/stripe/plans";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { logger } from "@/lib/logger";
 import { notifySupportInboxOfTrialSignup } from "@/lib/staff-notify";
+import { syncSubscriberClient } from "@/lib/staff/subscriber-clients";
 import { coerceTimeZone, shiftYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 
 const log = logger.child("orgs-create");
@@ -169,6 +170,17 @@ export async function POST(request: Request) {
     log.error("organization insert failed", { error: orgErr?.message });
     return NextResponse.json({ error: "Failed to create organization" }, { status: 500 });
   }
+
+  // Mirror the new org as a client (or convert a matching demo-request lead) in the staff org.
+  // Never throws; a failure is logged and the nightly/backfill sync repairs it.
+  await syncSubscriberClient(adminClient, org.id, {
+    contact: {
+      name: typeof body.contactName === "string" ? body.contactName : null,
+      email: contactEmail,
+      phone: typeof body.contactPhone === "string" ? body.contactPhone : null,
+    },
+    reason: pendingPlan ? `Signed up for a trial; chose the ${pendingPlan} plan.` : "Signed up for a trial.",
+  });
 
   // Tell support who signed up. Best-effort and awaited so the serverless
   // function isn't frozen mid-send; a failure never blocks the signup.
