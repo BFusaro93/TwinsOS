@@ -1,0 +1,125 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Landscapt Snow Operations</title>
+<style>
+@page{size:Letter;margin:0.5in 0.65in}
+*{box-sizing:border-box}
+body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:#1f2937;font-size:9.6pt;line-height:1.38;margin:0}
+.hero{background:#005642;color:#fff;padding:28px 34px;border-radius:10px;margin-bottom:16px}
+.hero .k{letter-spacing:.14em;font-size:8.5pt;color:#b7d433;font-weight:700;text-transform:uppercase}
+.hero h1{margin:6px 0 8px;font-size:26pt;line-height:1.15}
+.hero p{margin:0;font-size:11.5pt;color:#d9efe6;max-width:5.6in}
+h2{font-size:14pt;color:#005642;margin:16px 0 4px;padding-bottom:4px;border-bottom:2px solid #b7d433;break-after:avoid}
+h2 small{display:block;font-size:9.5pt;color:#6b7280;font-weight:400;margin-top:1px}
+p{margin:6px 0}
+ul{margin:6px 0 6px 18px;padding:0}li{margin:3px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}
+.card{border:1px solid #d7e3de;border-radius:8px;padding:11px 14px;background:#f7fbf9;break-inside:avoid}
+.card b{color:#005642}
+.flow{display:flex;gap:6px;margin:12px 0;break-inside:avoid}
+.step{flex:1;background:#eef6f2;border-radius:8px;padding:9px 8px;text-align:center;font-size:9pt}
+.step i{display:block;font-style:normal;font-weight:700;color:#005642;font-size:9.5pt;margin-bottom:2px}
+table{border-collapse:collapse;width:100%;font-size:9.5pt;margin:8px 0;break-inside:avoid}
+td,th{border:1px solid #d7e3de;padding:5px 8px;text-align:left;vertical-align:top}
+th{background:#005642;color:#fff;font-weight:600}
+tr:nth-child(even) td{background:#f7fbf9}
+.note{background:#fff8e6;border-left:4px solid #e0a800;padding:8px 12px;font-size:9.5pt;border-radius:4px;margin:10px 0;break-inside:avoid}
+.foot{margin-top:14px;padding-top:10px;border-top:1px solid #d7e3de;font-size:9pt;color:#6b7280}
+.pb{break-before:page}
+</style></head><body>
+
+<div class="hero"><div class="k">Landscapt · Snow Operations</div>
+<h1>Run every storm from one screen, from the first plow to the final invoice</h1>
+<p>Storm events, priority dispatch, a working map, crew-app tracking, client messaging, and billing that follows each contract's rules: built for snow, not bolted on.</p></div>
+
+<div class="flow">
+<div class="step"><i>1 · Routes</i>Master routes by crew, saved storm to storm</div>
+<div class="step"><i>2 · Storm</i>One event per storm, with forecast depth</div>
+<div class="step"><i>3 · Dispatch</i>Priority order, map, crews</div>
+<div class="step"><i>4 · Plow</i>Crew app: times, salt, pushes</div>
+<div class="step"><i>5 · Close out</i>Depth, hours, skips, notices</div>
+<div class="step"><i>6 · Invoice</i>Rated per contract, no double-billing</div>
+</div>
+
+<h2>1. Storm events, not visits<small>Organize the work around the storm itself</small></h2>
+<ul>
+<li>Create one <b>storm event</b> with a name, date, optional forecast depth, and temperature. Add every client who needs service and dispatch them together instead of scheduling each plow separately.</li>
+<li>The event moves through <b>Pending, Working, Complete</b> as the storm unfolds. A Complete storm takes no new stops, and adding one reopens it so it never reads finished with work left.</li>
+<li><b>Multi-day storms:</b> every stop has its own date. Move one stop, or tick many and move them together. Crews see each stop on the day it's scheduled.</li>
+<li>A <b>National Weather Service chip</b> shows the forecast and active alerts for the storm date (U.S.). Retire old storms to inactive and bring them back any time.</li>
+</ul>
+
+<h2>2. Master routes<small>Build the routes once; every storm starts in the right order</small></h2>
+<ul>
+<li>Build routes from your snow jobs by client, address, service, zip, or <b>proximity</b> (within 1 to 25 miles of an address or a route stop). Order stops by dragging, typing a position, or with <b>Group Stops</b> and <b>Optimize Route</b> by driving time from the shop. New snow jobs on no route are flagged so you can slot them in.</li>
+<li>A crew can run separate <b>plowing and salting routes</b>, and each job lives on one route. Subcontractors are simply crews of their own.</li>
+<li><b>Save Order to Master Routes</b> after a storm and the next storm's job list comes up in the same sequence. Tick <b>Permanent</b> when reassigning a stop and the change sticks to the crew's route for every future storm.</li>
+</ul>
+
+<h2>3. Adding jobs the smart way<small>Only the clients this storm should actually trigger</small></h2>
+<ul>
+<li>Each client has a <b>trigger depth</b> and a <b>priority</b> (High, Normal, Low). With a 6" forecast, clients whose contracts need more are highlighted and left out by default.</li>
+<li>Jobs are also excluded when the date isn't an authorized service day, or when the contract has ended or hasn't started. Contracts can be set to skip, include, or bill storms outside their dates.</li>
+<li>Filter by route, service, priority, and crew, then add the whole list in one click. Each stop picks up its route's default crew.</li>
+</ul>
+
+<h2>4. Dispatching<small>The same dispatch board your office already knows, tuned for a storm</small></h2>
+<ul>
+<li><b>Team Assign</b> by dragging, or tap a visit and then a crew on a tablet. <b>Dispatch Assigned</b> sends every crewed stop at once, and <b>Cancel Dispatch</b> pulls them back.</li>
+<li><b>Working map:</b> stops numbered by route position and colored by crew. Select stops, <b>draw an area</b> to grab everything inside it, reorder with left and right clicks, see route lines, then assign, move dates, or dispatch from the map.</li>
+<li><b>Optimize</b> each crew's route by drive time (nearest or furthest first), with drive times shown on every row. Order is kept per crew per day.</li>
+<li><b>Two trucks on a big lot:</b> put several crews on a stop. Each clocks its own hours, and the lead crew carries the charge.</li>
+<li>Filters, tags, search, column chooser, crew stats, CSV export, and printed route sheets with checkboxes for conditions, full plow, and salt. The board works at phone width, so dispatch from the truck.</li>
+</ul>
+
+<h2>5. In the truck: the crew app<small>Every trip, every hour, every bag of salt on record</small></h2>
+<ul>
+<li><b>Start, pause, and stop</b> from the crew app; times, breaks, hours and crew size are recorded there and can't be altered by a crew login.</li>
+<li><b>Going back? Add another push.</b> Each return trip is its own visit with its own times, depth, crew, and a line on the client's timeline. Billing follows the job: once per storm, per push, or by the hour.</li>
+<li><b>Need help? Call in another crew</b> and the stop appears on their tablet instantly. <b>Can't make it? Hand off</b> and the stop moves to the crew you pick, flagged "Handed off from" on the board.</li>
+<li><b>Salt and materials per storm:</b> crews record what they used on each stop. It comes off inventory and bills on that storm's invoice.</li>
+</ul>
+
+<h2>6. Closing out a storm<small>Snowfall is recorded by the people who were there, visit by visit</small></h2>
+<ul>
+<li><b>Close Out</b> selected visits with actual depth, temperature, and hours on site for hourly jobs. Each visit keeps its own reading.</li>
+<li><b>Skip or cancel with a reason</b> (no snow at this site, client cancelled, equipment down, site inaccessible, or your own). Reasons land on the client's timeline, and skipped or cancelled stops are left out of billing and crew totals.</li>
+<li><b>Invoiced badge</b> on any stop opens its invoice without leaving the board. Hover for status.</li>
+</ul>
+
+<h2>7. Messaging clients<small>Storm updates without a phone tree</small></h2>
+<ul>
+<li>Tick stops and <b>email or text clients</b> in one step. A client with several stops gets one message that lists them all, with a live preview first.</li>
+<li>Merge tags for storm name and date, service, crew, status (scheduled, on our way, in progress, complete), arrival time, and address. Save your wording as templates, or use them in automations triggered by dispatch or completion.</li>
+<li>The confirm step shows who will be skipped: no email or phone, bounced address, no text opt-in, or a STOP reply. Storm messages are service notices, so they still reach clients marked Do Not Market. A <b>Jobs Without Emails</b> list links straight to each fix.</li>
+</ul>
+
+<h2 style="break-before:page">8. Billing that matches how you sell snow<small>Snow Invoicing groups each client's storm visits and rates them once the storm is done</small></h2>
+<table>
+<tr><th style="width:26%">Invoice type</th><th>How it bills</th></tr>
+<tr><td><b>Per Event</b></td><td>A flat rate once per storm, however deep and however many trips.</td></tr>
+<tr><td><b>Per Inch (event or push)</b></td><td>A rate per inch: the storm's deepest reading once, or every push on its own depth.</td></tr>
+<tr><td><b>Interval billing</b></td><td>Price by bands of snowfall (e.g. 0-3" $165, 3-6" $299, 6-9" $422), with an open-ended top band billed per inch, or an <b>hourly band</b> for deep storms (e.g. 6"+ at $90/hr).</td></tr>
+<tr><td><b>Hourly</b></td><td>Hours on site times the hourly rate, billed once per visit; each crew on a multi-crew stop bills its own hours.</td></tr>
+<tr><td><b>Monthly flat rate</b></td><td>Billed on the contract's cycle, with optional <b>caps and overage</b> (below).</td></tr>
+</table>
+<ul>
+<li><b>Safe by design:</b> only completed, uninvoiced visits appear, so generating twice never double-bills. A visit that may already be on a hand-made invoice is flagged before you bill it, and voiding an invoice returns its visits to the queue. A visit with no recorded depth waits at $0 rather than billing the wrong band.</li>
+<li><b>Additional hours:</b> if a crew finishes after a storm was invoiced, only the new hours come back to bill.</li>
+<li>Invoices take the client's terms (or the job's own), carry the PO number and sales rep, skip tax for exempt clients, and can show each visit's start and end time on its line. Recorded depth is locked once invoiced.</li>
+<li><b>Contract storms outside the dates:</b> don't service, include in the flat rate, or bill per event.</li>
+</ul>
+
+<h2>9. Contract caps and overage<small>Fixed-price contracts that protect you in a big winter</small></h2>
+<ul>
+<li>Set an <b>inch, salt, event, and/or push cap</b> on a monthly flat-rate contract, reset each contract year or each month, with a separate overage price for each.</li>
+<li>Work inside the cap stays covered. Past it, only the overage bills, as its own invoice, tagged <b>Overage</b>. A storm that crosses the inch cap bills only the inches beyond it.</li>
+<li>Usage is counted live from the visits ("42 of 80 in used"), so correcting a depth updates it immediately. A stop whose cap is used up shows an <b>Overage chip</b> on the board so dispatch knows it will bill separately.</li>
+</ul>
+
+<h2>10. Setup &amp; control<small>Configured to how your operation works</small></h2>
+<div class="grid">
+<div class="card"><b>What you configure</b><ul><li>Master routes with default crews</li><li>Client priority and trigger depth</li><li>Rate tiers, hourly bands, and service price rules</li><li>Message templates for email and text</li><li>Contract caps, overage, and out-of-dates rules</li></ul></div>
+<div class="card"><b>Control and privacy</b><ul><li>Role-based permissions for dispatch, messaging, and invoicing</li><li>Crew logins can't read or change rate tiers, storms, or routes</li><li>Timeline entry for every message, skip, hand-off, and push</li><li>Equipment and vehicles load onto crews from the yard</li></ul></div>
+</div>
+
+<div class="foot">Landscapt is a cloud platform for landscape and field-service operations, with CRM, scheduling, invoicing, purchasing, and maintenance in one system. Ask us for a live walkthrough using your own routes and contracts.</div>
+</body></html>
