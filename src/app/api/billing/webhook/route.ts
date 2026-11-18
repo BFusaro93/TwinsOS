@@ -9,6 +9,7 @@ import { reconcileAddonsWithSubscription, removePurchasedBundledAddons } from "@
 import { logger } from "@/lib/logger";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { releaseOrgSmsResources } from "@/lib/twilio/provisioning";
+import { syncSubscriberClient } from "@/lib/staff/subscriber-clients";
 import { EMAIL_FROM } from "@/lib/email/send";
 
 const log = logger.child("stripe webhook");
@@ -270,6 +271,14 @@ async function applySubscriptionToOrg(
     log.warn("subscription event for a customer with no matching org — ignored", { lookup });
     return;
   }
+
+  // Keep the staff org's client for this subscriber in step with its plan/status (lead -> active
+  // on first payment, -> cancelled on cancel). Never throws, so it can't fail the event.
+  await syncSubscriberClient(db, org.id, {
+    reason: DOWNGRADE_STATUSES.has(subscription.status)
+      ? `Subscription ${subscription.status}.`
+      : `Subscription ${subscription.status} on the ${org.plan} plan.`,
+  });
 
   // Purchased add-ons are granted only while THIS subscription bills them: an
   // ended subscription grants none, and a resubscribe (new subscription with

@@ -15097,6 +15097,7 @@ export type Database = {
           seat_overage_cents_override: number | null
           seats_included_override: number | null
           slug: string
+          staff_client_id: string | null
           stripe_connect_account_id: string | null
           stripe_connect_charges_enabled: boolean
           stripe_connect_livemode: boolean | null
@@ -15146,6 +15147,7 @@ export type Database = {
           seat_overage_cents_override?: number | null
           seats_included_override?: number | null
           slug: string
+          staff_client_id?: string | null
           stripe_connect_account_id?: string | null
           stripe_connect_charges_enabled?: boolean
           stripe_connect_livemode?: boolean | null
@@ -15195,6 +15197,7 @@ export type Database = {
           seat_overage_cents_override?: number | null
           seats_included_override?: number | null
           slug?: string
+          staff_client_id?: string | null
           stripe_connect_account_id?: string | null
           stripe_connect_charges_enabled?: boolean
           stripe_connect_livemode?: boolean | null
