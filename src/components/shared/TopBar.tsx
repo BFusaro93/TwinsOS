@@ -98,7 +98,7 @@ function useBreadcrumbs() {
     "approval-flows": "Approval Flows",
     reports: "Reports",
     support: "Support",
-    photos: "Photo Docs",
+    photos: "Field",
     jobs: "Job Photos",
     "job-photos": "Job Photos",
     dashboards: "Dashboards",

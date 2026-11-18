@@ -99,6 +99,7 @@ import { RequisitionDetailPanel } from "./RequisitionDetailPanel";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { usePhotoJobByProjectId } from "@/modules/photo-docs/hooks/usePhotoJobs";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { useTicketsLinkedTo } from "@/lib/hooks/use-tickets";
 import { computeSalesTax } from "@/lib/utils/po-tax";
 import { allocatePoLine } from "@/lib/utils/project-po-allocation";
@@ -1202,6 +1203,7 @@ function DetailsTab({
   const router = useRouter();
   const { canWriteEquipt } = useRoleCapabilities();
   const { data: linkedPhotoJob } = usePhotoJobByProjectId(project.id);
+  const { allowed: hasJobPhotos } = useAddonAccess("job_photos");
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
   // Use project-level snapshot if set; fall back to org settings for old projects
   const effectiveFullRate = project.laborRateCents ?? breakevenLaborRateCents;
@@ -1369,7 +1371,7 @@ function DetailsTab({
         <MetaRow label="Address" value={formatAddress(project.address, project.city, project.state, project.zip)} />
         <MetaRow label="Start Date" value={formatDate(project.startDate)} />
         <MetaRow label="End Date" value={project.endDate ? formatDate(project.endDate) : "TBD"} />
-        {linkedPhotoJob && (
+        {hasJobPhotos && linkedPhotoJob && (
           <MetaRow
             label="Job Photos"
             value={

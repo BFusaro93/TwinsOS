@@ -753,6 +753,12 @@ function CRMTab() {
         <ClientDefaultsSection />
       </AccordionSection>
       <AccordionSection
+        title="Services"
+        description="Turn on the service lines your company offers"
+      >
+        <ServicesOfferedSection />
+      </AccordionSection>
+      <AccordionSection
         title="Crew App"
         description="Settings for the crew tablet clock-in app"
       >
@@ -793,6 +799,45 @@ function CRMTab() {
           </Link>
         </div>
       </AccordionSection>
+    </div>
+  );
+}
+
+// ── ServicesOfferedSection ────────────────────────────────────────────────────
+
+function ServicesOfferedSection() {
+  const { data: orgSettings } = useOrgSettings();
+  const { mutateAsync: updateOrg } = useUpdateOrgSettings();
+  const [saving, setSaving] = useState(false);
+
+  async function toggleSnow(next: boolean) {
+    setSaving(true);
+    try {
+      await updateOrg({ snowEnabled: next });
+      toast.success(next ? "Snow services turned on" : "Snow services turned off");
+    } catch {
+      toast.error("Failed to update setting");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 p-4">
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="snow-enabled"
+          checked={orgSettings?.snowEnabled ?? true}
+          disabled={saving || !orgSettings}
+          onCheckedChange={(v) => void toggleSnow(v === true)}
+        />
+        <Label htmlFor="snow-enabled" className="font-normal">
+          We offer snow services
+        </Label>
+      </div>
+      <p className="text-xs text-slate-400 dark:text-neutral-500">
+        Turning this off hides Snow Jobs and Snow Invoicing from the navigation. Existing snow data is kept and comes back if you turn it on again.
+      </p>
     </div>
   );
 }

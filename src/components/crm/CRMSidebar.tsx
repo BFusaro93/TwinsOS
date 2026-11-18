@@ -9,6 +9,8 @@ import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useMyCrewInfo } from "@/lib/hooks/use-crew-app";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { BrandMark } from "@/components/shared/BrandMark";
 import {
   ArrowLeft,
@@ -69,6 +71,10 @@ interface NavItem {
   permission?: string;
   /** Shown only to a user who is the Linked Login of a crew (crm_crews.user_id). */
   linkedCrewOnly?: boolean;
+  /** Snow feature — hidden when the org turns Snow off in Settings → CRM. */
+  snow?: boolean;
+  /** Hidden when the org lacks this paid add-on (plan bundle or purchase). */
+  addon?: "job_photos";
 }
 
 interface NavSection {
@@ -102,9 +108,9 @@ export const CRM_NAV: NavSection[] = [
       { label: "My Crew Schedule", href: "/crm/crew",                  icon: Truck, linkedCrewOnly: true },
       { label: "Waiting List",   href: "/crm/scheduling/waiting-list", icon: ListOrdered, permission: "sched_waiting_list" },
       { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
-      { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake, permission: "snow_dispatch_view" },
+      { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake, permission: "snow_dispatch_view", snow: true },
       { label: "Projects",       href: "/crm/scheduling/projects",     icon: FolderKanban },
-      { label: "Job Photos",     href: "/crm/scheduling/job-photos",   icon: FileImage },
+      { label: "Job Photos",     href: "/crm/scheduling/job-photos",   icon: FileImage, addon: "job_photos" },
       { label: "Warranties",     href: "/crm/warranties",              icon: ShieldCheck, permission: "warranty_view" },
     ],
   },
@@ -116,7 +122,7 @@ export const CRM_NAV: NavSection[] = [
       { label: "Requisitions",    href: "/crm/accounting/requisitions",    icon: ClipboardList, permission: "requisition_list", more: true },
       { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
       { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature, permission: "contract_list", more: true },
-      { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText, permission: "snow_invoicing_view", more: true },
+      { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText, permission: "snow_invoicing_view", more: true, snow: true },
       { label: "Commissions",     href: "/crm/accounting/commissions",     icon: Percent, anyPermission: ["commission_view", "commission_manage", "commission_view_own"], more: true },
     ],
   },
@@ -172,6 +178,11 @@ export function CRMSidebar() {
   const { currentUser } = useCurrentUserStore();
   const { can } = usePermissions();
   const { data: myCrew } = useMyCrewInfo();
+  const { data: orgSettings } = useOrgSettings();
+  // Default on while loading so Snow doesn't flicker out of the nav.
+  const snowEnabled = orgSettings?.snowEnabled ?? true;
+  // Allowed while loading, so the link doesn't flicker out.
+  const { allowed: hasJobPhotos } = useAddonAccess("job_photos");
   // Which sections have their "More" row expanded (a section holding the current page opens itself).
   const [openMore, setOpenMore] = useState<Record<string, boolean>>({});
 
@@ -224,7 +235,9 @@ export function CRMSidebar() {
             (item) =>
               (!item.permission || can(item.permission)) &&
               (!item.anyPermission || item.anyPermission.some((k) => can(k))) &&
-              (!item.linkedCrewOnly || !!myCrew)
+              (!item.linkedCrewOnly || !!myCrew) &&
+              (!item.snow || snowEnabled) &&
+              (item.addon !== "job_photos" || hasJobPhotos)
           );
           // Icon-only rail has no room for a "More" row, so everything shows.
           const main = sidebarCollapsed ? visible : visible.filter((i) => !i.more);

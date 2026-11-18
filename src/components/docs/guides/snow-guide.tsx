@@ -861,6 +861,27 @@ export function SnowGuide() {
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
           <li>
+            <strong>Forecast column.</strong> The Snow Jobs board has a <strong>Forecast</strong>{" "}
+            column next to <strong>Amt</strong> that estimates what each stop will bill before a
+            crew logs a depth. Flat per-event stops forecast their price; per-inch and interval
+            stops are priced at the storm event&apos;s <strong>forecast depth</strong> (set when you
+            create the storm, or later from <strong>Actions → Edit Forecast Depth…</strong>) until
+            a real depth is logged, so enter a forecast depth to get numbers. Per-inch stops without one, and hourly stops, show a dash. Until a depth is
+            logged, <strong>Amt</strong> shows &quot;Needs depth&quot; for per-inch stops. Forecast
+            is an estimate only — it is never billed, never appears in Snow Invoicing, and the
+            Totals row shows it separately in italics. Cancelled and skipped stops have none, and
+            the All tab leaves cancelled stops out (they keep their own tab and count).
+          </li>
+          <li>
+            <strong>Turning snow off.</strong> Not every company plows. Go to{" "}
+            <strong>Settings → CRM → Services</strong> and untick{" "}
+            <strong>We offer snow services</strong> to remove <strong>Snow Jobs</strong> and{" "}
+            <strong>Snow Invoicing</strong> from the navigation. Nothing is deleted — existing storm
+            events, snow jobs and snow invoices are kept and everything comes back when you tick the
+            box again. New companies start with snow on. It only hides the menu items; it doesn&apos;t
+            change permissions, and anyone who already has a direct link can still open the page.
+          </li>
+          <li>
             <strong>Subcontractors.</strong> Set up each subcontractor as its own crew. There is no
             separate subcontractor setting on a snow job, and you don&apos;t need to add them as a
             vendor just to dispatch them. Go to <strong>Team → Crews</strong>, create a crew named

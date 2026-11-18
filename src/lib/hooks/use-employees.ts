@@ -537,7 +537,7 @@ export function useCreateCrew() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_crews")
-        .insert(values)
+        .insert(typeof values.name === "string" ? { ...values, name: values.name.trim() } : values)
         .select()
         .single();
       if (error) throw error;
@@ -556,7 +556,7 @@ export function useUpdateCrew() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_crews")
-        .update(updates)
+        .update(typeof updates.name === "string" ? { ...updates, name: updates.name.trim() } : updates)
         .eq("id", id);
       if (error) throw error;
     },

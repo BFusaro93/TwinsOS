@@ -129,6 +129,7 @@ const SNOW_COLUMNS: ColumnDef[] = [
   { key: "depth", label: "Depth" },
   { key: "temp", label: "Temp" },
   { key: "notes", label: "Notes to Crew" },
+  { key: "forecast", label: "Forecast" },
   { key: "amt", label: "Amt" },
 ];
 
@@ -325,6 +326,70 @@ function StormEventDialog({
           <Button size="sm" onClick={handleCreate} disabled={!name || !eventDate || isPending}>
             {isPending ? "Creating…" : "Create"}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── edit forecast depth dialog ───────────────────────────────────────────────
+
+function ForecastDepthDialog({
+  open, onOpenChange, eventName, current, onSave,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  eventName: string;
+  current: number | null;
+  onSave: (inches: number | null) => Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (open) setValue(current != null ? String(current) : ""); }, [open, current]);
+
+  async function handleSave() {
+    const trimmed = value.trim();
+    const inches = trimmed === "" ? null : parseFloat(trimmed);
+    if (inches != null && (!Number.isFinite(inches) || inches < 0)) {
+      toast.error("Forecast depth can't be negative");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(inches);
+      onOpenChange(false);
+    } catch {
+      toast.error("Failed to update forecast depth");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit Forecast Depth</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2 py-2">
+          <Label>Forecast depth for {eventName} (in)</Label>
+          <Input
+            type="number"
+            step="0.1"
+            min={0}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleSave(); }}
+            className="h-9 text-sm"
+            autoFocus
+          />
+          <p className="text-xs text-muted-foreground">
+            Drives the Forecast column for per-inch stops. Leave blank to clear it. Doesn&apos;t change stops already on the board or any billing.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button size="sm" onClick={() => void handleSave()} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1290,10 +1355,11 @@ export function SnowDispatchBoard() {
   const [crewFilters, setCrewFilters] = useState<string[]>([]); // crew ids, plus "none" for Unassigned
   const [statsOpen, setStatsOpen] = useState(false);
   const [outcomeDialog, setOutcomeDialog] = useState<{ ids: string[]; status: "skipped" | "cancelled" } | null>(null);
-  const [visibleKeys, setVisibleKeys] = // v3: Date joined (v2: Service) the column set — a saved v1 layout would have hidden it for everyone who had customized columns.
-  usePersistedColumns("snow_dispatch_v3", SNOW_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key));
+  const [visibleKeys, setVisibleKeys] = // v4: Forecast joined (v3: Date, v2: Service) the column set — a saved v1 layout would have hidden it for everyone who had customized columns.
+  usePersistedColumns("snow_dispatch_v4", SNOW_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key));
   const isVisible = (k: string) => visibleKeys.includes(k);
   const [multiCrewOpen, setMultiCrewOpen] = useState(false);
+  const [forecastDepthOpen, setForecastDepthOpen] = useState(false);
   const [messageChannel, setMessageChannel] = useState<SnowMessageChannel | null>(null);
   const [noEmailOpen, setNoEmailOpen] = useState(false);
   // Map: narrow the table to the stops picked on it.
@@ -1405,12 +1471,12 @@ export function SnowDispatchBoard() {
   );
   const { data: tiersByJobId } = useSnowRateTiersForJobs(perEventPerInchJobIds);
 
-  const amountByVisitId = useMemo(() => {
+  const computeAmounts = useCallback((list: CRMJobVisit[]): Map<string, number> => {
     // Two hourly jobs at one crew stop each bill their share of it (as Snow Invoicing does).
-    const shares = hourlyStopShares(visits);
+    const shares = hourlyStopShares(list);
     const byGroup = new Map<string, SnowBillableVisit[]>();
     const zeroIds: string[] = [];
-    for (const visit of liftStormDepths(visits)) {
+    for (const visit of liftStormDepths(list)) {
       const v: SnowBillableVisit = shares.has(visit.id) ? { ...visit, hourlyStopShare: shares.get(visit.id) } : visit;
       // Skipped and cancelled stops are called off, not plowed — nothing is billed for them, so
       // they get no amount (their row shows "—") and stay out of the totals and crew stats.
@@ -1431,7 +1497,29 @@ export function SnowDispatchBoard() {
       }
     }
     return result;
-  }, [visits, tiersByJobId]);
+  }, [tiersByJobId]);
+  const amountByVisitId = useMemo(() => computeAmounts(visits), [computeAmounts, visits]);
+  // Forecast: the same pricing, but a per-inch stop with no recorded depth is priced at the storm's
+  // forecast depth. Estimate only — never billed, never in Snow Invoicing or reports. Per-inch stops
+  // have no forecast until the storm has a forecast depth; hourly ranges need logged hours, so show "—".
+  const forecastDepth = activeEvent?.forecastDepthInches ?? null;
+  const forecastByVisitId = useMemo(() => {
+    const isPerInch = (v: CRMJobVisit) => v.job?.invoiceType === "per_push_per_inch" || v.job?.invoiceType === "per_event_per_inch";
+    const assumed = visits.map((v) =>
+      isPerInch(v) && !((v.snowDepthInches ?? 0) > 0) && forecastDepth != null && forecastDepth > 0
+        ? { ...v, snowDepthInches: forecastDepth }
+        : v
+    );
+    const priced = computeAmounts(assumed);
+    const out = new Map<string, number>();
+    for (const v of visits) {
+      const amt = priced.get(v.id);
+      if (amt == null || amt <= 0) continue;
+      if (isPerInch(v) && !((v.snowDepthInches ?? 0) > 0) && !(forecastDepth != null && forecastDepth > 0)) continue;
+      out.set(v.id, amt);
+    }
+    return out;
+  }, [visits, forecastDepth, computeAmounts]);
   // amountByVisitId's per-group split always sums back to the exact group
   // total, so summing it here is equivalent to (and cheaper than) re-deriving
   // one representative visit's group amount per billingGroupKey.
@@ -1477,7 +1565,7 @@ export function SnowDispatchBoard() {
     return visits.filter((v) => {
       const crewId = effectiveCrewIdOf(v);
       if (crewFilters.length > 0 && !crewFilters.includes(crewId ?? "none")) return false;
-      if (statusFilter !== "all" && v.status !== statusFilter) return false;
+      if (statusFilter === "all" ? v.status === "cancelled" : v.status !== statusFilter) return false;
       if (tableOnlySelected && selectedVisitIds.size > 0 && !selectedVisitIds.has(v.id)) return false;
       if (serviceFilters.length > 0 && !serviceFilters.includes(visitServiceName(v))) return false;
       if (priorityFilters.length > 0 && !priorityFilters.includes(v.clientPriority ?? "none")) return false;
@@ -1590,6 +1678,7 @@ export function SnowDispatchBoard() {
       .map((x) => x.v);
   }, [filteredVisits, sort, crewNameById, stopNumberById]);
 
+  const forecastTotalFor = (list: CRMJobVisit[]) => list.reduce((sum, v) => sum + (forecastByVisitId.get(v.id) ?? 0), 0);
   const filteredTotalAmt = useMemo(
     () => filteredVisits.reduce((s, v) => s + (amountByVisitId.get(v.id) ?? 0), 0),
     [filteredVisits, amountByVisitId]
@@ -2059,7 +2148,8 @@ export function SnowDispatchBoard() {
 
           <div className="flex items-center max-lg:max-w-full max-lg:overflow-x-auto max-lg:[&>*]:shrink-0 max-lg:[&>*]:whitespace-nowrap">
             {SNOW_FILTER_TABS.map((t) => {
-              const cnt = t.value === "all" ? visits.length : visits.filter((v) => v.status === t.value).length;
+              // "All" leaves cancelled stops out — they keep their own tab and count.
+              const cnt = t.value === "all" ? visits.filter((v) => v.status !== "cancelled").length : visits.filter((v) => v.status === t.value).length;
               return (
                 <button
                   key={t.value}
@@ -2091,7 +2181,7 @@ export function SnowDispatchBoard() {
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-48 p-1" align="start">
+            <PopoverContent className="w-56 max-h-72 overflow-y-auto p-1" align="start">
               <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>All Crews</FilterOptionRow>
               <FilterOptionRow checked={crewFilters.includes("none")} onToggle={() => toggleCrewFilter("none")}>Unassigned</FilterOptionRow>
               {crews.map((c) => (
@@ -2171,6 +2261,9 @@ export function SnowDispatchBoard() {
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
+                  <DropdownMenuItem className="text-xs" disabled={!activeEvent} onSelect={() => setForecastDepthOpen(true)}>
+                    <Snowflake className={MENU_ICON} />Edit Forecast Depth…
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="text-xs" onSelect={() => setCrewAssignOpen(true)}>
                     <Users className={MENU_ICON} />Team Assign…
                   </DropdownMenuItem>
@@ -2219,7 +2312,7 @@ export function SnowDispatchBoard() {
             className="w-44 max-sm:w-full max-sm:basis-full"
             inputClassName="h-7 max-lg:h-9 text-xs"
           />
-          <span className="text-[10px] text-slate-300">{filteredVisits.length} of {visits.length} stops</span>
+          <span className="text-[10px] text-slate-300">{filteredVisits.length} of {statusFilter === "cancelled" ? visits.length : visits.filter((v) => v.status !== "cancelled").length} stops</span>
 
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -2428,6 +2521,7 @@ export function SnowDispatchBoard() {
                   {isVisible("depth") && <th className="px-2 py-2.5 text-right">Depth</th>}
                   {isVisible("temp") && <th className="px-2 py-2.5 text-right">Temp</th>}
                   {isVisible("notes") && <th className="px-2 py-2.5">Notes to Crew</th>}
+                  {isVisible("forecast") && <th className="px-2 py-2.5 text-right" title="Estimate before depth is logged — per-inch stops use the storm's forecast depth. Not billed.">Forecast</th>}
                   {isVisible("amt") && <th className="px-2 py-2.5 text-right">Amt</th>}
                 </tr>
               </thead>
@@ -2445,7 +2539,10 @@ export function SnowDispatchBoard() {
                 ) : (
                   <>
                     <tr className="bg-muted text-[10px] font-semibold text-slate-700 dark:text-neutral-300">
-                      <td colSpan={isVisible("amt") ? 3 + visibleKeys.length : 4 + visibleKeys.length} className="px-2 py-1.5 text-right text-muted-foreground">Totals</td>
+                      <td colSpan={4 + visibleKeys.length - (isVisible("amt") ? 1 : 0) - (isVisible("forecast") ? 1 : 0)} className="px-2 py-1.5 text-right text-muted-foreground">Totals</td>
+                      {isVisible("forecast") && (
+                        <td className="px-2 py-1.5 text-right italic text-muted-foreground">{forecastTotalFor(filteredVisits) > 0 ? formatCurrency(forecastTotalFor(filteredVisits)) : "—"}</td>
+                      )}
                       {isVisible("amt") && (
                         <td className="px-2 py-1.5 text-right">{(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) > 0 ? formatCurrency(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) : "—"}</td>
                       )}
@@ -2574,7 +2671,7 @@ export function SnowDispatchBoard() {
                         {isVisible("crew") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                           {canManage ? (
                             <Select value={effectiveCrewIdOf(v) ?? "none"} onValueChange={(c) => void changeCrew([v.id], c === "none" ? null : c)}>
-                              <SelectTrigger className="h-7 w-32 text-[11px]"><SelectValue /></SelectTrigger>
+                              <SelectTrigger className="h-7 w-48 text-[11px]"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">Unassigned</SelectItem>
                                 {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -2587,8 +2684,21 @@ export function SnowDispatchBoard() {
                         {isVisible("depth") && <td className="px-2 py-2 text-right text-muted-foreground">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>}
                         {isVisible("temp") && <td className="px-2 py-2 text-right text-muted-foreground">{v.temperature != null ? `${v.temperature}°` : "—"}</td>}
                         {isVisible("notes") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><NotesToCrewCell visit={v} canEdit={canManage} /></td>}
+                        {isVisible("forecast") && <td className="px-2 py-2 text-right italic text-muted-foreground" title="Estimate — not billed">
+                          {forecastByVisitId.has(v.id) ? formatCurrency(forecastByVisitId.get(v.id) ?? 0) : "—"}
+                        </td>}
                         {isVisible("amt") && <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
-                          {amountByVisitId.has(v.id) ? formatCurrency(amountByVisitId.get(v.id) ?? 0) : "—"}
+                          {amountByVisitId.has(v.id) ? (
+                            // Per-inch jobs price off the recorded snow depth, so until a crew logs one the
+                            // amount is genuinely unknown — say so instead of showing a misleading $0.00.
+                            (amountByVisitId.get(v.id) ?? 0) === 0 &&
+                            (v.job?.invoiceType === "per_push_per_inch" || v.job?.invoiceType === "per_event_per_inch") &&
+                            !((v.snowDepthInches ?? 0) > 0) ? (
+                              <span className="text-xs font-normal text-muted-foreground" title="Per-inch job — priced once a snow depth is logged for the visit">
+                                Needs depth
+                              </span>
+                            ) : formatCurrency(amountByVisitId.get(v.id) ?? 0)
+                          ) : "—"}
                         </td>}
                       </tr>
                     ))}
@@ -2599,6 +2709,16 @@ export function SnowDispatchBoard() {
           )}
         </div>
       </div>
+
+      {activeEvent && (
+        <ForecastDepthDialog
+          open={forecastDepthOpen}
+          onOpenChange={setForecastDepthOpen}
+          eventName={activeEvent.name}
+          current={activeEvent.forecastDepthInches}
+          onSave={(inches) => updateStormEvent({ id: activeEvent.id, patch: { forecast_depth_inches: inches } })}
+        />
+      )}
 
       <OutcomeDialog state={outcomeDialog} onClose={() => setOutcomeDialog(null)} onConfirm={applyOutcome} />
 

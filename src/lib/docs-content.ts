@@ -930,6 +930,16 @@ export const DOC_SECTIONS: DocSection[] = [
               "When a crew has an opening nearby, click 'Dispatch' on a waiting-list job to assign a firm date and crew, converting it into a scheduled visit. Matching today is by City/Zip filtering rather than GPS geofencing.",
           },
           {
+            step: "Forecast column",
+            detail:
+              "The Snow Jobs board's Forecast column (next to Amt) estimates each stop's charge before a crew logs a depth: flat per-event stops show their price, and per-inch or interval stops are priced at the storm event's forecast depth until a real depth is logged. Enter a forecast depth when you create the storm, or later from Actions > Edit Forecast Depth, to get numbers. Per-inch stops without one, and hourly stops, show a dash; Amt shows 'Needs depth' for per-inch stops until a depth is logged. Forecast is an estimate only: never billed, never in Snow Invoicing, and totalled separately. The All tab excludes cancelled stops, which keep their own tab and count.",
+          },
+          {
+            step: "Turning snow on or off",
+            detail:
+              "If your company doesn't do snow, go to Settings > CRM > Services and untick 'We offer snow services'. Snow Jobs and Snow Invoicing then disappear from the navigation. Nothing is deleted: existing storm events, snow jobs and snow invoices are kept and return when you tick the box again. It is on by default for every company, and it only hides the menu items (a saved direct link to a snow page still opens).",
+          },
+          {
             step: "Storm events",
             detail:
               "CRM > Scheduling > Snow Jobs is organized around Storm Events, not individual visits. Click '+ New Storm Event', name it (defaults to 'Snow Event' plus the date), and set the event date, forecast depth, and temperature.",
@@ -1381,7 +1391,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Report from the field",
             detail:
-              "Job Photos > Field > Injury / Near Miss is a phone-friendly form based on your paper Employee's Report of Injury. Choose Injury, Illness or Near miss, then fill in who, when, what happened, the injury, and what could have prevented it. Submitting opens a new case. The same menu has a Damage Report form that opens a Damage Case.",
+              "Field > Injury / Near Miss is a phone-friendly form based on your paper Employee's Report of Injury. Choose Injury, Illness or Near miss, then fill in who, when, what happened, the injury, and what could have prevented it. Submitting opens a new case. The same menu has a Damage Report form that opens a Damage Case.",
           },
           {
             step: "Follow up in the office",
@@ -1457,6 +1467,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "What it's for",
             detail:
               "A photo-documentation system organized around lightweight Photo Jobs, optionally linked to an Equipt Project or a Landscapt Client. Access is role-based, not crew-exclusive — Admins and Crew get it automatically, others need it enabled.",
+          },
+          {
+            step: "Add-on, the Field area, and what's hidden without it",
+            detail:
+              "Job Photos is a paid add-on (included on Growth and Enterprise and during a trial). Without it, the Job Photos link, the Photos tab on a client, the Job Photos link on a project and Photo Job search results are hidden, and opening a Job Photos page shows an add-on notice. The area itself is called Field: the Home 'Field' tile and the Field sidebar always show the field forms (Damage Report, Injury / Near Miss, Repair Request), which are not part of the add-on.",
           },
           {
             step: "Uploading",
@@ -3530,7 +3545,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Should we report near misses, or only injuries?",
-        a: "Report both. A near miss is an event that could have hurt someone but didn't, and the Injury / Near Miss form in Job Photos > Field has its own type for it. Near misses are tracked and reported separately and never reset Days Since Last Injury or the Accident Free Workdays KPI, so reporting them can't make your numbers look worse.",
+        a: "Report both. A near miss is an event that could have hurt someone but didn't, and the Injury / Near Miss form under Field has its own type for it. Near misses are tracked and reported separately and never reset Days Since Last Injury or the Accident Free Workdays KPI, so reporting them can't make your numbers look worse.",
       },
       {
         q: "Does the in-app injury report replace our paper accident investigation form?",

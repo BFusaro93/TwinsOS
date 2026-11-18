@@ -99,6 +99,7 @@ import { SendClientEmailDialog } from "./SendClientEmailDialog";
 import { SendClientSmsDialog } from "./SendClientSmsDialog";
 import { ClientProjectsTab } from "./ClientProjectsTab";
 import { ClientPhotosTab } from "./ClientPhotosTab";
+import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
 import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
 import { AccountStatementDialog } from "./clients/AccountStatementDialog";
@@ -3810,6 +3811,8 @@ function ClientPropertiesList({
 
 export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }: Props) {
   const { can } = usePermissions();
+  // Photos tab is part of the paid Job Photos add-on (allowed while loading).
+  const { allowed: hasJobPhotos } = useAddonAccess("job_photos");
   const { data: client, isLoading } = useClient(clientId);
   const { data: contacts } = useClientContacts(clientId);
   // Archived properties are listed too (to unarchive); pickers elsewhere hide them.
@@ -4461,7 +4464,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               ...(!isLeadLike && can("contract_list") ? [{ value: "contracts", label: "Contracts" }] : []),
               { value: "projects",  label: "Projects" },
               ...(!isLeadLike && can("warranty_view") ? [{ value: "warranties", label: "Warranties" }] : []),
-              { value: "photos",    label: "Photos" },
+              ...(hasJobPhotos ? [{ value: "photos", label: "Photos" }] : []),
               { value: "files",     label: "Files" },
               { value: "details",   label: "Details" },
               { value: "audit",     label: "Audit Trail" },
@@ -4507,9 +4510,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
           <WarrantiesPanel scope={{ clientId }} />
         </TabsContent>
 
-        <TabsContent value="photos" className="m-0 p-4">
-          <ClientPhotosTab clientId={clientId} clientName={client.displayName} />
-        </TabsContent>
+        {hasJobPhotos && (
+          <TabsContent value="photos" className="m-0 p-4">
+            <ClientPhotosTab clientId={clientId} clientName={client.displayName} />
+          </TabsContent>
+        )}
 
         <TabsContent value="files" className="m-0">
           <ClientFilesTab clientId={clientId} />
