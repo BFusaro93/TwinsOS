@@ -404,15 +404,13 @@ function AddJobsDialog({
       });
   }, [candidateJobIds, snowJobs, maxTriggerInches, minPriority, date, rowDates]);
 
-  // The search narrows what is listed (and what Select all / Unselect all act on);
-  // jobs already ticked stay ticked while hidden and are still added.
+  // The search / service filter narrows what is listed, what Select all / Unselect all act on and
+  // what gets added: ticks on jobs the filter hides are dropped (below), so "594 selected" can't
+  // linger after filtering down to 10.
   const serviceOptions = useMemo(
     () => [...new Set(candidates.flatMap(({ job }) => (job.services ?? []).map((s) => s.serviceName).filter(Boolean)))].sort((a, b) => a.localeCompare(b)),
     [candidates],
   );
-  // selectedIds can still hold jobs that left the list (another route picked, a filter changed);
-  // only the ones listed are added, so only those are counted.
-  const selectedCount = candidates.filter((c) => selectedIds.has(c.job.id)).length;
   const visibleCandidates = useMemo(() => {
     const q = jobSearch.trim().toLowerCase();
     const byService = serviceFilter ? candidates.filter(({ job }) => (job.services ?? []).some((s) => s.serviceName === serviceFilter)) : candidates;
@@ -422,6 +420,16 @@ function AddJobsDialog({
         .filter(Boolean).join(" ").toLowerCase().includes(q)
     );
   }, [candidates, jobSearch, serviceFilter]);
+  const selectedCount = visibleCandidates.filter((c) => selectedIds.has(c.job.id)).length;
+  // Drop ticks on jobs the filters (or another route) no longer list.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const shown = new Set(visibleCandidates.map((c) => c.job.id));
+      const next = new Set([...prev].filter((id) => shown.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [visibleCandidates]);
 
   // Each opening starts from this storm's own date and forecast, not whatever
   // the dialog was last left at.
@@ -467,7 +475,7 @@ function AddJobsDialog({
   }
 
   async function handleAdd() {
-    const jobs = candidates
+    const jobs = visibleCandidates
       .filter((c) => selectedIds.has(c.job.id))
       .map((c) => ({
         jobId: c.job.id,
@@ -675,7 +683,7 @@ function AddJobsDialog({
 
         <div className="shrink-0 flex items-center justify-between border-t bg-card px-5 py-3">
           <p className="text-xs text-muted-foreground">
-            {selectedCount} of {candidates.length} selected
+            {selectedCount} of {visibleCandidates.length} selected
             <button type="button" className="ml-2 underline hover:text-foreground" onClick={() => setSelectedIds((prev) => new Set([...prev, ...visibleCandidates.map((c) => c.job.id)]))}>Select all</button>
             <button type="button" className="ml-2 underline hover:text-foreground" onClick={() => setSelectedIds((prev) => { const next = new Set(prev); visibleCandidates.forEach((c) => next.delete(c.job.id)); return next; })}>Unselect all</button>
           </p>
@@ -1505,6 +1513,17 @@ export function SnowDispatchBoard() {
   const clientOptions = useMemo(() => [...clientNameById.keys()].sort((a, b) => (clientNameById.get(a) ?? "").localeCompare(clientNameById.get(b) ?? "")), [clientNameById]);
   const dateOptions = useMemo(() => [...new Set(visits.map((v) => v.scheduledDate ?? "—"))].sort(), [visits]);
   const zipOptions = useMemo(() => [...new Set(visits.map((v) => v.job?.serviceZip ?? "—"))].sort(), [visits]);
+
+  // Selection follows the filters: stops a filter hides are deselected, so the selection bar and its
+  // bulk actions (crew, date, close out, email) only ever act on what is shown.
+  useEffect(() => {
+    setSelectedVisitIds((prev) => {
+      if (prev.size === 0) return prev;
+      const shown = new Set(filteredVisits.map((v) => v.id));
+      const next = new Set([...prev].filter((id) => shown.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filteredVisits]);
 
   const allShownSelected = filteredVisits.length > 0 && filteredVisits.every((v) => selectedVisitIds.has(v.id));
   const someShownSelected = filteredVisits.some((v) => selectedVisitIds.has(v.id));
