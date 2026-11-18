@@ -188,7 +188,42 @@ export function AutomationsGuide() {
           <strong>Bulk edits fire triggers too.</strong> Adding or removing a tag on many clients at
           once fires Tag added or Tag removed for each client that actually changed (a client that
           already had the tag isn&apos;t counted as newly tagged), and a bulk edit of a client&apos;s
-          source fires the same trigger as editing one client.
+          source fires the same trigger as editing one client. A bulk change to more than 50 clients is
+          sent to automations in the background within 15 minutes; if a client was changed back in the
+          meantime (re-activated, tag removed again) that client is skipped.
+        </p>
+        <p>
+          <strong>Invoice created means the invoice was issued.</strong> It fires once per invoice, when
+          the invoice gets its invoice number &mdash; Save Invoice, Send, Print, emailing it, or any
+          invoice Landscapt creates for you (completed visits, contract billing, snow, project milestones,
+          merged invoices). Opening the New Invoice screen doesn&apos;t fire it, and imported invoices never
+          do. Invoices Landscapt creates on its own start their automation within 15 minutes.{" "}
+          <strong>Invoice sent</strong> fires once per invoice the first time it leaves draft &mdash;
+          emailed, printed or marked as Sent. Re-emailing it doesn&apos;t fire it again.
+        </p>
+        <p>
+          <strong>Invoice paid</strong> fires however the invoice gets paid off: a payment entered in the
+          office (including a parent account&apos;s check that pays a sub-account&apos;s invoice &mdash; the
+          sub-account is the one enrolled), a card or bank payment online or through autopay, account
+          credit that covers the balance, or a line edit that leaves nothing owing.{" "}
+          <strong>Invoice past due</strong> skips an invoice while a bank (ACH) payment for it is still
+          clearing.
+        </p>
+        <p>
+          <strong>Credit card charge failed</strong> fires only when a charge the customer wasn&apos;t there
+          for fails &mdash; autopay, or the office charging the card on file &mdash; once per invoice, so its
+          email can include the invoice number and payment link. A customer mistyping their card on the
+          payment page doesn&apos;t fire it. <strong>Credit card updated</strong> fires when the office or the
+          client saves a new card or bank account, and when the card network automatically refreshes a saved
+          card.
+        </p>
+        <p>
+          <strong>Ticket reopened</strong> also fires when a customer&apos;s reply in the client portal
+          reopens a closed ticket.
+        </p>
+        <p>
+          <strong>Zapier gets every event</strong>, no matter which user made the change &mdash; an admin, an
+          office user, a sales rep, or a bulk action.
         </p>
       </Section>
 
@@ -222,15 +257,58 @@ export function AutomationsGuide() {
             each invoice, estimate, ticket or meeting gets its own run.
           </li>
           <li>
-            <strong>Every other trigger</strong> (client, lead, tag, form, contract and the rest) runs{" "}
+            <strong>Form, contract, damage case and card triggers</strong> also run{" "}
+            <strong>once per record</strong>: each form submission, each contract (Contract created, Contract
+            signed), each contract term (Contract about to expire &mdash; a renewed contract with a new end date
+            gets a new reminder), each damage case and each expiring card gets its own run. A returning lead who
+            fills out your web form again gets your reply again.
+          </li>
+          <li>
+            <strong>Every other trigger</strong> (client, lead, tag and the rest) runs{" "}
             <strong>once per client</strong>.
           </li>
         </ul>
         <p>
           <strong>Allow Re-Entry</strong> (in the sequence&apos;s Rules dialog) lets the same day, record or
           client start the sequence again once its earlier run has finished and the delay you set there has
-          passed. While a run is still going it is never started a second time. The Rules dialog repeats these
-          rules under the Allow Re-Entry switch.
+          passed. The delay is counted from when the earlier run started, so a 1-day delay really means once a
+          day. While a run is still going it is never started a second time. For the date-based triggers
+          (Estimate no response, Estimate expiring, Meeting is coming up, Credit card about to expire, Contract
+          about to expire), re-entry only starts a new run when the date itself changed &mdash; the estimate
+          was re-sent or re-dated, the meeting rescheduled, a new card saved or the contract renewed &mdash; so
+          the same estimate never gets the same reminder every other day. The Rules dialog repeats these rules
+          under the Allow Re-Entry switch.
+        </p>
+        <p>
+          <strong>Runs stop on their own when their reason goes away.</strong> Besides your Stop Conditions,
+          a run ends at its next step when:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Visit runs</strong> (Visit dispatched, Visit completed, Visit date changed): the client has
+            no visit left on that day &mdash; everything that day was cancelled, skipped, deleted or moved. A
+            &quot;crew coming tomorrow&quot; text won&apos;t go out after a rain-out.
+          </li>
+          <li>
+            <strong>Estimate runs</strong> (Estimate sent, No response, Expiring): the client asked for changes
+            on the proposal page, so they never get &quot;we haven&apos;t heard from you&quot; after replying.
+            Won, lost and deleted estimates already stopped their runs.
+          </li>
+          <li>
+            <strong>Invoice past due</strong>: the invoice is no longer past due (its due date was moved out),
+            the client&apos;s unused credit covers it, or a bank (ACH) payment for it is still clearing. Paid,
+            void and deleted invoices already stopped their runs.
+          </li>
+          <li>
+            <strong>Ticket past due</strong>: the ticket is put On Hold, or its due date is moved out or
+            cleared. Closed and deleted tickets already stopped their runs.
+          </li>
+        </ul>
+        <p>
+          <strong>Steps never start other automations.</strong> A Tags step that adds a tag, or an Update a
+          field step that changes the client&apos;s source, does not fire Tag added or Client source updated
+          for other sequences. This keeps automations from setting each other off in a loop. The Tags step
+          removes a tag whatever its capitalization.
         </p>
       </Section>
 

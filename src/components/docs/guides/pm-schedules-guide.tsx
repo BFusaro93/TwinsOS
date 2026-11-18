@@ -393,7 +393,11 @@ export function PMSchedulesGuide() {
           <li>
             The <strong>PM Due Reminder</strong> automation template (CMMS &gt; Automations) can
             also generate a work order automatically ahead of the due date, instead of waiting for
-            someone to click Generate manually.
+            someone to click Generate manually. PM Due automations fire once for each PM schedule
+            each time it comes due, naming that schedule&apos;s asset &mdash; one overdue schedule
+            doesn&apos;t silence the alert for the others, and the same schedule fires again once
+            its next due date moves on. Work Order Overdue automations likewise fire once for each
+            overdue work order.
           </li>
           <li>
             Marking the resulting work order complete is the normal way a PM schedule&apos;s cycle

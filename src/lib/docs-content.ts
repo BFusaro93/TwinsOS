@@ -343,7 +343,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Create a work order",
             detail:
-              "Go to CMMS > Work Orders and click '+ New Work Order'. Fill in the title, linked asset or vehicle, priority (Low / Medium / High / Urgent), due date, and assign to a technician.",
+              "Go to CMMS > Work Orders and click '+ New Work Order'. Fill in the title, linked asset or vehicle, priority (Low / Medium / High / Critical), due date, and assign to a technician.",
           },
           {
             step: "Status flow",
@@ -424,7 +424,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Notifications",
             detail:
-              "PM schedules due within 7 days appear in the Notifications bell as 'PM Due' alerts. The PM Due Reminder automation template can also create a work order automatically before the due date.",
+              "PM schedules due within 7 days appear in the Notifications bell as 'PM Due' alerts. The PM Due Reminder automation template can also create a work order automatically before the due date — once for each PM schedule each time it comes due.",
           },
           {
             step: "Generating work orders",
@@ -2016,6 +2016,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Maintenance & Work Orders",
     items: [
       {
+        q: "My PM Due automation fired once and then never again. Why?",
+        a: "That's fixed. PM Due automations now fire once for each PM schedule each time it comes due, naming that schedule's asset, so one overdue schedule no longer silences the alert for the others. The same schedule fires again once its next due date moves on. Work Order Overdue automations fire once for each overdue work order.",
+      },
+      {
+        q: "My \"PO Approved\" automation never runs. Why?",
+        a: "Approving a PO through its approval chain didn't trigger it before; now it does. Purchase Order Status Changed fires when a PO is approved, rejected or submitted for approval, once per change. It offers the real PO statuses: Requested, Pending Approval, Approved, Rejected, Ordered, Partially Fulfilled, Completed and Canceled. Older rules saved as Closed now mean Completed.",
+      },
+      {
+        q: "Where did the Urgent priority go on automation work orders?",
+        a: "Work orders and maintenance requests use Low, Medium, High and Critical. Automations saved with Urgent now create Critical work orders. Urgent was never a valid priority, so those automations couldn't create anything before.",
+      },
+      {
+        q: "Why does my Send Email automation action need an email address?",
+        a: "The mail service can only deliver to a real address, so the recipient must be one. You can also add a message. If the mail service rejects the address, the failure is logged once instead of retried every 15 minutes.",
+      },
+      {
         q: "Do Equipt automations run on the Starter plan?",
         a: "No. Equipt's automations (meter readings, low stock, PM due and work order overdue) pause on the Starter plan, which includes Landscapt only. They resume once the plan includes Equipt.",
       },
@@ -2204,6 +2220,78 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Landscapt (CRM)",
     items: [
+      {
+        q: "I marked an estimate as Sent by hand. Will my \"Estimate was sent\" automation run?",
+        a: "Yes. Estimate was sent fires the first time an estimate moves into Sent, however it gets there: emailing it, copying its proposal link, or changing its stage to Sent (stage picker, drag or bulk change). That first move also records the sent date that No response from client counts from. Sending it again later doesn't restart the sequence.",
+      },
+      {
+        q: "When does \"Invoice created\" fire?",
+        a: "When the invoice is issued, meaning it gets its invoice number: Save Invoice, Send, Print, emailing it, or any invoice Landscapt creates for you (completed visits, contract billing, snow, milestones, merged invoices). It fires once per invoice. Opening the New Invoice screen doesn't fire it, and imported invoices never do. Invoices Landscapt creates on its own start their automation within 15 minutes.",
+      },
+      {
+        q: "Does \"Invoice sent\" fire if I print or mail the invoice?",
+        a: "Yes. Invoice sent fires once per invoice the first time it leaves draft: emailed, printed or marked as Sent. Re-emailing the same invoice doesn't fire it again.",
+      },
+      {
+        q: "A client paid with account credit. Does \"Invoice paid\" still run?",
+        a: "Yes. Invoice paid fires however the invoice is paid off: a payment entered in the office, a card or bank payment online or through autopay, account credit that covers the balance, or a line edit that leaves nothing owing. When a parent account's check pays a sub-account's invoice, the sub-account is the one enrolled.",
+      },
+      {
+        q: "Will a client get a past-due reminder while their bank payment is still clearing?",
+        a: "No. Invoice past due skips an invoice while a bank (ACH) payment for it is in progress, and a past-due sequence that's already running stops at its next step. It also stops if you move the due date out or the client's unused credit covers the invoice.",
+      },
+      {
+        q: "My client mistyped their card on the payment page. Did they get a \"card failed\" email?",
+        a: "No. Credit card charge failed only fires when a charge the customer wasn't there for fails: autopay, or the office charging the card on file. It runs once per invoice, so its email can include [invoicenumber] and [paymentlink].",
+      },
+      {
+        q: "My \"Visit completed\" email goes out later than the first visit at a stop. Why?",
+        a: "Visit completed waits until the client's whole day is finished: no scheduled, dispatched or in-progress visit left for them that day. That way the email, and the chemical Notice of Treatment, cover every service and product from the stop. Completing, skipping, cancelling or moving the last open visit finishes the day.",
+      },
+      {
+        q: "How do I send a day-before visit reminder?",
+        a: "Make an automation on the Visit was dispatched trigger with a text or email step that uses [visitdate] and [visitservices], for example \"Your [visitservices] is scheduled for [visitdate].\" Then press Dispatch day on the Dispatch Board for tomorrow's schedule. Each client gets one message for all their visits that day. Only visits with a crew are dispatched, and if the visit is cancelled or moved before the message goes out, the run stops.",
+      },
+      {
+        q: "What's the difference between [servicedate] and [visitdate]?",
+        a: "In a visit-triggered sequence, [visitdate] and [visitservices] always describe the day the run is about; [servicename], [servicedate] and [chemicalnotice] now do too. [nextservicename] and [nextservicedate] still show the client's next upcoming visit, which may be a different one, so use [visitdate] for reminders.",
+      },
+      {
+        q: "A crew got rained out. Will clients still get the \"crew coming tomorrow\" text?",
+        a: "No. A visit-triggered run stops at its next step when the client has no visit left on that day: everything was cancelled, skipped, deleted or moved.",
+      },
+      {
+        q: "The client asked for changes on the proposal. Will they still get \"we haven't heard from you\"?",
+        a: "No. Estimate sent, No response and Estimate expiring runs stop as soon as the client has an open change request on the proposal page.",
+      },
+      {
+        q: "A returning lead filled out our web form again but got no reply. Why?",
+        a: "That's fixed: Form submitted now runs once per submission, not once per client. Contract created, Contract signed, Contract about to expire (once per contract term), Damage case created and Credit card about to expire (once per card) also run once per record, so next year's contract renewal reminder goes out too.",
+      },
+      {
+        q: "With Allow Re-Entry on, my estimate reminder used to repeat every other day. Is that fixed?",
+        a: "Yes. Re-entry is counted from when the earlier run started, so a 1-day delay means once a day. For date-based triggers (No response, Estimate expiring, Meeting is coming up, card or contract expiring), re-entry only starts a new run when the date itself changes, such as a re-sent estimate, a rescheduled meeting, a new card or a renewed contract.",
+      },
+      {
+        q: "What is the \"Re-subscribed to emails\" trigger?",
+        a: "It replaces \"Has opted in for emails\". It fires when a client's Do Not Market is turned off, on the client record or through the API. Has opted in for texts fires when text consent is newly given: a client replying START, the consent box on a web form, the office ticking it, or the API.",
+      },
+      {
+        q: "Do marketing automations text clients who unsubscribed?",
+        a: "No. A client marked Do Not Market doesn't get texts from marketing-type sequences (ones with Marketing, General or Follow-up emails). Service sequences, such as text-only reminders or ones whose emails are Transactional or Reminder, still text them.",
+      },
+      {
+        q: "My Zap didn't fire when a sales rep created a lead. Why?",
+        a: "Zapier events used to be skipped when the person making the change wasn't an admin. They now go out no matter who makes the change, including office users, sales reps and bulk actions.",
+      },
+      {
+        q: "An automation step adds a tag. Why didn't my \"Tag added\" automation run?",
+        a: "By design, automation steps never start other automations. A Tags step or an Update a field step doesn't fire Tag added or Client source updated, so automations can't set each other off in a loop. Add the follow-up steps to the same sequence instead.",
+      },
+      {
+        q: "What time do date-based automations send?",
+        a: "Past-due, expiring-estimate, no-response, card-expiry and contract-expiry automations are checked once a day around 9 to 10am Eastern, so their first emails no longer go out overnight. Email steps with a send window and texts (8am to 9pm in your time zone) still follow those rules.",
+      },
       {
         q: "A client had three visits completed on the same day. Why did my \"Visit completed\" automation only send one email?",
         a: "Visit triggers run once per client per service day. Every visit that client has that day, across services, crews and properties, shares one run, so they get one message instead of three. A visit on another day starts a new run. Visit completed also waits for the client's day to be finished (no scheduled, dispatched or in-progress visit left that day), so the email goes out once the last visit is completed, skipped, cancelled or moved, and it names every service done that day.",
