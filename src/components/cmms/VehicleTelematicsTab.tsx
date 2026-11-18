@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2, ExternalLink, MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { TelematicsHistory } from "@/components/cmms/TelematicsHistory";
 import { RingGauge, TruckTires, type GaugeTone, type TireReading } from "@/components/cmms/TelematicsGauges";
 import { useRefreshVehicleTelematics, useVehicleTelematics } from "@/lib/hooks/use-vehicle-telematics";
 import { cn, relativeTime } from "@/lib/utils";
@@ -201,20 +202,32 @@ function compass(deg: number): string {
 }
 
 /**
- * OpenStreetMap embed centred on the vehicle with a pin. Chosen over Google
- * because it needs no API key — Equipt's Google key routing belongs to the
- * Landscapt Route Optimization add-on, and this tab shouldn't depend on it.
- * Don't set referrerPolicy="no-referrer" on the iframe: OSM's tile servers
- * require a Referer and the map renders blank without one.
+ * Google Maps Embed API (place mode: a pin at the vehicle). The Embed API is
+ * free and unlimited, and the key is a dedicated one — restricted to the
+ * Embed API and to our domains — NOT the Landscapt Route Optimization key.
+ * NEXT_PUBLIC_ so it is inlined at build time; it is safe in the page because
+ * the referrer + API restrictions are what protect it. Without the key the map
+ * is simply left out (the address and "Open in Google Maps" link remain).
+ *
+ * Don't set referrerPolicy="no-referrer" on the iframe: the key's HTTP-referrer
+ * restriction needs the page origin to be sent.
  */
-function mapEmbedUrl(lat: number, lng: number): string {
-  const d = 0.004; // ≈ 450 m each way
-  const bbox = [lng - d, lat - d, lng + d, lat + d].map((n) => n.toFixed(6)).join(",");
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat.toFixed(6)},${lng.toFixed(6)}`;
+const MAPS_EMBED_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY;
+
+function mapEmbedUrl(lat: number, lng: number): string | null {
+  if (!MAPS_EMBED_KEY) return null;
+  const params = new URLSearchParams({
+    key: MAPS_EMBED_KEY,
+    q: `${lat.toFixed(6)},${lng.toFixed(6)}`,
+    zoom: "17",
+    maptype: "roadmap",
+  });
+  return `https://www.google.com/maps/embed/v1/place?${params.toString()}`;
 }
 
 function Location({ s }: { s: VehicleTelematicsSnapshot }) {
   const has = s.latitude !== null && s.longitude !== null;
+  const mapUrl = s.latitude !== null && s.longitude !== null ? mapEmbedUrl(s.latitude, s.longitude) : null;
   const moving = (s.speedMph ?? 0) >= 1;
   const measured = s.statTimes.gps;
 
@@ -228,12 +241,12 @@ function Location({ s }: { s: VehicleTelematicsSnapshot }) {
           </Badge>
         )}
       </div>
-      {has && s.latitude !== null && s.longitude !== null && (
+      {mapUrl && (
         <iframe
           title="Vehicle location map"
-          src={mapEmbedUrl(s.latitude, s.longitude)}
+          src={mapUrl}
           loading="lazy"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
           className="h-56 w-full border-b border-slate-100 dark:border-neutral-800"
         />
       )}
@@ -361,6 +374,8 @@ export function VehicleTelematicsTab({ vehicleId }: { vehicleId: string }) {
           )}
         </div>
       </div>
+
+      <TelematicsHistory vehicleId={vehicleId} />
 
       <Location s={snapshot} />
 

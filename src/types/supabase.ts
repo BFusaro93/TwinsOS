@@ -17713,6 +17713,70 @@ export type Database = {
           },
         ]
       }
+      vehicle_telematics_history: {
+        Row: {
+          battery_milli_volts: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          engine_state: string | null
+          fuel_percent: number | null
+          id: string
+          org_id: string
+          recorded_at: string
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          battery_milli_volts?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          engine_state?: string | null
+          fuel_percent?: number | null
+          id?: string
+          org_id?: string
+          recorded_at: string
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          battery_milli_volts?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          engine_state?: string | null
+          fuel_percent?: number | null
+          id?: string
+          org_id?: string
+          recorded_at?: string
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_telematics_history_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_telematics_history_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_telematics_history_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicle_telematics_snapshots: {
         Row: {
           battery_milli_volts: number | null
@@ -21966,6 +22030,7 @@ export type Database = {
         Args: { p_dataset: string; p_joins: Json; p_key: string }
         Returns: Json
       }
+      samsara_enabled: { Args: never; Returns: boolean }
       save_storm_order_to_snow_routes: {
         Args: { p_storm_event_id: string }
         Returns: number
