@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, ExternalLink, MapPin, RefreshCw, Wrench } from "lucide-react";
+import { AlertTriangle, BatteryMedium, CheckCircle2, Droplet, ExternalLink, Fuel, MapPin, RefreshCw, Thermometer, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TelematicsHistory } from "@/components/cmms/TelematicsHistory";
@@ -97,6 +97,8 @@ function Gauges({ s }: { s: VehicleTelematicsSnapshot }) {
           />
           <RingGauge
             label="Battery"
+            icon={BatteryMedium}
+            endLabels={["L", "H"]}
             value={volts === null ? null : volts.toFixed(1)}
             unit="Volts"
             percent={volts === null ? null : span(volts, 11, 15)}
@@ -118,6 +120,8 @@ function Gauges({ s }: { s: VehicleTelematicsSnapshot }) {
         <div className="flex flex-row justify-around gap-6 md:flex-col md:items-center">
           <RingGauge
             label="Fuel Level"
+            icon={Fuel}
+            endLabels={["E", "F"]}
             value={s.fuelPercent === null ? null : `${Math.round(s.fuelPercent)}%`}
             percent={s.fuelPercent}
             tone={s.fuelPercent === null ? "idle" : fuelTone(s.fuelPercent)}
@@ -125,6 +129,8 @@ function Gauges({ s }: { s: VehicleTelematicsSnapshot }) {
           />
           <RingGauge
             label="Coolant Temp"
+            icon={Thermometer}
+            endLabels={["C", "H"]}
             value={coolantF === null ? null : `${coolantF}°`}
             unit="°F"
             percent={coolantF === null ? null : span(coolantF, 60, 260)}
@@ -138,6 +144,8 @@ function Gauges({ s }: { s: VehicleTelematicsSnapshot }) {
         <div className="flex justify-center border-t border-slate-100 pt-6 dark:border-neutral-800">
           <RingGauge
             label="DEF Level"
+            icon={Droplet}
+            endLabels={["E", "F"]}
             value={`${Math.round(def)}%`}
             percent={def}
             tone={defTone(def)}

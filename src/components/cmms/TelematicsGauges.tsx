@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type GaugeTone = "ok" | "warn" | "bad" | "idle";
@@ -32,10 +33,14 @@ interface RingGaugeProps {
   tone: GaugeTone;
   /** Tooltip, e.g. when Samsara measured this value. */
   title?: string;
+  /** Small icon at the bottom of the ring (fuel pump, battery, ...). */
+  icon?: LucideIcon;
+  /** Labels at the arc's two ends, left then right: ["E", "F"], ["L", "H"], ["C", "H"]. */
+  endLabels?: [string, string];
 }
 
 /** A circular gauge. `value === null` renders the "not reported" state. */
-export function RingGauge({ label, value, unit, percent, tone, title }: RingGaugeProps) {
+export function RingGauge({ label, value, unit, percent, tone, title, icon: Icon, endLabels }: RingGaugeProps) {
   const missing = value === null;
   const effectiveTone: GaugeTone = missing ? "idle" : tone;
   const full = percent === undefined;
@@ -89,6 +94,23 @@ export function RingGauge({ label, value, unit, percent, tone, title }: RingGaug
             <span className="mt-1 text-xs text-slate-500 dark:text-neutral-400">{unit}</span>
           )}
         </div>
+        {/* Bottom of the ring: the arc is open here, so the icon sits between its two ends. */}
+        {Icon && (
+          <Icon
+            aria-hidden="true"
+            className="absolute bottom-[8px] left-1/2 h-5 w-5 -translate-x-1/2 text-slate-500 dark:text-neutral-400"
+          />
+        )}
+        {endLabels && (
+          <>
+            <span className="absolute bottom-[8px] left-[17px] text-[10px] font-medium leading-none text-slate-400 dark:text-neutral-500">
+              {endLabels[0]}
+            </span>
+            <span className="absolute bottom-[8px] right-[17px] text-[10px] font-medium leading-none text-slate-400 dark:text-neutral-500">
+              {endLabels[1]}
+            </span>
+          </>
+        )}
       </div>
       <span className="text-sm font-medium text-slate-700 dark:text-neutral-300">{label}</span>
       {missing && <span className="text-xs text-slate-400 dark:text-neutral-500">Not reported</span>}
