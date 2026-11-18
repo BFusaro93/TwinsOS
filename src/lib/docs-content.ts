@@ -1761,7 +1761,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "What syncs",
             detail:
-              "Odometer and GPS-distance readings, converted to miles. A reading only updates if the new mileage is greater than or equal to the meter's current value. Nothing else from Samsara's API — no engine hours, fuel, or fault codes.",
+              "Odometer and GPS-distance readings, converted to miles. A reading only updates if the new mileage is greater than or equal to the meter's current value. The daily sync writes nothing else to your meters. Live sensor data (fuel, battery, tires, fault codes, location) is read separately by the vehicle's Telematics tab.",
           },
           {
             step: "When it runs",
@@ -1769,9 +1769,19 @@ export const DOC_SECTIONS: DocSection[] = [
               "A daily scheduled sync, plus a manual 'Sync Now' button for admins. There's no webhook — Samsara doesn't push data to Landscapt in real time.",
           },
           {
+            step: "Telematics tab",
+            detail:
+              "Once Samsara is connected, each vehicle in Equipt > Vehicles gets a Telematics tab: engine state, battery, tire pressures, fuel, coolant, DEF level, location with address/speed/heading, and fuel and battery history over 7, 30 or 90 days (an hourly job records the samples). A stat the vehicle doesn't report shows 'Not reported'. If the tab is empty it says why: Samsara isn't connected, the vehicle isn't linked (set its Samsara Vehicle ID on the Details tab, or name it exactly as in Samsara), or no data has been pulled yet.",
+          },
+          {
+            step: "Fault codes and work orders",
+            detail:
+              "The Fault Codes card lists current codes as Confirmed, Pending or Permanent. Pending codes are informational only and never raise work. For a confirmed or permanent code, click 'Create work order' (needs permission to edit work orders; clicking again for the same open code returns the existing work order), or build an Equipt automation with the 'Vehicle Fault Code' trigger, which fires once per new confirmed code and can be limited to when the check-engine light is on. The first hourly check after connecting only records existing codes without firing automations.",
+          },
+          {
             step: "Full guide",
             detail:
-              "A deeper walkthrough — the full setup flow, exactly how vehicle matching and mileage validation work, and what to check if readings aren't updating.",
+              "A deeper walkthrough — the full setup flow, exactly how vehicle matching and mileage validation work, the Telematics tab, and what to check if readings aren't updating.",
             href: "/settings/support/samsara-guide",
             linkLabel: "Open the Samsara Integration guide",
           },
@@ -3878,6 +3888,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How is data isolated — can other companies see our data?",
         a: "All records are scoped to your organization at the database level using Row Level Security. Queries that don't match your org ID return zero rows by design. No data is ever shared between organizations.",
+      },
+      {
+        q: "How do I turn a vehicle's fault code into a work order?",
+        a: "Open the vehicle in Equipt > Vehicles, go to the Telematics tab and find the Fault Codes card. For a confirmed or permanent code, click Create work order (you need permission to edit work orders). The work order number then replaces the button. Pending codes can't raise work until the vehicle confirms them. To do it automatically, add an Equipt automation with the Vehicle Fault Code trigger; it fires once for each new confirmed code (optionally only when the check-engine light is on), and codes already present when Samsara was first connected don't fire.",
+      },
+      {
+        q: "Why is the Telematics tab missing or empty on a vehicle?",
+        a: "The tab only appears when Samsara is connected (an admin adds the API key under Settings > Integrations). If it is there but empty, it tells you why: the vehicle isn't linked to Samsara (set its Samsara Vehicle ID on the Details tab, or name it exactly as it appears in Samsara and reopen the tab), or nothing has been pulled yet (use Try again). A stat the vehicle doesn't report shows Not reported.",
       },
       {
         q: "How do I connect the Samsara integration for vehicle odometers?",

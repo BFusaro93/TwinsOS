@@ -207,6 +207,8 @@ export function InventoryCostingGuide() {
             is still $0, that return can create a $0 layer. WAC and FIFO skip $0 layers and fall back
             to the catalog unit cost, and a Work Order return costed at $0 uses the part&apos;s
             catalog cost, so Add Part no longer comes up pre-filled at $0 because of one.
+            Receiving a PO line priced at $0 adds the stock but writes no cost layer and leaves the
+            part&apos;s catalog cost alone, so a free line never zeroes a real cost.
           </li>
           <li>
             <strong>Switching methods doesn&apos;t rewrite history.</strong> Only new line-item
