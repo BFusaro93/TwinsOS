@@ -338,3 +338,46 @@ export function snapshotToRow(
     deleted_at: null,
   };
 }
+
+// ── Fuel / battery history ───────────────────────────────────────────────────
+
+/** Start of the current hour (UTC) — the history table keeps one sample per vehicle per hour. */
+export function historyHour(now: Date = new Date()): string {
+  const d = new Date(now);
+  d.setUTCMinutes(0, 0, 0);
+  return d.toISOString();
+}
+
+/** Latest fuel / battery / engine state for EVERY vehicle in the org (one paginated call set). */
+export async function fetchFleetFuelBattery(apiKey: string): Promise<SamsaraVehicleStats[]> {
+  const out: SamsaraVehicleStats[] = [];
+  let after: string | null = null;
+  do {
+    const body = (await samsaraGet(apiKey, "/fleet/vehicles/stats", {
+      types: "engineStates,fuelPercents,batteryMilliVolts",
+      ...(after ? { after } : {}),
+    })) as {
+      data?: SamsaraVehicleStats[];
+      pagination?: { hasNextPage?: boolean; endCursor?: string };
+    };
+    out.push(...(body.data ?? []));
+    after = body.pagination?.hasNextPage ? (body.pagination.endCursor ?? null) : null;
+  } while (after);
+  return out;
+}
+
+export function historyRow(
+  orgId: string,
+  vehicleId: string,
+  recordedAt: string,
+  t: Pick<NormalizedTelematics, "fuelPercent" | "batteryMilliVolts" | "engineState">,
+) {
+  return {
+    org_id: orgId,
+    vehicle_id: vehicleId,
+    recorded_at: recordedAt,
+    fuel_percent: t.fuelPercent,
+    battery_milli_volts: t.batteryMilliVolts,
+    engine_state: t.engineState,
+  };
+}

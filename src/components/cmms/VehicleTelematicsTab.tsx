@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2, ExternalLink, MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { TelematicsHistory } from "@/components/cmms/TelematicsHistory";
 import { RingGauge, TruckTires, type GaugeTone, type TireReading } from "@/components/cmms/TelematicsGauges";
 import { useRefreshVehicleTelematics, useVehicleTelematics } from "@/lib/hooks/use-vehicle-telematics";
 import { cn, relativeTime } from "@/lib/utils";
@@ -361,6 +362,8 @@ export function VehicleTelematicsTab({ vehicleId }: { vehicleId: string }) {
           )}
         </div>
       </div>
+
+      <TelematicsHistory vehicleId={vehicleId} />
 
       <Location s={snapshot} />
 

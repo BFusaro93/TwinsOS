@@ -8,6 +8,8 @@ import { logger } from "@/lib/logger";
 import {
   SamsaraApiError,
   fetchVehicleTelematics,
+  historyHour,
+  historyRow,
   findSamsaraVehicleIdByName,
   mapTelematicsRow,
   snapshotToRow,
@@ -90,6 +92,18 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
     if (error || !saved) {
       log.error("snapshot upsert failed", { error, vehicleId });
       return NextResponse.json({ error: "Could not save telematics" }, { status: 500 });
+    }
+
+    // Also feed the history chart (one sample per vehicle per hour; the hourly cron
+    // writes the same row, and a duplicate is ignored). Best-effort — never fails the refresh.
+    if (telematics.fuelPercent !== null || telematics.batteryMilliVolts !== null) {
+      const { error: historyErr } = await admin
+        .from("vehicle_telematics_history")
+        .upsert(historyRow(orgId, vehicleId, historyHour(), telematics), {
+          onConflict: "vehicle_id,recorded_at",
+          ignoreDuplicates: true,
+        });
+      if (historyErr) log.warn("history sample failed", { vehicleId, error: historyErr });
     }
 
     return NextResponse.json({
