@@ -1049,7 +1049,9 @@ export function EstimatingGuide() {
           </li>
           <li>
             Confirm. The job is created and a <strong>&ldquo;Job created&rdquo;</strong> entry is
-            logged on the client&rsquo;s Activity timeline.
+            logged on the client&rsquo;s Activity timeline. Files attached to the estimate (a site plan,
+            a signed scope) are copied onto the new job&rsquo;s attachments, so they travel with
+            the work; the estimate&rsquo;s photos stay on the estimate and aren&rsquo;t copied.
           </li>
         </ol>
         <Callout>

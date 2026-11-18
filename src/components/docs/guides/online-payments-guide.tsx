@@ -290,7 +290,12 @@ export function OnlinePaymentsGuide() {
             Draft, the deposit pays as much of it as it can, so a client paying by check is never asked
             for money they already put down. Other credit the client holds shows as{" "}
             <em>Credit available</em> on the invoice, the PDF, the pay page and the portal, and invoices
-            that credit fully covers are left out of past-due reminders.
+            that credit fully covers are left out of past-due reminders. Only the invoice&apos;s own
+            account&apos;s credit counts (plus a deposit taken on its estimate): a parent account&apos;s
+            credit doesn&apos;t mark a sub-account&apos;s invoice as covered, because it can&apos;t be spent
+            there automatically, so that invoice still gets its past-due reminders. Each credit is counted
+            toward one invoice at a time, oldest due first, so a single $200 credit never makes two $200
+            invoices look covered.
           </li>
           <li>
             <strong>A failed bank payment leaves a trace.</strong> When a client&apos;s bank returns an

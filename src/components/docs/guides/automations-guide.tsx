@@ -92,6 +92,7 @@ export function AutomationsGuide() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#overview">Overview</TOCLink>
           <TOCLink href="#triggers">Triggers</TOCLink>
+          <TOCLink href="#run-scope">How often a sequence runs for one client</TOCLink>
           <TOCLink href="#conditions">Trigger Conditions vs. Stop Conditions</TOCLink>
           <TOCLink href="#copy-automation">Copying an automation</TOCLink>
           <TOCLink href="#events">Events</TOCLink>
@@ -172,6 +173,42 @@ export function AutomationsGuide() {
           once fires Tag added or Tag removed for each client that actually changed (a client that
           already had the tag isn&apos;t counted as newly tagged), and a bulk edit of a client&apos;s
           source or email opt-in fires the same triggers as editing one client.
+        </p>
+      </Section>
+
+      <Section id="run-scope" title="How often a sequence runs for one client">
+        <p>
+          A sequence runs once for each &quot;thing&quot; its trigger is about &mdash; firing the trigger again
+          for the same thing doesn&apos;t start a second run. What counts as the same thing depends on the
+          trigger:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Visit triggers</strong> (Visit completed, Visit completed for a specific service, Visit
+            dispatched, Visit skipped, Visit cancelled, Visit date changed, Visit moved to waiting list) run{" "}
+            <strong>once per client per service day</strong>. All of that client&apos;s visits on the same
+            day &mdash; every service, every crew and every property &mdash; share one run, so a stop with a
+            mow, a bed edge and a second crew sends one &quot;thanks for your service&quot; email, not three. A
+            visit on another day starts a new run, so a weekly mow follow-up goes out every week.
+          </li>
+          <li>
+            <strong>Job and package triggers</strong> (Job created, Job cancelled, Package created, Package
+            renewed) run <strong>once per job</strong>. Two new jobs for the same client each get their own run.
+          </li>
+          <li>
+            <strong>Estimate, invoice, ticket and meeting triggers</strong> run <strong>once per record</strong>:
+            each invoice, estimate, ticket or meeting gets its own run.
+          </li>
+          <li>
+            <strong>Every other trigger</strong> (client, lead, tag, form, contract and the rest) runs{" "}
+            <strong>once per client</strong>.
+          </li>
+        </ul>
+        <p>
+          <strong>Allow Re-Entry</strong> (in the sequence&apos;s Rules dialog) lets the same day, record or
+          client start the sequence again once its earlier run has finished and the delay you set there has
+          passed. While a run is still going it is never started a second time. The Rules dialog repeats these
+          rules under the Allow Re-Entry switch.
         </p>
       </Section>
 
@@ -585,6 +622,12 @@ export function AutomationsGuide() {
           </li>
           <li>
             <strong>Expired trials.</strong> A company whose trial has ended stops sending automations until it subscribes; its pending steps wait and resume after.
+          </li>
+          <li>
+            <strong>Plans without Landscapt.</strong> On the Equipt plan (Equipt only), Landscapt automation steps
+            don&apos;t run &mdash; they wait and pick up again after you upgrade to a plan that includes Landscapt.
+            The same goes the other way: Equipt&apos;s own automations (meter readings, low stock, PM due, work order
+            overdue) pause on the Starter plan (Landscapt only).
           </li>
           <li>
             <strong>Activity stats.</strong> The Email and SMS activity pages show figures for the most recent 500 messages and say so once that limit is reached.

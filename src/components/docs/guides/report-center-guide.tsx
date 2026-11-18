@@ -498,6 +498,13 @@ export function ReportCenterGuide() {
             not priced: apply the overtime pay rate in your payroll system.
           </li>
           <li>
+            <strong>Not linked to an employee.</strong> A crew roster entry that isn&apos;t linked to an
+            employee record is paid as its own person, so the same worker listed by name on two crews shows
+            as two people and their hours never add up toward overtime. When the period has any, an amber
+            note above the table names them; pick the employee for each one under Team → Crews so their
+            hours combine.
+          </li>
+          <li>
             <strong>Correct any day.</strong> In the detail, change the <strong>clock-in and
             clock-out times</strong>, the <strong>unpaid break minutes</strong> (the number you enter is the
             day&apos;s whole unpaid break, replacing the recorded breaks rather than adding to them), or type the hours

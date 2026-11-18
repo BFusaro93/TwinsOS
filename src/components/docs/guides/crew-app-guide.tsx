@@ -108,7 +108,9 @@ export function CrewAppGuide() {
           If an action is queued without signal (clock in/out, pause, resume, skip, drive start/end,
           Start Day, End Day, and marking someone in, out or not working), a banner
           says it&apos;s saved on the phone and will send when signal returns, and it is
-          recorded at the moment it was tapped, not when the phone reconnects &mdash; so a lunch pause
+          recorded at the moment it was tapped, not when the phone reconnects. Taps are always sent one
+          at a time, in the order they were tapped &mdash; with signal and when it comes back &mdash; so
+          Start Day always lands before the first Start Job, and a pause before its resume &mdash; so a lunch pause
           that syncs hours later still subtracts the right minutes, and a 7:00 Start Day that syncs at
           9:30 still pays from 7:00. Taps older than 48 hours, or from a clearly wrong phone clock,
           fall back to the sync time. Queued taps are held by the open page, so keep it open until
@@ -153,7 +155,18 @@ export function CrewAppGuide() {
           turning on if you&apos;d rather the crew not be drawn into a pricing conversation on a
           driveway. Job totals, labor and material costs, and material prices are never available
           to a crew login, whatever the setting — not in the app and not by reading the data
-          directly with the crew&apos;s login.
+          directly with the crew&apos;s login. With Hide pricing on, a visit&apos;s price is never sent to
+          the crew&apos;s phone or tablet at all, so it can&apos;t be dug out of a shared device.
+        </p>
+        <p>
+          <strong>What stays office-only.</strong> A crew login can&apos;t see product costs, sale prices or
+          stock levels, or service rates and costs &mdash; not in the app, not in Request Materials or Suggest
+          work, and not on a crew-visible dashboard. It also can&apos;t see other users&apos; emails or roles,
+          employees&apos; HR details (pay, address, emergency contact and so on), or sales meetings. The crew
+          sees only its own crew&apos;s job punches; other crews&apos; times stay with the office. And a
+          crew changes its visits only through the app&apos;s own buttons (Start Job, Take a Break, Stop Job,
+          Skip, acknowledging notes, completion notes) &mdash; it can&apos;t edit a visit&apos;s date, crew,
+          price or status any other way.
         </p>
       </Section>
 
@@ -256,6 +269,10 @@ export function CrewAppGuide() {
           recorded correctly without a second thought. You also can&apos;t start drive time while a job
           is running — stop the job first.
         </p>
+        <p>
+          Start Drive and End Drive are the only way a crew records drive time. If a time needs fixing,
+          the office corrects it; the crew can&apos;t edit drive times after the fact.
+        </p>
       </Section>
 
       <Section id="crew-day" title="Start Day and End Day">
@@ -287,7 +304,9 @@ export function CrewAppGuide() {
             <strong>Forgot to tap Start Day?</strong> Starting the first job opens the day anyway, so
             payroll still has a shift. It&apos;s flagged <em>Started at first job</em> in the Payroll
             report, because the real start (at the shop) was earlier &mdash; the office can correct it
-            there.
+            there. If the crew did tap Start Day earlier but the taps reached the office out of order
+            (no signal at the shop, say), the earlier Start Day still wins: the day is moved back to
+            the Start Day tap and is no longer flagged.
           </li>
           <li>
             <strong>Start Job and Stop Job clock the whole crew too.</strong> Start Job punches every
@@ -323,7 +342,9 @@ export function CrewAppGuide() {
             than 16 hours: End Day doesn&apos;t close it at an absurd length, it stays open and the
             Payroll report flags it for the office to correct. Someone who left before midnight and
             comes back after it rejoins the shift they left, so the time away is only taken off
-            once. If you export Payroll while some
+            once. A stop carried over past midnight is clocked in with that day&apos;s roster &mdash; the
+            same people Start Day uses that day &mdash; not the roster of the day the stop was scheduled.
+            If you export Payroll while some
             days are still open or have no shift, Landscapt warns that hours are understated or missing
             and asks you to confirm — fix those days first for accurate pay. An <strong>open</strong>{" "}
             day has a Start Day but no End Day; a <strong>no shift</strong> day has job time but no
@@ -444,8 +465,16 @@ export function CrewAppGuide() {
         <p>
           <strong>Changing a job&apos;s crew mid-day.</strong> A stop that a crew has already started
           stays with that crew when the office moves the job to another crew, so they can still pause,
-          skip and stop it, and their time closes normally. Finished visits keep the crew that did
-          them. Only the job&apos;s upcoming, not-yet-started visits move to the new crew.
+          skip and stop it, and their time closes normally. Completed and skipped visits, and visits
+          dated before today, keep the crew that had them. Only the job&apos;s visits from today onward
+          that haven&apos;t been started move to the new crew.
+        </p>
+        <p>
+          <strong>Stop Job when one service can&apos;t finish.</strong> If one service on a stop can&apos;t
+          be stopped (its chemicals aren&apos;t confirmed, say), the crew is told why, but the services that
+          did finish are still completed, invoiced and costed. Fix the one that failed and tap Stop Job
+          again; only that service is left to close. Stop Job also keeps each service&apos;s own crew size,
+          so a three-man mow and a one-man bed edge on the same stop are costed as three and one.
         </p>
         <p>
           If the stop has chemicals, a <strong>Confirm chemicals applied</strong> card lists each one
@@ -737,7 +766,9 @@ export function CrewAppGuide() {
         <p>
           Dashboards are scoped separately. A crew only sees dashboards that have been explicitly
           marked visible to crews. Reports built on jobs and visits carry prices, so they show a
-          crew login no data even on a crew-visible dashboard.
+          crew login no data even on a crew-visible dashboard. The product and service catalogs are
+          office-only too, so product and service reports show a crew nothing, and on reports such as
+          chemical applications or upsells the product or service name column is blank for a crew.
         </p>
         <p>
           For the office&apos;s half of this — stop order, route optimisation, and exactly how actual

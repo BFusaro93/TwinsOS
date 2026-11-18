@@ -252,7 +252,9 @@ export function JobsPackagesGuide() {
           (today onward, not started, completed, skipped or cancelled) that follow the job&apos;s
           crew — ones with no crew of their own or still on the job&apos;s old crew — move to the new
           crew. A visit you moved to a different crew on the Dispatch Board, a visit pinned to
-          &ldquo;no crew&rdquo;, and multi-crew stops keep their crews.
+          &ldquo;no crew&rdquo;, and multi-crew stops keep their crews. Visits dated before today,
+          visits a crew has already started (even if nobody is clocked in right now), and completed or
+          skipped visits always stay with the crew that had them, so past labor and history never move.
         </p>
         <p>
           <strong>Per-service notes.</strong> Each service on a job can carry its own crew note,
@@ -742,7 +744,9 @@ export function JobsPackagesGuide() {
             clashes is refused with a message, and a duplicate row in a CSV import is skipped.
             Switching a schedule off stops any new visits being generated for the jobs on it
             (including the per-job Generate Visits button); visits that already exist are kept. Renaming a schedule carries every job on it
-            along, so they keep their cadence. A schedule that active jobs still use can&apos;t be
+            along, so they keep their cadence. The rename and the move happen together: if any job on the
+            schedule couldn&apos;t be moved (for example one you don&apos;t have permission to change),
+            nothing is renamed and you&apos;re told why. A schedule that active jobs still use can&apos;t be
             deleted: the Delete dialog shows how many jobs use it — move them to another schedule
             first, or switch the schedule off instead.
           </li>

@@ -281,7 +281,13 @@ export function ClientPortalGuide() {
             <strong>Ticket limits.</strong> A client can submit up to 10 tickets in any 10 minutes per
             account, with a subject of up to 200 characters and a description of up to 5,000. New
             tickets always arrive open, normal priority and unassigned &mdash; the same limits apply
-            however the ticket is submitted.
+            however the ticket is submitted. Each new portal ticket is emailed to the client&apos;s sales
+            rep, or to the portal&apos;s support email when the client has no active rep.
+          </li>
+          <li>
+            <strong>Tickets for a sub-account.</strong> A property manager signed in to the portal can file a
+            ticket for any of their sub-accounts as well as their own account; the ticket is created on the
+            account they pick, so it lands on that property&apos;s record in Landscapt.
           </li>
           <li>
             <strong>Visit names.</strong> Visits in the schedule are named by their service rather

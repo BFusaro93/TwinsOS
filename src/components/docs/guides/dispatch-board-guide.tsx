@@ -727,7 +727,10 @@ export function DispatchBoardGuide() {
           &mdash; a finished visit keeps the crew that did the work so its labor and history stay
           put; if everything you selected is completed you&apos;re told so instead. Sending selected
           visits back to the waiting list processes them one at a time, and the job&apos;s own date
-          and crew only reset when its last visit goes back.
+          and crew only reset when its last visit goes back. On a stop worked by several crews,{" "}
+          <strong>Return to Waiting List</strong> sends every crew&apos;s visit on that stop back together
+          (a package step keeps one placeholder visit, as usual), and it is refused if any crew on the stop
+          has already clocked in. The message counts every visit that went back.
         </p>
         <p>
           <strong>Bulk changes are all-or-nothing.</strong> A bulk Change Status, Re-assign Crew or
@@ -1055,7 +1058,9 @@ export function DispatchBoardGuide() {
           what is on screen. Views are private to you. A date range is saved only if you set it with
           a Quick range, so a &ldquo;This week&rdquo; view keeps meaning this week. A crew, service
           or tag that has been deleted since the view was saved is skipped when you apply it (a
-          message says how many); save the view again to drop it for good. The board&apos;s Excel{" "}
+          message says how many); save the view again to drop it for good. An older view that has typed
+          City or Zip text keeps filtering by that text (any city or zip containing it); picking from the
+          City or Zip checklist replaces it with an exact list. The board&apos;s Excel{" "}
           <strong>Export</strong> button needs the Export Lists permission.
         </p>
         <p>
