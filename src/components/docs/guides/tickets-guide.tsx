@@ -271,9 +271,10 @@ export function TicketsGuide() {
       <Section id="list-filters" title="Searching and filtering the list">
         <p>
           The search box above the Tickets list has an &times; button, and Escape clears it. The
-          column filter narrows by one field at a time; <strong>Category</strong>,{" "}
-          <strong>Assignment</strong> (including Unassigned) and <strong>Priority</strong> are
-          picked from a list and match exactly, instead of being typed. <strong>Created</strong> and{" "}
+          column filters stack (each keeps its own value and a ticket must match all of them);{" "}
+          <strong>Category</strong>, <strong>Assignment</strong> (including Unassigned) and{" "}
+          <strong>Priority</strong> are multi-select checklists, instead of being typed, and the
+          client filter is labeled <strong>Client</strong> (it was &ldquo;Account&rdquo;). <strong>Created</strong> and{" "}
           <strong>Due Date</strong> are date-range filters (From / To). Created is compared on your
           company&apos;s calendar day, so a ticket logged in the evening lands on the day your staff
           saw it. The Calls list has the same Created and Due Date range filters.

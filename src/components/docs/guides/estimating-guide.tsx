@@ -64,9 +64,14 @@ export function EstimatingGuide() {
 
       <Section id="creating" title="Creating an estimate">
         <p>
-          On the Estimates list, the <strong>Client</strong>, <strong>Stage</strong> and{" "}
-          <strong>Sales Rep</strong> column filters are picked from a list and match exactly
-          (Sales Rep also offers <em>Unassigned</em>).
+          On the Estimates list, <strong>Stage</strong>, <strong>Sales Rep</strong> and{" "}
+          <strong>Service</strong> are multi-select checklists (Sales Rep also offers{" "}
+          <em>Unassigned</em>; Stage includes Converted) and <strong>Client</strong> is a free-form
+          search. Filters stack: each keeps its own value and an estimate must match all of them. The
+          header counts what is showing (&ldquo;X of N estimates&rdquo; while filtered). The{" "}
+          <strong>Won / Lost Reason</strong> column shows the reason given when an estimate was
+          closed, and the estimate&apos;s header carries a &ldquo;Won reason&rdquo; or &ldquo;Lost
+          reason&rdquo; badge.
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
@@ -1043,7 +1048,9 @@ export function EstimatingGuide() {
             Void the invoice first if you really want a regular job.
           </li>
           <li>
-            Set the scheduled date, assign a crew, and enter a <strong>Crew Size (men)</strong>. The
+            Set the scheduled date (required for One Time; for Recurring it is an optional Start
+            Date, since the Schedule drives the visits; use Waiting List when there is no date yet),
+            assign a crew, and enter a <strong>Crew Size (men)</strong>. The
             crew size is written onto the job and its first visit, so the Dispatch Board&rsquo;s Men
             column is right from day one instead of reading 0.
           </li>

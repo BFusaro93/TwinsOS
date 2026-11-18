@@ -77,6 +77,8 @@ export function SnowGuide() {
           temperature. It also carries its own status —{" "}
           <strong>Pending → Working → Complete</strong> — which reflects the storm&apos;s actual
           life cycle: not yet touched, actively being dispatched and pushed, or wrapped up.
+          Switching to another storm clears the board&apos;s Client and Date filters, so you
+          never land on an empty list because of a filter set for the previous storm.
         </p>
       </Section>
 
@@ -178,7 +180,9 @@ export function SnowGuide() {
           per visit, when the crew&apos;s work is closed out.</strong> Select one or more completed
           visits and click <strong>Close Out…</strong> to enter the actual depth (in), temperature,
           and — for hourly-billed jobs — hours on site (the time the crew was at the property, not
-          multiplied by crew size). Salt and other materials aren&apos;t entered here: the crew
+          multiplied by crew size). Close Out writes only what you type: a depth or temperature
+          already recorded on the visit stays if you leave that field blank (a blank used to wipe
+          it, which un-priced Per Inch stops). Salt and other materials aren&apos;t entered here: the crew
           records what they used on each stop (see Salt and materials, per storm). Each visit is its own row with its own depth reading, closed
           out separately.
         </p>
@@ -316,8 +320,10 @@ export function SnowGuide() {
             has none — Team Assign uses the same rule.
           </li>
           <li>
-            <strong>Route order.</strong> The <strong>#</strong> column is each stop&apos;s position
-            within its crew&apos;s route; the arrows beside it move a stop up or down, and the
+            <strong>Route order.</strong> The default sort is crew, then day, then stop number, so a
+            crew&apos;s stops sit together in route order (Client and Crew sorts keep that order
+            within each value). The <strong>#</strong> column is each stop&apos;s position
+            within its crew&apos;s route for that day; the arrows beside it move a stop up or down, and the
             order is saved. <strong>Optimize</strong> (next to a Nearest first / Furthest first
             choice) routes each crew separately by driving time, starting from the crew&apos;s own
             starting address or, failing that, the Company Address in Settings &gt; Organization,
@@ -348,6 +354,19 @@ export function SnowGuide() {
             on only one route). You can also edit the routes directly with the <strong>Master Routes</strong>
             button next to New Storm Event (the same editor is in Settings &gt; Services &gt;
             Snow Routes).
+          </li>
+          <li>
+            <strong>Assigning crews: this storm only, or Permanent.</strong> Choosing a crew in the
+            selection bar&apos;s <em>Assign crew…</em> (or the map panel&apos;s <em>Assign to crew…</em>)
+            changes this storm&apos;s stops only; next storm they come back on the crew their Master
+            Route has. Tick <strong>Permanent</strong> beside the picker to also save the crew onto
+            the Master Routes. The picker then lists each crew&apos;s active routes (a crew with
+            several shows as <em>Crew name - Route name</em>, for example a plowing route and a salting
+            route), so you pick the crew and the route in one step. A job already on the route you
+            pick keeps its place, others go on the end, and if the crew has no route yet one is created
+            and named after the crew. Choosing <em>Unassigned</em> with Permanent ticked also takes the
+            stops off their Master Routes. Many crews keep one route for plowing and another for
+            salting so a salt-only storm loads only the salt route.
           </li>
           <li>
             <strong>Building Master Routes.</strong> Click <em>Master Routes</em> on the Snow Jobs
@@ -502,7 +521,11 @@ export function SnowGuide() {
           cancelled, expired, inactive or deleted, nothing else bills its visits, so they appear in
           this queue like any other snow visit &mdash; except storms inside a billing cycle the
           contract already invoiced (before it was cancelled, expired or switched off), which the
-          contract price already paid for and stay out of the queue.
+          contract price already paid for and stay out of the queue. If a visit&apos;s recorded
+          depth isn&apos;t covered by any depth range or rate per inch on its job, the queue row
+          says so (&ldquo;isn&apos;t covered by any depth range or rate per inch on this job — add
+          one to bill it&rdquo;) instead of showing a silent $0.00; add a range or a rate per
+          inch to the job and the row prices.
         </p>
         <p>
           <strong>Storms outside the contract dates.</strong> Each snow contract chooses what happens

@@ -202,6 +202,13 @@ export function InventoryCostingGuide() {
             and Work Orders.
           </li>
           <li>
+            <strong>A $0 cost layer never sets the pre-fill.</strong> If stock comes back (for
+            example a part removed from a Work Order after receipt) while the part&apos;s catalog cost
+            is still $0, that return can create a $0 layer. WAC and FIFO skip $0 layers and fall back
+            to the catalog unit cost, and a Work Order return costed at $0 uses the part&apos;s
+            catalog cost, so Add Part no longer comes up pre-filled at $0 because of one.
+          </li>
+          <li>
             <strong>Switching methods doesn&apos;t rewrite history.</strong> Only new line-item
             pre-fills change; every Requisition, PO, and Work Order line already saved keeps
             whatever cost it recorded at the time.

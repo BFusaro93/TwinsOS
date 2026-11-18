@@ -126,7 +126,17 @@ export function JobsPackagesGuide() {
             be changed later on the job&apos;s Job Settings (Edit): like a schedule change, you&apos;re
             shown how many untouched upcoming visits the new dates drop, those are removed, and the
             new dates are filled in. A recurring job has no separate Scheduled Date to edit — its Start
-            Date is what the schedule runs from.
+            Date is what the schedule runs from. When you convert an estimate, a recurring job only
+            needs its Schedule: the date is labeled <strong>Start Date</strong> and is optional (leave
+            it blank to begin on the Schedule&apos;s next day; visits begin on the first Schedule day
+            on or after a date you set, with no extra hand-placed visit). Scheduled recurring jobs are
+            created Scheduled, not on hold.
+          </li>
+          <li>
+            <strong>One Time needs a date when converted from an estimate.</strong> The Scheduled Date
+            is required, because a one-time job with no date has no visit to dispatch and used to be
+            created on hold, invisible to the Dispatch Board and Waiting List. If the work has no date
+            yet, convert it as a <strong>Waiting List</strong> job instead.
           </li>
           <li>
             <strong>Visit caps and skipped visits.</strong> A service converted from an estimate line
@@ -324,9 +334,16 @@ export function JobsPackagesGuide() {
         <p>
           The Jobs list has three tabs — <strong>Active</strong>, <strong>Unscheduled</strong>, and{" "}
           <strong>Completed</strong>. The Active tab&apos;s <strong>From / To</strong> date range
-          applies to every job, keyed on the job&apos;s next pending visit: a job whose next visit
-          falls outside the window isn&apos;t listed, <em>including</em> overdue jobs whose next
-          visit is already in the past. The filter means exactly what it shows.
+          applies to every job, keyed on its earliest pending visit inside the window: a job with
+          visits next week stays listed even if it also has an older visit that was never completed.
+          A job whose only pending visits are overdue (before the window) isn&apos;t listed. The
+          filter means exactly what it shows.
+        </p>
+        <p>
+          <strong>Overdue badge.</strong> A job with earlier pending visits shows a red{" "}
+          <strong>N overdue</strong> badge beside its status (hover for &ldquo;earlier visits were
+          never completed, skipped or cancelled&rdquo;), so a job listed for next week still flags
+          missed work. Cancelled and on-hold jobs don&apos;t show it.
         </p>
         <p>
           <strong>The Status column.</strong> A job with visits still to do shows its next

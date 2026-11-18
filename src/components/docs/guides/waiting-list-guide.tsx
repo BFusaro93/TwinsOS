@@ -104,9 +104,12 @@ export function WaitingListGuide() {
           there after a refresh or the next time you open the page. A preset like &quot;This
           quarter&quot; is remembered by name, so next month it still means the current quarter; a
           custom range keeps the exact dates you picked. Below that, <strong>Select a
-          Filter</strong> lets you narrow the fetched set by one field at a time: Client, Service,
-          City, Zip, or Crew. Crew is picked from a list of your active crews (or Unassigned)
-          rather than typed. A separate free-text Search box matches client name, service name,
+          Filter</strong> lets you narrow the fetched set by Client, Service, City, Zip, Crew or
+          Sales Rep. Filters stack: each keeps its own value, switching tabs never clears the
+          others, and a row must match all of them (the &times; beside a filter clears just that
+          one). Crew is the same checklist as the Dispatch Board (your active crews plus
+          Unassigned), and City and Zip are checklists of the values on the list, so you tick them
+          rather than type. A separate free-text Search box matches client name, service name,
           street address, city, zip, crew code, and notes to crew independent of that filter; it has an &times; button, and pressing Escape clears it.
         </p>
         <Table>
@@ -191,8 +194,8 @@ export function WaitingListGuide() {
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
-            Clicks the <strong>Zip</strong> filter under &quot;Select a Filter&quot; and types
-            <code> 44057</code>. Three jobs come back — a one-time mulch job, a waiting-list mowing
+            Clicks the <strong>Zip</strong> filter under &quot;Select a Filter&quot; and ticks
+            <code> 44057</code> in the checklist. Three jobs come back — a one-time mulch job, a waiting-list mowing
             job, and one service off a fertilizer package.
           </li>
           <li>
@@ -216,7 +219,8 @@ export function WaitingListGuide() {
         <p>
           On this page, &quot;find something nearby&quot; means filtering by <strong>City</strong> or{" "}
           <strong>Zip</strong> — there&apos;s no map or live proximity check built into the list
-          itself, just text matching against those two fields. It&apos;s fast and it works, but only
+          itself, just matching against the values in those two fields (you tick them from a
+          checklist). It&apos;s fast and it works, but only
           as well as the address data behind it.
         </p>
         <Callout>
