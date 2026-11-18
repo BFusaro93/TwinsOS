@@ -2,11 +2,14 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { AlertTriangle, ChevronDown, ChevronRight, Download, Lock, RotateCcw, Wallet } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Download, Lock, Plus, RotateCcw, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -17,6 +20,8 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { instantToZoneWallClock, mondayOfYmd, shiftYmd, todayInZone } from "@/lib/time/zone";
 import {
   PayrollForbiddenError,
+  useDeletePayrollDay,
+  usePayrollCrewMembers,
   usePayroll,
   usePayrollLock,
   useSavePayrollAdjustment,
@@ -60,6 +65,7 @@ export function PayrollReport() {
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState(false);
   const { data: report, isLoading, error } = usePayroll(from, to);
   const rows = useMemo(() => report?.rows ?? [], [report]);
   const overtimeLabel = report ? describeOvertimeRule(report.overtime) : null;
@@ -148,6 +154,9 @@ export function PayrollReport() {
         <Button variant="outline" size="sm" onClick={() => setRange(thisWeek(tz))}>This week</Button>
         <Button variant="outline" size="sm" onClick={() => setRange(lastWeek(tz))}>Last week</Button>
         <Button variant="outline" size="sm" onClick={() => setRange(lastTwoWeeks(tz))}>Last 2 weeks</Button>
+        <Button size="sm" className="gap-1" onClick={() => setAdding(true)}>
+          <Plus className="h-4 w-4" /> Add time entry
+        </Button>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
             Total <strong className="text-foreground">{fmt(grand)} h</strong>
@@ -170,6 +179,7 @@ export function PayrollReport() {
       </div>
 
       <PayrollLockBar lockedThrough={lockedThrough} tz={tz} />
+      <AddTimeEntryDialog open={adding} onOpenChange={setAdding} defaultDate={to} lockedThrough={lockedThrough} />
 
       <p className="text-xs text-muted-foreground">
         Paid time is each person&apos;s day — clocked in at the shop to clocked out at the shop — less lunch and unpaid pauses.
@@ -316,6 +326,7 @@ function PayrollLockBar({ lockedThrough, tz }: { lockedThrough: string | null; t
 
 function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: boolean }) {
   const save = useSavePayrollAdjustment();
+  const del = useDeletePayrollDay();
   const [hours, setHours] = useState(row.hoursOverride != null ? String(row.hoursOverride) : "");
   const [extra, setExtra] = useState(row.extraHours ? String(row.extraHours) : "");
   const [pto, setPto] = useState(row.ptoHours ? String(row.ptoHours) : "");
@@ -417,6 +428,23 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
       <TableCell className={`text-right tabular-nums ${row.overtimeHours > 0 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>{fmt(row.overtimeHours)}</TableCell>
       <TableCell className="space-x-1 whitespace-nowrap">
         <Button size="sm" className="h-8" disabled={locked || !dirty || save.isPending} onClick={() => submit()}>Save</Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 px-2 text-destructive hover:text-destructive"
+          title="Delete this day's time entry"
+          aria-label="Delete time entry"
+          disabled={locked || del.isPending}
+          onClick={() => {
+            if (window.confirm(
+              `Delete ${row.memberName}'s time for ${format(parseISO(row.workDate), "EEE MMM d")}? ` +
+              "This removes their day clock, job punches and any adjustment, so the hours also come off the jobs. " +
+              "It can't be undone from here."
+            )) del.mutate({ crewMemberId: row.crewMemberId, workDate: row.workDate });
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
         {row.adjusted && (
           <Button size="sm" variant="ghost" className="h-8 px-2" title="Reset to recorded hours" disabled={locked || save.isPending} onClick={() => submit(true)}>
             <RotateCcw className="h-4 w-4" />
@@ -424,5 +452,113 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
         )}
       </TableCell>
     </TableRow>
+  );
+}
+
+/**
+ * Adds a day nobody clocked — someone forgot to clock in or out, or still turns
+ * in paper time sheets. Saved as a payroll adjustment (clock times, or just
+ * hours) for that member-day; it does not create job punches, so Job Costing is
+ * unchanged. If the person already has a day recorded, it corrects that day.
+ */
+function AddTimeEntryDialog({
+  open, onOpenChange, defaultDate, lockedThrough,
+}: { open: boolean; onOpenChange: (o: boolean) => void; defaultDate: string; lockedThrough: string | null }) {
+  const { data: people = [] } = usePayrollCrewMembers();
+  const save = useSavePayrollAdjustment();
+  const [memberId, setMemberId] = useState("");
+  const [workDate, setWorkDate] = useState(defaultDate);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [breakMins, setBreakMins] = useState("");
+  const [hours, setHours] = useState("");
+  const [note, setNote] = useState("");
+
+  const num = (s: string): number | null => (s.trim() === "" || Number.isNaN(Number(s)) ? null : Math.max(0, Number(s)));
+  const hasTimes = !!startTime && !!endTime;
+  const hasHours = num(hours) != null && (num(hours) as number) > 0;
+  const locked = isPayrollDayLocked(workDate, lockedThrough);
+  const valid = !!memberId && !!workDate && (hasTimes || hasHours) && !locked && (!!startTime === !!endTime);
+
+  function submit() {
+    save.mutate(
+      {
+        crewMemberId: memberId,
+        workDate,
+        hoursOverride: hasTimes ? null : num(hours),
+        startTime: startTime || null,
+        endTime: endTime || null,
+        breakMinutes: hasTimes && num(breakMins) != null ? Math.round(num(breakMins) as number) : null,
+        extraHours: 0,
+        ptoHours: 0,
+        note: note.trim() || "Manual entry",
+      },
+      {
+        onSuccess: () => {
+          toast.success("Time entry added");
+          setMemberId(""); setStartTime(""); setEndTime(""); setBreakMins(""); setHours(""); setNote("");
+          onOpenChange(false);
+        },
+      }
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add time entry</DialogTitle>
+          <DialogDescription>
+            For a day nobody clocked: a forgotten clock-in or clock-out, or a paper time sheet. Enter the start and end
+            times, or just the hours. It counts for payroll only — job costing is not changed.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground" htmlFor="te-member">Employee</label>
+            <select
+              id="te-member"
+              value={memberId}
+              onChange={(e) => setMemberId(e.target.value)}
+              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="">Select an employee…</option>
+              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground" htmlFor="te-date">Date</label>
+            <Input id="te-date" type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} />
+            {locked && <p className="mt-1 text-xs text-amber-600">Payroll is locked through this date. An admin can move the lock.</p>}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground" htmlFor="te-start">Start</label>
+              <Input id="te-start" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground" htmlFor="te-end">End</label>
+              <Input id="te-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground" htmlFor="te-break">Break (min)</label>
+              <Input id="te-break" inputMode="numeric" value={breakMins} onChange={(e) => setBreakMins(e.target.value)} placeholder="0" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground" htmlFor="te-hours">…or total hours (when there are no times)</label>
+            <Input id="te-hours" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="8.00" disabled={hasTimes} />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground" htmlFor="te-note">Note</label>
+            <Input id="te-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why this was added (e.g. paper time sheet)" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button disabled={!valid || save.isPending} onClick={submit}>Add entry</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
