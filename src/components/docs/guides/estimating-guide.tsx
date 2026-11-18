@@ -64,9 +64,14 @@ export function EstimatingGuide() {
 
       <Section id="creating" title="Creating an estimate">
         <p>
-          On the Estimates list, the <strong>Client</strong>, <strong>Stage</strong> and{" "}
-          <strong>Sales Rep</strong> column filters are picked from a list and match exactly
-          (Sales Rep also offers <em>Unassigned</em>).
+          On the Estimates list, <strong>Stage</strong>, <strong>Sales Rep</strong> and{" "}
+          <strong>Service</strong> are multi-select checklists (Sales Rep also offers{" "}
+          <em>Unassigned</em>; Stage includes Converted) and <strong>Client</strong> is a free-form
+          search. Filters stack: each keeps its own value and an estimate must match all of them. The
+          header counts what is showing (&ldquo;X of N estimates&rdquo; while filtered). The{" "}
+          <strong>Won / Lost Reason</strong> column shows the reason given when an estimate was
+          closed, and the estimate&apos;s header carries a &ldquo;Won reason&rdquo; or &ldquo;Lost
+          reason&rdquo; badge.
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>

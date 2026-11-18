@@ -180,7 +180,9 @@ export function SnowGuide() {
           per visit, when the crew&apos;s work is closed out.</strong> Select one or more completed
           visits and click <strong>Close Out…</strong> to enter the actual depth (in), temperature,
           and — for hourly-billed jobs — hours on site (the time the crew was at the property, not
-          multiplied by crew size). Salt and other materials aren&apos;t entered here: the crew
+          multiplied by crew size). Close Out writes only what you type: a depth or temperature
+          already recorded on the visit stays if you leave that field blank (a blank used to wipe
+          it, which un-priced Per Inch stops). Salt and other materials aren&apos;t entered here: the crew
           records what they used on each stop (see Salt and materials, per storm). Each visit is its own row with its own depth reading, closed
           out separately.
         </p>
@@ -318,8 +320,10 @@ export function SnowGuide() {
             has none — Team Assign uses the same rule.
           </li>
           <li>
-            <strong>Route order.</strong> The <strong>#</strong> column is each stop&apos;s position
-            within its crew&apos;s route; the arrows beside it move a stop up or down, and the
+            <strong>Route order.</strong> The default sort is crew, then day, then stop number, so a
+            crew&apos;s stops sit together in route order (Client and Crew sorts keep that order
+            within each value). The <strong>#</strong> column is each stop&apos;s position
+            within its crew&apos;s route for that day; the arrows beside it move a stop up or down, and the
             order is saved. <strong>Optimize</strong> (next to a Nearest first / Furthest first
             choice) routes each crew separately by driving time, starting from the crew&apos;s own
             starting address or, failing that, the Company Address in Settings &gt; Organization,
@@ -517,7 +521,11 @@ export function SnowGuide() {
           cancelled, expired, inactive or deleted, nothing else bills its visits, so they appear in
           this queue like any other snow visit &mdash; except storms inside a billing cycle the
           contract already invoiced (before it was cancelled, expired or switched off), which the
-          contract price already paid for and stay out of the queue.
+          contract price already paid for and stay out of the queue. If a visit&apos;s recorded
+          depth isn&apos;t covered by any depth range or rate per inch on its job, the queue row
+          says so (&ldquo;isn&apos;t covered by any depth range or rate per inch on this job — add
+          one to bill it&rdquo;) instead of showing a silent $0.00; add a range or a rate per
+          inch to the job and the row prices.
         </p>
         <p>
           <strong>Storms outside the contract dates.</strong> Each snow contract chooses what happens

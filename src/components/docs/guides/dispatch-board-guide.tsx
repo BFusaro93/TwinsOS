@@ -626,6 +626,14 @@ export function DispatchBoardGuide() {
             &quot;All Crews&quot; to clear it).
           </li>
           <li>
+            <strong>Select a Filter row</strong> — Client, Service, Date, City, Zip and Crew above
+            the dark bar. Filters stack: each keeps its own value, switching tabs never clears the
+            others, and a visit must match all of them; the &times; beside a filter clears just
+            that one. Service, City, Zip and Crew are checklists (City and Zip list the values on
+            the board), and a saved view stores your City and Zip picks (older views that kept them
+            as text are converted to the matching values when loaded).
+          </li>
+          <li>
             <strong>Search</strong> — a free-text box that matches client name, street address,
             city, zip, service name or code, crew code, and notes to crew. Click the &times; in the box (or press Escape) to clear it. The per-column
             filter&apos;s Crew option is a pick-list of your active crews plus Unassigned, so

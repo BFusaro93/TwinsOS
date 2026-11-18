@@ -391,7 +391,8 @@ export function PurchaseOrdersGuide() {
           shortcut to skip receiving.
         </Callout>
         <p>
-          <strong>Cancel PO</strong> is for calling off an order before anything arrives. It shows
+          On a PO that hasn&apos;t been submitted, <strong>Submit for Approval</strong> sits in the same
+          button row as <strong>Cancel PO</strong>. <strong>Cancel PO</strong> is for calling off an order before anything arrives. It shows
           on Requested, Pending, Approved, Ordered and Rejected POs that have nothing received yet,
           and asks you to confirm. Once any goods are received the PO can&apos;t be canceled
           &mdash; use Mark Complete to close it short. A canceled PO can be reopened with{" "}

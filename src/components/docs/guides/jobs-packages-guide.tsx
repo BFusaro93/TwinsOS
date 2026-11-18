@@ -334,9 +334,16 @@ export function JobsPackagesGuide() {
         <p>
           The Jobs list has three tabs — <strong>Active</strong>, <strong>Unscheduled</strong>, and{" "}
           <strong>Completed</strong>. The Active tab&apos;s <strong>From / To</strong> date range
-          applies to every job, keyed on the job&apos;s next pending visit: a job whose next visit
-          falls outside the window isn&apos;t listed, <em>including</em> overdue jobs whose next
-          visit is already in the past. The filter means exactly what it shows.
+          applies to every job, keyed on its earliest pending visit inside the window: a job with
+          visits next week stays listed even if it also has an older visit that was never completed.
+          A job whose only pending visits are overdue (before the window) isn&apos;t listed. The
+          filter means exactly what it shows.
+        </p>
+        <p>
+          <strong>Overdue badge.</strong> A job with earlier pending visits shows a red{" "}
+          <strong>N overdue</strong> badge beside its status (hover for &ldquo;earlier visits were
+          never completed, skipped or cancelled&rdquo;), so a job listed for next week still flags
+          missed work. Cancelled and on-hold jobs don&apos;t show it.
         </p>
         <p>
           <strong>The Status column.</strong> A job with visits still to do shows its next

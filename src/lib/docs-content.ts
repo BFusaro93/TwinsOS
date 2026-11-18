@@ -2611,6 +2611,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. Click Map on the Dispatch Board: Select mode picks stops (the table follows) and offers Assign to crew, Move to date, Assign crews and Dispatch; Route order moves a stop later (left-click) or earlier (right-click) in its crew's route and needs Save Order; Draw area selects every stop inside a shape you outline. The same rules as the table's Actions menu apply.",
       },
       {
+        q: "I set two filters under 'Select a Filter' but only one seems to apply. How do filters work?",
+        a: "They stack. On the Dispatch Board, Waiting List, Estimates, Invoices, Payments, Tickets, Forms and Email Activity, each filter keeps its own value, switching tabs never clears the others, and a row must match all of them. The x beside a filter clears only that one. Crew, City, Zip, Service, Stage, Sales Rep, Category and similar filters are checklists you tick rather than type.",
+      },
+      {
+        q: "A snow invoicing row says the depth 'isn't covered by any depth range or rate per inch'. What do I do?",
+        a: "The visit's recorded depth falls outside every depth range on its job and no rate per inch is set, so it would bill $0.00. Add a depth range that covers it, or a rate per inch, on the snow job and the row prices. Close Out also no longer erases a depth or temperature already recorded when you leave the field blank.",
+      },
+      {
+        q: "A job on the Jobs list shows a red 'overdue' badge, or a job with only old visits is missing. Why?",
+        a: "The Active tab lists a job by its earliest pending visit inside the From/To window, so a job with visits next week stays listed even if it has an older unfinished visit; the red N overdue badge counts those earlier visits. A job whose only pending visits are before the window isn't listed; widen From to see it.",
+      },
+      {
         q: "Why can't I convert an estimate to a one-time job without a date?",
         a: "A one-time job with no date has no visit to dispatch, so it would sit on hold where crews and schedulers never see it. Pick a Scheduled Date, or convert it as a Waiting List job if it has no date yet. A recurring job only needs its Schedule; its date is an optional Start Date.",
       },
