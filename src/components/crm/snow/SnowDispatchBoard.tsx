@@ -71,7 +71,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
-import { buildPermanentAssignTargets, buildSnowStopsCsv, downloadCsv, parseAssignTarget, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
+import { buildSnowStopsCsv, downloadCsv, splitCancelDispatchTargets } from "@/components/crm/snow/snow-board-actions";
+import { PermanentCrewPicker } from "@/components/crm/snow/PermanentCrewPicker";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { BulkMultiCrewDialog } from "@/components/crm/dispatch/BulkMultiCrewDialog";
 import { MultiSelectFilterTab } from "@/components/shared/MultiSelectFilterTab";
@@ -403,8 +404,9 @@ function AddJobsDialog({
       });
   }, [candidateJobIds, snowJobs, maxTriggerInches, minPriority, date, rowDates]);
 
-  // The search narrows what is listed (and what Select all / Unselect all act on);
-  // jobs already ticked stay ticked while hidden and are still added.
+  // The search / service filter narrows what is listed, what Select all / Unselect all act on and
+  // what gets added: ticks on jobs the filter hides are dropped (below), so "594 selected" can't
+  // linger after filtering down to 10.
   const serviceOptions = useMemo(
     () => [...new Set(candidates.flatMap(({ job }) => (job.services ?? []).map((s) => s.serviceName).filter(Boolean)))].sort((a, b) => a.localeCompare(b)),
     [candidates],
@@ -418,6 +420,16 @@ function AddJobsDialog({
         .filter(Boolean).join(" ").toLowerCase().includes(q)
     );
   }, [candidates, jobSearch, serviceFilter]);
+  const selectedCount = visibleCandidates.filter((c) => selectedIds.has(c.job.id)).length;
+  // Drop ticks on jobs the filters (or another route) no longer list.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const shown = new Set(visibleCandidates.map((c) => c.job.id));
+      const next = new Set([...prev].filter((id) => shown.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [visibleCandidates]);
 
   // Each opening starts from this storm's own date and forecast, not whatever
   // the dialog was last left at.
@@ -463,7 +475,7 @@ function AddJobsDialog({
   }
 
   async function handleAdd() {
-    const jobs = candidates
+    const jobs = visibleCandidates
       .filter((c) => selectedIds.has(c.job.id))
       .map((c) => ({
         jobId: c.job.id,
@@ -580,14 +592,14 @@ function AddJobsDialog({
             </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] text-muted-foreground">Date for the {selectedIds.size} selected:</span>
+            <span className="text-[11px] text-muted-foreground">Date for the {selectedCount} selected:</span>
             <Input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} className="h-8 w-40 text-xs" aria-label="Date for the selected jobs" />
             <Button
               type="button"
               size="sm"
               variant="outline"
               className="h-8 text-xs"
-              disabled={!bulkDate || selectedIds.size === 0}
+              disabled={!bulkDate || selectedCount === 0}
               onClick={() => setRowDates((prev) => { const next = new Map(prev); selectedIds.forEach((id) => next.set(id, bulkDate)); return next; })}
             >
               Set date
@@ -671,7 +683,7 @@ function AddJobsDialog({
 
         <div className="shrink-0 flex items-center justify-between border-t bg-card px-5 py-3">
           <p className="text-xs text-muted-foreground">
-            {selectedIds.size} of {candidates.length} selected
+            {selectedCount} of {visibleCandidates.length} selected
             <button type="button" className="ml-2 underline hover:text-foreground" onClick={() => setSelectedIds((prev) => new Set([...prev, ...visibleCandidates.map((c) => c.job.id)]))}>Select all</button>
             <button type="button" className="ml-2 underline hover:text-foreground" onClick={() => setSelectedIds((prev) => { const next = new Set(prev); visibleCandidates.forEach((c) => next.delete(c.job.id)); return next; })}>Unselect all</button>
           </p>
@@ -1314,8 +1326,6 @@ export function SnowDispatchBoard() {
   const { data: snowRoutes = [] } = useSnowRoutes();
   // "Permanent" checkbox beside the crew pickers: also save the crew onto the Master Routes.
   const [permanentCrew, setPermanentCrew] = useState(false);
-  // With Permanent on, the picker lists each crew's Master Routes (a crew may have a plow and a salt route).
-  const permanentTargets = useMemo(() => buildPermanentAssignTargets(crews, snowRoutes), [crews, snowRoutes]);
   const { mutateAsync: addStormPush, isPending: addingPush } = useAddStormPush();
 
   // Inactive storms are hidden from the picker unless asked for (or currently open).
@@ -1503,6 +1513,17 @@ export function SnowDispatchBoard() {
   const clientOptions = useMemo(() => [...clientNameById.keys()].sort((a, b) => (clientNameById.get(a) ?? "").localeCompare(clientNameById.get(b) ?? "")), [clientNameById]);
   const dateOptions = useMemo(() => [...new Set(visits.map((v) => v.scheduledDate ?? "—"))].sort(), [visits]);
   const zipOptions = useMemo(() => [...new Set(visits.map((v) => v.job?.serviceZip ?? "—"))].sort(), [visits]);
+
+  // Selection follows the filters: stops a filter hides are deselected, so the selection bar and its
+  // bulk actions (crew, date, close out, email) only ever act on what is shown.
+  useEffect(() => {
+    setSelectedVisitIds((prev) => {
+      if (prev.size === 0) return prev;
+      const shown = new Set(filteredVisits.map((v) => v.id));
+      const next = new Set([...prev].filter((id) => shown.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filteredVisits]);
 
   const allShownSelected = filteredVisits.length > 0 && filteredVisits.every((v) => selectedVisitIds.has(v.id));
   const someShownSelected = filteredVisits.some((v) => selectedVisitIds.has(v.id));
@@ -2237,22 +2258,26 @@ export function SnowDispatchBoard() {
           <span className="text-xs font-medium text-brand-700 dark:text-brand-400">{selectedVisitIds.size} selected</span>
           {canManage && (
             <>
-              <Select
-                value=""
-                onValueChange={(v) => {
-                  if (!permanentCrew) { void changeCrew([...selectedVisitIds], v === "none" ? null : v); return; }
-                  const t = parseAssignTarget(v);
-                  void changeCrew([...selectedVisitIds], t.crewId, true, t.routeId);
-                }}
-              >
-                <SelectTrigger className="h-7 w-40 text-xs ml-2"><SelectValue placeholder={permanentCrew ? "Assign crew + route…" : "Assign crew…"} /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {permanentCrew
-                    ? permanentTargets.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
-                    : crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {permanentCrew ? (
+                <div className="ml-2 flex items-center gap-1.5">
+                  <PermanentCrewPicker
+                    crews={crews}
+                    routes={snowRoutes}
+                    onApply={(crewId, routeId) => void changeCrew([...selectedVisitIds], crewId, true, routeId)}
+                  />
+                </div>
+              ) : (
+                <Select
+                  value=""
+                  onValueChange={(v) => void changeCrew([...selectedVisitIds], v === "none" ? null : v)}
+                >
+                  <SelectTrigger className="h-7 w-40 text-xs ml-2"><SelectValue placeholder="Assign crew…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
               <label
                 className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
                 title="Also save this crew onto the Master Routes, so future storms assign these jobs to it"
@@ -2322,7 +2347,7 @@ export function SnowDispatchBoard() {
                 onSelectOnly={(ids) => setSelectedVisitIds(new Set(ids))}
                 onClearSelection={() => { setSelectedVisitIds(new Set()); setTableOnlySelected(false); }}
                 onMoveStop={(id, dir) => { const v = visits.find((x) => x.id === id); if (v) void moveStop(v, dir); }}
-                permanentTargets={permanentTargets}
+                permanentRoutes={snowRoutes}
                 onAssignCrew={(ids, crewId, permanent, routeId) => changeCrew(ids, crewId, permanent, routeId)}
                 onDispatch={(ids) => dispatchVisits(ids)}
                 onOpenMultiCrew={() => setMultiCrewOpen(true)}

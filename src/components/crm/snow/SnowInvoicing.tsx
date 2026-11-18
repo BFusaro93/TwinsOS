@@ -177,8 +177,11 @@ export function SnowInvoicing() {
     });
   }
 
+  // Selection from another storm (or rows that left the list) must not count as selected.
+  const selectedCount = rows.filter((r) => selectedIds.has(r.visit.id)).length;
+
   function toggleAll() {
-    if (selectedIds.size === rows.length) setSelectedIds(new Set());
+    if (selectedCount === rows.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(rows.map((r) => r.visit.id)));
   }
 
@@ -288,7 +291,7 @@ export function SnowInvoicing() {
 
       <div className="flex items-center gap-3 px-4 shrink-0">
         <Snowflake className="h-4 w-4 text-brand-500 dark:text-brand-400" />
-        <Select value={stormEventId || "all"} onValueChange={(v) => setStormEventId(v === "all" ? "" : v)}>
+        <Select value={stormEventId || "all"} onValueChange={(v) => { setStormEventId(v === "all" ? "" : v); setSelectedIds(new Set()); }}>
           <SelectTrigger className="h-9 w-64 text-sm"><SelectValue placeholder="All storm events" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All storm events</SelectItem>
@@ -317,7 +320,7 @@ export function SnowInvoicing() {
           ))}
         </div>
 
-        {tab === "queue" && selectedIds.size > 0 && (
+        {tab === "queue" && selectedCount > 0 && (
           <div className="ml-auto flex items-center gap-3">
             {tiersError && (
               <span className="text-xs font-medium text-red-600 dark:text-red-400">
@@ -325,7 +328,7 @@ export function SnowInvoicing() {
               </span>
             )}
             <span className="text-sm text-slate-600 dark:text-neutral-400">
-              {selectedIds.size} selected · <span className="font-semibold">{formatCurrency(selectedTotal)}</span>
+              {selectedCount} selected · <span className="font-semibold">{formatCurrency(selectedTotal)}</span>
             </span>
             {canGenerate && (
               <Button
@@ -407,7 +410,7 @@ export function SnowInvoicing() {
             <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
               <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 <th className="w-8 px-2 py-2.5">
-                  <Checkbox checked={rows.length > 0 && selectedIds.size === rows.length} onCheckedChange={toggleAll} className="h-3.5 w-3.5" />
+                  <Checkbox checked={rows.length > 0 && selectedCount === rows.length} onCheckedChange={toggleAll} className="h-3.5 w-3.5" />
                 </th>
                 <th className="min-w-[140px] px-2 py-2.5">Client</th>
                 <th className="px-2 py-2.5">Date</th>

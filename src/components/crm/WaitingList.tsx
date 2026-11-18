@@ -770,11 +770,19 @@ export function WaitingList() {
   }, [filtered, startDate, endDate, readyOnly, orgTodayFn, toOrgDate]);
 
   const allSelected = visitRows.length > 0 && visitRows.every((r) => selectedKeys.has(r.key));
-  const someSelected = selectedKeys.size > 0;
+  // Only rows the filters still list count as selected (the buttons act on those alone).
+  const selectedCount = visitRows.filter((r) => selectedKeys.has(r.key)).length;
+  const someSelected = selectedCount > 0;
 
   function toggleAll() {
-    if (allSelected) setSelectedKeys(new Set());
-    else setSelectedKeys(new Set(visitRows.map((r) => r.key)));
+    if (allSelected) {
+      // Clear what is listed; ticks on rows a filter hides are left as they were.
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        visitRows.forEach((r) => next.delete(r.key));
+        return next;
+      });
+    } else setSelectedKeys(new Set([...selectedKeys, ...visitRows.map((r) => r.key)]));
   }
 
   function toggleOne(key: string) {
@@ -940,7 +948,7 @@ export function WaitingList() {
               >
                 Actions
                 {someSelected && (
-                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedKeys.size}</span>
+                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedCount}</span>
                 )}
                 <ChevronDown className="ml-1 h-3 w-3" />
               </Button>

@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
-import { parseAssignTarget, type PermanentAssignTarget } from "@/components/crm/snow/snow-board-actions";
+import { PermanentCrewPicker } from "@/components/crm/snow/PermanentCrewPicker";
+import type { SnowRoute } from "@/types/crm-jobs";
 import { useJobCoords, type JobCoord } from "@/lib/hooks/use-job-coords";
 
 export interface DispatchWorkMapStop {
@@ -61,7 +62,7 @@ export function DispatchWorkMap({
   onClearSelection,
   onMoveStop,
   onAssignCrew,
-  permanentTargets,
+  permanentRoutes,
   onDispatch,
   onOpenMultiCrew,
   onMoveToDate,
@@ -83,9 +84,9 @@ export function DispatchWorkMap({
   onMoveStop: (visitId: string, dir: -1 | 1) => void;
   /** `permanent` also saves the crew onto the Master Routes (future storms). */
   onAssignCrew: (visitIds: string[], crewId: string | null, permanent: boolean, routeId: string | null) => Promise<void>;
-  /** Snow board only: crew + Master Route choices shown when Permanent is ticked (a crew can have a plow
-   *  and a salt route). Omit it (Dispatch Board) and the Permanent checkbox is not shown. */
-  permanentTargets?: PermanentAssignTarget[];
+  /** Snow board only: the Master Routes a Permanent assignment can save to (crew, then route). Omit it
+   *  (Dispatch Board) and the Permanent checkbox is not shown. */
+  permanentRoutes?: SnowRoute[];
   onDispatch: (visitIds: string[]) => Promise<void>;
   onOpenMultiCrew: () => void;
   onMoveToDate: (visitIds: string[], date: string) => Promise<void>;
@@ -421,30 +422,38 @@ export function DispatchWorkMap({
             </dl>
             {canManage && (
               <>
-                <div className="flex gap-1.5">
-                  <Select value={assignCrewId || undefined} onValueChange={setAssignCrewId}>
-                    <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue placeholder={permanentTargets && assignPermanent ? "Assign crew + route…" : "Assign to crew…"} /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {permanentTargets && assignPermanent
-                        ? permanentTargets.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
-                        : crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={busy || !assignCrewId}
-                    onClick={() => void run(async () => {
-                      const t = permanentTargets && assignPermanent ? parseAssignTarget(assignCrewId) : { crewId: assignCrewId === "none" ? null : assignCrewId, routeId: null };
-                      await onAssignCrew([...selectedIds], t.crewId, !!permanentTargets && assignPermanent, t.routeId);
-                      setAssignCrewId("");
-                    })}
-                  >
-                    Update
-                  </Button>
-                </div>
-                {permanentTargets && (
+                {permanentRoutes && assignPermanent ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    <PermanentCrewPicker
+                      crews={crews}
+                      routes={permanentRoutes}
+                      triggerClassName="h-7 flex-1 min-w-32 text-xs"
+                      onApply={(crewId, routeId) => void run(async () => { await onAssignCrew([...selectedIds], crewId, true, routeId); })}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <Select value={assignCrewId || undefined} onValueChange={setAssignCrewId}>
+                      <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue placeholder="Assign to crew…" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={busy || !assignCrewId}
+                      onClick={() => void run(async () => {
+                        await onAssignCrew([...selectedIds], assignCrewId === "none" ? null : assignCrewId, false, null);
+                        setAssignCrewId("");
+                      })}
+                    >
+                      Update
+                    </Button>
+                  </div>
+                )}
+                {permanentRoutes && (
                   <label
                     className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground"
                     title="Also save this crew onto the Master Routes, so future storms assign these jobs to it"

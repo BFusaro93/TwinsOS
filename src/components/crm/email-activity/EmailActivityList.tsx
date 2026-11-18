@@ -205,11 +205,18 @@ export function EmailActivityList() {
   }, [emails, quickFilter, filterEntries, search, orgTimeZone]);
 
   const allSelected = filtered.length > 0 && filtered.every((e: EmailActivity) => selectedIds.has(e.id));
-  const someSelected = selectedIds.size > 0;
+  // Only rows the filters still list count as selected.
+  const selectedCount = filtered.filter((e: EmailActivity) => selectedIds.has(e.id)).length;
+  const someSelected = selectedCount > 0;
 
   function toggleAll() {
     if (allSelected) {
-      setSelectedIds(new Set());
+      // Clear what is listed; ticks on rows a filter hides are left as they were.
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((e: EmailActivity) => next.delete(e.id));
+        return next;
+      });
     } else {
       setSelectedIds(new Set(filtered.map((e: EmailActivity) => e.id)));
     }
@@ -360,7 +367,7 @@ export function EmailActivityList() {
               >
                 Actions
                 {someSelected && (
-                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>
+                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedCount}</span>
                 )}
                 <ChevronDown className="ml-1 h-3 w-3" />
               </Button>

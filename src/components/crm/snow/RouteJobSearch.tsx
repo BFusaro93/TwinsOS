@@ -72,6 +72,9 @@ export function RouteJobSearch({
   const shown = matches.slice(0, RESULT_CAP);
   // Search-result checkboxes are for jobs that can actually be added.
   const addable = shown.filter((m) => !routeJobIds.has(m.job.id));
+  // Ticks on jobs the search no longer lists stay out of the count and out of Add to route.
+  const addableIds = new Set(addable.map((m) => m.job.id));
+  const pickedIds = [...picked].filter((id) => addableIds.has(id));
 
   function set<K extends keyof RouteJobFilters>(key: K, value: RouteJobFilters[K]) {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -185,10 +188,10 @@ export function RouteJobSearch({
             <Button
               size="sm"
               className="h-8 text-xs"
-              disabled={picked.size === 0 || adding}
-              onClick={() => { onAdd([...picked]); setPicked(new Set()); }}
+              disabled={pickedIds.length === 0 || adding}
+              onClick={() => { onAdd(pickedIds); setPicked(new Set()); }}
             >
-              Add {picked.size > 0 ? `${picked.size} ` : ""}to route
+              Add {pickedIds.length > 0 ? `${pickedIds.length} ` : ""}to route
             </Button>
           </div>
         )}
