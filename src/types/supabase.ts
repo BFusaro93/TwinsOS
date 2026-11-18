@@ -17687,6 +17687,262 @@ export type Database = {
           },
         ]
       }
+      vehicle_fault_events: {
+        Row: {
+          check_engine_light: boolean | null
+          cleared_at: string | null
+          code: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          first_seen_at: string
+          id: string
+          org_id: string
+          source: string
+          status: string
+          updated_at: string
+          vehicle_id: string
+          work_order_id: string | null
+        }
+        Insert: {
+          check_engine_light?: boolean | null
+          cleared_at?: string | null
+          code: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          first_seen_at?: string
+          id?: string
+          org_id?: string
+          source: string
+          status: string
+          updated_at?: string
+          vehicle_id: string
+          work_order_id?: string | null
+        }
+        Update: {
+          check_engine_light?: boolean | null
+          cleared_at?: string | null
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          first_seen_at?: string
+          id?: string
+          org_id?: string
+          source?: string
+          status?: string
+          updated_at?: string
+          vehicle_id?: string
+          work_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_fault_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_fault_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_fault_events_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_fault_events_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_telematics_history: {
+        Row: {
+          battery_milli_volts: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          engine_state: string | null
+          fuel_percent: number | null
+          id: string
+          org_id: string
+          recorded_at: string
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          battery_milli_volts?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          engine_state?: string | null
+          fuel_percent?: number | null
+          id?: string
+          org_id?: string
+          recorded_at: string
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          battery_milli_volts?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          engine_state?: string | null
+          fuel_percent?: number | null
+          id?: string
+          org_id?: string
+          recorded_at?: string
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_telematics_history_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_telematics_history_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_telematics_history_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_telematics_snapshots: {
+        Row: {
+          battery_milli_volts: number | null
+          check_engine_light: boolean | null
+          coolant_milli_c: number | null
+          created_at: string
+          created_by: string | null
+          def_milli_percent: number | null
+          deleted_at: string | null
+          engine_state: string | null
+          fault_codes: Json
+          fetched_at: string
+          fuel_percent: number | null
+          address: string | null
+          heading_degrees: number | null
+          latitude: number | null
+          longitude: number | null
+          speed_mph: number | null
+          id: string
+          org_id: string
+          samsara_vehicle_id: string | null
+          stat_times: Json
+          tire_back_left_kpa: number | null
+          tire_back_right_kpa: number | null
+          tire_front_left_kpa: number | null
+          tire_front_right_kpa: number | null
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          battery_milli_volts?: number | null
+          check_engine_light?: boolean | null
+          coolant_milli_c?: number | null
+          created_at?: string
+          created_by?: string | null
+          def_milli_percent?: number | null
+          deleted_at?: string | null
+          engine_state?: string | null
+          fault_codes?: Json
+          fetched_at?: string
+          fuel_percent?: number | null
+          address?: string | null
+          heading_degrees?: number | null
+          latitude?: number | null
+          longitude?: number | null
+          speed_mph?: number | null
+          id?: string
+          org_id?: string
+          samsara_vehicle_id?: string | null
+          stat_times?: Json
+          tire_back_left_kpa?: number | null
+          tire_back_right_kpa?: number | null
+          tire_front_left_kpa?: number | null
+          tire_front_right_kpa?: number | null
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          battery_milli_volts?: number | null
+          check_engine_light?: boolean | null
+          coolant_milli_c?: number | null
+          created_at?: string
+          created_by?: string | null
+          def_milli_percent?: number | null
+          deleted_at?: string | null
+          engine_state?: string | null
+          fault_codes?: Json
+          fetched_at?: string
+          fuel_percent?: number | null
+          address?: string | null
+          heading_degrees?: number | null
+          latitude?: number | null
+          longitude?: number | null
+          speed_mph?: number | null
+          id?: string
+          org_id?: string
+          samsara_vehicle_id?: string | null
+          stat_times?: Json
+          tire_back_left_kpa?: number | null
+          tire_back_right_kpa?: number | null
+          tire_front_left_kpa?: number | null
+          tire_front_right_kpa?: number | null
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_telematics_snapshots_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_telematics_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_telematics_snapshots_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: true
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicles: {
         Row: {
           air_filter_part_number: string | null
@@ -21801,6 +22057,7 @@ export type Database = {
         Args: { p_dataset: string; p_joins: Json; p_key: string }
         Returns: Json
       }
+      samsara_enabled: { Args: never; Returns: boolean }
       save_storm_order_to_snow_routes: {
         Args: { p_storm_event_id: string }
         Returns: number

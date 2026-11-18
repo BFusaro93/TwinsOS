@@ -25,6 +25,8 @@ import { NewAssetDialog } from "@/components/cmms/NewAssetDialog";
 import { AssetPartsTab } from "@/components/shared/AssetPartsTab";
 import { WOHistoryTab } from "@/components/shared/WOHistoryTab";
 import { AssetMetersTab } from "@/components/shared/AssetMetersTab";
+import { VehicleTelematicsTab } from "@/components/cmms/VehicleTelematicsTab";
+import { useSamsaraEnabled } from "@/lib/hooks/use-vehicle-telematics";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useUpdateVehicle, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
 import { useMeters } from "@/lib/hooks/use-meters";
@@ -501,6 +503,7 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
   const [status, setStatus] = useState<AssetStatus>(vehicle.status as AssetStatus);
   const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
   const { canWriteEquipt } = useRoleCapabilities();
+  const { data: samsaraEnabled } = useSamsaraEnabled();
 
   // Sync local status state when the vehicle prop updates (e.g. status changed
   // from the Work Order detail panel and the cache invalidates).
@@ -566,6 +569,14 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
             label: "Details",
             content: <DetailsTab vehicle={vehicle} status={status} />,
           },
+          // Only orgs with Samsara switched on get the tab.
+          ...(samsaraEnabled
+            ? [{
+                value: "telematics",
+                label: "Telematics",
+                content: <VehicleTelematicsTab vehicleId={vehicle.id} />,
+              }]
+            : []),
           {
             value: "parts",
             label: "Parts",

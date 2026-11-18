@@ -282,7 +282,7 @@ export function JobPhotosGuide() {
           be filled out on a phone in the field. Each submission is attributed to the signed-in user:
         </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li><strong>Repair Request</strong> — creates a maintenance request / work order submission.</li>
+          <li><strong>Repair Request</strong> — creates a maintenance request / work order submission. It only appears for organizations with the Equipt module; without it the tile is hidden (in the Field sidebar and the crew quick-add) and the page sends you to Job Photos.</li>
           <li>
             <strong>Damage Report</strong> — opens a{" "}
             <GuideLink href="/settings/support/damage-cases-guide" className="text-[#60ab45] underline">Damage Case</GuideLink>{" "}

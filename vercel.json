@@ -16,6 +16,10 @@
       "schedule": "0 10 * * *"
     },
     {
+      "path": "/api/cron/telematics-history",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/automations/run",
       "schedule": "*/15 * * * *"
     },

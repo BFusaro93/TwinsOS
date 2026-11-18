@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -62,6 +63,7 @@ export function AutomationDialog({
   const [woDaysOverdue, setWoDaysOverdue] = useState("1");
   const [woTargetStatus, setWoTargetStatus] = useState<"open" | "in_progress" | "on_hold" | "done">("open");
   const [poTargetStatus, setPoTargetStatus] = useState<"draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed">("approved");
+  const [faultCelOnly, setFaultCelOnly] = useState(false);
 
   const [intervalValue, setIntervalValue] = useState("");
 
@@ -112,6 +114,7 @@ export function AutomationDialog({
       setWoDaysOverdue("1");
       setWoTargetStatus("open");
       setPoTargetStatus("approved");
+      setFaultCelOnly(false);
       setActionType("send_notification");
       setWoTitle("");
       setWoPriority("medium");
@@ -160,6 +163,9 @@ export function AutomationDialog({
       case "po_status_change":
         setPoTargetStatus(t.toStatus);
         break;
+      case "vehicle_fault_code":
+        setFaultCelOnly(t.onlyCheckEngineLight);
+        break;
     }
 
     // Seed action fields
@@ -204,6 +210,7 @@ export function AutomationDialog({
     setWoDaysOverdue("1");
     setWoTargetStatus("open");
     setPoTargetStatus("approved");
+    setFaultCelOnly(false);
   }
 
   // Reset action config when action type changes
@@ -242,6 +249,8 @@ export function AutomationDialog({
         return { type: "wo_status_change", toStatus: woTargetStatus };
       case "po_status_change":
         return { type: "po_status_change", toStatus: poTargetStatus };
+      case "vehicle_fault_code":
+        return { type: "vehicle_fault_code", onlyCheckEngineLight: faultCelOnly };
     }
   }
 
@@ -373,6 +382,7 @@ export function AutomationDialog({
                     <SelectItem value="request_submitted">Request Submitted</SelectItem>
                     <SelectItem value="wo_status_change">WO Status Change</SelectItem>
                     <SelectItem value="po_status_change">PO Status Change</SelectItem>
+                    <SelectItem value="vehicle_fault_code">Vehicle Fault Code</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -535,6 +545,19 @@ export function AutomationDialog({
                       <SelectItem value="done">Done</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {triggerType === "vehicle_fault_code" && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Fires once when a Samsara-connected vehicle reports a new confirmed fault code. The code and its
+                    description are added to the work order, request or notification.
+                  </p>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={faultCelOnly} onCheckedChange={(v) => setFaultCelOnly(v === true)} />
+                    Only when the check-engine light is on
+                  </label>
                 </div>
               )}
 

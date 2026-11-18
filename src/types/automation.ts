@@ -7,7 +7,8 @@ export type TriggerType =
   | "wo_overdue"
   | "request_submitted"
   | "wo_status_change"
-  | "po_status_change";
+  | "po_status_change"
+  | "vehicle_fault_code";
 
 export interface MeterThresholdTrigger {
   type: "meter_threshold";
@@ -41,6 +42,12 @@ export interface POStatusChangeTrigger {
   toStatus: "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed";
 }
 
+export interface VehicleFaultCodeTrigger {
+  type: "vehicle_fault_code";
+  /** Only fire when the check-engine light is on for the new code. */
+  onlyCheckEngineLight: boolean;
+}
+
 export type AutomationTrigger =
   | MeterThresholdTrigger
   | PartLowStockTrigger
@@ -48,7 +55,8 @@ export type AutomationTrigger =
   | WOOverdueTrigger
   | RequestSubmittedTrigger
   | WOStatusChangeTrigger
-  | POStatusChangeTrigger;
+  | POStatusChangeTrigger
+  | VehicleFaultCodeTrigger;
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
 

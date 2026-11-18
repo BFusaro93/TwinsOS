@@ -1,0 +1,136 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Landscapt Chemical Tracking</title>
+<style>
+@page{size:Letter;margin:0.5in 0.65in}
+*{box-sizing:border-box}
+body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:#1f2937;font-size:9.6pt;line-height:1.38;margin:0}
+.hero{background:#005642;color:#fff;padding:28px 34px;border-radius:10px;margin-bottom:16px}
+.hero .k{letter-spacing:.14em;font-size:8.5pt;color:#b7d433;font-weight:700;text-transform:uppercase}
+.hero h1{margin:6px 0 8px;font-size:26pt;line-height:1.15}
+.hero p{margin:0;font-size:11.5pt;color:#d9efe6;max-width:5.6in}
+h2{font-size:14pt;color:#005642;margin:16px 0 4px;padding-bottom:4px;border-bottom:2px solid #b7d433;break-after:avoid}
+h2 small{display:block;font-size:9.5pt;color:#6b7280;font-weight:400;margin-top:1px}
+p{margin:6px 0}
+ul{margin:6px 0 6px 18px;padding:0}li{margin:3px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}
+.card{border:1px solid #d7e3de;border-radius:8px;padding:11px 14px;background:#f7fbf9;break-inside:avoid}
+.card b{color:#005642}
+.flow{display:flex;gap:6px;margin:12px 0;break-inside:avoid}
+.step{flex:1;background:#eef6f2;border-radius:8px;padding:9px 8px;text-align:center;font-size:9pt}
+.step i{display:block;font-style:normal;font-weight:700;color:#005642;font-size:9.5pt;margin-bottom:2px}
+table{border-collapse:collapse;width:100%;font-size:9.5pt;margin:8px 0;break-inside:avoid}
+td,th{border:1px solid #d7e3de;padding:5px 8px;text-align:left;vertical-align:top}
+th{background:#005642;color:#fff;font-weight:600}
+tr:nth-child(even) td{background:#f7fbf9}
+.note{background:#fff8e6;border-left:4px solid #e0a800;padding:8px 12px;font-size:9.5pt;border-radius:4px;margin:10px 0;break-inside:avoid}
+.foot{margin-top:14px;padding-top:10px;border-top:1px solid #d7e3de;font-size:9pt;color:#6b7280}
+.pb{break-before:page}
+</style></head><body>
+
+<div class="hero"><div class="k">Landscapt · Chemical Tracking</div>
+<h1>Compliance-grade pesticide &amp; fertilizer recordkeeping, built into the work your crews already do</h1>
+<p>From the product label to the truck to the client's inbox: every application is planned, mixed, confirmed by the crew, recorded, and reportable in one system.</p></div>
+
+<div class="flow">
+<div class="step"><i>1 · Catalog</i>Label, SDS &amp; EPA data on the product</div>
+<div class="step"><i>2 · Rates</i>Rate &amp; mix recipe per product</div>
+<div class="step"><i>3 · Plan</i>Quantities calculated per property</div>
+<div class="step"><i>4 · Load &amp; Mix</i>Load list, route sheets, crew mix card</div>
+<div class="step"><i>5 · Confirm</i>Crew confirms amounts, conditions, applicator</div>
+<div class="step"><i>6 · Report</i>Compliance record, notice &amp; invoice</div>
+</div>
+
+<h2>1. Chemical product profiles<small>Everything a regulator, or a technician, needs to know about a product, stored once</small></h2>
+<p>Any product in the catalog can be flagged <b>Track Chemicals</b>, which opens a dedicated Chemical tab:</p>
+<div class="grid">
+<div class="card"><b>Regulatory identity</b><ul><li>EPA Registration #</li><li>EPA link (label / NPIC)</li><li>Scientific name</li><li>Restricted Use Product flag</li></ul></div>
+<div class="card"><b>Safety &amp; handling</b><ul><li>Re-entry interval (e.g. "24 hours" or "until dry")</li><li>Active ingredients with percentages</li><li>Label instructions shown to the technician</li><li>Client route-sheet instructions (watering, re-entry)</li></ul></div>
+</div>
+<ul>
+<li><b>Reference Library:</b> keep every chemical label and Safety Data Sheet, plus SOPs and training material, in one place. Documents linked to a product appear on its page and open from the crew's <b>View label</b> on the stop. You choose what crews can see.</li>
+</ul>
+
+<h2>2. Application rates and mix recipes<small>Set up once per product; used everywhere</small></h2>
+<ul>
+<li><b>Rate:</b> amount applied per area, such as 1.5 fl oz per 1,000 sq ft or per acre, with an application method (broadcast, backpack sprayer, truck tank) and product cost. Perimeter and barrier products can be rated per linear foot.</li>
+<li><b>Mix recipe:</b> mark a rate as <i>Not Mixed</i>, <i>Mixed with Water</i> (e.g. 2 oz chemical per 1 gal water), or <i>Mixed with Products</i> (tank mixes with a second catalog product).</li>
+<li><b>Unit-aware math:</b> volume, weight, and area units convert correctly. When a recipe is ambiguous or units can't be safely converted (for example, a linear-foot rate against a square-foot field), the system declines to guess rather than print a wrong dose.</li>
+<li>Handles both label conventions: rates stated as <i>concentrate</i> and rates stated as <i>finished spray volume</i>.</li>
+<li><b>The rate used is kept on the record</b> (e.g. "2 fl oz per 1,000 sq ft"), so reports and notices still show it after the product's rate changes.</li>
+</ul>
+
+<h2>3. Services that know their chemicals<small>Chemical programs without re-keying</small></h2>
+<ul>
+<li>Flag a service (e.g. 7-Step Fertilizer, Grub Control) as chemical-tracking and attach its default products, optionally with start and end dates for the program season.</li>
+<li>Those defaults pre-populate every dispatched visit's application record automatically, as a <i>planned</i> amount the crew later confirms.</li>
+<li>Optional <b>auto-calculated quantity</b>: pulls the treatable area and applies the product's rate to compute how much to apply and how much finished mix to prepare. The area comes from, in order:
+ <ol style="margin:3px 0 3px 18px;padding:0"><li>a <b>treated area</b> on the job service, for a spot treatment or just the front lawn;</li><li>the service's own <b>area measurement</b> (e.g. Hardscape Sq Ft for parking-lot weed control);</li><li>your company's default area field (e.g. Turf Sq Ft).</li></ol>
+ Measurements are read from the property first, then the client. The load list, reports, crew card, and application panel all use the same order, so they always agree.</li>
+</ul>
+
+<h2>4. Recording applications<small>Fast for the office, thorough for the auditor</small></h2>
+<table>
+<tr><th style="width:30%">Captured per application</th><th>Details</th></tr>
+<tr><td>Product &amp; amounts</td><td>Chemical (concentrate) amount and finished solution amount, each with its own unit; planned vs. confirmed vs. "Not used"</td></tr>
+<tr><td>What &amp; where</td><td>Targets (pests, weeds), areas treated, application method, rate label</td></tr>
+<tr><td>Who</td><td>Applicator, with their license number from the employee record</td></tr>
+<tr><td>When</td><td>Application start and end time</td></tr>
+<tr><td>Conditions</td><td>Temperature, wind speed and direction, pH. Choose weather, pH, both, or neither for your organization. <b>Fill from weather</b> pulls the National Weather Service reading for the day and property; edit before saving.</td></tr>
+<tr><td>Notes &amp; budget</td><td>Free-form notes; budgeted vs. actual concentrate, so over- and under-application is visible</td></tr>
+</table>
+<ul>
+<li><b>Planned is not applied.</b> A preloaded chemical is only an estimate. It stays out of the compliance report, notices, invoices, and stock counts until the amount used is confirmed (or marked <i>Not used</i>). Choose whether the <b>crew</b> confirms in the field (the default, and the crew can't stop the job until they do) or the <b>office</b> adds amounts later.</li>
+<li><b>Day close-out wizard</b> on the Dispatch Board steps through each chemical job for a date. <i>Save &amp; Next</i> saves only what you changed, so nothing is confirmed by accident. Log temperature and wind once for the whole day, fill them from weather, and see which notices have gone out.</li>
+<li><b>Inline on any job visit:</b> open the chemical panel directly from the visit. Chemicals added by the office to a visit not yet worked are plans the crew confirms.</li>
+<li><b>Frozen compliance snapshots:</b> EPA #, re-entry interval, restricted-use flag, and applicator license are captured at the moment of application. A later correction to the catalog or an employee's license never rewrites history.</li>
+<li><b>Records can't quietly disappear:</b> a worked visit or job with confirmed applications can't be deleted, and every change to a record is kept in the audit trail.</li>
+</ul>
+
+<h2>5. In the field: the crew's mix sheet and confirmation<small>The right dose, without a calculator, and the record made on the spot</small></h2>
+<p>On the crew app (iOS, Android, and browser), each stop shows a <b>Chemical Mix</b> card: the product, how much active chemical to use, and the total finished-mix volume to prepare. Printed <b>chemical route sheets</b> give the same numbers on paper.</p>
+<ul>
+<li><b>Confirm what was applied:</b> enter the amount used or tick <i>Not used</i>. The foreman is recorded as applicator, with their license, and a matching mix volume is calculated.</li>
+<li><b>How applied and conditions:</b> adjust method, target, and area treated, and record temperature and wind (auto-filled from the nearest weather reading).</li>
+<li><b>Add a chemical</b> the office didn't plan, such as a spot treatment or substitute, even on a stop with nothing planned.</li>
+<li><b>View label and SDS:</b> EPA #, re-entry interval, restricted-use status, label directions, and the filed Safety Data Sheet, one tap away.</li>
+<li><b>Load check-off:</b> crews tick off equipment and materials as they load; the Crew Board shows what's on each truck.</li>
+<li><b>Confirmed records are final for the crew.</b> Only the office, with the right permission, can correct one, and the change is audited.</li>
+</ul>
+
+<h2>6. Notice of treatment, in every form clients expect<small>Documentation clients and regulators expect</small></h2>
+<ul>
+<li><b>Notice of Treatment</b> built from the application record: date, time, weather, applicator and license #, and each product with EPA #, amount, method, and target. Print it, or email it with a PDF copy attached, after a live preview.</li>
+<li><b>Bulk send:</b> select a day's visits and send each client their own notice. Visits are sorted into ready, already sent, no email, bounced, and not yet confirmed, so a second run never double-sends.</li>
+<li><b>Automatic for contract clients:</b> an automation can send the notice after a completed visit, so clients billed under a contract (who never get an invoice) still receive the record.</li>
+<li><b>Three kinds of chemical email:</b> Client Instruction, Recommendation, and Upsale, each with its own templates built in Documents with merge tags (client, applicator and license #, <b>products applied with EPA # and amount</b>, conditions, care instructions).</li>
+<li><b>On the invoice:</b> optionally add a Chemical Application Record page to the invoice PDF (product, EPA #, ratio, areas, amount, method, targets, re-entry, applicator).</li>
+<li>Per-product "client route sheet instructions" flow into the care instructions automatically.</li>
+</ul>
+
+<h2>7. Reports<small>Four purpose-built reports in the Report Center</small></h2>
+<table>
+<tr><th style="width:28%">Report</th><th>What it answers</th></tr>
+<tr><td><b>Chemical Tracking Report</b></td><td>The compliance record: date, client and address, product, EPA #, re-entry interval, restricted-use flag, chemical and solution amounts and units, targets, areas treated, method, temperature, wind, pH, applicator, license #, start/end time. Filtered by date range; only confirmed, applied chemicals are listed. Prints landscape and exports to PDF.</td></tr>
+<tr><td><b>Planned Chemical Usage</b></td><td>Concentrate needed for scheduled and dispatched visits, by client and by chemical, with totals. Use it to prep before the day.</td></tr>
+<tr><td><b>Daily Load List</b></td><td>What each crew should load for a given day: concentrate amount and finished-mix volume per chemical, plus general materials, grouped by crew. Also on the Crew Board's Load lane.</td></tr>
+<tr><td><b>Materials Needed</b></td><td>Demand across scheduled and waiting-list jobs versus on hand and on order, with the shortfall. Create a requisition or purchase order directly from the shortfall.</td></tr>
+</table>
+<p>Reports can also be run as custom reports and added to dashboards in the Report Center.</p>
+
+<h2 style="break-before:page">8. Inventory and purchasing connection<small>Chemicals are products, so stock and buying are part of the same system</small></h2>
+<ul>
+<li>Chemicals are stocked and purchased through the same product catalog and PO workflow, with fractional quantity on hand (e.g. 2.75 gallons).</li>
+<li><b>Stock depletes automatically:</b> when a visit completes, each confirmed chemical comes out of on-hand quantity, converted to the product's unit. Correcting, un-confirming, or reopening puts it back, and tiny remainders carry forward so small applications still add up.</li>
+<li>Materials Needed compares upcoming chemical demand to on-hand stock and open orders, converting units, so you buy what you actually need.</li>
+<li>Each rate carries a product cost, and receiving goods against a PO updates stock, so the same catalog drives costing, buying, and application records.</li>
+</ul>
+
+<h2>9. Setup &amp; control<small>Configured to how your operation works</small></h2>
+<div class="grid">
+<div class="card"><b>Settings you own</b><ul><li>Application methods, targets, areas treated</li><li>Volume and area units (standard units, including linear feet, preloaded)</li><li>Which conditions to record</li><li>Who confirms: crew or office</li><li>Default area field and auto-calculate quantity on or off</li><li>Client notice email template</li></ul></div>
+<div class="card"><b>Role-based permissions</b><ul><li>Add / edit chemical usage, enforced in the database as well as the screen</li><li>Email application notices</li><li>Create units, methods, targets</li><li>Crew logins record chemicals only through the crew app</li><li>Audit trail on changes</li></ul></div>
+</div>
+
+<div class="note"><b>Regulatory note:</b> recordkeeping requirements vary by state and license class. The Chemical Tracking Report captures the fields most state programs ask for; we'd be glad to walk through your state's requirements and map them to the report.</div>
+
+<div class="foot">Landscapt is a cloud platform for landscape and field-service operations, with CRM, scheduling, invoicing, purchasing, and maintenance in one system. Ask us for a live walkthrough using your own products and rates.</div>
+</body></html>
