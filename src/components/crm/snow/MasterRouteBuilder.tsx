@@ -10,6 +10,7 @@ import {
   useDeleteSnowRoute,
   useSnowRouteStops,
   useRemoveRouteStop,
+  useSetRouteStopCrew,
   useSnowJobs,
 } from "@/lib/hooks/use-snow-dispatch";
 import {
@@ -72,6 +73,7 @@ export function MasterRouteBuilder() {
   const { data: stops = [] } = useSnowRouteStops(routeId);
   const addStops = useAddRouteStops();
   const removeStop = useRemoveRouteStop();
+  const setStopCrew = useSetRouteStopCrew();
   const reorder = useReorderRouteStopsOptimistic();
   const optimize = useOptimizeRouteJobs();
 
@@ -218,7 +220,7 @@ export function MasterRouteBuilder() {
             >
               <SelectTrigger className="h-8 w-56 max-w-full text-xs"><SelectValue placeholder="Default crew" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No default crew</SelectItem>
+                <SelectItem value="none">No default crew (shared route)</SelectItem>
                 {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -230,6 +232,9 @@ export function MasterRouteBuilder() {
               />
               Active
             </label>
+            {!route.defaultCrewId && (
+              <span className="text-xs text-slate-500 dark:text-neutral-400">Shared route: each stop keeps its own crew. Saving a storm&apos;s order fills them in.</span>
+            )}
             {canManage && (
               <button
                 className="ml-auto text-slate-300 hover:text-red-500 dark:text-neutral-500 dark:hover:text-red-400"
@@ -329,6 +334,9 @@ export function MasterRouteBuilder() {
                       address={stopLine(j, s.serviceAddress)}
                       service={j ? jobServiceNames(j).join(", ") : ""}
                       priority={j?.clientPriority}
+                      crewId={s.crewId}
+                      crews={route.defaultCrewId ? undefined : crews}
+                      onSetCrew={(crewId) => setStopCrew.mutate({ id: s.id, crewId, routeId: route.id }, { onError: () => toast.error("Failed to set the crew") })}
                       canManage={canManage}
                       busy={reorder.isPending}
                       dragOver={dragOver === i && dragFrom !== null && dragFrom !== i}

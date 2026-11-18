@@ -78,25 +78,32 @@ export interface PermanentAssignTarget {
  * A crew can have several Master Routes (e.g. one for plowing and one for salting, since some
  * storms only salt), so a permanent assignment has to name the route. One entry per route; a crew
  * with several routes shows "Crew - Route", a crew with one shows just its name, and a crew with
- * none is a single entry that creates its route.
+ * none is a single entry that creates its route. A shared route (no default crew, e.g. "All Plow
+ * Jobs") is offered for every crew: the stop remembers which crew runs it.
  */
 export function buildPermanentAssignTargets(crews: { id: string; name: string }[], routes: SnowRoute[]): PermanentAssignTarget[] {
   const out: PermanentAssignTarget[] = [];
+  const shared = routes
+    .filter((r) => r.isActive && !r.defaultCrewId)
+    .sort((a, b) => a.name.localeCompare(b.name));
   for (const crew of crews) {
     const own = routes
       .filter((r) => r.isActive && r.defaultCrewId === crew.id)
       .sort((a, b) => a.name.localeCompare(b.name));
-    if (own.length === 0) {
+    if (own.length === 0 && shared.length === 0) {
       out.push({ value: `${crew.id}|`, label: crew.name, crewId: crew.id, routeId: null });
       continue;
     }
     for (const r of own) {
       out.push({
         value: `${crew.id}|${r.id}`,
-        label: own.length === 1 ? crew.name : `${crew.name} - ${r.name}`,
+        label: own.length === 1 && shared.length === 0 ? crew.name : `${crew.name} - ${r.name}`,
         crewId: crew.id,
         routeId: r.id,
       });
+    }
+    for (const r of shared) {
+      out.push({ value: `${crew.id}|${r.id}`, label: `${crew.name} - ${r.name}`, crewId: crew.id, routeId: r.id });
     }
   }
   return out;
