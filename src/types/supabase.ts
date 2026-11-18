@@ -17713,6 +17713,115 @@ export type Database = {
           },
         ]
       }
+      vehicle_telematics_snapshots: {
+        Row: {
+          battery_milli_volts: number | null
+          check_engine_light: boolean | null
+          coolant_milli_c: number | null
+          created_at: string
+          created_by: string | null
+          def_milli_percent: number | null
+          deleted_at: string | null
+          engine_state: string | null
+          fault_codes: Json
+          fetched_at: string
+          fuel_percent: number | null
+          address: string | null
+          heading_degrees: number | null
+          latitude: number | null
+          longitude: number | null
+          speed_mph: number | null
+          id: string
+          org_id: string
+          samsara_vehicle_id: string | null
+          stat_times: Json
+          tire_back_left_kpa: number | null
+          tire_back_right_kpa: number | null
+          tire_front_left_kpa: number | null
+          tire_front_right_kpa: number | null
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          battery_milli_volts?: number | null
+          check_engine_light?: boolean | null
+          coolant_milli_c?: number | null
+          created_at?: string
+          created_by?: string | null
+          def_milli_percent?: number | null
+          deleted_at?: string | null
+          engine_state?: string | null
+          fault_codes?: Json
+          fetched_at?: string
+          fuel_percent?: number | null
+          address?: string | null
+          heading_degrees?: number | null
+          latitude?: number | null
+          longitude?: number | null
+          speed_mph?: number | null
+          id?: string
+          org_id?: string
+          samsara_vehicle_id?: string | null
+          stat_times?: Json
+          tire_back_left_kpa?: number | null
+          tire_back_right_kpa?: number | null
+          tire_front_left_kpa?: number | null
+          tire_front_right_kpa?: number | null
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          battery_milli_volts?: number | null
+          check_engine_light?: boolean | null
+          coolant_milli_c?: number | null
+          created_at?: string
+          created_by?: string | null
+          def_milli_percent?: number | null
+          deleted_at?: string | null
+          engine_state?: string | null
+          fault_codes?: Json
+          fetched_at?: string
+          fuel_percent?: number | null
+          address?: string | null
+          heading_degrees?: number | null
+          latitude?: number | null
+          longitude?: number | null
+          speed_mph?: number | null
+          id?: string
+          org_id?: string
+          samsara_vehicle_id?: string | null
+          stat_times?: Json
+          tire_back_left_kpa?: number | null
+          tire_back_right_kpa?: number | null
+          tire_front_left_kpa?: number | null
+          tire_front_right_kpa?: number | null
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_telematics_snapshots_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_telematics_snapshots_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_telematics_snapshots_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: true
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicles: {
         Row: {
           air_filter_part_number: string | null

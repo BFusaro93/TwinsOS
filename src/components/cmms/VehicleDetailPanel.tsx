@@ -25,6 +25,7 @@ import { NewAssetDialog } from "@/components/cmms/NewAssetDialog";
 import { AssetPartsTab } from "@/components/shared/AssetPartsTab";
 import { WOHistoryTab } from "@/components/shared/WOHistoryTab";
 import { AssetMetersTab } from "@/components/shared/AssetMetersTab";
+import { VehicleTelematicsTab } from "@/components/cmms/VehicleTelematicsTab";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useUpdateVehicle, useUpdateVehicleStatus } from "@/lib/hooks/use-vehicles";
 import { useMeters } from "@/lib/hooks/use-meters";
@@ -565,6 +566,11 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
             value: "details",
             label: "Details",
             content: <DetailsTab vehicle={vehicle} status={status} />,
+          },
+          {
+            value: "telematics",
+            label: "Telematics",
+            content: <VehicleTelematicsTab vehicleId={vehicle.id} />,
           },
           {
             value: "parts",
