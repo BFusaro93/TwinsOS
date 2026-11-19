@@ -1156,8 +1156,19 @@ export function InvoiceDetail({
       .catch((err: unknown) => toast.error(mutationErrorMessage(err, "Printed, but the invoice could not be marked printed")));
   }
 
-  function handleDownloadPDF() {
+  /** Preview: opens the PDF in a new tab (no print, lock or status change). */
+  function handlePreviewPDF() {
     window.open(`/api/crm/invoices/${invoice!.id}/pdf`, "_blank");
+  }
+
+  /** Download: saves the PDF to the computer without leaving the page. */
+  function handleDownloadPDF() {
+    const a = document.createElement("a");
+    a.href = `/api/crm/invoices/${invoice!.id}/pdf?download=1`;
+    a.download = `invoice-${invoice!.invoiceNumber}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   async function handleToggleLock() {
@@ -1377,7 +1388,7 @@ export function InvoiceDetail({
             </Button>
           )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={handleDownloadPDF}
+            onClick={handlePreviewPDF}
             title="Open the invoice as a PDF in a new tab — doesn't print, lock or change its status. Save first to see your latest edits.">
             <Eye className="mr-1 h-3.5 w-3.5 text-muted-foreground" /> Preview
           </Button>
@@ -1403,7 +1414,7 @@ export function InvoiceDetail({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={handleDownloadPDF}>
-                <Printer className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Open / download PDF
+                <Printer className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Download PDF
               </DropdownMenuItem>
               {/* Void/merge/delete revoke the links automatically, so a void
                   invoice has nothing to revoke. */}

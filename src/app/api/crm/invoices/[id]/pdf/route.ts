@@ -43,11 +43,14 @@ export async function GET(
     const result = await renderInvoicePDF(supabase, id, orgId, user.id, { forPrint });
     if (!result) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
+    // ?download=1 — the menu's Download PDF: save the file instead of opening it in the browser's viewer.
+    const disposition = req.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline";
+
     return new NextResponse(result.buffer as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="invoice-${result.invoiceNumber}.pdf"`,
+        "Content-Disposition": `${disposition}; filename="invoice-${result.invoiceNumber}.pdf"`,
         "Cache-Control": "private, no-cache",
       },
     });

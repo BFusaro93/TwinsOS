@@ -87,6 +87,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
     ],
     notes: [
       "Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started.",
+      "Excludes visits that belong to cancelled, completed, skipped or on-hold jobs.",
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
@@ -102,6 +103,9 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "status", op: "in", value: OUTSTANDING_VISIT_STATUSES },
+        // Leftover visits of a cancelled, completed, skipped or on-hold job are
+        // not work anyone owes — cancelling a job only clears its future visits.
+        { column: "job_status", op: "in", value: ["scheduled", "in_progress"] },
         {
           column: "scheduled_date",
           op: "lte",
