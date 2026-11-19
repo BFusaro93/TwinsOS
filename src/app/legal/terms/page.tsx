@@ -12,7 +12,7 @@ export default function TermsOfServicePage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-16 text-slate-800">
       <h1 className="text-3xl font-bold text-slate-900">Terms of Service</h1>
-      <p className="mt-2 text-sm text-slate-500">Last updated: September 1, 2026</p>
+      <p className="mt-2 text-sm text-slate-500">Last updated: November 18, 2026</p>
 
       <section className="mt-8 space-y-4 leading-relaxed">
         <p>
@@ -77,6 +77,11 @@ export default function TermsOfServicePage() {
           Stripe, Twilio, Zapier, Google Maps, and Samsara. Your use of those providers is governed by their
           own terms and privacy policies. We are not responsible for the acts, omissions, or availability of
           third-party providers.
+        </p>
+        <p>
+          Card payments you accept through Stripe may carry a platform application fee, charged by Landscapt
+          on each card payment and deducted through Stripe from the amount paid out to you. The rate is stated
+          in your plan or agreement and appears as an &ldquo;application fee&rdquo; in your Stripe dashboard.
         </p>
 
         <h2 className="pt-4 text-xl font-semibold text-slate-900">7. Intellectual Property</h2>

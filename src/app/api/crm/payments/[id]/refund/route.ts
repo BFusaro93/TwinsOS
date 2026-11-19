@@ -148,6 +148,10 @@ export async function POST(
         {
           payment_intent: payment.stripe_payment_intent_id,
           amount: grossRefundCents,
+          // Give back the platform's share of a refund in proportion (Stripe scales the
+          // application fee by refunded/charged; a full refund returns all of it). A no-op
+          // on charges that carried no fee.
+          refund_application_fee: true,
         },
         {
           stripeAccount: org.stripe_connect_account_id,

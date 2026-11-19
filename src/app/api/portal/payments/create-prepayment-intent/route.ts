@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
+import { platformFeeParams } from "@/lib/stripe/platform-fee";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (service.from("organizations") as any)
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
+      "platform_fee_bps, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
     )
     .eq("id", ctx.orgId)
     .single();
@@ -100,6 +101,7 @@ export async function POST(request: Request) {
               ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
               ccProcessingFeeBps: org.cc_processing_fee_bps,
               ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+              platformFeeBps: org.platform_fee_bps,
               ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
             },
             amountCents,
@@ -110,6 +112,7 @@ export async function POST(request: Request) {
     const paymentIntent = await stripe.paymentIntents.create(
       {
         amount: totalChargeCents,
+        ...platformFeeParams(org.platform_fee_bps, totalChargeCents, paymentMethod),
         currency: "usd",
         payment_method_types: [paymentMethod],
         ...surchargeIntentParams(feeCents, paymentMethod === "card"),

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
+import { platformFeeParams } from "@/lib/stripe/platform-fee";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { createPaymentIntentNotCanceled } from "@/lib/stripe/idempotency";
@@ -222,7 +223,7 @@ export async function POST(
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode, ach_payments_enabled, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations"
+      "platform_fee_bps, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode, ach_payments_enabled, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations"
     )
     .eq("id", estimate.org_id)
     .single();
@@ -260,6 +261,7 @@ export async function POST(
             ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
             ccProcessingFeeBps: org.cc_processing_fee_bps,
             ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+            platformFeeBps: org.platform_fee_bps,
             ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
           },
           depositCents,
@@ -349,6 +351,7 @@ export async function POST(
     stripe,
     {
       amount: totalChargeCents,
+      ...platformFeeParams(org.platform_fee_bps, totalChargeCents, paymentMethod),
       currency: "usd",
       payment_method_types: [paymentMethod],
       ...surchargeIntentParams(feeCents, paymentMethod === "card"),

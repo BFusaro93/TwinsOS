@@ -296,6 +296,17 @@ async function applyViaRpc({
   const amountCents: number = row.amount_cents ?? 0;
   const newlyPaidInvoiceIds: string[] = row.newly_paid_invoice_ids ?? [];
 
+  // What the platform collected on this charge (Stripe's application fee), kept on the payment
+  // row for per-org revenue reporting. Best-effort: the money is already recorded.
+  const platformFeeCents = paymentIntent.application_fee_amount ?? 0;
+  if (platformFeeCents > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: feeErr } = await (db.from("crm_payments") as any)
+      .update({ platform_fee_cents: platformFeeCents })
+      .eq("id", paymentId);
+    if (feeErr) log.warn("couldn't record platform fee on payment", { error: feeErr, paymentId });
+  }
+
   // The client the RPC actually recorded against: differs from the metadata's
   // when that client was merged into another while the payment was in flight.
   let payerId = clientId;

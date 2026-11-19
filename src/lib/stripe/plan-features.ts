@@ -188,7 +188,7 @@ export const PLAN_FEATURE_CATEGORIES: PlanFeatureCategory[] = [
       {
         key: "stripe_processing",
         label: "Stripe-powered payment processing",
-        description: "Stripe's standard rates apply (2.9% + $0.30 per card charge; 0.8% per ACH transfer, capped at $5). An optional pass-through fee to recover the card cost from clients is off by default; each org sets the rate and threshold (or has it cover Stripe's fee exactly) and can waive it per charge.",
+        description: "Processing is 3% + $0.30 per card charge and 0.8% per ACH transfer, capped at $5. An optional pass-through fee to recover the card cost from clients is off by default; each org sets the rate and threshold (or has it cover Stripe's fee exactly) and can waive it per charge.",
         highlight: true,
         values: { starter: true, cmms: false, growth: true, enterprise: true },
       },

@@ -3,6 +3,7 @@ import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
+import { platformFeeParams } from "@/lib/stripe/platform-fee";
 import { cardAllowsSurcharge, computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (supabase.from("organizations") as any)
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
+      "platform_fee_bps, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
     )
     .eq("id", effOrgId)
     .single();
@@ -195,6 +196,7 @@ export async function POST(request: Request) {
             ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
             ccProcessingFeeBps: org.cc_processing_fee_bps,
             ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+            platformFeeBps: org.platform_fee_bps,
             ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
           },
           invoice.balance_cents,
@@ -206,6 +208,7 @@ export async function POST(request: Request) {
     const paymentIntent = await stripe.paymentIntents.create(
       {
         amount: totalChargeCents,
+        ...platformFeeParams(org.platform_fee_bps, totalChargeCents, paymentMethod),
         currency: "usd",
         customer: client.stripe_customer_id,
         payment_method: client.saved_payment_method_id,
