@@ -962,7 +962,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       {/* Table */}
       <div className="shrink-0 overflow-x-auto bg-card lg:min-h-0 lg:flex-1 lg:shrink lg:overflow-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-4 py-3">
                 <input

@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/select";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail, Check } from "lucide-react";
+import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail, Check, ArrowUp, ArrowDown } from "lucide-react";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -349,6 +349,30 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
 
 // ── row ──────────────────────────────────────────────────────────────────────
 
+type WaitingSortKey = "client" | "service" | "dateRange" | "city" | "zip" | "crew" | "rate";
+
+function WaitingSortLabel({
+  col, sort, onSort, children,
+}: {
+  col: WaitingSortKey;
+  sort: { key: WaitingSortKey; dir: "asc" | "desc" } | null;
+  onSort: (col: WaitingSortKey) => void;
+  children: string;
+}) {
+  const active = sort?.key === col;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(col)}
+      className={`inline-flex items-center gap-1 font-semibold hover:text-slate-900 dark:hover:text-neutral-100 ${active ? "text-slate-900 dark:text-neutral-100" : ""}`}
+      aria-label={`Sort by ${children}`}
+    >
+      {children}
+      {active ? (sort.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : null}
+    </button>
+  );
+}
+
 function WaitingJobRow({
   job,
   service,
@@ -599,6 +623,12 @@ export function WaitingList() {
   // SA-style view: hide steps/jobs that aren't ready yet (Min Days spacing not
   // met, or the window hasn't opened).
   const [readyOnly, setReadyOnly] = useState(false);
+  // Column-header sort (click: A→Z, again: Z→A, third click: back to the default order). Sorting by
+  // Client puts a client's jobs next to each other, so duplicates are easy to spot.
+  const [sort, setSort] = useState<{ key: WaitingSortKey; dir: "asc" | "desc" } | null>(null);
+  function toggleSort(key: WaitingSortKey) {
+    setSort((cur) => (!cur || cur.key !== key ? { key, dir: "asc" } : cur.dir === "asc" ? { key, dir: "desc" } : null));
+  }
   const { today: orgTodayFn, toISODate: toOrgDate } = useOrgDates();
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [visibleKeys, setVisibleKeys] = usePersistedColumns(
@@ -766,8 +796,36 @@ export function WaitingList() {
         rows.push({ key: job.id, job, service: null });
       }
     }
-    return rows;
-  }, [filtered, startDate, endDate, readyOnly, orgTodayFn, toOrgDate]);
+    if (!sort) return rows;
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const text = (v: string | null | undefined) => (v ?? "").trim();
+    const valueOf = (r: { job: CRMJob; service: CRMJobService | null }): string | number => {
+      switch (sort.key) {
+        case "client":    return text(r.job.clientName);
+        case "service":   return text(r.service ? r.service.serviceName : (r.job.services ?? []).map((s) => s.serviceName).join(", "));
+        case "dateRange": return (r.service ? r.service.startDate : r.job.waitingListStart) ?? "";
+        case "city":      return text(r.job.serviceCity);
+        case "zip":       return text(r.job.serviceZip);
+        case "crew":      return text((r.job.crewId && crewCodeById.get(r.job.crewId)) || r.job.crewName);
+        case "rate":      return (r.service ? r.service.rateCents : r.job.rateCents) ?? 0;
+      }
+    };
+    const cmp = (a: string | number, b: string | number) =>
+      typeof a === "number" && typeof b === "number"
+        ? a - b
+        : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+    return [...rows].sort((a, b) => {
+      const av = valueOf(a);
+      const bv = valueOf(b);
+      // Blanks sink to the bottom whichever way it's sorted.
+      if (av === "" && bv !== "") return 1;
+      if (bv === "" && av !== "") return -1;
+      const c = cmp(av, bv) * dir;
+      if (c !== 0) return c;
+      // Ties keep a client's jobs together, then by service.
+      return cmp(text(a.job.clientName), text(b.job.clientName)) || cmp(text(a.service?.serviceName), text(b.service?.serviceName));
+    });
+  }, [filtered, startDate, endDate, readyOnly, orgTodayFn, toOrgDate, sort, crewCodeById]);
 
   const allSelected = visitRows.length > 0 && visitRows.every((r) => selectedKeys.has(r.key));
   // Only rows the filters still list count as selected (the buttons act on those alone).
@@ -1131,7 +1189,7 @@ export function WaitingList() {
       {/* Table */}
       <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full min-w-[900px] text-sm">
-          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
             <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-4 py-3">
                 <input
@@ -1141,13 +1199,13 @@ export function WaitingList() {
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                 />
               </th>
-              {visibleKeys.includes("client") && <th className="min-w-[200px] px-4 py-3">Client</th>}
-              {visibleKeys.includes("service") && <th className="min-w-[180px] px-4 py-3">Service</th>}
-              {visibleKeys.includes("dateRange") && <th className="px-4 py-3">Date Range</th>}
-              {visibleKeys.includes("city") && <th className="px-4 py-3">City</th>}
-              {visibleKeys.includes("zip") && <th className="px-4 py-3">Zip</th>}
-              {visibleKeys.includes("crew") && <th className="px-4 py-3">Crew</th>}
-              {visibleKeys.includes("rate") && <th className="px-4 py-3 text-right">Rate</th>}
+              {visibleKeys.includes("client") && <th className="min-w-[200px] px-4 py-3"><WaitingSortLabel col="client" sort={sort} onSort={toggleSort}>Client</WaitingSortLabel></th>}
+              {visibleKeys.includes("service") && <th className="min-w-[180px] px-4 py-3"><WaitingSortLabel col="service" sort={sort} onSort={toggleSort}>Service</WaitingSortLabel></th>}
+              {visibleKeys.includes("dateRange") && <th className="px-4 py-3"><WaitingSortLabel col="dateRange" sort={sort} onSort={toggleSort}>Date Range</WaitingSortLabel></th>}
+              {visibleKeys.includes("city") && <th className="px-4 py-3"><WaitingSortLabel col="city" sort={sort} onSort={toggleSort}>City</WaitingSortLabel></th>}
+              {visibleKeys.includes("zip") && <th className="px-4 py-3"><WaitingSortLabel col="zip" sort={sort} onSort={toggleSort}>Zip</WaitingSortLabel></th>}
+              {visibleKeys.includes("crew") && <th className="px-4 py-3"><WaitingSortLabel col="crew" sort={sort} onSort={toggleSort}>Crew</WaitingSortLabel></th>}
+              {visibleKeys.includes("rate") && <th className="px-4 py-3 text-right"><WaitingSortLabel col="rate" sort={sort} onSort={toggleSort}>Rate</WaitingSortLabel></th>}
               {EXTRA_COLUMNS.map((c) => visibleKeys.includes(c.key) && <th key={c.key} className="px-4 py-3 whitespace-nowrap">{c.label}</th>)}
               {customFieldDefs.map((def) => visibleKeys.includes(customColKey(def.id)) && (
                 <th key={def.id} className="px-4 py-3 whitespace-nowrap">{def.name}</th>

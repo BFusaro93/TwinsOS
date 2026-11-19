@@ -116,7 +116,7 @@ import {
 } from "@/lib/hooks/use-client-custom-fields";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
-import { formatCurrency, formatDate, formatHours, todayLocalISODate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { isValidEmail } from "@/lib/utils/email";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -3819,6 +3819,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const { data: properties } = useClientProperties(clientId, { includeArchived: true });
   const { data: clientTickets } = useTickets({ clientId });
   const { data: childClients } = useChildClients(clientId);
+  // Sub-accounts show six at first; "Show all" expands the full list (scrollable, with a name filter).
+  const [showAllChildren, setShowAllChildren] = useState(false);
+  const [childFilter, setChildFilter] = useState("");
   const { data: parentClient } = useClient(client?.parentClientId ?? "");
   const [activeTab, setActiveTab] = useState("home");
   const [editOpen, setEditOpen] = useState(false);
@@ -4228,8 +4231,22 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               Manage
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {childClients!.slice(0, 6).map((child) => (
+          {showAllChildren && childClients!.length > 6 && (
+            <Input
+              value={childFilter}
+              onChange={(e) => setChildFilter(e.target.value)}
+              placeholder="Filter sub-accounts by name or city…"
+              className="mb-2 h-7 text-xs"
+            />
+          )}
+          <div className={cn("grid grid-cols-2 gap-1.5", showAllChildren && "max-h-[28rem] overflow-y-auto pr-1")}>
+            {(showAllChildren
+              ? childClients!.filter((c) => {
+                  const q = childFilter.trim().toLowerCase();
+                  return !q || c.displayName.toLowerCase().includes(q) || (c.billingCity ?? "").toLowerCase().includes(q);
+                })
+              : childClients!.slice(0, 6)
+            ).map((child) => (
               <button
                 key={child.id}
                 onClick={() => router.push(`/crm/clients/${child.id}`)}
@@ -4255,7 +4272,13 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
             ))}
           </div>
           {childClients!.length > 6 && (
-            <p className="mt-1.5 text-xs text-slate-400 dark:text-neutral-500">+{childClients!.length - 6} more sub-accounts</p>
+            <button
+              type="button"
+              onClick={() => { setShowAllChildren((v) => !v); setChildFilter(""); }}
+              className="mt-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
+            >
+              {showAllChildren ? "Show fewer" : `Show all ${childClients!.length} sub-accounts (+${childClients!.length - 6} more)`}
+            </button>
           )}
         </div>
       )}

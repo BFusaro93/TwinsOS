@@ -7,6 +7,8 @@ import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { CREW_VISIT_RESPONSE_COLUMNS } from "@/lib/visits/visit-columns";
+import { autoPauseOtherRunningStops } from "@/lib/crew/auto-stop";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 
 interface VisitRow {
   id: string;
@@ -153,11 +155,32 @@ export async function POST(
   }
 
   const ids = pausedRows.map((r) => r.id);
+
+  // One job at a time: the crew went back to this stop, so any other stop of theirs still running
+  // (they paused this one, started another, and are now returning) is paused at this instant.
+  let autoPaused: string[] = [];
+  const ownCrewId = effectiveVisitCrewId(anchor);
+  if (ownCrewId) {
+    const { data: client } = anchor.client_id
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? await (supabase as any).from("clients").select("display_name").eq("id", anchor.client_id).maybeSingle()
+      : { data: null };
+    const label = (client?.display_name as string | undefined) || "another job";
+    autoPaused = await autoPauseOtherRunningStops(supabase, {
+      orgId: anchor.org_id,
+      crewId: ownCrewId,
+      exceptVisitIds: ids,
+      at: resolveOccurredAt(rawOccurredAt, { notBefore: pausedRows[0].paused_at }).toISOString(),
+      resumedStopLabel: label,
+      timeZone: await getOrgTimeZone(supabase, anchor.org_id),
+      userId: user.id,
+    });
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: finalRows } = await (supabase as any)
     .from("crm_job_visits")
     .select(CREW_VISIT_RESPONSE_COLUMNS)
     .in("id", ids);
 
-  return NextResponse.json({ visitIds: ids, visits: finalRows });
+  return NextResponse.json({ visitIds: ids, visits: finalRows, ...(autoPaused.length > 0 ? { autoPausedVisitIds: autoPaused } : {}) });
 }

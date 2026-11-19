@@ -784,7 +784,7 @@ export function EstimateTemplatesList() {
       {/* Table */}
       <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
             <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-4 py-3" />
               <th className="px-4 py-3">Name</th>

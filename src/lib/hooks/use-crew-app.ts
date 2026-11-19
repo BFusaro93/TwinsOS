@@ -1262,7 +1262,12 @@ export function useStopResume() {
       if (!res.ok) throw await crewRequestError(res, "Failed to resume");
       return res.json();
     },
-    onSuccess: (_data, { anchorVisitId }) => {
+    onSuccess: (data, { anchorVisitId }) => {
+      // Going back to a paused job while another is running: the server paused the other one so
+      // nobody is on two jobs at once. Resume it from its own page when you return.
+      if (((data as { autoPausedVisitIds?: string[] } | null)?.autoPausedVisitIds ?? []).length > 0) {
+        toast.info("Your other job was still running, so it was paused. Open it and tap Resume when you go back.", { duration: 8000 });
+      }
       qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
       qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });

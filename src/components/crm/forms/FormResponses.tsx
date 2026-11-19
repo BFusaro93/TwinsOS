@@ -367,7 +367,7 @@ export function FormResponses({ formId }: Props) {
       {/* Table */}
       <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-4 px-4 py-3" />
               <th className="px-4 py-3">Status</th>

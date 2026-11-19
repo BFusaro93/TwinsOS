@@ -3679,6 +3679,64 @@ async function countJobsOnSchedule(
   return count ?? 0;
 }
 
+export interface ScheduleCustomerRow {
+  jobId: string;
+  clientId: string;
+  clientName: string;
+  jobNumber: number | null;
+  services: string;
+  address: string;
+  city: string;
+  zip: string;
+  status: string;
+}
+
+/**
+ * The customers on a schedule: every live job (not deleted, completed or cancelled) whose
+ * schedule is `name`, with its client, services and service address — the same set the
+ * delete guard counts. Jobs point at their schedule by name.
+ */
+export function useCRMScheduleCustomers(name: string | null) {
+  return useQuery({
+    queryKey: ['crm-schedules', 'customers', name],
+    enabled: !!name,
+    queryFn: async (): Promise<ScheduleCustomerRow[]> => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = [];
+      // PostgREST caps a plain select at 1000 rows — page through.
+      for (let from = 0; ; from += 1000) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from('crm_jobs')
+          .select('id, client_id, job_number, status, service_address, service_city, service_zip, clients(display_name), crm_job_services(service_name)')
+          .eq('schedule', name!)
+          .is('deleted_at', null)
+          .not('status', 'in', '("completed","cancelled")')
+          .order('id')
+          .range(from, from + 999);
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if (!data || data.length < 1000) break;
+      }
+      return rows
+        .map((r) => ({
+          jobId: r.id as string,
+          clientId: r.client_id as string,
+          clientName: (r.clients?.display_name as string | undefined) ?? '—',
+          jobNumber: (r.job_number as number | null) ?? null,
+          services: ((r.crm_job_services ?? []) as { service_name: string | null }[])
+            .map((sv) => sv.service_name).filter(Boolean).join(', '),
+          address: (r.service_address as string | null) ?? '',
+          city: (r.service_city as string | null) ?? '',
+          zip: (r.service_zip as string | null) ?? '',
+          status: r.status as string,
+        }))
+        .sort((a, b) => a.clientName.localeCompare(b.clientName, undefined, { sensitivity: 'base' }));
+    },
+  });
+}
+
 /** How many live jobs use the schedule — shown (and enforced) before a delete. */
 export function useCRMScheduleJobCount(name: string | null) {
   return useQuery({

@@ -11,6 +11,7 @@ import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications";
 import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit-notes";
 import { rollUpHiddenLines } from "@/lib/invoices/hidden-lines";
+import { groupConsolidatedLines } from "@/lib/invoices/consolidated-groups";
 import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
 import { fetchInvoiceCreditAvailableCents } from "@/lib/invoices/credit-available";
 
@@ -89,7 +90,19 @@ async function buildInvoicePDFData(
       discountCents: (li.discount_cents as number) ?? 0,
       hideOnPrint: !!li.hide_on_print,
     }));
-  const printedLineItems = rollUpHiddenLines(lineItems);
+  // A consolidated invoice (sub-account invoices billed together on the parent) prints one
+  // header per sub-account / property with its lines under it. Only invoices that actually
+  // swallowed others are grouped, so a normal line that happens to start with "[" never is.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { count: consolidatedSources } = await (supabase as any)
+    .from("crm_invoices")
+    .select("id", { count: "exact", head: true })
+    .eq("consolidated_into_id", invoiceId)
+    .eq("org_id", orgId);
+  const rolledUp = rollUpHiddenLines(lineItems);
+  const printedLineItems = (consolidatedSources ?? 0) > 0
+    ? groupConsolidatedLines(rolledUp, (inv.clients as { display_name?: string | null } | null)?.display_name ?? null)
+    : rolledUp;
 
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};

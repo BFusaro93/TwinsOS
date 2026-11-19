@@ -474,7 +474,7 @@ export function ImportExportMenu({
           {!parseError && previewRows.length > 0 && (
             <div className="max-h-64 overflow-auto rounded-md border text-xs">
               <table className="w-full">
-                <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+                <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
                   <tr>
                     {previewCols.map((col) => (
                       <th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600 dark:text-neutral-400">

@@ -25,6 +25,17 @@ export interface InvoicePDFLineItem {
   discountCents?: number;
   /** Hidden-on-invoice marker; rolled up (and dropped) before rendering — see lib/invoices/hidden-lines.ts. */
   hideOnPrint?: boolean;
+  /** Set on the first line of a group on a consolidated invoice: prints a sub-account / property header above it. */
+  groupHeader?: string;
+}
+
+/** A sub-account / property header row between groups of lines on a consolidated invoice. */
+function GroupHeaderRow({ label, color }: { label: string; color: string }) {
+  return (
+    <View wrap={false} minPresenceAhead={40} style={{ paddingVertical: 4, paddingHorizontal: 6, backgroundColor: "#f1f5f9", borderBottom: "0.5 solid #cbd5e1" }}>
+      <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 9, color }}>{label}</Text>
+    </View>
+  );
 }
 
 /** A photo embedded on the invoice's photo page(s). dataUri is base64 —
@@ -308,7 +319,9 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       </View>
 
       {invoice.lineItems.map((li, i) => (
-        <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
+        <Fragment key={i}>
+        {li.groupHeader ? <GroupHeaderRow label={li.groupHeader} color="#0f172a" /> : null}
+        <View style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
           <View style={S.cellService}>
             <Text style={S.serviceNameText}>{li.name ?? "Service"}</Text>
             {li.description ? (
@@ -319,6 +332,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
           <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents - (li.discountCents ?? 0))}</Text>{(li.discountCents ?? 0) > 0 ? <Text style={[S.cellText, { textAlign: "right", fontSize: 7 }]}>after {cents(li.discountCents ?? 0)} discount</Text> : null}</View>
         </View>
+        </Fragment>
       ))}
 
       {/* ── totals ─────────────────────────────────────────────────── */}
@@ -492,7 +506,9 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       </View>
 
       {invoice.lineItems.map((li, i) => (
-        <View key={i} style={SC.row}>
+        <Fragment key={i}>
+        {li.groupHeader ? <GroupHeaderRow label={li.groupHeader} color="#0f172a" /> : null}
+        <View style={SC.row}>
           <View style={SC.cellDesc}>
             <Text style={SC.itemName}>{li.name ?? "Service"}</Text>
             {li.description ? <Text style={SC.itemDesc}>{notesToPlainText(li.description)}</Text> : null}
@@ -501,6 +517,7 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           <View style={SC.cellNum}><Text style={SC.cellText}>{cents(li.rateCents)}</Text></View>
           <View style={SC.cellTotal}><Text style={[SC.cellText, { fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents - (li.discountCents ?? 0))}</Text>{(li.discountCents ?? 0) > 0 ? <Text style={[SC.cellText, { fontSize: 7 }]}>after {cents(li.discountCents ?? 0)} discount</Text> : null}</View>
         </View>
+        </Fragment>
       ))}
 
       <View style={SC.totals}>
@@ -865,7 +882,9 @@ function StatementInvoiceLayout({
       )}
 
       {invoice.lineItems.map((li, i) => (
-        <View key={i} style={SS.activityRow}>
+        <Fragment key={i}>
+        {li.groupHeader ? <GroupHeaderRow label={li.groupHeader} color="#0f172a" /> : null}
+        <View style={SS.activityRow}>
           <View style={SS.cellDate}><Text style={SS.activityText}>{formatDate(invoice.invoiceDate)}</Text></View>
           <View style={SS.cellDesc}>
             <Text style={SS.activityText}>{li.name ?? invoice.description ?? "Service"}</Text>
@@ -874,6 +893,7 @@ function StatementInvoiceLayout({
           <View style={SS.cellPrice}><Text style={SS.activityText}>{cents(li.rateCents)}</Text></View>
           <View style={SS.cellTotal}><Text style={SS.activityText}>{cents(li.totalCents)}</Text></View>
         </View>
+        </Fragment>
       ))}
 
       {showPaymentStub ? (

@@ -340,6 +340,7 @@ export function InvoicesList({ clientId }: Props) {
   // Status and Payment Method are multi-select (stack with every other filter).
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [methodFilters, setMethodFilters] = useState<string[]>([]);
+  const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [otherChargeOpen, setOtherChargeOpen] = useState(false);
@@ -360,7 +361,7 @@ export function InvoicesList({ clientId }: Props) {
   // any of them changes, rows that are no longer shown must not stay selected
   // (bulk Void / Email / Charge would otherwise act on invoices the user can't
   // see). Same rule as the Clients and Leads lists.
-  const selectionScope = JSON.stringify([effectiveClientId ?? null, quickFilter, searchParams.get("ids"), search, filterValues, statusFilters, methodFilters]);
+  const selectionScope = JSON.stringify([effectiveClientId ?? null, quickFilter, searchParams.get("ids"), search, filterValues, statusFilters, methodFilters, tagFilters]);
   const [selectionScopeSeen, setSelectionScopeSeen] = useState(selectionScope);
   if (selectionScopeSeen !== selectionScope) {
     setSelectionScopeSeen(selectionScope);
@@ -406,6 +407,12 @@ export function InvoicesList({ clientId }: Props) {
     void:       applyQuickFilter(allInvoices, "void", todayYmd).length,
   }), [allInvoices, todayYmd]);
 
+  // Every tag on any listed invoice's client, for the Tags filter.
+  const tagOptions = useMemo(
+    () => [...new Set(allInvoices.flatMap((i) => i.clientTags ?? []))].sort((a, b) => a.localeCompare(b)),
+    [allInvoices]
+  );
+
   const filtered = useMemo(() => {
     let list = idsFilter ? allInvoices.filter((i) => idsFilter.has(i.id)) : applyQuickFilter(allInvoices, quickFilter, todayYmd);
     if (search.trim()) {
@@ -431,6 +438,7 @@ export function InvoicesList({ clientId }: Props) {
     }
     if (statusFilters.length > 0) list = list.filter((i) => statusFilters.includes(effectiveStatus(i, todayYmd)));
     if (methodFilters.length > 0) list = list.filter((i) => methodFilters.includes(paymentTypeLabel(i)));
+    if (tagFilters.length > 0) list = list.filter((i) => (i.clientTags ?? []).some((t) => tagFilters.includes(t)));
     // Sort
     list = [...list].sort((a, b) => {
       let av: number | string = 0, bv: number | string = 0;
@@ -465,7 +473,7 @@ export function InvoicesList({ clientId }: Props) {
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     return list;
-  }, [allInvoices, idsFilter, quickFilter, search, filterEntries, statusFilters, methodFilters, sortKey, sortDir, accountBalanceByClient, todayYmd]);
+  }, [allInvoices, idsFilter, quickFilter, search, filterEntries, statusFilters, methodFilters, tagFilters, sortKey, sortDir, accountBalanceByClient, todayYmd]);
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -852,6 +860,14 @@ export function InvoicesList({ clientId }: Props) {
               {label}
             </button>
           ))}
+          {tagOptions.length > 0 && (
+            <MultiSelectFilterTab
+              label="Tags"
+              options={tagOptions.map((t) => ({ value: t, label: t }))}
+              selected={tagFilters}
+              onChange={setTagFilters}
+            />
+          )}
           {activeFilterKey && (
             <>
               {activeFilterKey === "date" ? (
@@ -1034,7 +1050,7 @@ export function InvoicesList({ clientId }: Props) {
       {/* Table */}
       <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-3 py-3">
                 <input
