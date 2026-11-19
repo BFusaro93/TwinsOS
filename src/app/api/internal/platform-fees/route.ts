@@ -13,6 +13,11 @@ const UpdateSchema = z.object({
   platformFeeBps: z.number().int().min(0).max(100),
 });
 
+/** bps → "0.10%" */
+function formatBps(bps: number): string {
+  return `${(bps / 100).toFixed(2)}%`;
+}
+
 async function requireStaff() {
   const supabase = await createClient();
   const {
@@ -37,6 +42,33 @@ export async function GET() {
     log.error("failed to list orgs", { error });
     return NextResponse.json({ error: "Couldn't load organizations" }, { status: 500 });
   }
+
+  const service = createServiceClient();
+  // Users per org, so the page can hide empty duplicate/abandoned orgs.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: profileRows } = await (service.from("profiles") as any).select("org_id");
+  const userCounts = new Map<string, number>();
+  for (const r of (profileRows ?? []) as { org_id: string | null }[]) {
+    if (r.org_id) userCounts.set(r.org_id, (userCounts.get(r.org_id) ?? 0) + 1);
+  }
+  // Newest fee change per org, from the audit trail.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: auditRows } = await (service.from("audit_log") as any)
+    .select("org_id, changed_by_name, description, created_at")
+    .eq("record_type", "organization")
+    .eq("field_changed", "platform_fee_bps")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  const lastChange = new Map<string, { by: string | null; at: string; description: string | null }>();
+  for (const r of (auditRows ?? []) as {
+    org_id: string;
+    changed_by_name: string | null;
+    description: string | null;
+    created_at: string;
+  }[]) {
+    if (!lastChange.has(r.org_id)) lastChange.set(r.org_id, { by: r.changed_by_name, at: r.created_at, description: r.description });
+  }
+
   return NextResponse.json({
     orgs: (data ?? []).map(
       (o: {
@@ -50,6 +82,8 @@ export async function GET() {
         name: o.name,
         platformFeeBps: o.platform_fee_bps,
         stripeConnected: !!o.stripe_connect_account_id && !!o.stripe_connect_charges_enabled,
+        userCount: userCounts.get(o.id) ?? 0,
+        lastChange: lastChange.get(o.id) ?? null,
       })
     ),
   });
@@ -64,8 +98,16 @@ export async function PATCH(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   const { orgId, platformFeeBps } = parsed.data;
 
+  const service = createServiceClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (createServiceClient().from("organizations") as any)
+  const { data: before } = await (service.from("organizations") as any)
+    .select("platform_fee_bps")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (!before) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (service.from("organizations") as any)
     .update({ platform_fee_bps: platformFeeBps })
     .eq("id", orgId)
     .select("id, platform_fee_bps")
@@ -73,6 +115,30 @@ export async function PATCH(request: Request) {
   if (error || !data) {
     log.error("failed to update platform fee", { error, orgId });
     return NextResponse.json({ error: "Couldn't update the fee" }, { status: 500 });
+  }
+  if (before.platform_fee_bps !== platformFeeBps) {
+    // organizations has no audit trigger, so record the change explicitly. The
+    // entry sits under the affected org (record_type 'organization') and is
+    // visible to that org's admins in the audit report.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: staffProfile } = await (service.from("profiles") as any)
+      .select("name")
+      .eq("id", auth.user.id)
+      .maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: auditError } = await (service.from("audit_log") as any).insert({
+      org_id: orgId,
+      created_by: auth.user.id,
+      record_type: "organization",
+      record_id: orgId,
+      action: "updated",
+      changed_by_name: staffProfile?.name ?? null,
+      description: `Platform fee changed from ${formatBps(before.platform_fee_bps)} to ${formatBps(platformFeeBps)}`,
+      field_changed: "platform_fee_bps",
+      old_value: String(before.platform_fee_bps),
+      new_value: String(platformFeeBps),
+    });
+    if (auditError) log.error("failed to write platform fee audit entry", { error: auditError, orgId });
   }
   log.info("platform fee changed", { orgId, platformFeeBps, staffUserId: auth.user.id });
   return NextResponse.json({ ok: true, platformFeeBps: data.platform_fee_bps });

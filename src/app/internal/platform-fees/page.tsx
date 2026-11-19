@@ -12,6 +12,8 @@ interface OrgFeeRow {
   name: string;
   platformFeeBps: number;
   stripeConnected: boolean;
+  userCount: number;
+  lastChange: { by: string | null; at: string; description: string | null } | null;
 }
 
 /** bps → "0.10%" */
@@ -51,6 +53,12 @@ function FeeRow({ org }: { org: OrgFeeRow }) {
         <div className="text-xs text-muted-foreground">
           {org.stripeConnected ? "Stripe connected" : "No Stripe account"} · currently {formatBps(org.platformFeeBps)}
         </div>
+        {org.lastChange && (
+          <div className="text-xs text-muted-foreground">
+            Last changed {new Date(org.lastChange.at).toLocaleDateString()}
+            {org.lastChange.by ? ` by ${org.lastChange.by}` : ""}
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <Input
@@ -74,6 +82,8 @@ function FeeRow({ org }: { org: OrgFeeRow }) {
 }
 
 export default function PlatformFeesPage() {
+  const [search, setSearch] = useState("");
+  const [showEmpty, setShowEmpty] = useState(false);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["staff-platform-fees"],
     queryFn: async (): Promise<OrgFeeRow[]> => {
@@ -87,19 +97,43 @@ export default function PlatformFeesPage() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Payment platform fee</h1>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Platform fee</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           The share of every card payment (the total charged to the client; bank/ACH payments carry no fee) that goes to the platform, per
           organization. 0.10% is the standard rate for new organizations; existing ones were left at 0. Changes apply
           to payments created after you save, and a refund returns the fee in proportion. Maximum 1%.
         </p>
       </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          type="search"
+          placeholder="Search organizations…"
+          className="max-w-xs"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search organizations"
+        />
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input type="checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} />
+          Show orgs with no users
+        </label>
+      </div>
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : isError || !data ? (
         <p className="text-sm text-destructive">Couldn&apos;t load organizations.</p>
       ) : (
-        data.map((org) => <FeeRow key={`${org.id}:${org.platformFeeBps}`} org={org} />)
+        (() => {
+          const q = search.trim().toLowerCase();
+          const rows = data.filter(
+            (o) => (showEmpty || o.userCount > 0 || q !== "") && (!q || o.name.toLowerCase().includes(q))
+          );
+          return rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No organizations match.</p>
+          ) : (
+            rows.map((org) => <FeeRow key={`${org.id}:${org.platformFeeBps}`} org={org} />)
+          );
+        })()
       )}
     </div>
   );
