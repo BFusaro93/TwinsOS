@@ -264,6 +264,9 @@ export const REPORT_DATASETS: ReportDataset[] = [
         options: VISIT_STATUS_OPTIONS,
       },
       { key: "sub_status", label: "Sub Status", type: "text" },
+      // The parent job's status (crm_jobs.status) — a visit can outlive its job's
+      // cancellation/completion as 'scheduled' when it was dated before the change.
+      { key: "job_status", label: "Job Status", type: "text" },
       { key: "client_name", label: "Client", type: "text" },
       { key: "service_names", label: "Services", type: "text" },
       { key: "service_code", label: "Service Code", type: "text" },
