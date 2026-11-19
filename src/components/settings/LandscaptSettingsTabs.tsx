@@ -1937,7 +1937,7 @@ function AccountingTab() {
             </UISelect>
             <p className="text-xs text-slate-400 dark:text-neutral-500">
               {feeModeDraft === "cover_fee"
-                ? "The charge is grossed up so that, after Stripe's card fee (2.9% + $0.30, taken from the whole charge including this fee), you receive the full invoice amount. The fee is capped at 4% of the balance (card-network ceiling), so very small balances net slightly less. The percent below is ignored."
+                ? "The charge is grossed up so that, after Stripe's card fee (2.9% + $0.30) and the platform fee (0.1% on newer accounts), both taken from the whole charge including this fee, you receive the full invoice amount. The fee is capped at 4% of the balance (card-network ceiling), so very small balances net slightly less. The percent below is ignored."
                 : "A flat percent of the invoice balance. Stripe's card fee is taken from the whole charge, including this fee, so the fee itself costs you a little."}
             </p>
           </div>

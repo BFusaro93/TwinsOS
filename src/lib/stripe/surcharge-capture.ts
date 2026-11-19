@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import { scaledPlatformFeeCents } from "@/lib/stripe/platform-fee";
 
 /**
  * Card surcharges and debit cards.
@@ -61,7 +62,7 @@ export async function settleSurchargeAuthorization(
   }
 
   if (allowsSurcharge || surchargeCents === 0) {
-    await captureOrIgnore(stripe, intent.id, opts, undefined);
+    await captureOrIgnore(stripe, intent.id, opts, undefined, 0);
     return "captured";
   }
 
@@ -75,7 +76,10 @@ export async function settleSurchargeAuthorization(
   // stays "1" until the capture lands (the intent's status guards it after that), so a capture that
   // fails here is picked up and retried by the next webhook delivery or sweep.
   await stripe.paymentIntents.update(intent.id, { metadata: { fee_cents: "0" } }, opts);
-  await captureOrIgnore(stripe, intent.id, opts, amountToCapture);
+  // The platform fee was sized on the authorized total (invoice + surcharge); a debit card is only
+  // charged the invoice balance, so the fee must shrink with it or the org pays it on money never taken.
+  const captureFeeCents = scaledPlatformFeeCents(intent.application_fee_amount, intent.amount, amountToCapture);
+  await captureOrIgnore(stripe, intent.id, opts, amountToCapture, captureFeeCents);
   return "captured";
 }
 
@@ -83,10 +87,18 @@ async function captureOrIgnore(
   stripe: Stripe,
   intentId: string,
   opts: { stripeAccount: string },
-  amountToCapture: number | undefined
+  amountToCapture: number | undefined,
+  /** Platform fee to set on a PARTIAL capture (ignored for a full capture, which keeps the intent's fee). */
+  applicationFeeCents: number
 ): Promise<void> {
   try {
-    await stripe.paymentIntents.capture(intentId, amountToCapture !== undefined ? { amount_to_capture: amountToCapture } : {}, opts);
+    await stripe.paymentIntents.capture(
+      intentId,
+      amountToCapture !== undefined
+        ? { amount_to_capture: amountToCapture, ...(applicationFeeCents > 0 ? { application_fee_amount: applicationFeeCents } : {}) }
+        : {},
+      opts
+    );
   } catch (err) {
     // A concurrent settle (webhook + cron) already captured it: fine.
     const code = (err as { code?: string } | null)?.code;

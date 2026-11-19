@@ -75,7 +75,7 @@ const ITEMS: DeepDiveItem[] = [
   {
     icon: CreditCard,
     title: "Invoicing & Payments",
-    body: "Draft-to-paid invoicing with Stripe-powered card and ACH payments built in, at Stripe's standard rates (2.9% + $0.30 card, 0.8% capped at $5 ACH). Clients can save a payment method for optional autopay. An optional pass-through fee to recover the card cost is off by default; you set the rate and threshold (or have it cover Stripe's fee exactly) and can waive it per charge.",
+    body: "Draft-to-paid invoicing with Stripe-powered card and ACH payments built in, at 3% + $0.30 per card charge and 0.8% per ACH transfer, capped at $5 (Stripe's rates plus a 0.1% platform fee on cards). Clients can save a payment method for optional autopay. An optional pass-through fee to recover the card cost is off by default; you set the rate and threshold (or have it cover Stripe's fee exactly) and can waive it per charge.",
   },
   {
     icon: Users,

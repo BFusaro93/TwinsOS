@@ -63,11 +63,11 @@ export default function PricingPage() {
             <div className="mx-auto grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="rounded-md border border-[#e6e6e0] bg-[#fbfbf8] p-4">
                 <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                  Stripe&apos;s processing rates
+                  Payment processing rates
                 </div>
                 <div className="flex items-center justify-between py-1 text-[13.5px]">
                   <span className="text-slate-600">Card</span>
-                  <span className="font-semibold text-[#0a0a0a]">2.9% + $0.30</span>
+                  <span className="font-semibold text-[#0a0a0a]">3% + $0.30</span>
                 </div>
                 <div className="flex items-center justify-between py-1 text-[13.5px]">
                   <span className="text-slate-600">ACH transfer</span>

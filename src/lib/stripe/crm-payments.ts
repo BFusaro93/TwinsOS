@@ -22,6 +22,9 @@ export interface OrgFeeSettings {
   ccProcessingFeeThresholdCents: number;
   /** 'flat' (default) = bps of the balance; 'cover_fee' = gross up so the org nets the balance after Stripe's card fee. */
   ccProcessingFeeMode?: string | null;
+  /** The platform's fee on this org's charges (bps of the total). The 'cover the card fee' gross-up
+   *  includes it so the org still nets the invoice balance. Absent/0 for grandfathered orgs. */
+  platformFeeBps?: number | null;
 }
 
 /** Stripe's standard US card pricing (2.9% + $0.30), used by the 'cover the card fee' surcharge mode. */
@@ -51,8 +54,10 @@ export function computeProcessingFee(
   const eligible = org.ccProcessingFeeEnabled && !waiveFee && balanceCents > org.ccProcessingFeeThresholdCents;
   if (eligible && org.ccProcessingFeeMode === "cover_fee") {
     // Stripe takes RATE x total + FIXED off the whole charge, surcharge included, so charge
-    // T = (balance + FIXED) / (1 - RATE): T minus Stripe's cut is exactly the invoice balance.
-    const exactTotalCents = Math.ceil((balanceCents + STRIPE_CARD_FIXED_CENTS) / (1 - STRIPE_CARD_RATE));
+    // T = (balance + FIXED) / (1 - RATE - platform fee rate): T minus Stripe's and the platform's cut is exactly the invoice balance.
+    const exactTotalCents = Math.ceil(
+      (balanceCents + STRIPE_CARD_FIXED_CENTS) / (1 - STRIPE_CARD_RATE - (org.platformFeeBps ?? 0) / 10000)
+    );
     const feeCents = Math.min(exactTotalCents - balanceCents, Math.round((balanceCents * COVER_FEE_CAP_BPS) / 10000));
     return { feeCents, totalChargeCents: balanceCents + feeCents };
   }
