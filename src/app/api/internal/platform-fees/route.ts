@@ -30,9 +30,39 @@ async function requireStaff() {
 }
 
 /** Staff-only: every org with its current platform fee and Stripe Connect status. */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireStaff();
   if (auth.error) return auth.error;
+
+  // ?orgId=… returns that org's full rate-change history (newest first).
+  const historyOrgId = new URL(request.url).searchParams.get("orgId");
+  if (historyOrgId) {
+    if (!z.string().uuid().safeParse(historyOrgId).success) {
+      return NextResponse.json({ error: "Invalid orgId" }, { status: 400 });
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: entries, error: historyError } = await (createServiceClient().from("audit_log") as any)
+      .select("id, changed_by_name, description, created_at")
+      .eq("org_id", historyOrgId)
+      .eq("record_type", "organization")
+      .eq("field_changed", "platform_fee_bps")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (historyError) {
+      log.error("failed to load fee history", { error: historyError, orgId: historyOrgId });
+      return NextResponse.json({ error: "Couldn't load history" }, { status: 500 });
+    }
+    return NextResponse.json({
+      history: (entries ?? []).map(
+        (e: { id: string; changed_by_name: string | null; description: string | null; created_at: string }) => ({
+          id: e.id,
+          by: e.changed_by_name,
+          description: e.description,
+          at: e.created_at,
+        })
+      ),
+    });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (createServiceClient().from("organizations") as any)
