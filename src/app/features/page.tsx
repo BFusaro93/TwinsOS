@@ -69,7 +69,7 @@ const CATEGORIES = [
     label: "Billing & Support",
     sub: "Landscapt",
     items: [
-      { icon: CreditCard, title: "Credit Card & ACH Processing", body: "Stripe-powered online payments built into every invoice, at 3% + $0.30 per card charge and 0.8% per ACH transfer, capped at $5 (Stripe's rates plus a 0.1% platform fee on cards). An optional pass-through fee to recover the card cost is off by default; you set the rate and threshold (or have it cover Stripe's fee exactly) and can waive it per charge." },
+      { icon: CreditCard, title: "Credit Card & ACH Processing", body: "Stripe-powered online payments built into every invoice, at 3% + $0.30 per card charge and 0.8% per ACH transfer, capped at $5. An optional pass-through fee to recover the card cost is off by default; you set the rate and threshold (or have it cover Stripe's fee exactly) and can waive it per charge." },
       { icon: Users, title: "Client Portal", body: "Clients log in to view and pay invoices, review estimates, and submit their own tickets." },
       { icon: LifeBuoy, title: "Tickets", body: "Customer support tickets with priority, status, and automated past-due tracking — visible to clients in their own portal." },
       { icon: MessageSquareText, title: "SMS & Client Texting", body: "Automated text reminders and updates, with a client's replies landing straight in a ticket for staff to follow up on — TCPA opt-in built in." },
