@@ -1,0 +1,29 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://gxtmqxdxlvyfswcoxyvm.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4dG1xeGR4bHZ5ZnN3Y294eXZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2NTk2ODMsImV4cCI6MjA5NzIzNTY4M30.hqJkdMb_1JFHn60OjyTfM29xymZIcApYlFl0EsWh3Y8",
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:3000"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://mhphatxiqxbscivffejl.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_5r6oz1zTEKQNUVW9HHMfug_jIoUDi-J",
+        "EXPO_PUBLIC_API_BASE_URL": "https://landscapt.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

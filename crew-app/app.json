@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "crew-app",
+    "name": "Landscapt Crew",
     "slug": "brandon",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,12 +9,13 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.bfusaro93.brandon",
+      "bundleIdentifier": "com.landscapt.crew",
       "infoPlist": {
         "UIApplicationSceneManifest": {
           "UIApplicationSupportsMultipleScenes": false,
           "UISceneConfigurations": {}
-        }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -25,7 +26,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": [
+      "package": "com.landscapt.crew",
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
