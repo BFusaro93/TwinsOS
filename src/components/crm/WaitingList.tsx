@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/select";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail, Check, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail, Check, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -368,7 +368,9 @@ function WaitingSortLabel({
       aria-label={`Sort by ${children}`}
     >
       {children}
-      {active ? (sort.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : null}
+      {active
+        ? (sort.dir === "asc" ? <ArrowUp className="h-3 w-3 text-slate-600 dark:text-neutral-400" /> : <ArrowDown className="h-3 w-3 text-slate-600 dark:text-neutral-400" />)
+        : <ArrowUpDown className="h-3 w-3 text-slate-300 dark:text-neutral-500" />}
     </button>
   );
 }

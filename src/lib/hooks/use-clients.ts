@@ -400,21 +400,33 @@ export interface ClientSearchOptions {
 export const CLIENT_SEARCH_LIMIT = 50;
 
 /** Search-as-you-type for client pickers: at most `limit` (50) matches,
- *  alphabetical. An empty term returns the first 50. */
+ *  alphabetical — parent / stand-alone accounts first, then sub-accounts, when a term is typed.
+ *  An empty term returns the first 50. */
 export function useClientSearch(term: string, opts: ClientSearchOptions = {}, enabled = true) {
   return useQuery({
     queryKey: clientKeys.search(term, opts),
     queryFn: async () => {
       const supabase = createClient();
-      let q = searchClientsRpc(supabase, { search: term }).select(CLIENT_SELECT);
-      if (opts.statuses?.length) q = q.in("status", opts.statuses);
-      if (opts.excludeStatuses?.length) q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
-      if (opts.topLevelOnly) q = q.is("parent_client_id", null);
+      const limit = opts.limit ?? CLIENT_SEARCH_LIMIT;
       const exclude = (opts.excludeIds ?? []).filter(Boolean);
-      if (exclude.length > 0) q = q.not("id", "in", `(${exclude.join(",")})`);
-      const { data, error } = await q.order("display_name").order("id").limit(opts.limit ?? CLIENT_SEARCH_LIMIT);
-      if (error) throw error;
-      return (data ?? []).map(mapClient);
+      const run = async (scope: "all" | "parents" | "subs", max: number) => {
+        let q = searchClientsRpc(supabase, { search: term }).select(CLIENT_SELECT);
+        if (opts.statuses?.length) q = q.in("status", opts.statuses);
+        if (opts.excludeStatuses?.length) q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
+        if (opts.topLevelOnly || scope === "parents") q = q.is("parent_client_id", null);
+        if (scope === "subs") q = q.not("parent_client_id", "is", null);
+        if (exclude.length > 0) q = q.not("id", "in", `(${exclude.join(",")})`);
+        const { data, error } = await q.order("display_name").order("id").limit(max);
+        if (error) throw error;
+        return (data ?? []).map(mapClient);
+      };
+      // A typed search lists parent / stand-alone accounts first, then sub-accounts. An account with
+      // dozens of "Cannon - <address>" sub-accounts otherwise fills the whole list alphabetically and
+      // pushes "Cannon Management Rentals" itself past the limit.
+      if (!term.trim() || opts.topLevelOnly) return run("all", limit);
+      const parents = await run("parents", limit);
+      if (parents.length >= limit) return parents;
+      return [...parents, ...(await run("subs", limit - parents.length))];
     },
     enabled,
     placeholderData: keepPreviousData,
