@@ -21,10 +21,44 @@ function formatBps(bps: number): string {
   return `${(bps / 100).toFixed(2)}%`;
 }
 
+interface HistoryEntry {
+  id: string;
+  by: string | null;
+  description: string | null;
+  at: string;
+}
+
+function FeeHistory({ orgId }: { orgId: string }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["staff-platform-fee-history", orgId],
+    queryFn: async (): Promise<HistoryEntry[]> => {
+      const res = await fetch(`/api/internal/platform-fees?orgId=${orgId}`);
+      if (!res.ok) throw new Error("Couldn't load history");
+      const body = (await res.json()) as { history: HistoryEntry[] };
+      return body.history;
+    },
+  });
+  if (isLoading) return <p className="text-xs text-muted-foreground">Loading history…</p>;
+  if (isError || !data) return <p className="text-xs text-destructive">Couldn&apos;t load history.</p>;
+  if (data.length === 0) return <p className="text-xs text-muted-foreground">No changes recorded yet.</p>;
+  return (
+    <ul className="flex flex-col gap-1">
+      {data.map((e) => (
+        <li key={e.id} className="text-xs text-muted-foreground">
+          <span className="text-slate-700 dark:text-neutral-300">{e.description ?? "Rate changed"}</span> ·{" "}
+          {new Date(e.at).toLocaleString()}
+          {e.by ? ` · ${e.by}` : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function FeeRow({ org }: { org: OrgFeeRow }) {
   const queryClient = useQueryClient();
   // Edited as a percent string ("0.1"); stored as integer basis points.
   const [value, setValue] = useState((org.platformFeeBps / 100).toString());
+  const [showHistory, setShowHistory] = useState(false);
 
   const parsedBps = Math.round(parseFloat(value) * 100);
   const valid = Number.isFinite(parsedBps) && parsedBps >= 0 && parsedBps <= 100;
@@ -42,6 +76,7 @@ function FeeRow({ org }: { org: OrgFeeRow }) {
     onSuccess: () => {
       toast.success(`${org.name}: platform fee set to ${formatBps(parsedBps)}`);
       queryClient.invalidateQueries({ queryKey: ["staff-platform-fees"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-platform-fee-history", org.id] });
     },
     onError: () => toast.error("Couldn't update the fee."),
   });
@@ -58,6 +93,15 @@ function FeeRow({ org }: { org: OrgFeeRow }) {
             Last changed {new Date(org.lastChange.at).toLocaleDateString()}
             {org.lastChange.by ? ` by ${org.lastChange.by}` : ""}
           </div>
+        )}
+        {org.lastChange && (
+          <button
+            type="button"
+            className="mt-0.5 text-xs text-brand-700 hover:underline dark:text-brand-400"
+            onClick={() => setShowHistory((v) => !v)}
+          >
+            {showHistory ? "Hide history" : "View history"}
+          </button>
         )}
       </div>
       <div className="flex items-center gap-2">
@@ -77,6 +121,11 @@ function FeeRow({ org }: { org: OrgFeeRow }) {
           {save.isPending ? "Saving…" : "Save"}
         </Button>
       </div>
+      {showHistory && (
+        <div className="basis-full border-t pt-2">
+          <FeeHistory orgId={org.id} />
+        </div>
+      )}
     </div>
   );
 }
