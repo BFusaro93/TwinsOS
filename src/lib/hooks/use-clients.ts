@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { isAreaZone, isLinearZone, sumLinearFt, sumZoneSqft } from "@/lib/property-zones";
+import { hasBuiltinTarget, isAreaZone, isLinearZone, sumBuiltinTarget, sumZoneSqft } from "@/lib/property-zones";
 import type { AddressVerdict } from "@/types/address-verification";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
@@ -949,9 +949,9 @@ export function useUpdateClientPropertyZones() {
       const zones = inputZones.filter(isAreaZone);
       const sums = {
         gross: sumZoneSqft(zones),
-        turf: sumZoneSqft(zones, "turf"),
-        mulch: sumZoneSqft(zones, "mulch_bed"),
-        parking: sumZoneSqft(zones, "parking_lot"),
+        turf: sumBuiltinTarget(zones, "turf"),
+        mulch: sumBuiltinTarget(zones, "mulch_bed"),
+        parking: sumBuiltinTarget(zones, "parking_lot"),
       };
       // Only overwrite a rollup column when the saved zone list actually
       // contains zones of that type. Properties whose turf_sqft / mulch_bed_sqft
@@ -968,8 +968,9 @@ export function useUpdateClientPropertyZones() {
         .eq("id", propertyId)
         .maybeSingle();
       const priorZones: PropertyZone[] = (Array.isArray(prior?.zones) ? prior.zones : []).filter(isAreaZone);
-      const hasType = (t: string) => zones.some((z) => z.type === t);
-      const hadType = (t: string) => priorZones.some((z) => z.type === t);
+      // "Has" is judged by what a zone feeds (its type's default or an explicit Counts toward pick), not its raw type.
+      const hasType = (t: "turf" | "mulch_bed" | "parking_lot") => hasBuiltinTarget(zones, t);
+      const hadType = (t: "turf" | "mulch_bed" | "parking_lot") => hasBuiltinTarget(priorZones, t);
       const rollup: Record<string, number | null> = {};
       if (hasType("turf")) rollup.turf_sqft = sums.turf || null;
       else if (hadType("turf")) rollup.turf_sqft = null;
@@ -982,9 +983,9 @@ export function useUpdateClientPropertyZones() {
       // Distances: per-type totals feed the Perimeter / Edging takeoffs, same only-when-present rule as areas.
       const priorLinear: PropertyZone[] = (Array.isArray(prior?.zones) ? prior.zones : []).filter(isLinearZone);
       for (const [type, col] of [["perimeter", "linear_ft_perimeter"], ["edging", "linear_ft_edging"]] as const) {
-        const has = allZones.some((z) => isLinearZone(z) && z.linearType === type);
-        const had = priorLinear.some((z) => z.linearType === type);
-        if (has) rollup[col] = sumLinearFt(allZones, type) || null;
+        const has = hasBuiltinTarget(allZones, type);
+        const had = hasBuiltinTarget(priorLinear, type);
+        if (has) rollup[col] = sumBuiltinTarget(allZones, type) || null;
         else if (had) rollup[col] = null;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

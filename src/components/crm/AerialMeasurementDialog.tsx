@@ -11,7 +11,7 @@ import { useClient, useClientProperties, useAddClientProperty, useUpdateClientPr
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import type { PropertyZone } from "@/types/crm";
-import { isAreaZone, sumLinearFt, sumZoneSqft, type LinearType } from "@/lib/property-zones";
+import { hasBuiltinTarget, isAreaZone, sumBuiltinTarget, sumLinearFt, sumZoneSqft, zoneBuiltinTarget, zoneSignedSqft, type LinearType } from "@/lib/property-zones";
 import { usePropertyCustomFieldValues, useUpsertPropertyCustomFieldValue } from "@/lib/hooks/use-rate-matrix";
 import {
   useCustomFieldDefs,
@@ -29,6 +29,7 @@ function suggestMapping(fieldName: string): FieldMapping {
   if (n.includes("parking")) return "parking_lot";
   if (n.includes("perimeter")) return "perimeter";
   if (n.includes("edg")) return "edging";
+  if (/\bsq\.?\s*(ft|feet)\b|square/.test(n)) return "none"; // an area field; "ft" in "Sq. Ft." is not a distance
   if (/linear|fence|length|distance|\bfeet\b|\bft\b/.test(n)) return "linear";
   if (n.includes("gross") || n.includes("total")) return "gross";
   return "none";
@@ -37,9 +38,79 @@ function suggestMapping(fieldName: string): FieldMapping {
 const ZONE_TYPES: { value: PropertyZone["type"]; label: string; short: string; color: string }[] = [
   { value: "turf", label: "Turf", short: "Turf", color: "#22c55e" },
   { value: "mulch_bed", label: "Mulch Bed", short: "Mulch Bed", color: "#92400e" },
-  { value: "parking_lot", label: "Parking Lot / Hardscape", short: "Hardscape", color: "#64748b" },
+  { value: "parking_lot", label: "Parking Lot", short: "Parking Lot", color: "#64748b" },
   { value: "other", label: "Other", short: "Other", color: "#6366f1" },
 ];
+
+/** Built-in takeoff fields a zone can count toward, per zone kind. The value doubles as the zone's type / linearType. */
+const AREA_BUILTIN_TARGETS: { value: "turf" | "mulch_bed" | "parking_lot"; label: string }[] = [
+  { value: "turf", label: "Turf Sq. Ft." },
+  { value: "mulch_bed", label: "Mulch Bed Sq. Ft." },
+  { value: "parking_lot", label: "Parking Lot Sq. Ft." },
+];
+const LINEAR_BUILTIN_TARGETS: { value: LinearType; label: string }[] = [
+  { value: "perimeter", label: "Linear Ft. Perimeter" },
+  { value: "edging", label: "Linear Ft. Edging" },
+];
+
+type CountsTowardPatch = Partial<Pick<PropertyZone, "type" | "linearType" | "customFieldId">>;
+
+/**
+ * The one "Counts toward" picker for a zone: a built-in takeoff field or a custom number field, or nothing
+ * (areas then count in the gross total only). Picking a built-in sets the zone's type / linearType; picking a
+ * custom field sets customFieldId and parks the type on 'other' so the zone feeds exactly one place.
+ */
+function CountsTowardSelect({
+  zone,
+  fields,
+  onChange,
+}: {
+  zone: PropertyZone;
+  fields: { id: string; name: string }[];
+  onChange: (patch: CountsTowardPatch) => void;
+}) {
+  const isLine = zone.kind === "linear";
+  const builtins: { value: string; label: string }[] = isLine ? LINEAR_BUILTIN_TARGETS : AREA_BUILTIN_TARGETS;
+  const implied = zoneBuiltinTarget(zone);
+  const value = zone.customFieldId ?? (implied ? `b:${implied}` : "none");
+  const label =
+    builtins.find((b) => `b:${b.value}` === value)?.label ??
+    fields.find((f) => f.id === value)?.name ??
+    (isLine ? "Not counted" : "Gross only");
+  const unset = isLine ? ({ linearType: "other" } as const) : ({ type: "other" } as const);
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        if (v === "none") onChange({ customFieldId: null, ...unset });
+        else if (v.startsWith("b:")) {
+          const key = v.slice(2);
+          onChange(isLine ? { customFieldId: null, linearType: key as LinearType } : { customFieldId: null, type: key as PropertyZone["type"] });
+        } else onChange({ customFieldId: v, ...unset });
+      }}
+    >
+      <SelectTrigger className="h-7 gap-1 px-2 text-left text-xs">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: colorForZone(zone) }} />
+          <span className="truncate">{label}</span>
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none">{isLine ? "Not counted" : "Gross only"}</SelectItem>
+        {builtins.map((b) => (
+          <SelectItem key={b.value} value={`b:${b.value}`}>
+            {b.label}
+          </SelectItem>
+        ))}
+        {fields.map((f) => (
+          <SelectItem key={f.id} value={f.id}>
+            {f.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 const SQFT_PER_SQMETER = 10.7639;
 const FT_PER_METER = 3.28084;
@@ -609,28 +680,40 @@ export function AerialMeasurementDialog({
   const linearZones = zones.filter((z) => z.kind === "linear");
   const totalsByType: Record<Exclude<FieldMapping, "none">, number> & { none: number } = {
     none: 0,
-    turf: sumZoneSqft(areaZones, "turf"),
-    mulch_bed: sumZoneSqft(areaZones, "mulch_bed"),
-    parking_lot: sumZoneSqft(areaZones, "parking_lot"),
+    // Built-in totals follow what each zone feeds (its type's default or its Counts toward pick).
+    turf: sumBuiltinTarget(zones, "turf"),
+    mulch_bed: sumBuiltinTarget(zones, "mulch_bed"),
+    parking_lot: sumBuiltinTarget(zones, "parking_lot"),
     gross: sumZoneSqft(areaZones),
-    perimeter: sumLinearFt(linearZones, "perimeter"),
-    edging: sumLinearFt(linearZones, "edging"),
+    perimeter: sumBuiltinTarget(zones, "perimeter"),
+    edging: sumBuiltinTarget(zones, "edging"),
     linear_other: sumLinearFt(linearZones, "other"),
     linear: sumLinearFt(linearZones),
   };
   const totalSqft = totalsByType.gross;
   const totalLinearFt = totalsByType.linear;
-  /** Sum of the distance lines that point at each number custom field (lines sharing a field add together). */
+  /**
+   * Sum of the zones (traced areas in sq ft, distance lines in ft) that point at each number custom field.
+   * Zones sharing a field add together; subtract-mode areas count negative. Pointing a zone at a field
+   * takes over that field from the type-total dropdown.
+   */
   const lineSums = new Map<string, number>();
-  for (const z of linearZones) {
+  for (const z of zones) {
     if (z.customFieldId && numberFieldDefs.some((f) => f.id === z.customFieldId)) {
-      lineSums.set(z.customFieldId, (lineSums.get(z.customFieldId) ?? 0) + (z.lengthFt || 0));
+      const amount = z.kind === "linear" ? z.lengthFt || 0 : zoneSignedSqft(z);
+      lineSums.set(z.customFieldId, (lineSums.get(z.customFieldId) ?? 0) + amount);
     }
+  }
+  for (const [id, total] of lineSums) lineSums.set(id, Math.max(0, Math.round(total)));
+  /** Unit shown next to a zone-fed field total: the field's own unit, else sq ft when areas feed it and ft otherwise. */
+  function zoneFieldUnit(f: (typeof numberFieldDefs)[number]): string {
+    if (f.unit) return f.unit;
+    return zones.some((z) => z.customFieldId === f.id && z.kind !== "linear") ? "sq ft" : "ft";
   }
   /** A distance mapping only writes when something of that type was actually measured (never overwrite with a phantom 0). */
   function hasMeasurementFor(m: FieldMapping): boolean {
     if (m === "linear") return linearZones.length > 0;
-    if (m === "perimeter" || m === "edging") return linearZones.some((z) => z.linearType === m);
+    if (m === "perimeter" || m === "edging") return hasBuiltinTarget(linearZones, m);
     if (m === "linear_other") return linearZones.some((z) => (z.linearType ?? "other") === "other");
     return true;
   }
@@ -808,15 +891,15 @@ export function AerialMeasurementDialog({
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: "#22c55e" }} /> Area (adds)</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SUBTRACT_COLOR }} /> Subtracted</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: LINEAR_COLOR }} /> Distance</span>
-              <span>Zones of the same type add together · drag corners to adjust</span>
+              <span>Zones counting toward the same place add together · drag corners to adjust</span>
             </div>
 
             {areaZones.length > 0 && (
               <div className="rounded-md border border-border">
-                <div className="grid grid-cols-[1fr_9rem_7.5rem_6rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <div className="grid grid-cols-[1fr_7.5rem_12rem_6rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <span>Zone name</span>
-                  <span>Type</span>
                   <span>Effect</span>
+                  <span>Counts toward</span>
                   <span className="text-right">Sq ft</span>
                   <span />
                 </div>
@@ -824,7 +907,7 @@ export function AerialMeasurementDialog({
                   {areaZones.map((z) => (
                     <div
                       key={z._id}
-                      className={`grid grid-cols-[1fr_9rem_7.5rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50 dark:bg-red-950/40" : ""}`}
+                      className={`grid grid-cols-[1fr_7.5rem_12rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50 dark:bg-red-950/40" : ""}`}
                     >
                       <div className="min-w-0">
                         <Input
@@ -843,24 +926,6 @@ export function AerialMeasurementDialog({
                           </p>
                         )}
                       </div>
-                      <Select value={z.type} onValueChange={(v) => updateZone(z._id, { type: v as PropertyZone["type"] })}>
-                        <SelectTrigger className="h-7 gap-1 px-2 text-left text-xs">
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-sm"
-                              style={{ background: colorForZone(z) }}
-                            />
-                            <span className="truncate">{ZONE_TYPES.find((t) => t.value === z.type)?.short}</span>
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ZONE_TYPES.map((t) => (
-                            <SelectItem key={t.value} value={t.value}>
-                              {t.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                       <Select
                         value={z.mode === "subtract" ? "subtract" : "add"}
                         onValueChange={(v) => updateZone(z._id, { mode: v as "add" | "subtract" })}
@@ -873,6 +938,11 @@ export function AerialMeasurementDialog({
                           <SelectItem value="subtract">Subtracts</SelectItem>
                         </SelectContent>
                       </Select>
+                      <CountsTowardSelect
+                        zone={z}
+                        fields={numberFieldDefs.map((f) => ({ id: f.id, name: f.name }))}
+                        onChange={(patch) => updateZone(z._id, patch)}
+                      />
                       {z.path ? (
                         <span
                           className={`text-right text-sm ${z.mode === "subtract" ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-neutral-400"}`}
@@ -900,10 +970,10 @@ export function AerialMeasurementDialog({
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-0.5 border-t bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-neutral-400">
                   {(["turf", "mulch_bed", "parking_lot"] as const)
-                    .filter((t) => areaZones.some((z) => z.type === t))
+                    .filter((t) => totalsByType[t] > 0 || areaZones.some((z) => z.type === t))
                     .map((t) => (
                       <span key={t} className="font-normal">
-                        {ZONE_TYPES.find((zt) => zt.value === t)?.label}: {totalsByType[t].toLocaleString()}
+                        {ZONE_TYPES.find((zt) => zt.value === t)?.short}: {totalsByType[t].toLocaleString()}
                       </span>
                     ))}
                   <span>Total: {totalSqft.toLocaleString()} sq ft</span>
@@ -913,56 +983,25 @@ export function AerialMeasurementDialog({
 
             {linearZones.length > 0 && (
               <div className="rounded-md border border-border">
-                <div className="grid grid-cols-[1fr_9rem_10rem_8rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <div className="grid grid-cols-[1fr_12rem_8rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <span>Distance</span>
-                  <span>Type</span>
                   <span>Counts toward</span>
                   <span className="text-right">Length</span>
                   <span />
                 </div>
                 <div className="max-h-32 divide-y overflow-y-auto">
                   {linearZones.map((z) => (
-                    <div key={z._id} className="grid grid-cols-[1fr_9rem_10rem_8rem_2.5rem] items-center gap-2 px-3 py-1.5">
+                    <div key={z._id} className="grid grid-cols-[1fr_12rem_8rem_2.5rem] items-center gap-2 px-3 py-1.5">
                       <Input
                         value={z.name}
                         onChange={(e) => updateZone(z._id, { name: e.target.value })}
                         className="h-7 text-sm"
                       />
-                      <Select
-                        value={z.linearType ?? "other"}
-                        onValueChange={(v) => updateZone(z._id, { linearType: v as LinearType })}
-                      >
-                        <SelectTrigger className="h-7 px-2 text-left text-xs">
-                          <span className="truncate">{LINEAR_TYPES.find((t) => t.value === (z.linearType ?? "other"))?.label}</span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LINEAR_TYPES.map((t) => (
-                            <SelectItem key={t.value} value={t.value}>
-                              {t.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={z.customFieldId ?? "none"}
-                        onValueChange={(v) => updateZone(z._id, { customFieldId: v === "none" ? null : v })}
-                        disabled={numberFieldDefs.length === 0}
-                      >
-                        <SelectTrigger className="h-7 px-2 text-left text-xs">
-                          <span className="truncate">
-                            {numberFieldDefs.find((f) => f.id === z.customFieldId)?.name ??
-                              (numberFieldDefs.length === 0 ? "No number fields" : "Not synced")}
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Not synced</SelectItem>
-                          {numberFieldDefs.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>
-                              {f.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <CountsTowardSelect
+                        zone={z}
+                        fields={numberFieldDefs.map((f) => ({ id: f.id, name: f.name }))}
+                        onChange={(patch) => updateZone(z._id, patch)}
+                      />
                       <span className="text-right text-sm text-slate-600 dark:text-neutral-400">
                         {(z.lengthFt ?? 0).toLocaleString()} ft
                         <span className="block text-[11px] text-slate-400 dark:text-neutral-500">
@@ -1010,7 +1049,7 @@ export function AerialMeasurementDialog({
                         </div>
                         {lineSums.has(f.id) ? (
                           <span className="text-xs text-slate-500 dark:text-neutral-400">
-                            From distance lines: {Math.round(lineSums.get(f.id) ?? 0).toLocaleString()} ft
+                            From zones: {(lineSums.get(f.id) ?? 0).toLocaleString()} {zoneFieldUnit(f)}
                           </span>
                         ) : (
                         <Select

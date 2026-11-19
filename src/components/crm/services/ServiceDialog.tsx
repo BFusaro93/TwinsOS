@@ -1212,7 +1212,7 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-400 dark:text-neutral-500">
-                Which property measurement this service&apos;s chemical amounts are sized from, such as Parking Lot / Hardscape
+                Which property measurement this service&apos;s chemical amounts are sized from, such as Parking Lot
                 Sq. Ft. for a parking-lot weed control service. A treated area typed on an estimate line overrides it.
                 Saved with Save Changes.
               </p>
