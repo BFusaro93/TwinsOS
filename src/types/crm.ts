@@ -18,6 +18,7 @@ export type ActivityType =
 
 export interface PropertyZone {
   name: string;
+  /** What a traced area counts toward. turf / mulch_bed / parking_lot feed the matching built-in takeoff; 'other' feeds none (gross only, or a custom field via customFieldId). */
   type: 'turf' | 'mulch_bed' | 'parking_lot' | 'other';
   sqft: number;
   notes?: string;
@@ -30,7 +31,7 @@ export interface PropertyZone {
   lengthFt?: number;
   /** What a linear measurement is, so lengths roll up per type like sq ft does. Absent on a linear entry = 'other'. */
   linearType?: 'perimeter' | 'edging' | 'other';
-  /** Number custom field this distance counts toward; lines pointing at the same field add together. */
+  /** Number custom field this zone (traced area or distance line) counts toward instead of a built-in takeoff; zones pointing at the same field add together. */
   customFieldId?: string | null;
 }
 

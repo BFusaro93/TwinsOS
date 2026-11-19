@@ -1623,7 +1623,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                 {([
                   { label: "Turf Sq. Ft.", key: "turfSqft" as const },
                   { label: "Mulch Bed Sq. Ft.", key: "mulchBedSqft" as const },
-                  { label: "Parking Lot / Hardscape Sq. Ft.", key: "parkingLotSqft" as const },
+                  { label: "Parking Lot Sq. Ft.", key: "parkingLotSqft" as const },
                   { label: "Gross Sq. Ft.", key: "grossSqft" as const },
                   { label: "Linear Ft. Perimeter", key: "linearFtPerimeter" as const },
                   { label: "Linear Ft. Edging", key: "linearFtEdging" as const },
@@ -1966,7 +1966,7 @@ const PROPERTY_TAKEOFF_FIELDS: { key: PropertyTakeoffKey; label: string }[] = [
   { key: "turfSqft", label: "Turf Sq. Ft." },
   { key: "mulchBedSqft", label: "Mulch Bed Sq. Ft." },
   { key: "grossSqft", label: "Gross Sq. Ft." },
-  { key: "parkingLotSqft", label: "Parking Lot / Hardscape Sq. Ft." },
+  { key: "parkingLotSqft", label: "Parking Lot Sq. Ft." },
   { key: "linearFtPerimeter", label: "Linear Ft. Perimeter" },
   { key: "linearFtEdging", label: "Linear Ft. Edging" },
   { key: "yardsOfMulch", label: "Yards of Mulch" },
@@ -4583,7 +4583,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               <div className="space-y-2">
                 <InfoRow label="Turf sq ft" value={client.turfSqft?.toLocaleString()} />
                 <InfoRow label="Mulch bed sq ft" value={client.mulchBedSqft?.toLocaleString()} />
-                <InfoRow label="Parking lot / hardscape sq ft" value={client.parkingLotSqft?.toLocaleString()} />
+                <InfoRow label="Parking lot sq ft" value={client.parkingLotSqft?.toLocaleString()} />
                 <InfoRow label="Gross sq ft" value={client.grossSqft?.toLocaleString()} />
                 <InfoRow label="Perimeter ft" value={client.linearFtPerimeter?.toLocaleString()} />
                 <InfoRow label="Linear ft edging" value={client.linearFtEdging?.toLocaleString()} />

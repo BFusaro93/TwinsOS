@@ -3313,7 +3313,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I make a service like parking-lot weed control use the Parking Lot square footage?",
-        a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot / Hardscape Sq. Ft. Without it the service uses the org's Area Custom Field from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
+        a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot Sq. Ft. Without it the service uses the org's Area Custom Field from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
       },
       {
         q: "How do I estimate a perimeter or barrier product that is labelled per linear foot?",
@@ -3569,7 +3569,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Where do I enter a property's zone measurements, like turf or mulch bed square footage?",
-        a: "Use More → Aerial Measurement on the client: trace each turf, mulch bed or hardscape area on the satellite map (Trace Area), cut out things like the house with Subtract Area, and measure fences or edging with Measure Distance. Totals are saved on the property, and for the client's own address they are also copied to the client's takeoff fields (Turf, Mulch Bed, Parking Lot / Hardscape, Gross). You can also type the client-level totals on the Edit Client dialog's Custom Fields tab. Either way they feed the estimating engine's production-rate calculations. For a client with several properties, type each property's measurements in the Add/Edit Property dialog (Measurements), or trace them with Aerial Measurement; an estimate for a property defaults production-rate quantities from that property, and a blank value stays blank instead of using another address's numbers.",
+        a: "Use More → Aerial Measurement on the client: trace each turf, mulch bed, parking lot or hardscape area on the satellite map (Trace Area), cut out things like the house with Subtract Area, and measure fences or edging with Measure Distance. Totals are saved on the property, and for the client's own address they are also copied to the client's takeoff fields (Turf, Mulch Bed, Parking Lot, Gross). You can also type the client-level totals on the Edit Client dialog's Custom Fields tab. Either way they feed the estimating engine's production-rate calculations. For a client with several properties, type each property's measurements in the Add/Edit Property dialog (Measurements), or trace them with Aerial Measurement; an estimate for a property defaults production-rate quantities from that property, and a blank value stays blank instead of using another address's numbers.",
       },
       {
         q: "Does the 'PO Number' field on an invoice link to a purchase order in the PO module?",

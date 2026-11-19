@@ -113,7 +113,7 @@ export function ServicesPricingGuide() {
         </p>
         <p>
           <strong>Which fields can be the lookup.</strong> The built-in measurements (Turf, Mulch Bed,
-          Gross, Linear Ft. Perimeter, Linear Ft. Edging, Yards of Mulch, Parking Lot / Hardscape) and
+          Gross, Linear Ft. Perimeter, Linear Ft. Edging, Yards of Mulch, Parking Lot) and
           any <strong>Number</strong> field you create under Settings &rarr; Custom Client Fields.
           Number fields appear in the list automatically, with the same name. The value comes from the
           property when the property has one, otherwise from the client, so you can enter it once on the

@@ -641,7 +641,7 @@ export function EstimatingGuide() {
         <p>
           Production-rate lines need a quantity to divide by the service&rsquo;s rate &mdash;
           that quantity usually comes from a property&rsquo;s zone measurements: Turf Sq Ft, Mulch
-          Bed Sq Ft, Gross Sq Ft, Parking Lot / Hardscape Sq Ft, Linear Ft Perimeter/Edging, Yards of Mulch.
+          Bed Sq Ft, Gross Sq Ft, Parking Lot Sq Ft, Linear Ft Perimeter/Edging, Yards of Mulch.
         </p>
         <Callout>
           These are kept on the <strong>client</strong>. Fill them in with{" "}

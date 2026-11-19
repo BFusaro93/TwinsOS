@@ -454,7 +454,7 @@ export function ClientsGuide() {
         <p>
           Measurements that feed the estimating engine&apos;s production-rate calculations are kept
           as <strong>takeoffs</strong> on the client: <strong>Turf Sq. Ft.</strong>,{" "}
-          <strong>Mulch Bed Sq. Ft.</strong>, <strong>Parking Lot / Hardscape Sq. Ft.</strong>,{" "}
+          <strong>Mulch Bed Sq. Ft.</strong>, <strong>Parking Lot Sq. Ft.</strong>,{" "}
           <strong>Gross Sq. Ft.</strong>, <strong>Linear Ft. Perimeter</strong>,{" "}
           <strong>Linear Ft. Edging</strong>, and <strong>Yards of Mulch</strong>. You can type them
           in by hand on the Edit Client dialog&apos;s <strong>Custom Fields</strong> tab (Takeoffs
@@ -511,11 +511,13 @@ export function ClientsGuide() {
         </ol>
         <p>
           Every shape lands in a table below the map. For each area, set its <strong>name</strong>,{" "}
-          <strong>Type</strong> (Turf, Mulch Bed, Parking Lot / Hardscape, or Other) and{" "}
-          <strong>Effect</strong> (Adds or Subtracts); you can also drag the corners on the map to
-          adjust. For each distance, set its name and <strong>Type</strong> (Perimeter, Edging or
-          Other). Areas of the same type add together, and the table shows a total per type plus an
-          overall total. A shape that crosses itself is flagged and has to be retraced before you
+          <strong>Effect</strong> (Adds or Subtracts) and <strong>Counts toward</strong>; you can
+          also drag the corners on the map to adjust. For each distance, set its name and what it
+          counts toward. <strong>Counts toward</strong> is a single picker: choose a built-in takeoff
+          (Turf, Mulch Bed or Parking Lot for areas; Perimeter or Edging for distances), one of your
+          custom number fields (for example Sidewalk Sq. Ft.), or <em>Gross only</em> for an area
+          that should count in the overall total and nowhere else. Shapes counting toward the same
+          place add together, and the table shows a total per built-in plus an overall total. A shape that crosses itself is flagged and has to be retraced before you
           can save.
         </p>
         <p>
@@ -523,15 +525,16 @@ export function ClientsGuide() {
           fields (set up under Settings → Landscapt Settings → Clients → Custom Client Fields), the dialog lists each one with a
           dropdown of what to keep it in sync with: Turf total, Mulch bed total, Parking lot total,
           Gross total, or a Perimeter / Edging / Other / All-distances total (the dropdown guesses a
-          sensible match from the field name). A distance can instead be pointed at a specific
-          field with its <strong>Counts toward</strong> column; several distances pointed at the
-          same field add together, and that field shows &ldquo;From distance lines&rdquo; instead of
-          a dropdown. A field is only written when something of that type was actually measured, so
+          sensible match from the field name; a name containing &ldquo;sq ft&rdquo; is left on Don&apos;t sync
+          because it is an area, not a distance). A field that a shape counts toward is fed
+          straight from those shapes instead.
+          Several shapes pointed at the same custom field add together, and that field shows
+          &ldquo;From zones&rdquo; instead of a dropdown. A field is only written when something of that type was actually measured, so
           saving never overwrites an existing value with 0.
         </p>
         <p>
           <strong>Saving.</strong> Click Save to store the shapes on the property. When the property
-          is the client&apos;s own (master) address, its Turf, Mulch Bed, Parking Lot / Hardscape and
+          is the client&apos;s own (master) address, its Turf, Mulch Bed, Parking Lot and
           Gross totals, plus the Perimeter and Edging distance totals, are also copied onto the
           client&apos;s takeoff fields so the Details tab and estimates see them straight away. Each
           takeoff is only changed when that type is in the saved shapes (or was there before and has
