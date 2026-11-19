@@ -165,7 +165,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   return (
     <>
       <CommandInput value={query} onValueChange={setQuery} placeholder={isCrew ? "Search job photos and dispatch jobs…" : "Search clients, leads, invoices, work orders, assets…"} />
-      <CommandList className="max-h-[480px]">
+      <CommandList className="max-h-none flex-1">
         <CommandEmpty>No results found.</CommandEmpty>
 
         {/* Clients and leads come from the server search, which already decided they
