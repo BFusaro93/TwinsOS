@@ -688,7 +688,7 @@ function AddJobsDialog({
             <p className="text-center text-sm text-slate-400 dark:text-neutral-500 py-12">No snow jobs match{jobSearch.trim() ? <> &ldquo;{jobSearch.trim()}&rdquo;</> : " this filter"}.</p>
           ) : (
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
+              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
                 <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <th className="w-8 px-3 py-2">
                     <Checkbox
@@ -2463,7 +2463,7 @@ export function SnowDispatchBoard() {
             </p>
           ) : (
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
+              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
                 <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <th className="w-8 px-2 py-2.5">
                     <Checkbox
@@ -2486,7 +2486,7 @@ export function SnowDispatchBoard() {
                     </button>
                   </th>
                   <th className="w-8 px-2 py-2.5">St</th>
-                  <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">
+                  <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted max-lg:shadow-[1px_0_0_rgb(226_232_240)]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 uppercase hover:text-slate-600 dark:hover:text-neutral-300"

@@ -92,6 +92,8 @@ import {
   ListChecks,
   ChevronDown,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Download,
   Phone,
   PhoneCall,
@@ -719,6 +721,25 @@ function extraColCellText(key: ColKey, job: CRMJob | null | undefined): string {
     case "parking_sqft":  return formatSqft(job?.propertyParkingLotSqft);
     default:              return "—";
   }
+}
+
+type SortableCol = Exclude<ColKey, "icons" | "priority"> | "client";
+
+/** The value a Dispatch Board column sorts on. Raw values (ISO dates, 24h times, numbers) rather than the board's
+ *  formatted text, so dates and times order correctly. Null/blank sinks to the bottom. */
+function sortableCellValue(
+  key: SortableCol,
+  visit: CRMJobVisit,
+  ctx: { serviceCodeById: Map<string, string>; crewCodeById: Map<string, string> }
+): string | number | null {
+  let v: string | number | null;
+  switch (key) {
+    case "client": v = visit.clientName ?? ""; break;
+    case "start":  v = visit.startTime ?? ""; break;
+    case "end":    v = visit.endTime ?? ""; break;
+    default:       v = exportCellValue(key as ColKey, visit, ctx); break;
+  }
+  return v === "" || v == null ? null : v;
 }
 
 /** One toggleable column's value for the Export, mirroring what VisitRow
@@ -3417,6 +3438,29 @@ function EditJobTimesDialog({
 
 // ── visit row ──────────────────────────────────────────────────────────────────
 
+/** A sortable Dispatch Board column header: click to sort A→Z, again for Z→A, a third time to return to route order. */
+function SortLabel({
+  col, sort, onSort, children,
+}: {
+  col: SortableCol;
+  sort: { key: SortableCol; dir: "asc" | "desc" } | null;
+  onSort: (col: SortableCol) => void;
+  children: React.ReactNode;
+}) {
+  const active = sort?.key === col;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(col)}
+      className={cn("inline-flex items-center gap-0.5 uppercase font-bold tracking-wide hover:text-slate-700 dark:hover:text-neutral-300", active && "text-slate-700 dark:text-neutral-200")}
+      aria-label={`Sort by ${typeof children === "string" ? children : col}`}
+    >
+      {children}
+      {active ? (sort.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : null}
+    </button>
+  );
+}
+
 function VisitRow({
   visit,
   orderNum,
@@ -4443,6 +4487,10 @@ export function DispatchBoard() {
   // order (identical to the current one) and popping the Save/Clear Order
   // bar despite nothing actually having moved.
   const [manualRouteMode, setManualRouteMode] = useState(false);
+  // Column-header sort: a VIEW over the board (click a header to sort, again to flip, a third time
+  // to go back to route order). It never touches the saved route order — the route handlers below
+  // keep working off routeVisits — and is ignored while a route is being hand-ordered.
+  const [headerSort, setHeaderSort] = useState<{ key: SortableCol; dir: "asc" | "desc" } | null>(null);
   const [visibleKeys,     setVisibleKeys]     = usePersistedColumns("dispatch_board", COL_DEFS.map((d) => d.key));
   const { data: customFieldDefs = [] } = usePropertyCustomFieldDefs();
   const allColumnDefs = useMemo(
@@ -5115,9 +5163,32 @@ export function DispatchBoard() {
           return 0;
         });
       })();
-  const displayVisits = mapTableOnlySelected && selectedIds.size > 0
+  // The route-ordered rows: what the saved route, drag, reverse and Save Order operate on.
+  const routeVisits = mapTableOnlySelected && selectedIds.size > 0
     ? orderedVisits.filter((v) => selectedIds.has(v.id))
     : orderedVisits;
+  const activeHeaderSort = manualRouteMode ? null : headerSort;
+  const displayVisits = (() => {
+    if (!activeHeaderSort) return routeVisits;
+    const dir = activeHeaderSort.dir === "asc" ? 1 : -1;
+    const sorted = [...routeVisits].sort((a, b) => {
+      const av = sortableCellValue(activeHeaderSort.key, a, { serviceCodeById, crewCodeById });
+      const bv = sortableCellValue(activeHeaderSort.key, b, { serviceCodeById, crewCodeById });
+      // Blanks always sink to the bottom, whichever way it's sorted.
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const cmp = typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" });
+      return cmp * dir;
+    });
+    return sorted;
+  })();
+  function toggleHeaderSort(key: SortableCol) {
+    if (manualRouteMode) { toast.info("Finish ordering the route first — column sorting is off while you reorder stops."); return; }
+    setHeaderSort((cur) => (!cur || cur.key !== key ? { key, dir: "asc" } : cur.dir === "asc" ? { key, dir: "desc" } : null));
+  }
 
   const photoCountByVisitId = useVisitPhotoCounts(displayVisits.map((v) => v.id));
   const selectedChemicalVisits = displayVisits.filter(
@@ -5140,7 +5211,7 @@ export function DispatchBoard() {
   const crewOrderNumById = new Map<string, number>();
   {
     const counters = new Map<string, number>();
-    for (const v of displayVisits) {
+    for (const v of routeVisits) {
       const key = routeKeyOfVisit(v);
       const next = (counters.get(key) ?? 0) + 1;
       counters.set(key, next);
@@ -5231,7 +5302,7 @@ export function DispatchBoard() {
   /** Route order mode: swaps a stop with its neighbour in its own crew's route (draft until Save Order). */
   function mapMoveStop(id: string, dir: -1 | 1) {
     const key = crewKeyOf(id);
-    const order = displayVisits.map((v) => v.id);
+    const order = routeVisits.map((v) => v.id);
     const crewIds = order.filter((x) => crewKeyOf(x) === key);
     const i = crewIds.indexOf(id);
     const j = i + dir;
@@ -5251,10 +5322,10 @@ export function DispatchBoard() {
   }
 
   function toggleSelectAll() {
-    if (selectedIds.size === displayVisits.length) {
+    if (selectedIds.size === routeVisits.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(displayVisits.map((v) => v.id)));
+      setSelectedIds(new Set(routeVisits.map((v) => v.id)));
     }
   }
 
@@ -5286,7 +5357,7 @@ export function DispatchBoard() {
   function handleApplyRouteNumbers() {
     if (draftNumbers.size === 0) return;
     if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
-    const cur = manualOrder ?? displayVisits.map((v) => v.id);
+    const cur = manualOrder ?? routeVisits.map((v) => v.id);
     const { order, crewsWithDuplicates } = applyRouteNumbers(cur, crewKeyOf, draftNumbers);
     setManualOrder(order);
     setRouteDrafts({});
@@ -5308,14 +5379,14 @@ export function DispatchBoard() {
     // against that date's weekday, and push a real visit off the end of the
     // list so it kept a now-colliding priority.
     const loadedIds = new Set(allVisits.map((v) => v.id));
-    const changedOrder = (manualOrder ?? displayVisits.map((v) => v.id)).filter((id) => loadedIds.has(id));
+    const changedOrder = (manualOrder ?? routeVisits.map((v) => v.id)).filter((id) => loadedIds.has(id));
     if (changedOrder.length === 0) {
       toast.error("Nothing to save — the visits this order applied to are no longer on the board.");
       setManualOrder(null);
       clearOptimization();
       return;
     }
-    // manualOrder/displayVisits are built from `filtered` — if a crew/status/
+    // manualOrder/routeVisits are built from `filtered` — if a crew/status/
     // search filter is active, visits it hides never appear in changedOrder
     // at all. Assigning sequential priorities 1..N over changedOrder alone
     // would leave those hidden visits with their OLD priority values, which
@@ -5353,7 +5424,7 @@ export function DispatchBoard() {
     setDragId(id);
     crossCrewHintShown.current = false;
     // Initialize manual order from current display order if not set
-    if (!manualOrder) setManualOrder(displayVisits.map((v) => v.id));
+    if (!manualOrder) setManualOrder(routeVisits.map((v) => v.id));
   }
 
   /** Returns whether `overId` is a valid drop target, so the row only accepts
@@ -5374,7 +5445,7 @@ export function DispatchBoard() {
     }
     setDragOverId(overId);
     setManualOrder((prev) => {
-      const order = prev ?? displayVisits.map((v) => v.id);
+      const order = prev ?? routeVisits.map((v) => v.id);
       const from = order.indexOf(dragId);
       const to   = order.indexOf(overId);
       if (from === -1 || to === -1) return order;
@@ -5435,24 +5506,24 @@ export function DispatchBoard() {
   /**
    * Scope for the three route tools (Optimize, Reverse, Group Stops): the
    * checked rows when there are any, otherwise everything the filters leave
-   * visible. Read through displayVisits rather than selectedIds directly, so
+   * visible. Read through routeVisits rather than selectedIds directly, so
    * a stale check on a row a filter has since hidden can't narrow a run down
    * to nothing.
    */
   function routeScope(): { has: (id: string) => boolean; scoped: boolean } {
     const ids = new Set(
-      displayVisits.filter((v) => selectedIds.has(v.id)).map((v) => v.id)
+      routeVisits.filter((v) => selectedIds.has(v.id)).map((v) => v.id)
     );
     const scoped = ids.size > 0;
     return { has: (id: string) => !scoped || ids.has(id), scoped };
   }
 
-  // displayVisits is the visible set already ordered by any unsaved drag or
+  // routeVisits is the visible set already ordered by any unsaved drag or
   // optimize, so it — not manualOrder, which can outlive a filter change — is
   // the right base for these two.
   function handleReverseRoute() {
     if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
-    const cur = displayVisits.map((v) => v.id);
+    const cur = routeVisits.map((v) => v.id);
     const scope = routeScope();
     setManualOrder(reorderWithinCrews(cur, (ids) => [...ids].reverse(), scope.has));
     if (optimizedOrder) clearOptimization();
@@ -5463,7 +5534,7 @@ export function DispatchBoard() {
 
   function handleGroupStops() {
     if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
-    const cur = displayVisits.map((v) => v.id);
+    const cur = routeVisits.map((v) => v.id);
     const scope = routeScope();
     const zipAreaOf = (id: string) =>
       (visitById.get(id)?.job?.serviceZip ?? "").slice(0, 3);
@@ -6411,7 +6482,7 @@ export function DispatchBoard() {
                   // behavior) shoved the row to the physical top of the
                   // table above unrelated crews, even though the per-crew
                   // "#" number came out right.
-                  let cur = manualOrder ?? displayVisits.map((v) => v.id);
+                  let cur = manualOrder ?? routeVisits.map((v) => v.id);
                   const selectedByCrew = new Map<string, string[]>();
                   for (const id of selectedIds) {
                     const key = crewKeyOf(id);
@@ -6592,7 +6663,7 @@ export function DispatchBoard() {
       {/* Table */}
       <div className={`overscroll-x-contain bg-card max-lg:min-h-[60dvh] ${mapOpen ? "shrink-0 overflow-x-auto" : "flex-1 overflow-auto"}`}>
         <table className="w-full min-w-[1200px] text-xs">
-          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted/40">
+          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
             <tr className="border-b text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-8 px-2 py-1.5" onClick={toggleSelectAll}>
                 <Checkbox
@@ -6603,22 +6674,22 @@ export function DispatchBoard() {
               </th>
               <th className="w-10 px-1 py-1.5">#</th>
               <th className="w-8  px-2 py-1.5">St</th>
-              <th className="min-w-[200px] px-2 py-1.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:min-w-[160px] max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
-              {isVisible("service")  && <th className="px-2 py-1.5">Service</th>}
-              {isVisible("date")     && <th className="px-2 py-1.5">Date</th>}
-              {isVisible("city")     && <th className="px-2 py-1.5">City</th>}
-              {isVisible("zip")      && <th className="px-2 py-1.5">Zip</th>}
-              {isVisible("assigned") && <th className="min-w-[90px] px-2 py-1.5">Assigned</th>}
-              {isVisible("last_svc") && <th className="px-2 py-1.5">Last Svc</th>}
-              {isVisible("start")    && <th className="px-2 py-1.5">Start</th>}
-              {isVisible("end")      && <th className="px-2 py-1.5">End</th>}
-              {isVisible("b_hrs")    && <th className="px-2 py-1.5 text-right">B Hrs</th>}
-              {isVisible("actual")   && <th className="px-2 py-1.5 text-right">Actual</th>}
-              {isVisible("variance") && <th className="px-2 py-1.5 text-right">Variance</th>}
-              {isVisible("men")      && <th className="px-2 py-1.5 text-center">Men</th>}
-              {isVisible("qty")      && <th className="px-2 py-1.5 text-right">Qty</th>}
-              {isVisible("rate")     && <th className="px-2 py-1.5 text-right">Rate</th>}
-              {isVisible("amt")      && <th className="px-2 py-1.5 text-right">Amt</th>}
+              <th className="min-w-[200px] px-2 py-1.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:min-w-[160px] max-lg:bg-slate-50 dark:max-lg:bg-muted max-lg:shadow-[1px_0_0_rgb(226_232_240)]"><SortLabel col="client" sort={activeHeaderSort} onSort={toggleHeaderSort}>Client</SortLabel></th>
+              {isVisible("service")  && <th className="px-2 py-1.5"><SortLabel col="service" sort={activeHeaderSort} onSort={toggleHeaderSort}>Service</SortLabel></th>}
+              {isVisible("date")     && <th className="px-2 py-1.5"><SortLabel col="date" sort={activeHeaderSort} onSort={toggleHeaderSort}>Date</SortLabel></th>}
+              {isVisible("city")     && <th className="px-2 py-1.5"><SortLabel col="city" sort={activeHeaderSort} onSort={toggleHeaderSort}>City</SortLabel></th>}
+              {isVisible("zip")      && <th className="px-2 py-1.5"><SortLabel col="zip" sort={activeHeaderSort} onSort={toggleHeaderSort}>Zip</SortLabel></th>}
+              {isVisible("assigned") && <th className="min-w-[90px] px-2 py-1.5"><SortLabel col="assigned" sort={activeHeaderSort} onSort={toggleHeaderSort}>Assigned</SortLabel></th>}
+              {isVisible("last_svc") && <th className="px-2 py-1.5"><SortLabel col="last_svc" sort={activeHeaderSort} onSort={toggleHeaderSort}>Last Svc</SortLabel></th>}
+              {isVisible("start")    && <th className="px-2 py-1.5"><SortLabel col="start" sort={activeHeaderSort} onSort={toggleHeaderSort}>Start</SortLabel></th>}
+              {isVisible("end")      && <th className="px-2 py-1.5"><SortLabel col="end" sort={activeHeaderSort} onSort={toggleHeaderSort}>End</SortLabel></th>}
+              {isVisible("b_hrs")    && <th className="px-2 py-1.5 text-right"><SortLabel col="b_hrs" sort={activeHeaderSort} onSort={toggleHeaderSort}>B Hrs</SortLabel></th>}
+              {isVisible("actual")   && <th className="px-2 py-1.5 text-right"><SortLabel col="actual" sort={activeHeaderSort} onSort={toggleHeaderSort}>Actual</SortLabel></th>}
+              {isVisible("variance") && <th className="px-2 py-1.5 text-right"><SortLabel col="variance" sort={activeHeaderSort} onSort={toggleHeaderSort}>Variance</SortLabel></th>}
+              {isVisible("men")      && <th className="px-2 py-1.5 text-center"><SortLabel col="men" sort={activeHeaderSort} onSort={toggleHeaderSort}>Men</SortLabel></th>}
+              {isVisible("qty")      && <th className="px-2 py-1.5 text-right"><SortLabel col="qty" sort={activeHeaderSort} onSort={toggleHeaderSort}>Qty</SortLabel></th>}
+              {isVisible("rate")     && <th className="px-2 py-1.5 text-right"><SortLabel col="rate" sort={activeHeaderSort} onSort={toggleHeaderSort}>Rate</SortLabel></th>}
+              {isVisible("amt")      && <th className="px-2 py-1.5 text-right"><SortLabel col="amt" sort={activeHeaderSort} onSort={toggleHeaderSort}>Amt</SortLabel></th>}
               {isVisible("icons")    && <th className="px-2 py-1.5">Notes</th>}
               {EXTRA_COL_DEFS.map((d) => isVisible(d.key) && <th key={d.key} className="px-2 py-1.5 whitespace-nowrap">{d.label}</th>)}
               {customFieldDefs.map((def) => isVisible(customColKey(def.id)) && (

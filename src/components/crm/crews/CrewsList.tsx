@@ -820,7 +820,7 @@ export function CrewsList() {
       {/* Table */}
       <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 border-b bg-slate-50 dark:bg-muted/40">
+          <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted">
             <tr className="text-left text-xs font-semibold text-muted-foreground">
               <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3">Team Code</th>

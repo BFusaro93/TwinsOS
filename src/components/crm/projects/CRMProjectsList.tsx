@@ -837,7 +837,7 @@ export function CRMProjectsList() {
       {/* Table */}
       <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 border-b bg-slate-50 dark:bg-muted/40">
+          <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="px-4 py-3 min-w-[200px]">Project</th>
               <th className="px-4 py-3">Client</th>

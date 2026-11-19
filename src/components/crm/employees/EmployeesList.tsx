@@ -1105,7 +1105,7 @@ function EmployeeTable({
   const showPayRate = can("payroll_show_pay_rate");
   return (
     <table className="w-full text-sm">
-      <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 z-10">
+      <thead className="sticky top-0 bg-slate-50 dark:bg-muted z-10">
         <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           <th className="px-4 py-3">Name</th>
           <th className="px-4 py-3">Resource Code</th>

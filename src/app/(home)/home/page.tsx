@@ -179,8 +179,10 @@ export default function HomePage() {
         <p className="text-sm text-muted-foreground">Make a section to get started</p>
       </div>
 
-      {/* Primary app boxes */}
-      <div className="flex w-full max-w-6xl flex-wrap justify-center gap-5">
+      {/* Primary app boxes. Up to six tiles (My Schedule, Dashboards, Equipt, Landscapt, Tools,
+          Field) share one row on a wide screen: 6 × 13rem + 5 gaps needs ~1350px, so the row is
+          wider than the old 72rem cap that pushed the last tile onto a second line. */}
+      <div className="flex w-full max-w-[1400px] flex-wrap justify-center gap-5">
         {hasVisitToday && (
           <Link href="/crm/crew" className={INTERNAL_BOX}>
             <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">

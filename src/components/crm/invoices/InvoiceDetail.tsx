@@ -83,7 +83,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn, formatCurrency } from "@/lib/utils";
 import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
-import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, ChevronUp, GripVertical, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff, Link2Off, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, ChevronUp, GripVertical, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff, Link2Off, ArrowLeft, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -259,6 +259,8 @@ function LineItemRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: locked });
   const [row, setRow] = useState(item);
   const [dirty, setDirty] = useState(false);
+  // Big editor for long descriptions (the inline box is a few lines tall).
+  const [descOpen, setDescOpen] = useState(false);
   const [rateStr, setRateStr] = useState(() => (item.rateCents / 100).toFixed(2));
   const [qtyStr, setQtyStr] = useState(() => String(item.qty));
   // Bumped on every keystroke. A save that started BEFORE later edits must not
@@ -467,15 +469,46 @@ function LineItemRow({
       </td>
       {/* Description */}
       <td className="px-3 py-2">
-        <textarea
-          rows={Math.min(8, Math.max(1, notesToPlainText(row.description).split("\n").length))}
-          value={notesToPlainText(row.description)}
-          onChange={(e) => update("description", e.target.value.replace(/^[-*] /gm, "• "))}
-          onBlur={save}
-          placeholder="Description… (start a line with - for a bullet)"
-          disabled={locked}
-          className="w-full resize-y whitespace-pre-wrap rounded border border-transparent bg-transparent px-1 py-0.5 text-xs leading-snug text-slate-700 dark:text-neutral-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
-        />
+        <div className="relative">
+          <textarea
+            rows={Math.min(8, Math.max(1, notesToPlainText(row.description).split("\n").length))}
+            value={notesToPlainText(row.description)}
+            onChange={(e) => update("description", e.target.value.replace(/^[-*] /gm, "• "))}
+            onBlur={save}
+            placeholder="Description… (start a line with - for a bullet)"
+            disabled={locked}
+            className="w-full resize-y whitespace-pre-wrap rounded border border-transparent bg-transparent px-1 py-0.5 pr-6 text-xs leading-snug text-slate-700 dark:text-neutral-300 hover:border-border focus:border-brand-400 focus:outline-none focus:bg-card disabled:opacity-60 disabled:cursor-not-allowed"
+          />
+          <button
+            type="button"
+            onClick={() => setDescOpen(true)}
+            title="Open a bigger box to write or read a long description"
+            aria-label="Expand description"
+            className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-700 dark:hover:text-neutral-300"
+          >
+            <Maximize2 className="h-3 w-3" />
+          </button>
+        </div>
+        <Dialog open={descOpen} onOpenChange={(o) => { setDescOpen(o); if (!o) save(); }}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Line description{row.name ? ` — ${row.name}` : ""}</DialogTitle>
+            </DialogHeader>
+            <textarea
+              autoFocus
+              rows={18}
+              value={notesToPlainText(row.description)}
+              onChange={(e) => update("description", e.target.value.replace(/^[-*] /gm, "• "))}
+              placeholder="Description… (start a line with - for a bullet)"
+              disabled={locked}
+              className="min-h-[50vh] w-full resize-y whitespace-pre-wrap rounded-md border bg-background px-3 py-2 text-sm leading-relaxed focus:border-brand-400 focus:outline-none disabled:opacity-60"
+            />
+            <p className="text-xs text-muted-foreground">Start a line with <span className="font-mono">-</span> to make a bullet. It prints on the invoice exactly as laid out here.</p>
+            <DialogFooter>
+              <Button onClick={() => { setDescOpen(false); save(); }}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </td>
       {/* Service date */}
       <td className="w-28 px-2 py-2 align-middle">
@@ -1344,6 +1377,11 @@ export function InvoiceDetail({
             </Button>
           )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
+            onClick={handleDownloadPDF}
+            title="Open the invoice as a PDF in a new tab — doesn't print, lock or change its status. Save first to see your latest edits.">
+            <Eye className="mr-1 h-3.5 w-3.5 text-muted-foreground" /> Preview
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={handlePrint}>
             <Printer className="mr-1 h-3.5 w-3.5 text-muted-foreground" /> Print
           </Button>
@@ -1365,7 +1403,7 @@ export function InvoiceDetail({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={handleDownloadPDF}>
-                <Printer className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Download PDF
+                <Printer className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Open / download PDF
               </DropdownMenuItem>
               {/* Void/merge/delete revoke the links automatically, so a void
                   invoice has nothing to revoke. */}

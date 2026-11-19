@@ -466,7 +466,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
               </div>
               <div className="max-h-[420px] overflow-y-auto">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+                  <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
                     <tr className="border-b text-left text-xs text-muted-foreground">
                       <th className="w-10 px-4 py-2 font-medium">
                         <Checkbox

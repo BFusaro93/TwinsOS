@@ -65,7 +65,7 @@ export function SnowNoEmailDialog({
         ) : (
           <div className="max-h-[55vh] overflow-auto rounded-md border">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
+              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
                 <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <th className="px-3 py-2">Client</th>
                   <th className="px-3 py-2">Stop</th>

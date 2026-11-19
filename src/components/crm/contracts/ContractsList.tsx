@@ -2110,7 +2110,7 @@ export function ContractsList({ clientId }: Props) {
       {/* Table */}
       <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-10 px-3 py-3">
                 <input

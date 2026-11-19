@@ -26,7 +26,8 @@ interface RunningVisit {
  * two were paid and costed twice.
  *
  * Owner's rule: the other stop is stopped automatically at the new stop's
- * clock-in — or at its pause, if it was paused (no work happened after that):
+ * clock-in — unless the crew PAUSED it, which means they're coming back (Resume
+ * on it pauses whatever is running then: autoPauseOtherRunningStops):
  *   - its visits get clocked_out_at / end_time at that instant, the running
  *     pause cleared; they stay IN PROGRESS, so the crew's next Stop Job on it
  *     (or the office's Mark Complete) finishes it through the normal photo /
@@ -81,8 +82,11 @@ export async function autoStopOtherRunningStops(
       log.warn("could not read running stops", { crewId: p.crewId, error: error.message });
       return stopped;
     }
+    // A stop the crew explicitly PAUSED is left alone: they're coming back to it (DJ's
+    // ping-pong between two jobs). Its pause already keeps the time away out of its hours
+    // (the break is netted from the punch span at Stop Job), so nothing is double counted.
     const running = (data as unknown as RunningVisit[])
-      .filter((v) => !except.has(v.id) && Date.parse(v.clocked_in_at) < atMs);
+      .filter((v) => !except.has(v.id) && !v.paused_at && Date.parse(v.clocked_in_at) < atMs);
     if (running.length === 0) return stopped;
 
     // A stop clocks in together: same client, day and clock-in instant.
@@ -140,4 +144,85 @@ export async function autoStopOtherRunningStops(
     log.error("auto-stop of other running stops failed", { crewId: p.crewId, error: err instanceof Error ? err.message : String(err) });
   }
   return stopped;
+}
+
+/**
+ * The mirror of autoStopOtherRunningStops for Resume: a crew resuming a paused
+ * stop while another of its stops is running (the crew paused job A, started B,
+ * and is now going back to A) pauses that other stop at the resume instant, so
+ * nobody is working two jobs at once. The paused stop stays open — its Resume
+ * later rolls the time away into break_minutes like any pause. Non-throwing;
+ * returns the visit ids it paused.
+ */
+export async function autoPauseOtherRunningStops(
+  supabase: AnySupabase,
+  p: {
+    orgId: string;
+    crewId: string;
+    /** Visits of the stop being resumed — never paused here. */
+    exceptVisitIds: string[];
+    /** The resume instant (ISO). */
+    at: string;
+    /** How the office will recognise the resumed stop ("Smith — 12 Oak St"). */
+    resumedStopLabel: string;
+    timeZone: string;
+    userId: string;
+  }
+): Promise<string[]> {
+  const paused: string[] = [];
+  try {
+    const atMs = Date.parse(p.at);
+    const except = new Set(p.exceptVisitIds);
+    const today = isoInZone(new Date(p.at), p.timeZone);
+    const { data, error } = await selectEffectiveCrewVisits(
+      supabase,
+      "id, client_id, scheduled_date, clocked_in_at, paused_at, crm_jobs:crew_job(crew_id)",
+      p.crewId,
+      (q) =>
+        q.eq("org_id", p.orgId)
+          .is("deleted_at", null)
+          .gte("scheduled_date", shiftYmd(today, -CARRY_OVER_MAX_DAYS))
+          .not("clocked_in_at", "is", null)
+          .is("clocked_out_at", null)
+          .is("paused_at", null)
+          .not("status", "in", "(completed,cancelled,skipped)")
+    );
+    if (error) {
+      log.warn("could not read running stops", { crewId: p.crewId, error: error.message });
+      return paused;
+    }
+    const running = (data as unknown as RunningVisit[])
+      .filter((v) => !except.has(v.id) && Date.parse(v.clocked_in_at) < atMs);
+    if (running.length === 0) return paused;
+
+    const visitWriter = createVisitWriter(p.userId);
+    const text = `Paused automatically at ${formatInZone(p.at, p.timeZone, { hour: "numeric", minute: "2-digit" })} when the crew resumed ${p.resumedStopLabel}. Resume this stop when the crew returns.`;
+    for (const v of running) {
+      const { data: updated, error: updErr } = await visitWriter
+        .from("crm_job_visits")
+        .update({ paused_at: p.at, updated_at: p.at })
+        .eq("id", v.id)
+        .is("paused_at", null)
+        .is("clocked_out_at", null)
+        .select("id");
+      if (updErr) {
+        log.warn("auto-pause visit update failed", { visitId: v.id, error: updErr.message });
+        continue;
+      }
+      if (((updated ?? []) as unknown[]).length === 0) continue;
+      paused.push(v.id);
+      const { error: commentErr } = await supabase.rpc("crm_append_visit_job_comment", {
+        p_visit_id: v.id,
+        p_comment_id: `auto-pause-${v.id}-${atMs}`,
+        p_author_name: "Crew app",
+        p_author_id: p.userId,
+        p_text: text,
+        p_created_at: p.at,
+      });
+      if (commentErr) log.warn("auto-pause comment failed", { visitId: v.id, error: commentErr.message });
+    }
+  } catch (err) {
+    log.error("auto-pause of other running stops failed", { crewId: p.crewId, error: err instanceof Error ? err.message : String(err) });
+  }
+  return paused;
 }

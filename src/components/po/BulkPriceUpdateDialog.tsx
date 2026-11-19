@@ -207,7 +207,7 @@ export function BulkPriceUpdateDialog({
         {/* Table */}
         <div className="max-h-[45vh] overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Product</th>
                 <th className="px-3 py-2 font-medium">Vendor</th>

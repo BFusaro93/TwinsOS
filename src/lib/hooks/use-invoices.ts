@@ -251,6 +251,9 @@ export function mapInvoice(row: any): CRMInvoice {
     clientBalanceOutstandingCents: row.clients?.balance_outstanding_cents ?? null,
     clientPrepayCents: row.clients?.balance_prepay_cents ?? null,
     clientCreditsCents: row.clients?.balance_credits_cents ?? null,
+    clientTags: Array.isArray(row.clients?.client_tags)
+      ? (row.clients.client_tags as { tag: string }[]).map((t) => t.tag)
+      : [],
     pendingPaymentCents: row.pending_payment_cents ?? null,
     pendingPaymentMethod: row.pending_payment_method ?? null,
     pendingPaymentAt: row.pending_payment_at ?? null,
@@ -289,7 +292,7 @@ export function useInvoices(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, default_payment_method, balance_outstanding_cents, balance_prepay_cents, balance_credits_cents, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_contracts(billing_frequency), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable, service_id, sort_order, is_other_charge, crm_services(name))")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, default_payment_method, balance_outstanding_cents, balance_prepay_cents, balance_credits_cents, saved_payment_method_type, saved_payment_method_summary, autopay_enabled, client_tags(tag)), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_contracts(billing_frequency), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable, service_id, sort_order, is_other_charge, crm_services(name))")
         .is("deleted_at", null)
         // `invoice_date` is a DATE, so batch-generated invoices tie in droves.
         // Without a tiebreaker Postgres returns tied rows in physical heap

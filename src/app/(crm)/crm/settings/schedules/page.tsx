@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ScheduleInUseError, ScheduleNameTakenError, useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule, useBulkImportCRMSchedules, useCRMScheduleJobCount } from "@/lib/hooks/use-crm-jobs";
+import { ScheduleInUseError, ScheduleNameTakenError, useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule, useBulkImportCRMSchedules, useCRMScheduleJobCount, useCRMScheduleCustomers } from "@/lib/hooks/use-crm-jobs";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -595,7 +595,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
             {[
               { value: 'details', label: 'Schedule' },
               // Nothing to show until the schedule exists.
-              ...(schedule ? [{ value: 'audit', label: 'Audit Trail' }] : []),
+              ...(schedule ? [{ value: 'customers', label: 'Customers' }, { value: 'audit', label: 'Audit Trail' }] : []),
             ].map((t) => (
               <TabsTrigger
                 key={t.value}
@@ -738,6 +738,12 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
             </TabsContent>
 
             {schedule && (
+              <TabsContent value="customers" className="mt-0">
+                <ScheduleCustomers scheduleName={schedule.name} />
+              </TabsContent>
+            )}
+
+            {schedule && (
               <TabsContent value="audit" className="mt-0">
                 <AuditTrailTab recordType="schedule" recordId={schedule.id} />
               </TabsContent>
@@ -751,6 +757,79 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
+
+/** Every customer with a live job on this schedule, with a CSV export of the list. */
+function ScheduleCustomers({ scheduleName }: { scheduleName: string }) {
+  const { data: rows = [], isLoading, isError } = useCRMScheduleCustomers(scheduleName);
+  const [filter, setFilter] = useState('');
+  const q = filter.trim().toLowerCase();
+  const shown = q
+    ? rows.filter((r) => [r.clientName, r.services, r.address, r.city, r.zip].some((f) => f.toLowerCase().includes(q)))
+    : rows;
+  const clientCount = new Set(rows.map((r) => r.clientId)).size;
+
+  if (isLoading) return <p className="py-6 text-center text-sm text-muted-foreground">Loading customers…</p>;
+  if (isError) return <p className="py-6 text-center text-sm text-red-600 dark:text-red-400">Couldn&apos;t load the customers on this schedule.</p>;
+  if (rows.length === 0) return <p className="py-6 text-center text-sm text-muted-foreground">No active jobs are on this schedule yet.</p>;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <p className="text-sm text-muted-foreground">
+          {clientCount} customer{clientCount !== 1 ? 's' : ''} · {rows.length} active job{rows.length !== 1 ? 's' : ''}
+        </p>
+        <input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter…"
+          className="ml-auto h-8 w-44 rounded-md border bg-background px-2 text-xs focus:border-brand-400 focus:outline-none"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() =>
+            exportCSV(
+              shown.map((r) => ({
+                Customer: r.clientName,
+                'Job #': r.jobNumber ?? '',
+                Services: r.services,
+                Address: r.address,
+                City: r.city,
+                Zip: r.zip,
+                Status: r.status,
+              })),
+              `schedule-${scheduleName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-customers.csv`
+            )
+          }
+        >
+          Export CSV
+        </Button>
+      </div>
+      <div className="overflow-hidden rounded-md border">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/50 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2">Customer</th>
+              <th className="px-3 py-2">Services</th>
+              <th className="px-3 py-2">Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r) => (
+              <tr key={r.jobId} className="border-t">
+                <td className="px-3 py-2 font-medium">{r.clientName}</td>
+                <td className="px-3 py-2 text-muted-foreground">{r.services || '—'}</td>
+                <td className="px-3 py-2 text-muted-foreground">{[r.address, r.city].filter(Boolean).join(', ') || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function SchedulePreviewPopover({ schedule }: { schedule: CRMSchedule }) {
   const dates = useMemo(() => computeUpcomingDates(schedule, 12), [schedule]);
