@@ -12,6 +12,7 @@ import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
 import { OAuthConnectionsCard } from "@/components/settings/OAuthConnectionsCard";
 import { HomeShortcutsCard } from "@/components/settings/HomeShortcutsCard";
 import { useCurrentUserStore } from "@/stores";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const TAB_KEYS = ["organization", "branding", "users", "subscription", "integrations"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
@@ -26,11 +27,14 @@ function tabLabel(tab: TabKey): string {
   }
 }
 
-function MasterAccountSettings() {
+function MasterAccountSettings({ isAdmin }: { isAdmin: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const defaultTab = TAB_KEYS.includes(requestedTab as TabKey) ? (requestedTab as TabKey) : "organization";
+  // Account Settings holders (non-admins) get everything except Users and API
+  // keys: those can mint or take over an admin, or read the org via the public API.
+  const visibleTabs = TAB_KEYS.filter((tab) => isAdmin || tab !== "users");
+  const defaultTab = visibleTabs.includes(requestedTab as TabKey) ? (requestedTab as TabKey) : "organization";
 
   return (
     <div className="flex flex-col gap-0">
@@ -47,7 +51,7 @@ function MasterAccountSettings() {
       >
         <div className="border-b px-4 md:px-6">
           <TabsList className="h-auto flex-wrap gap-0 rounded-none bg-transparent p-0">
-            {TAB_KEYS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
@@ -59,9 +63,11 @@ function MasterAccountSettings() {
           </TabsList>
         </div>
         <div className="p-4 md:p-6">
-          <TabsContent value="users" className="mt-0">
-            <UsersPage />
-          </TabsContent>
+          {isAdmin && (
+            <TabsContent value="users" className="mt-0">
+              <UsersPage />
+            </TabsContent>
+          )}
 
           <TabsContent value="organization" className="mt-0">
             <OrganizationTab />
@@ -79,7 +85,7 @@ function MasterAccountSettings() {
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
               <div className="flex flex-col gap-6">
                 <ZapierIntegrationCard />
-                <ApiKeysCard />
+                {isAdmin && <ApiKeysCard />}
                 <OAuthConnectionsCard />
               </div>
               <HomeShortcutsCard />
@@ -93,25 +99,26 @@ function MasterAccountSettings() {
 
 export default function MasterAccountSettingsPage() {
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const isAdmin = currentUser.role === "admin";
 
   // Master Account Settings covers org info, branding, user management,
-  // subscription/billing, and the Zapier integration key — all account-wide,
-  // sensitive, and not something every role should see or change. Unlike
-  // Landscapt Settings (gated by the crm_settings permission — see
-  // LandscaptSettingsTabs), there's no finer-grained permission to check
-  // here, so this is admin-only — EXCEPT the OAuth "Connected Apps" card,
-  // which isn't an org-wide setting: an OAuth grant belongs to whichever
+  // subscription/billing, and integrations — all account-wide and sensitive.
+  // Admins see everything. A role with the account_settings permission sees all
+  // of it except Users and API keys (see canManageMasterAccount for the server
+  // side of the same rule). Everyone else gets only the OAuth "Connected Apps"
+  // card, which isn't an org-wide setting: an OAuth grant belongs to whichever
   // user approved it (the API route it's backed by already scopes non-admins
-  // to their own connections only), so every org member gets a stripped-down
-  // view of just that, rather than being blocked from ever disconnecting an
-  // app they connected themselves.
-  if (currentUserLoaded && currentUser.role !== "admin") {
-    return <NonAdminConnectedApps />;
+  // to their own connections only), so every org member can still disconnect
+  // an app they connected themselves.
+  if (currentUserLoaded && !isAdmin) {
+    if (permissionsLoading) return null;
+    if (!can("account_settings")) return <NonAdminConnectedApps />;
   }
 
   return (
     <Suspense>
-      <MasterAccountSettings />
+      <MasterAccountSettings isAdmin={isAdmin} />
     </Suspense>
   );
 }

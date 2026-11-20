@@ -425,8 +425,9 @@ function DiscountsEditor() {
     const name = newName.trim();
     const amount = parseFloat(newAmount);
     if (!name) { toast.error("Enter a discount name"); return; }
-    if (!amount || amount <= 0) {
-      toast.error(newType === "percent" ? "Enter a rate greater than 0%" : "Enter an amount greater than $0");
+    // 0 is allowed: a placeholder preset whose amount is typed at time of use.
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error(newType === "percent" ? "Enter a rate of 0% or more" : "Enter an amount of $0 or more");
       return;
     }
     if (newType === "percent" && amount > 100) {
