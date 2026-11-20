@@ -32,6 +32,9 @@ interface Visit {
 interface Props {
   upcoming: Visit[];
   completed: Visit[];
+  /** The org can hide either section from the portal. */
+  showUpcoming?: boolean;
+  showHistory?: boolean;
 }
 
 const STATUS_PILL: Record<string, { label: string; color: string }> = {
@@ -41,7 +44,7 @@ const STATUS_PILL: Record<string, { label: string; color: string }> = {
   cancelled:   { label: "Cancelled",    color: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
-export default function PortalServicesPage({ upcoming: initialUpcoming, completed }: Props) {
+export default function PortalServicesPage({ upcoming: initialUpcoming, completed, showUpcoming = true, showHistory = true }: Props) {
   const [upcoming, setUpcoming] = useState(initialUpcoming);
 
   // Live visit status. Portal users have no RLS read path to crm_job_visits
@@ -75,7 +78,7 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
       )}
 
       {/* Upcoming */}
-      <section>
+      {showUpcoming && <section>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Upcoming</h2>
         {upcoming.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-6 text-center text-slate-400 text-sm">
@@ -113,10 +116,10 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
             })}
           </ul>
         )}
-      </section>
+      </section>}
 
       {/* Completed */}
-      <section>
+      {showHistory && <section>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Completed</h2>
         {completed.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-6 text-center text-slate-400 text-sm">
@@ -144,7 +147,7 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
             ))}
           </ul>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

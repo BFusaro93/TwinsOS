@@ -39,6 +39,13 @@ export interface PortalSettingsRow {
   allow_documents: boolean;
   welcome_message: string | null;
   portal_ticket_categories: string[];
+  email_support_on_new_ticket: boolean;
+  allow_autopay: boolean;
+  allow_card_management: boolean;
+  card_max_payment_cents: number | null;
+  ach_max_payment_cents: number | null;
+  show_upcoming_services: boolean;
+  show_service_history: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -4,6 +4,7 @@ import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
 import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
+import { loadPortalFeatureSettings, portalPaymentLimitError } from "@/lib/portal/portal-feature-settings";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
@@ -106,6 +107,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
     }
   }
+
+  // Org's per-payment ceiling for this method. Checked on the balance before any credit is
+  // applied, so a refusal never leaves the invoice quietly changed.
+  const limitError = portalPaymentLimitError(await loadPortalFeatureSettings(ctx.orgId), paymentMethod, invoice.balance_cents);
+  if (limitError) return NextResponse.json({ error: limitError, code: "over_payment_limit" }, { status: 400 });
 
   // Always carry the client's Stripe customer (so the duplicate lookup can
   // see this intent), and refuse while a payment for this invoice is still in

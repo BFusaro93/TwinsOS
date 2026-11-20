@@ -60,10 +60,13 @@ export function SavedPaymentMethodDialog({
   open,
   onClose,
   onSaved,
+  allowAutopay = true,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: (summary: string, autopayEnabled: boolean) => void;
+  /** False when the service provider doesn't offer autopay through the portal. */
+  allowAutopay?: boolean;
 }) {
   const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
   const [useForAutopay, setUseForAutopay] = useState(false);
@@ -159,15 +162,17 @@ export function SavedPaymentMethodDialog({
                   Bank Account (ACH)
                 </button>
               </div>
-              <label className="flex items-start gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4"
-                  checked={useForAutopay}
-                  onChange={(e) => setUseForAutopay(e.target.checked)}
-                />
-                <span>Use it for autopay — charge invoices automatically when they&apos;re due</span>
-              </label>
+              {allowAutopay && (
+                <label className="flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4"
+                    checked={useForAutopay}
+                    onChange={(e) => setUseForAutopay(e.target.checked)}
+                  />
+                  <span>Use it for autopay — charge invoices automatically when they&apos;re due</span>
+                </label>
+              )}
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button
                 onClick={start}

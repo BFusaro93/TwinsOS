@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { loadPortalFeatureSettings, portalPaymentLimitError } from "@/lib/portal/portal-feature-settings";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
@@ -146,6 +147,14 @@ export async function POST(request: Request) {
       plural: true,
     });
     if (refusal) return NextResponse.json({ error: refusal.body.error, code: refusal.body.code }, { status: refusal.status });
+
+    // Org's per-payment ceiling for this method, on the combined balance before any credit is applied.
+    const limitError = portalPaymentLimitError(
+      await loadPortalFeatureSettings(ctx.orgId),
+      paymentMethod,
+      invoices.reduce((sum, i) => sum + i.balance_cents, 0)
+    );
+    if (limitError) return NextResponse.json({ error: limitError, code: "over_payment_limit" }, { status: 400 });
 
     const allocations = invoices.map((i) => ({ invoiceId: i.id, amountCents: i.balance_cents }));
     const invoiceClient = new Map(invoices.map((i) => [i.id, i.client_id]));

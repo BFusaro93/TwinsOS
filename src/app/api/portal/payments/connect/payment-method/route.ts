@@ -4,12 +4,17 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { logger } from "@/lib/logger";
+import { loadPortalFeatureSettings } from "@/lib/portal/portal-feature-settings";
 
 const log = logger.child("stripe saved payment method (portal)");
 
 export async function DELETE() {
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!(await loadPortalFeatureSettings(ctx.orgId)).allowCardManagement) {
+    return NextResponse.json({ error: "Your service provider manages the payment method on file. Please contact them to change it." }, { status: 403 });
+  }
 
   // Portal users have no RLS read path to clients / crm_invoices — service
 
@@ -67,6 +72,11 @@ export async function PATCH(request: Request) {
 
   const parsed = AutopaySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+
+  // Turning autopay OFF is always allowed; turning it ON only when the org permits it.
+  if (parsed.data.autopayEnabled && !(await loadPortalFeatureSettings(ctx.orgId)).allowAutopay) {
+    return NextResponse.json({ error: "Autopay isn't available through the portal. Please contact your service provider." }, { status: 403 });
+  }
 
   // Service client: portal users have no profiles row, and the client write guard reserves
   // payment columns for service-role callers. Scoped to this portal user's own client.

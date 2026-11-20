@@ -6,10 +6,15 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { labelPortalVisits, loadUpcomingPortalVisits } from "@/lib/portal/visit-labels";
 import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
+import { loadPortalFeatureSettings } from "@/lib/portal/portal-feature-settings";
 
 export default async function ServicesPage() {
   const ctx = await getPortalContext();
   if (!ctx) redirect("/portal/login");
+
+  // The org can hide either section; with both off there is no Services page at all.
+  const { showUpcomingServices, showServiceHistory } = await loadPortalFeatureSettings(ctx.orgId);
+  if (!showUpcomingServices && !showServiceHistory) redirect("/portal");
 
   const supabase = await createClient();
   // The customer's portal shows the SERVICE PROVIDER's day — a customer in
@@ -25,9 +30,13 @@ export default async function ServicesPage() {
   // scoped to this login's accounts + org, client-safe columns only.
   const service = createServiceClient();
   const [upcoming, completedRes] = await Promise.all([
-    loadUpcomingPortalVisits({ clientIds, orgId: ctx.orgId, today, limit: 25 }),
+    showUpcomingServices
+      ? loadUpcomingPortalVisits({ clientIds, orgId: ctx.orgId, today, limit: 25 })
+      : Promise.resolve({ visits: [], labels: new Map() } as Awaited<ReturnType<typeof loadUpcomingPortalVisits>>),
 
-    queryByClientIds(
+    !showServiceHistory
+      ? Promise.resolve({ data: [] as { id: string; client_id: string; scheduled_date: string; status: string; completed_at: string | null; job_id: string | null; job_service_id: string | null; invoice_description: string | null }[] })
+      : queryByClientIds(
       clientIds,
       (ids) =>
         service
@@ -70,6 +79,8 @@ export default async function ServicesPage() {
     <PortalServicesPage
       upcoming={upcomingRows.map(mapVisit)}
       completed={completedRows.map(mapVisit)}
+      showUpcoming={showUpcomingServices}
+      showHistory={showServiceHistory}
     />
   );
 }

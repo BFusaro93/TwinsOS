@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
+import { loadPortalFeatureSettings } from "@/lib/portal/portal-feature-settings";
 
 // Live status for the visits a portal page is showing. Replaces the Realtime
 // subscription on crm_job_visits: portal users have no RLS read path to that
@@ -15,6 +16,11 @@ const IdsSchema = z.array(z.string().uuid()).min(1).max(MAX_IDS);
 export async function GET(req: NextRequest) {
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Live status only serves the upcoming-services views, which the org can hide.
+  if (!(await loadPortalFeatureSettings(ctx.orgId)).showUpcomingServices) {
+    return NextResponse.json({ visits: [] }, { headers: { "Cache-Control": "private, no-store" } });
+  }
 
   const raw = (req.nextUrl.searchParams.get("ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const parsed = IdsSchema.safeParse([...new Set(raw)]);

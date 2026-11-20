@@ -9,6 +9,7 @@ import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
+import { loadPortalFeatureSettings } from "@/lib/portal/portal-feature-settings";
 
 const log = logger.child("stripe saved payment method (portal)");
 
@@ -25,6 +26,11 @@ export async function POST(request: Request) {
 
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const featureSettings = await loadPortalFeatureSettings(ctx.orgId);
+  if (!featureSettings.allowCardManagement) {
+    return NextResponse.json({ error: "Your service provider manages the payment method on file. Please contact them to change it." }, { status: 403 });
+  }
 
   // Same limiter as portal create-intent: each call mints a Stripe SetupIntent.
   // Fails open if the limiter errors.
@@ -127,7 +133,14 @@ export async function PUT(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { setupIntentId, enableAutopay } = parsed.data;
+  const { setupIntentId, enableAutopay: requestedAutopay } = parsed.data;
+
+  const featureSettings = await loadPortalFeatureSettings(ctx.orgId);
+  if (!featureSettings.allowCardManagement) {
+    return NextResponse.json({ error: "Your service provider manages the payment method on file. Please contact them to change it." }, { status: 403 });
+  }
+  // A card can still be saved when autopay is off org-wide — it just can't be turned on here.
+  const enableAutopay = requestedAutopay && featureSettings.allowAutopay;
 
   // Portal users have no RLS read path to clients / crm_invoices — service
 
