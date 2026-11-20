@@ -159,12 +159,12 @@ export function ProductCatalogGuide() {
         </p>
         <p>
           <strong>Estimated amounts.</strong> With <strong>Settings &gt; Chemical Tracking &gt;
-          Default Chemical Quantity</strong> on and an <strong>Area Custom Field</strong> chosen
+          Default Chemical Quantity</strong> on and a <strong>Default Area Measurement</strong> chosen
           (for example Turf Sq. Ft.), the planned amount is the product&apos;s default Application
           Rate multiplied by the property&apos;s area. The rate&apos;s area unit is honored, so a
           rate &ldquo;per 1,000 Sq Ft&rdquo; or &ldquo;per Acre&rdquo; is converted to square feet
           before the math, and a field measured in acres or square yards is converted too. The built-in
-          takeoff fields count as an Area Custom Field, and a job
+          takeoff fields count as an area measurement, and a job
           with no property of its own uses the client&apos;s property when the client has exactly
           one. A client with two or more properties and no property on the job gets no estimate
           rather than a guess. Start and end time inputs on the application record are optional.
@@ -176,7 +176,7 @@ export function ProductCatalogGuide() {
           Services tab &mdash; for a spot treatment or just the front lawn; (2) the service&apos;s own{" "}
           <strong>Area measurement for chemical quantities</strong> (Services &amp; Pricing &rarr; the
           service &rarr; Chemicals tab), for example Parking Lot Sq. Ft. on a parking-lot
-          weed control service; (3) the org&apos;s Area Custom Field above. Any measurement, including a Number
+          weed control service; (3) the org&apos;s Default Area Measurement above. Any measurement, including a Number
           custom field, is read from the property first and then from the client. The Materials Needed report,
           the Daily Load List, the crew&apos;s preloaded amounts and the application panel all use the same
           order, so they agree. Rate Matrix pricing uses the same property-then-client lookup for its

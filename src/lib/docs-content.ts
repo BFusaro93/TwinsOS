@@ -3313,7 +3313,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I make a service like parking-lot weed control use the Parking Lot square footage?",
-        a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot Sq. Ft. Without it the service uses the org's Area Custom Field from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
+        a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot Sq. Ft. Without it the service uses the org's Default Area Measurement from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
       },
       {
         q: "What happens if the chemical area field is blank, or the service isn't treating turf?",

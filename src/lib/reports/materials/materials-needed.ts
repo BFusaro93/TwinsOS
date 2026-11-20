@@ -137,7 +137,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     .maybeSingle();
   const areaFieldId = settings?.area_custom_field_id ?? null;
   if (!areaFieldId) {
-    notes.push("Set an Area Custom Field under Settings > Chemical Tracking to estimate chemical quantities needed.");
+    notes.push("Set a Default Area Measurement under Settings > Chemical Tracking to estimate chemical quantities needed.");
   }
 
   const { data: serviceChemicals } = chemicalProductIds.size

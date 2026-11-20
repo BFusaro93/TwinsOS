@@ -162,7 +162,7 @@ function GeneralChemicalSettings() {
         <div>
           <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">Default Chemical Quantity</p>
           <p className="text-xs text-muted-foreground">
-            Auto-calculate quantity to apply from a property&apos;s custom field and the product&apos;s
+            Auto-calculate quantity to apply from a property measurement and the product&apos;s
             application rate.
           </p>
         </div>
@@ -184,7 +184,7 @@ function GeneralChemicalSettings() {
 
       {settings?.autoCalcQuantity && (
         <div className="flex flex-col gap-1.5 max-w-xs">
-          <Label className="text-xs">Area Custom Field</Label>
+          <Label className="text-xs">Default Area Measurement</Label>
           <Select value={settings?.areaCustomFieldId ?? "none"} onValueChange={handleAreaFieldChange}>
             <SelectTrigger className="text-sm">
               <SelectValue placeholder="Select a property field…" />
@@ -199,10 +199,9 @@ function GeneralChemicalSettings() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            The default numeric property field (e.g. Turf Sq Ft) used to auto-calculate quantity from each
-            product&apos;s application rate. A service can use a different field of its own (e.g. Parking Lot
-            Sq Ft), and a job can override the treated area for a spot treatment. If no area resolves, no
-            amount is estimated and it&apos;s entered by hand.
+            Which property measurement (e.g. Turf Sq Ft) sizes each product&apos;s amount when a service doesn&apos;t
+            set its own. A job can override it with a treated area, for a spot treatment. If no area resolves,
+            no amount is estimated and it&apos;s entered by hand.
           </p>
         </div>
       )}
