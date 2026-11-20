@@ -20,6 +20,8 @@ const PAIRED_EVENTS: [string, string][] = [
   ["Estimate approval required", "You're the next approver in an estimate's internal approval chain."],
   ["Estimate client-accepted", "A client accepts an estimate."],
   ["Estimate client-rejected", "A client declines an estimate."],
+  ["Estimate change-request", "A client asks for changes on an estimate (from the proposal link or the client portal). Goes to active admins and managers and to the estimate's salesperson, even if they aren't an admin or manager."],
+  ["Estimate expiring soon", "An estimate is within 3 days of expiring and hasn't been accepted. One daily check; goes to the person who created the estimate, or its sales rep when there's no creator."],
   ["Proposal deposit failed", "A client's deposit is declined or returned by their bank after they accepted the proposal."],
   ["New ticket", "A new support/service ticket comes in."],
   ["Ticket assigned", "You're set as the assignee on a ticket."],
@@ -34,7 +36,6 @@ const PAIRED_EVENTS: [string, string][] = [
 const EMAIL_ONLY_EVENTS: [string, string][] = [
   ["Estimate approved", "An estimate you submitted for internal approval is approved."],
   ["Estimate rejected", "An estimate you submitted for internal approval is rejected."],
-  ["Estimate expiring soon", "An estimate is approaching its expiration date."],
   ["Any WO created (admin)", "Org-wide firehose: any work order is created, not just your own."],
   ["Any WO status changed (admin)", "Org-wide firehose: any work order changes status."],
   ["Any WO comment (admin)", "Org-wide firehose: a comment is added to any work order."],
@@ -90,14 +91,9 @@ export function NotificationPreferencesGuide() {
         <p>That pairing isn&apos;t universal, though — a handful of events only exist on one channel:</p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Estimate change-request is in-app only.</strong> There is no{" "}
-            <code>emailEstimateChangeRequest</code> field at all — this event can only ever produce a bell
-            notification, never an email.
-          </li>
-          <li>
-            <strong>Estimate approved, estimate rejected, and estimate expiring soon are email only.</strong>{" "}
-            There&apos;s no in-app counterpart for any of the three — they don&apos;t show up in the bell,
-            only in your inbox.
+            <strong>Estimate approved and estimate rejected are email only.</strong>{" "}
+            There&apos;s no in-app counterpart for either — they don&apos;t show up in the bell, only in your
+            inbox.
           </li>
           <li>
             <strong>The three admin &quot;any WO&quot; events are email only</strong> — see below.
@@ -107,7 +103,7 @@ export function NotificationPreferencesGuide() {
 
       <Section id="event-reference" title="Full event reference">
         <p>
-          18 events support both channels independently. The remaining 7 are locked to a single channel —
+          22 events support both channels independently. The remaining 6 are locked to a single channel —
           marked below.
         </p>
         <Table>
@@ -131,18 +127,8 @@ export function NotificationPreferencesGuide() {
             ))}
             <tr>
               <td colSpan={3} className="bg-[#f4f6f0] dark:bg-muted/50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[#5a5a56] dark:text-neutral-300">
-                Estimate change-request — in-app only
+                In-app only — no email variant
               </td>
-            </tr>
-            <tr className="border-b border-[#eceae3] dark:border-border align-top">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">
-                Estimate change-request
-                <div className="mt-0.5 whitespace-normal text-xs font-normal text-[#7a7a76] dark:text-neutral-400">
-                  A client (or internal reviewer) requests changes to an estimate before deciding.
-                </div>
-              </td>
-              <td className="px-3 py-2 text-[#7a7a76] dark:text-neutral-400">No email variant</td>
-              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Yes</td>
             </tr>
             <tr className="border-b border-[#eceae3] dark:border-border align-top">
               <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">

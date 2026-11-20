@@ -3329,11 +3329,15 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I make a service like parking-lot weed control use the Parking Lot square footage?",
-        a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot Sq. Ft. Without it the service uses the org's Area Custom Field from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
+        a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot Sq. Ft. Without it the service uses the org's Default Area Measurement from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
+      },
+      {
+        q: "What happens if the chemical area field is blank, or the service isn't treating turf?",
+        a: "The amount is sized from the first area that resolves: a treated area entered on the job service, else the service's own Area measurement for chemical quantities, else the default field in Settings > Chemical Tracking. If none gives a number for that property, no amount is estimated and the quantity is left to enter by hand. The same applies when auto-calculate quantity is off or a rate per linear foot meets a square-foot field. For non-turf work set the service's own field (for example Parking Lot Sq. Ft.) or enter a treated area on the job.",
       },
       {
         q: "How do I estimate a perimeter or barrier product that is labelled per linear foot?",
-        a: "In Settings > Chemical Tracking add an area unit such as 100 Linear Ft or 1,000 Linear Ft (new orgs already have both) and use it on the product's Application Rate. Then open the service's Chemicals tab and set Area measurement for chemical quantities to a linear-foot field such as Linear Ft. Perimeter. A linear-foot rate is only sized from a linear-foot field and a square-foot rate only from an area field; when they don't match no amount is estimated and the Daily Load List and application panel say why.",
+        a: "In Settings > Chemical Tracking add an area unit such as Linear Ft, 100 Linear Ft or 1,000 Linear Ft (new orgs already have all three) and use it on the product's Application Rate. Then open the service's Chemicals tab and set Area measurement for chemical quantities to a linear-foot field such as Linear Ft. Perimeter. A linear-foot rate is only sized from a linear-foot field and a square-foot rate only from an area field; when they don't match no amount is estimated and the Daily Load List and application panel say why.",
       },
       {
         q: "How do I skip one step of a package on an estimate?",
@@ -3485,7 +3489,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "When does an invoice count as overdue, and who gets contract and estimate expiry reminders?",
-        a: "An unpaid invoice is overdue once its due day has passed; one on Due on Receipt terms with no due date goes overdue the day after its invoice date, and an invoice with no balance left is never overdue. About three days before an open estimate expires, its creator is reminded (its sales rep when there is no creator). Contract expiry warnings go only for signed or active contracts, never for cancelled, expired or draft ones. A snow job whose contract has ended no longer shows on the Snow Jobs board, and its completed visits bill per visit.",
+        a: "An unpaid invoice is overdue once its due day has passed; one on Due on Receipt terms with no due date goes overdue the day after its invoice date, and an invoice with no balance left is never overdue. About three days before an open estimate expires, its creator is reminded by email and in the bell (its sales rep when there is no creator); each has its own switch under Notifications. Contract expiry warnings go only for signed or active contracts, never for cancelled, expired or draft ones. A snow job whose contract has ended no longer shows on the Snow Jobs board, and its completed visits bill per visit.",
       },
       {
         q: "How do I set up a contract that bills only some months, at different amounts?",
@@ -4079,6 +4083,38 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "I invited someone who's already on the team. What happens?",
         a: "Nothing is sent. Landscapt tells you they're already an active member, and their role isn't changed. Change it on the Users page instead.",
+      },
+      {
+        q: "What does the Account Settings permission do?",
+        a: "It lets a role open Master Account Settings without being an admin. The role gets the Organization, Branding, Subscription and Integrations tabs: company details, the plan and add-ons, and Zapier. The Users tab and API keys stay admin-only. Changing the tax rate or card fee also needs Accounting Settings.",
+      },
+      {
+        q: "Who is notified when a client asks for changes on an estimate?",
+        a: "Active admins and managers, plus the estimate's salesperson even if they aren't an admin or manager. Each person gets a bell notification and an email, and each has its own switch under Settings > Notifications (Estimate Change Requested). Turning yours off only silences you.",
+      },
+      {
+        q: "Do estimate accepted, declined and deposit-failed notifications go to everyone or only the salesperson?",
+        a: "They go to the recipients chosen in Settings > Notifications (all admins and managers unless an admin narrows it) plus the estimate's salesperson. Only admins see the recipient pickers. Your own switch only silences them for you.",
+      },
+      {
+        q: "How do I rename a ticket category, cancellation reason, tag or other Settings list item?",
+        a: "Click the pencil next to the item, type the new name and press Enter. Existing records follow the new name: tickets and the client portal's category picker, clients' cancellation reasons and sources, estimates' won and lost reasons and sources, services' categories, clients' tags and contacts' types. The Uncategorized and Upsell ticket categories can't be renamed, and payment methods can't be renamed here. Automation rules and forms that quote the old name as text aren't rewritten, so update those by hand.",
+      },
+      {
+        q: "Why are Settings lists in alphabetical order?",
+        a: "Ticket categories, cancellation reasons, client sources, tags, contact types, won and lost reasons and service categories always sort A to Z, in Settings and in every dropdown that uses them, so newly added items land in the right place.",
+      },
+      {
+        q: "How do I group tags into categories?",
+        a: "In Settings > Tags each tag has a Category box. Type a new category or pick an existing one, or set it when you add the tag. The Add Tag list on a client and the bulk tag dialog then show tags under their category headings, with uncategorized tags last.",
+      },
+      {
+        q: "Can I save a discount with no amount, to type the amount each time?",
+        a: "Yes. A saved discount can be 0% or $0. Picking it on an invoice or estimate fills the discount with 0 for you to overwrite, which suits entries like Price Match or Donation / Giveaway.",
+      },
+      {
+        q: "Why does the Dispatch Board map ask for a Google Maps key when route optimization already works?",
+        a: "Route optimization, address checks and geocoding use Landscapt's own Google key for plans that include them. Maps drawn in your browser (the Dispatch Board map, Aerial Measurement, the snow board and the master route builder) use the key saved in Settings > Integrations > Google Maps. Create a key limited to the Maps JavaScript API and your site address, then paste it there and run the test button.",
       },
       {
         q: "Why can't I change the last admin's role?",

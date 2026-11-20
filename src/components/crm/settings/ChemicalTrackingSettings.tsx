@@ -29,11 +29,14 @@ import type { ChemicalConditionsDisplay, ChemicalLookupType, ChemicalUnitClass }
 function Section({
   title,
   description,
+  count,
   defaultOpen = false,
   children,
 }: {
   title: string;
   description?: string;
+  /** Item count shown next to the title, like the other Settings tabs. */
+  count?: number;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
@@ -46,6 +49,11 @@ function Section({
       >
         <div>
           <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{title}</span>
+          {typeof count === "number" && (
+            <span className="ml-2 text-xs text-slate-400 dark:text-neutral-500">
+              {count} item{count !== 1 ? "s" : ""}
+            </span>
+          )}
           {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
         </div>
         {open ? <ChevronUp className="h-4 w-4 text-slate-400 dark:text-neutral-500" /> : <ChevronDown className="h-4 w-4 text-slate-400 dark:text-neutral-500" />}
@@ -154,7 +162,7 @@ function GeneralChemicalSettings() {
         <div>
           <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">Default Chemical Quantity</p>
           <p className="text-xs text-muted-foreground">
-            Auto-calculate quantity to apply from a property&apos;s custom field and the product&apos;s
+            Auto-calculate quantity to apply from a property measurement and the product&apos;s
             application rate.
           </p>
         </div>
@@ -176,7 +184,7 @@ function GeneralChemicalSettings() {
 
       {settings?.autoCalcQuantity && (
         <div className="flex flex-col gap-1.5 max-w-xs">
-          <Label className="text-xs">Area Custom Field</Label>
+          <Label className="text-xs">Default Area Measurement</Label>
           <Select value={settings?.areaCustomFieldId ?? "none"} onValueChange={handleAreaFieldChange}>
             <SelectTrigger className="text-sm">
               <SelectValue placeholder="Select a property field…" />
@@ -191,8 +199,9 @@ function GeneralChemicalSettings() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            The numeric property field (e.g. Turf Sq Ft) used to auto-calculate quantity from each
-            product&apos;s application rate.
+            Which property measurement (e.g. Turf Sq Ft) sizes each product&apos;s amount when a service doesn&apos;t
+            set its own. A job can override it with a treated area, for a spot treatment. If no area resolves,
+            no amount is estimated and it&apos;s entered by hand.
           </p>
         </div>
       )}
@@ -294,7 +303,7 @@ const DEFAULT_LOOKUP_ITEMS: Partial<Record<ChemicalLookupType, string[]>> = {
   // alphabetical order which splits them apart. The linear-foot units are for
   // perimeter/barrier labels ("per 100 lin ft"); they only size against a
   // linear-foot property field (see areaBasis in chemical-mix-calc.ts).
-  area_unit: ["Square Foot", "1,000 Sq Ft", "Acre", "100 Linear Ft", "1,000 Linear Ft"],
+  area_unit: ["Square Foot", "1,000 Sq Ft", "Acre", "Linear Ft", "100 Linear Ft", "1,000 Linear Ft"],
 };
 
 /** Which chem_create_* permission key gates adding a new item to each lookup
@@ -322,7 +331,7 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
   useEffect(() => {
     const defaults = DEFAULT_LOOKUP_ITEMS[listType];
     if (!defaults || isLoading || seedInFlightRef.current) return;
-    // Seeding writes 13 volume + 5 area rows into the org's catalog, so it is
+    // Seeding writes 13 volume + 6 area rows into the org's catalog, so it is
     // a create and has to respect the same permission as the Add button —
     // chem_create_uom is app-layer only (RLS lets any member insert), so
     // without this check a crew or viewer just opening the tab populated the
@@ -465,27 +474,37 @@ function NoticeEmailTemplatesEditor() {
   );
 }
 
+/** A Section whose header shows how many items its lookup list holds (shares the editor's cached query). */
+function LookupSection({
+  listType,
+  title,
+  description,
+  addPlaceholder,
+}: {
+  listType: ChemicalLookupType;
+  title: string;
+  description: string;
+  addPlaceholder: string;
+}) {
+  const { data: items } = useChemicalLookupItems(listType);
+  return (
+    <Section title={title} description={description} count={items?.length}>
+      <LookupListEditor listType={listType} addPlaceholder={addPlaceholder} />
+    </Section>
+  );
+}
+
 export function ChemicalTrackingTab() {
   return (
     <div className="rounded-lg border bg-card shadow-sm">
       <Section title="General Chemical Settings" defaultOpen>
         <GeneralChemicalSettings />
       </Section>
-      <Section title="Application Methods" description="How chemicals are applied — e.g. Broadcast, Backpack Sprayer, Truck Tank">
-        <LookupListEditor listType="application_method" addPlaceholder="e.g. Backpack Sprayer" />
-      </Section>
-      <Section title="Targets" description="What the chemical treats — pests, weeds, etc.">
-        <LookupListEditor listType="target" addPlaceholder="e.g. Grubs" />
-      </Section>
-      <Section title="Volume Units" description="Units for measuring chemical volume — ounces, gallons, pounds">
-        <LookupListEditor listType="volume_unit" addPlaceholder="e.g. Fluid Ounces" />
-      </Section>
-      <Section title="Area Units" description="Units for measuring the size of the treated area">
-        <LookupListEditor listType="area_unit" addPlaceholder="e.g. 1,000 sq ft" />
-      </Section>
-      <Section title="Areas Treated" description="Named property zones that can be treated — front lawn, back lawn, etc.">
-        <LookupListEditor listType="areas_treated" addPlaceholder="e.g. Front Turf" />
-      </Section>
+      <LookupSection listType="application_method" title="Application Methods" description="How chemicals are applied — e.g. Broadcast, Backpack Sprayer, Truck Tank" addPlaceholder="e.g. Backpack Sprayer" />
+      <LookupSection listType="target" title="Targets" description="What the chemical treats — pests, weeds, etc." addPlaceholder="e.g. Grubs" />
+      <LookupSection listType="volume_unit" title="Volume Units" description="Units for measuring chemical volume — ounces, gallons, pounds" addPlaceholder="e.g. Fluid Ounces" />
+      <LookupSection listType="area_unit" title="Area Units" description="Units for measuring the size of the treated area" addPlaceholder="e.g. 1,000 sq ft" />
+      <LookupSection listType="areas_treated" title="Areas Treated" description="Named property zones that can be treated — front lawn, back lawn, etc." addPlaceholder="e.g. Front Turf" />
       <Section title="Client Notice Email" description="Sent to clients after a chemical application is logged">
         <NoticeEmailTemplatesEditor />
       </Section>

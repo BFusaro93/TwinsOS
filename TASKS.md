@@ -45,6 +45,14 @@ Dependabot is configured to skip major bumps (#430). Each one broke the build wh
 - [ ] Not feasible as column masks (documented, no action): `client_view_balance` / `client_view_billing` (same data is readable through Invoices, Payments, Reports, portal, emails) and `export_lists` (the CSV is a reformat of rows the list page already loads under RLS).
 - [ ] Gotcha: security_invoker report views and the audit trigger read `clients` columns — re-check every view referencing a revoked column before applying the REVOKE.
 
+## Backlog — platform Google Maps key for in-browser maps (decided 2026-11-20: leave as is, cost)
+Entitled orgs (Enterprise, an open-ended trial, or the Route Optimization add-on) already get the platform key (`GOOGLE_MAPS_PLATFORM_API_KEY`) for every **server-side** Google call: route optimization, address verification, geocoding ([google-maps-key.ts](src/lib/google-maps-key.ts)). The **browser** maps do not: they read only the org's own saved key (`organizations.customizations.google_maps_api_key`, Settings → Integrations) and show a no-key state or blank map without it. Affected: the Dispatch Board map ([DispatchBoard.tsx](src/components/crm/DispatchBoard.tsx)), Aerial Measurement ([AerialMeasurementDialog.tsx](src/components/crm/AerialMeasurementDialog.tsx)), the snow dispatch board and the master route builder. Twins Lawn Service (open-ended trial, no own key) hits this today; the workaround is pasting a key into Settings → Integrations.
+
+Held back on purpose: each map load is a billable Google call, Aerial Measurement's satellite view is the heaviest, and a browser key can't safely be the same key as the server one.
+
+- [ ] If revisited: create a **separate browser key** in Google Cloud limited to Maps JavaScript API and HTTP-referrer-restricted to the app domains; add it to Vercel as a server env var (not `NEXT_PUBLIC_*`). Add an authenticated route that returns it only for orgs where `orgHasAddon(..., "route_optimization")` is true, and have a shared hook return `orgSettings.googleMapsApiKey ?? platformBrowserKey` for the four consumers above. Org-saved keys keep winning.
+- [ ] Before opening it past entitled orgs, watch the Maps billing in Google Cloud. Keeping the rule at "entitled orgs only" is the safe default.
+
 ## Deferred — nav placement: Photos into Landscapt
 Decided 2026-08-18: Projects stays under Equipt (it's PO/procurement cost tracking — PO line items and materials assign to a Project, tightly coupled to that module). Photos (photo-docs module) is conceptually Landscapt's, not Equipt's, and should eventually move — but nav/sidebar links stay exactly where they are today until a full nav reorg happens. Do not move the Photos link into the Landscapt nav menu until explicitly asked.
 
