@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useBulkAddTag, useBulkRemoveTag, useOrgTags } from "@/lib/hooks/use-clients";
+import { useBulkAddTag, useBulkRemoveTag, useOrgTags, useOrgTagGroups } from "@/lib/hooks/use-clients";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,15 @@ interface Props {
 
 export function BulkTagDialog({ open, onOpenChange, clientIds }: Props) {
   const orgTags = useOrgTags();
+  const tagGroups = useOrgTagGroups();
+  const tagSections = (() => {
+    const map = new Map<string | null, string[]>();
+    for (const t of orgTags) map.set(tagGroups[t] ?? null, [...(map.get(tagGroups[t] ?? null) ?? []), t]);
+    return [...map.entries()]
+      .sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b, undefined, { sensitivity: "base" })))
+      .map(([group, items]) => ({ group, items }));
+  })();
+  const hasTagGroups = tagSections.some((x) => x.group !== null);
   const { mutateAsync: bulkAdd, isPending: adding } = useBulkAddTag();
   const { mutateAsync: bulkRemove, isPending: removing } = useBulkRemoveTag();
   const [mode, setMode] = useState<"add" | "remove">("add");
@@ -67,17 +76,26 @@ export function BulkTagDialog({ open, onOpenChange, clientIds }: Props) {
         {orgTags.length > 0 && (
           <div>
             <p className="text-xs text-muted-foreground mb-2">Existing tags</p>
-            <div className="flex flex-wrap gap-1.5">
-              {orgTags.map((tag) => (
-                <Badge
-                  key={tag}
-                  variant="secondary"
-                  className="cursor-pointer hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors text-xs"
-                  onClick={() => handleTag(tag, mode)}
-                >
-                  {mode === "add" ? <Plus className="h-2.5 w-2.5 mr-1" /> : <Minus className="h-2.5 w-2.5 mr-1" />}
-                  {tag}
-                </Badge>
+            <div className="flex flex-col gap-3">
+              {tagSections.map((sec) => (
+                <div key={sec.group ?? "__none"}>
+                  {hasTagGroups && (
+                    <p className="mb-1.5 text-[11px] font-semibold text-brand-600 dark:text-brand-400">{sec.group ?? "Other"}</p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {sec.items.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors text-xs"
+                        onClick={() => handleTag(tag, mode)}
+                      >
+                        {mode === "add" ? <Plus className="h-2.5 w-2.5 mr-1" /> : <Minus className="h-2.5 w-2.5 mr-1" />}
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

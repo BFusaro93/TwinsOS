@@ -17,9 +17,11 @@ interface Props {
    *  (gated by the `tags_create_tag` permission). Picking an existing
    *  suggestion is always allowed. Defaults to true. */
   canCreateNew?: boolean;
+  /** Tag -> category. When given, suggestions are listed under category headings. */
+  groups?: Record<string, string>;
 }
 
-export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, className, canCreateNew = true }: Props) {
+export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, className, canCreateNew = true, groups }: Props) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +29,19 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
   const filtered = suggestions.filter(
     (s) => !tags.includes(s) && s.toLowerCase().includes(input.toLowerCase())
   );
+
+  // Suggestions under their category (A-Z, uncategorized last); flat when no categories exist.
+  const sections: { group: string | null; items: string[] }[] = (() => {
+    const map = new Map<string | null, string[]>();
+    for (const t of filtered) {
+      const key = groups?.[t] ?? null;
+      map.set(key, [...(map.get(key) ?? []), t]);
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b, undefined, { sensitivity: "base" })))
+      .map(([group, items]) => ({ group, items }));
+  })();
+  const hasGroups = sections.some((x) => x.group !== null);
 
   function commit(value: string) {
     const trimmed = value.trim();
@@ -87,15 +102,24 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
             className="h-6 w-32 px-2 text-xs"
           />
           {filtered.length > 0 && (
-            <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border bg-card shadow-md">
-              {filtered.map((s) => (
-                <button
-                  key={s}
-                  onMouseDown={(e) => { e.preventDefault(); commit(s); }}
-                  className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
-                >
-                  {s}
-                </button>
+            <div className="absolute left-0 top-full z-50 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border bg-card shadow-md">
+              {sections.map((sec) => (
+                <div key={sec.group ?? "__none"}>
+                  {hasGroups && (
+                    <p className="border-b px-3 pb-1 pt-2 text-center text-[11px] font-semibold text-brand-600 dark:text-brand-400">
+                      {sec.group ?? "Other"}
+                    </p>
+                  )}
+                  {sec.items.map((s) => (
+                    <button
+                      key={s}
+                      onMouseDown={(e) => { e.preventDefault(); commit(s); }}
+                      className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           )}

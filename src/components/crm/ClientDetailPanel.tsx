@@ -26,6 +26,7 @@ import {
   useAddClientTag,
   useRemoveClientTag,
   useOrgTags,
+  useOrgTagGroups,
   useCancelClient,
   useActivateClient,
   useClientSelfOptOut,
@@ -3858,6 +3859,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const { mutate: addTag } = useAddClientTag();
   const { mutate: removeTag } = useRemoveClientTag();
   const orgTags = useOrgTags();
+  const orgTagGroups = useOrgTagGroups();
   const { data: openTicket } = useTicket(openTicketId ?? "");
   const { data: openPayment } = usePayment(openPaymentId ?? undefined);
   const router = useRouter();
@@ -4011,6 +4013,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               <TagEditor
                 tags={client.tags ?? []}
                 suggestions={orgTags}
+                groups={orgTagGroups}
                 onAdd={(tag) => addTag({ clientId, tag })}
                 onRemove={(tag) => removeTag({ clientId, tag })}
                 canCreateNew={can("tags_create_tag")}
