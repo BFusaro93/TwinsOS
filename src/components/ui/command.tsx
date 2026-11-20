@@ -29,12 +29,12 @@ type CommandDialogProps = DialogProps &
 const CommandDialog = ({ children, filter, shouldFilter, ...props }: CommandDialogProps) => {
   return (
     <Dialog {...props}>
-      {/* Fixed height, so the box doesn't grow and shrink as results come and go; the list scrolls inside it. */}
+      {/* The search row is a fixed 48px so the dialog's close X (top-4, 16px tall) sits centered on it. Fixed height, so the box doesn't grow and shrink as results come and go; the list scrolls inside it. */}
       <DialogContent className="h-[min(560px,85dvh)] max-w-2xl grid-rows-[minmax(0,1fr)] overflow-hidden p-0 shadow-lg">
         <Command
           filter={filter}
           shouldFilter={shouldFilter}
-          className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]]:pr-12 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
+          className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]]:h-12 [&_[cmdk-input-wrapper]]:pr-12 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
         >
           {children}
         </Command>
