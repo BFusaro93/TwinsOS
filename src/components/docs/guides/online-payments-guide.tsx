@@ -22,7 +22,7 @@ export function OnlinePaymentsGuide() {
       <DocsHero
         kicker="Landscapt (CRM)"
         title="Online Payments & Stripe"
-        description="How a client actually pays an invoice online, how Stripe Connect keeps every org's money in their own account, and how the platform takes zero cut."
+        description="How a client actually pays an invoice online, how Stripe Connect keeps every org's money in their own account, and the two kinds of card fee: Landscapt's platform fee and the optional processing fee you can pass on to clients."
       />
 
       <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
@@ -34,7 +34,7 @@ export function OnlinePaymentsGuide() {
           <TOCLink href="#connect">Connecting your organization&apos;s Stripe account</TOCLink>
           <TOCLink href="#ach">Enabling bank transfer (ACH)</TOCLink>
           <TOCLink href="#how-clients-pay">How a client actually pays</TOCLink>
-          <TOCLink href="#fees">Processing fees — you set your own, the platform takes none</TOCLink>
+          <TOCLink href="#fees">Fees — the platform fee and your own processing fee</TOCLink>
           <TOCLink href="#security">How this is kept secure</TOCLink>
           <TOCLink href="#double-pay">What happens if a client pays twice</TOCLink>
           <TOCLink href="#pay-links">Revoking a pay link</TOCLink>
@@ -129,12 +129,25 @@ export function OnlinePaymentsGuide() {
         </p>
       </Section>
 
-      <Section id="fees" title="Processing fees — you set your own, the platform takes none">
+      <Section id="fees" title="Fees — the platform fee and your own processing fee">
         <p>
-          Landscapt takes <strong>zero cut</strong> of any client payment — every charge is a direct
-          charge straight to your own connected Stripe account. What you see charged is entirely a
-          fee <em>you</em> configure, in Settings &gt; Accounting, to help cover Stripe&apos;s own
-          card-processing rate:
+          Two different fees can apply to a card payment, and they are not the same thing. Every charge is
+          a direct charge to your own connected Stripe account, and you pay Stripe&apos;s own card rate as
+          usual.
+        </p>
+        <p>
+          <strong>Landscapt platform fee.</strong> Card payments you accept through Stripe may carry a
+          platform application fee, charged by Landscapt on each card payment and deducted through Stripe
+          from the amount paid out to you. The rate is stated in your plan or agreement (see the Terms of
+          Service, section 6), and each one appears as an &ldquo;application fee&rdquo; in your Stripe
+          dashboard. It comes out of your payout; clients never see it or pay it. It applies to card
+          payments only, never to bank transfer (ACH). On a debit or prepaid card the fee scales to the
+          amount actually captured, and a refund returns its matching share of the fee.
+        </p>
+        <p>
+          <strong>Your card processing fee (optional).</strong> Separately, you can pass a fee on to the
+          client, in Settings &gt; Accounting, to help cover the card-processing cost. This is a fee{" "}
+          <em>you</em> configure, and it is yours to keep:
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>Off by default for new companies. When you turn it on you set the rate (3% is the starting value, 4% is the most allowed) and the threshold above which it applies — for example 3% on card payments over $500.</li>
@@ -143,7 +156,7 @@ export function OnlinePaymentsGuide() {
           <li><strong>Refunds return the surcharge too.</strong> A full refund returns the processing fee the client paid; a partial refund returns the fee&apos;s matching share. Your books still show the refund against the invoice amount.</li>
           <li>Card networks cap surcharges (at 3%) and some states ban them. A flat rate can be at most 4%; Settings refuses a higher number. Within that, keep it lawful where you operate. Cover the card fee mode is capped at 4%, which can still exceed the 3% network cap on small invoices, so use a flat rate of 3% or less if you are in doubt. Surcharges apply to credit cards only, never debit or prepaid cards. Payments are authorized first and captured with the fee; if the payment_intent.amount_capturable_updated webhook event isn&apos;t subscribed in Stripe, a surcharged payment can take 5–7 minutes to record instead of seconds.</li>
           <li>Applies to card payments on invoices <em>and</em> to a deposit paid by card when a client accepts a proposal, on the same threshold.</li>
-          <li>Never applied to Bank Transfer/ACH payments — ACH is fee-free by design.</li>
+          <li>Never applied to Bank Transfer/ACH payments — ACH carries neither fee.</li>
           <li>
             <strong>Credit cards only.</strong> Debit and prepaid cards can&apos;t be surcharged. A saved card
             (autopay, Charge All) is checked first and a debit, prepaid or unreadable card is charged the

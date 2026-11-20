@@ -44,6 +44,7 @@ import { useClientSearch } from "@/lib/hooks/use-clients";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useInvoiceSearch, useEstimateSearch } from "@/lib/hooks/use-global-search";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
+import { pushRecentItem, readRecentItems, type RecentItem, type RecentItemKind } from "@/lib/recent-items";
 import {
   WO_STATUS_LABELS,
   PO_STATUS_LABELS,
@@ -156,17 +157,65 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
     (p) => p.category === "stocked_material" || p.category === "project_material"
   );
 
-  function go(href: string, select?: () => void) {
+  function go(href: string, select?: () => void, recent?: RecentItem) {
     select?.();
+    if (recent) pushRecentItem(currentUser.id, recent);
     onOpenChange(false);
     router.push(href);
   }
+
+  // "Recent": what this person last opened, shown while nothing is typed. Read when the dialog opens
+  // (this component only mounts while it is open), then filtered by the same view permissions as the
+  // live groups so a shortcut never reveals a record type they can't search for.
+  const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  useEffect(() => {
+    setRecentItems(readRecentItems(currentUser.id));
+  }, [currentUser.id]);
+  const recentVisible: Record<RecentItemKind, boolean> = {
+    client: showClients,
+    lead: showLeads,
+    invoice: showInvoices,
+    estimate: showEstimates,
+  };
+  const visibleRecents =
+    showFullSearch && query.trim() === "" ? recentItems.filter((i) => recentVisible[i.kind]).slice(0, 5) : [];
+  const RECENT_ICONS: Record<RecentItemKind, typeof Users> = {
+    client: Users,
+    lead: UserPlus,
+    invoice: Receipt,
+    estimate: ClipboardList,
+  };
 
   return (
     <>
       <CommandInput value={query} onValueChange={setQuery} placeholder={isCrew ? "Search job photos and dispatch jobs…" : "Search clients, leads, invoices, work orders, assets…"} />
       <CommandList className="max-h-none flex-1">
         <CommandEmpty>No results found.</CommandEmpty>
+
+        {visibleRecents.length > 0 && (
+          <CommandGroup heading="Recent">
+            {visibleRecents.map((item) => {
+              const Icon = RECENT_ICONS[item.kind];
+              return (
+                <CommandItem
+                  key={`${item.kind}:${item.id}`}
+                  value={`recent ${item.kind} ${item.label}`}
+                  onSelect={() => go(item.href, undefined, item)}
+                  className="flex items-center gap-3"
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium">{item.label}</span>
+                    {item.sub && (
+                      <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{item.sub}</span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-xs capitalize text-muted-foreground">{item.kind}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        )}
 
         {/* Clients and leads come from the server search, which already decided they
             match (it also matches phone digits in any format, billing fields, etc.).
@@ -181,7 +230,15 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               <CommandItem
                 key={client.id}
                 value={`${client.displayName} ${client.accountNumber ?? ""} ${(client.tags ?? []).join(" ")} ${client.primaryEmail ?? ""} ${[client.billingAddress, client.billingCity, client.billingZip].filter(Boolean).join(" ")} ${[client.serviceAddress, client.serviceCity, client.serviceState, client.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} client ${query}`}
-                onSelect={() => go(`/crm/clients/${client.id}`)}
+                onSelect={() =>
+                  go(`/crm/clients/${client.id}`, undefined, {
+                    kind: "client",
+                    id: client.id,
+                    label: client.displayName,
+                    sub: [client.primaryPhone, client.primaryEmail].filter(Boolean).join(" · ") || undefined,
+                    href: `/crm/clients/${client.id}`,
+                  })
+                }
                 className="flex items-center gap-3"
               >
                 <Users className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
@@ -210,7 +267,15 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               <CommandItem
                 key={lead.id}
                 value={`${lead.displayName} ${lead.accountNumber ?? ""} ${(lead.tags ?? []).join(" ")} ${lead.primaryEmail ?? ""} ${[lead.billingAddress, lead.billingCity, lead.billingZip].filter(Boolean).join(" ")} ${[lead.serviceAddress, lead.serviceCity, lead.serviceState, lead.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} lead ${query}`}
-                onSelect={() => go(`/crm/clients/${lead.id}`)}
+                onSelect={() =>
+                  go(`/crm/clients/${lead.id}`, undefined, {
+                    kind: "lead",
+                    id: lead.id,
+                    label: lead.displayName,
+                    sub: [lead.primaryPhone, lead.primaryEmail].filter(Boolean).join(" · ") || undefined,
+                    href: `/crm/clients/${lead.id}`,
+                  })
+                }
                 className="flex items-center gap-3"
               >
                 <UserPlus className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
@@ -237,7 +302,15 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               <CommandItem
                 key={inv.id}
                 value={`${invLabel} ${inv.clientName ?? ""} invoice ${query}`}
-                onSelect={() => go(`/crm/accounting/invoices?open=${inv.id}`)}
+                onSelect={() =>
+                  go(`/crm/accounting/invoices?open=${inv.id}`, undefined, {
+                    kind: "invoice",
+                    id: inv.id,
+                    label: invLabel,
+                    sub: inv.clientName ?? undefined,
+                    href: `/crm/accounting/invoices?open=${inv.id}`,
+                  })
+                }
                 className="flex items-center gap-3"
               >
                 <Receipt className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
@@ -265,7 +338,15 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               <CommandItem
                 key={est.id}
                 value={`${estLabel} ${est.clientName ?? ""} ${est.description ?? ""} estimate ${query}`}
-                onSelect={() => go(`/crm/estimates/${est.id}`)}
+                onSelect={() =>
+                  go(`/crm/estimates/${est.id}`, undefined, {
+                    kind: "estimate",
+                    id: est.id,
+                    label: estLabel,
+                    sub: sub || undefined,
+                    href: `/crm/estimates/${est.id}`,
+                  })
+                }
                 className="flex items-center gap-3"
               >
                 <ClipboardList className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
