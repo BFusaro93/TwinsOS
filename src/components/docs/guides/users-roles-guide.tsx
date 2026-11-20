@@ -284,6 +284,20 @@ export function UsersRolesGuide() {
             estimate numbering.
           </li>
           <li>
+            <strong>Master Account Settings</strong> (the page for organization info, branding, billing,
+            integrations and users) is open to admins. A role with the <strong>Account Settings</strong>{" "}
+            permission also gets its Organization, Branding, Subscription and Integrations tabs, so the
+            person can change company details, manage the plan and add-ons, and set up Zapier. The{" "}
+            <strong>Users</strong> tab and <strong>API keys</strong> stay admin-only, because they can create
+            or take over an admin or expose company data. Changing tax rate or card fees still needs
+            Accounting settings. Everyone else sees only their own Connected Apps.
+          </li>
+          <li>
+            <strong>Adding an estimate from a lead</strong> needs <strong>Add an Estimate</strong> under Lead
+            Access. It controls the button on a lead&apos;s record only; the Estimates pages need View
+            Estimates.
+          </li>
+          <li>
             <strong>Automations</strong> need Create/Modify Automation; Stop Automation alone
             can only switch one on or off. <strong>Document templates</strong> and{" "}
             <strong>packages</strong> need their Add, Edit or Delete permission.{" "}
