@@ -10,6 +10,8 @@ export interface OrgListOption {
   listName: string;
   value: string;
   sortOrder: number;
+  /** Optional category (client tags are grouped by it). */
+  group: string | null;
   createdAt: string;
 }
 
@@ -21,6 +23,7 @@ function mapOption(row: any): OrgListOption {
     listName: row.list_name,
     value: row.value,
     sortOrder: row.sort_order,
+    group: row.group_name ?? null,
     createdAt: row.created_at,
   };
 }
@@ -52,7 +55,14 @@ export function useOrgList(listName: string) {
         .order("sort_order")
         .order("value");
       if (error) throw error;
-      return data.map(mapOption) as OrgListOption[];
+      // Alphabetical (case-insensitive, numbers in natural order) so the Settings
+      // editors and every dropdown read the same. sort_order only breaks ties:
+      // rows added one at a time or imported in bulk used to show in insert order.
+      return (data.map(mapOption) as OrgListOption[]).sort(
+        (a, b) =>
+          a.value.localeCompare(b.value, undefined, { sensitivity: "base", numeric: true }) ||
+          a.sortOrder - b.sortOrder,
+      );
     },
   });
 }
@@ -60,13 +70,13 @@ export function useOrgList(listName: string) {
 export function useAddOrgListItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ listName, value }: { listName: string; value: string }) => {
+    mutationFn: async ({ listName, value, group }: { listName: string; value: string; group?: string | null }) => {
       const supabase = createClient();
       const orgId = await getOrgId();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_list_options")
-        .insert({ org_id: orgId, list_name: listName, value });
+        .insert({ org_id: orgId, list_name: listName, value, group_name: group?.trim() || null });
       if (error) throw error;
     },
     onSuccess: (_data, { listName }) => {
@@ -92,4 +102,61 @@ export function useDeleteOrgListItem() {
       qc.invalidateQueries({ queryKey: ["crm_list_options", listName] });
     },
   });
+}
+
+/** Lists whose options can be renamed. The rename also updates every record that stores the old name as text. */
+export const RENAMABLE_LISTS: readonly string[] = [
+  "ticket_categories", "cancellation_reasons", "client_sources", "estimate_reasons",
+  "estimate_lost_reasons", "service_categories", "client_tags", "contact_types",
+];
+
+/** Renames a list option and carries the new name to existing records. */
+export function useRenameOrgListItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, value }: { id: string; value: string; listName: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).rpc("rename_org_list_option", { p_id: id, p_new_value: value });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { listName }) => {
+      qc.invalidateQueries({ queryKey: ["crm_list_options", listName] });
+      qc.invalidateQueries({ queryKey: ["crm_tickets"] });
+      qc.invalidateQueries({ queryKey: ["client_portal_settings"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["estimates"] });
+    },
+  });
+}
+
+/** Sets (or clears) an option's category, e.g. which group a client tag sits under. */
+export function useSetOrgListItemGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, group }: { id: string; group: string | null; listName: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_list_options")
+        .update({ group_name: group?.trim() || null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { listName }) => {
+      qc.invalidateQueries({ queryKey: ["crm_list_options", listName] });
+    },
+  });
+}
+
+/** Groups options under their category, categories A-Z, uncategorized last. Options keep their incoming order. */
+export function groupOptionsByCategory<T extends { group: string | null }>(items: T[]): { group: string | null; items: T[] }[] {
+  const map = new Map<string | null, T[]>();
+  for (const it of items) {
+    const key = it.group?.trim() || null;
+    map.set(key, [...(map.get(key) ?? []), it]);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : a.localeCompare(b, undefined, { sensitivity: "base" })))
+    .map(([group, list]) => ({ group, items: list }));
 }

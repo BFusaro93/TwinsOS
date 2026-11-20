@@ -2483,6 +2483,14 @@ export function useOrgTags(): string[] {
   return (data ?? []).map((o) => o.value);
 }
 
+/** Tag name -> category (only tags that have one), from the same list as useOrgTags. */
+export function useOrgTagGroups(): Record<string, string> {
+  const { data } = useOrgList("client_tags");
+  const out: Record<string, string> = {};
+  for (const o of data ?? []) if (o.group) out[o.value] = o.group;
+  return out;
+}
+
 /** Adds `tag` to the org's tag list (Settings → Tags) if it isn't there. Best effort. */
 async function addTagToOrgList(supabase: ReturnType<typeof createClient>, tag: string): Promise<boolean> {
   try {

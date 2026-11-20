@@ -31,7 +31,7 @@ import {
   useDeleteCustomFieldDef,
   type CustomFieldDef,
 } from "@/lib/hooks/use-client-custom-fields";
-import { useOrgList, useAddOrgListItem, useDeleteOrgListItem } from "@/lib/hooks/use-org-lists";
+import { useOrgList, useAddOrgListItem, useDeleteOrgListItem, useRenameOrgListItem, RENAMABLE_LISTS, useSetOrgListItemGroup, groupOptionsByCategory } from "@/lib/hooks/use-org-lists";
 import {
   BUILT_IN_PAYMENT_METHODS,
   CUSTOM_METHOD_LABEL_MAX,
@@ -342,6 +342,135 @@ function UsersTab() {
 
 // ── CRMTab ────────────────────────────────────────────────────────────────────
 
+// ── Tags editor: client tags grouped under categories ─────────────────────────
+
+function TagsEditor() {
+  const [confirm, confirmDialog] = useConfirm();
+  const { data: items = [], isLoading } = useOrgList("client_tags");
+  const { mutateAsync: addItem } = useAddOrgListItem();
+  const { mutateAsync: deleteItem } = useDeleteOrgListItem();
+  const { mutateAsync: setGroup } = useSetOrgListItemGroup();
+  const { mutateAsync: renameItem } = useRenameOrgListItem();
+  const [adding, setAdding] = useState(false);
+  const [newValue, setNewValue] = useState("");
+  const [newGroup, setNewGroup] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  async function handleRename(id: string, current: string) {
+    const next = editValue.trim();
+    if (!next || next === current) { setEditingId(null); return; }
+    try {
+      await renameItem({ id, value: next, listName: "client_tags" });
+      toast.success("Renamed");
+      setEditingId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Failed to rename");
+    }
+  }
+
+  const categories = [...new Set(items.map((i) => i.group?.trim()).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b));
+  const sections = groupOptionsByCategory(items);
+
+  async function handleAdd() {
+    if (!newValue.trim()) return;
+    try {
+      await addItem({ listName: "client_tags", value: newValue.trim(), group: newGroup });
+      toast.success("Added");
+      setNewValue("");
+      setAdding(false);
+    } catch (err) { toast.error(`Failed to add: ${err instanceof Error ? err.message : JSON.stringify(err)}`); }
+  }
+
+  async function handleDelete(id: string) {
+    if (!(await confirm({ title: "Remove this tag?", description: "Clients that already have it keep it; it just leaves the picker list.", confirmLabel: "Remove", destructive: true }))) return;
+    try { await deleteItem({ id, listName: "client_tags" }); toast.success("Removed"); }
+    catch { toast.error("Failed to remove"); }
+  }
+
+  async function handleGroup(id: string, current: string | null, next: string) {
+    if ((current ?? "") === next.trim()) return;
+    try { await setGroup({ id, group: next.trim() || null, listName: "client_tags" }); }
+    catch { toast.error("Failed to change category"); }
+  }
+
+  if (isLoading) return <p className="text-sm text-slate-400 dark:text-neutral-500 py-2">Loading…</p>;
+
+  return (
+    <div>
+      <datalist id="tag-categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
+      {sections.map((sec) => (
+        <div key={sec.group ?? "__none"} className="mb-2">
+          <p className="border-b pb-1 pt-2 text-xs font-semibold text-brand-600 dark:text-brand-400">{sec.group ?? "No category"}</p>
+          <div className="divide-y">
+            {sec.items.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 py-2">
+                {editingId === item.id ? (
+                  <input
+                    autoFocus
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => void handleRename(item.id, item.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void handleRename(item.id, item.value); if (e.key === "Escape") setEditingId(null); }}
+                    className="flex-1 rounded-md border border-brand-400 px-3 py-1 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                  />
+                ) : (
+                  <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{item.value}</span>
+                )}
+                {editingId !== item.id && (
+                  <button onClick={() => { setEditingId(item.id); setEditValue(item.value); }} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-slate-100 dark:hover:bg-neutral-800 hover:text-slate-700 dark:hover:text-neutral-200" title="Rename">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
+                <input
+                  key={item.group ?? ""}
+                  list="tag-categories"
+                  defaultValue={item.group ?? ""}
+                  placeholder="Category"
+                  aria-label={`Category for ${item.value}`}
+                  onBlur={(e) => void handleGroup(item.id, item.group, e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                  className="w-44 rounded-md border border-slate-200 dark:border-neutral-700 bg-transparent px-2 py-1 text-xs text-slate-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                />
+                <button onClick={() => handleDelete(item.id)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title="Remove">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {adding ? (
+        <div className="flex items-center gap-3 py-3">
+          <input
+            autoFocus
+            placeholder="e.g. VIP"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleAdd(); if (e.key === "Escape") { setAdding(false); setNewValue(""); } }}
+            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          />
+          <input
+            list="tag-categories"
+            placeholder="Category (optional)"
+            value={newGroup}
+            onChange={(e) => setNewGroup(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleAdd(); }}
+            className="w-44 rounded-md border border-slate-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          />
+          <button onClick={() => void handleAdd()} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600">Add</button>
+          <button onClick={() => { setAdding(false); setNewValue(""); }} className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300">Cancel</button>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="mt-2 flex items-center gap-1 text-sm text-brand-600 dark:text-brand-400 hover:underline">
+          <Plus className="h-3.5 w-3.5" /> Add tag
+        </button>
+      )}
+      {confirmDialog}
+    </div>
+  );
+}
+
 function OrgListEditor({
   listName,
   addPlaceholder,
@@ -356,8 +485,26 @@ function OrgListEditor({
   const { data: items = [], isLoading } = useOrgList(listName);
   const { mutateAsync: addItem } = useAddOrgListItem();
   const { mutateAsync: deleteItem } = useDeleteOrgListItem();
+  const { mutateAsync: renameItem } = useRenameOrgListItem();
   const [adding, setAdding] = useState(false);
   const [newValue, setNewValue] = useState("");
+  // A rename also carries to existing records that store the name (tickets, clients, estimates...).
+  // "Uncategorized" and "Upsell" ticket categories are built in and stay locked.
+  const canRename = RENAMABLE_LISTS.includes(listName);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  async function handleRename(id: string, current: string) {
+    const next = editValue.trim();
+    if (!next || next === current) { setEditingId(null); return; }
+    try {
+      await renameItem({ id, value: next, listName });
+      toast.success("Renamed");
+      setEditingId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Failed to rename");
+    }
+  }
 
   async function handleAdd() {
     if (!newValue.trim()) return;
@@ -383,7 +530,23 @@ function OrgListEditor({
     <div className="divide-y">
       {items.map((item: import("@/lib/hooks/use-org-lists").OrgListOption) => (
         <div key={item.id} className="flex items-center gap-3 py-3">
-          <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{item.value}</span>
+          {editingId === item.id ? (
+            <input
+              autoFocus
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={() => void handleRename(item.id, item.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void handleRename(item.id, item.value); if (e.key === "Escape") setEditingId(null); }}
+              className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            />
+          ) : (
+            <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{item.value}</span>
+          )}
+          {canRename && editingId !== item.id && !(listName === "ticket_categories" && (item.value === "Uncategorized" || item.value === "Upsell")) && (
+            <button onClick={() => { setEditingId(item.id); setEditValue(item.value); }} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-slate-100 dark:hover:bg-neutral-800 hover:text-slate-700 dark:hover:text-neutral-200" title="Rename">
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
           <button onClick={() => handleDelete(item.id)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title="Remove">
             <X className="h-4 w-4" />
           </button>
@@ -806,7 +969,7 @@ function CRMTab() {
         <OrgListEditor listName="ticket_categories" addPlaceholder="e.g. Complaint" />
       </AccordionSection>
       <AccordionSection title="Tags" count={clientTags.length}>
-        <OrgListEditor listName="client_tags" addPlaceholder="e.g. VIP" />
+        <TagsEditor />
       </AccordionSection>
       <AccordionSection title="Custom Client Fields" count={customFieldDefs.length} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client. Number fields can also drive Rate Matrix pricing and chemical quantities; a property can override the client value">
         <CustomFieldDefsEditor />
