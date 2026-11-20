@@ -196,9 +196,9 @@ Work top to bottom. Items marked **YOU** are things we need from you. Items mark
 
 ## Quick reference: how to find your exports
 
-**Service Autopilot:** Look under the **Reports** menu and the grid or list pages (Clients, Invoices, Payments, Contracts and Schedules). Most grids have an **Export to Excel/CSV** button. If you can't find a report, send us a screenshot of the screen and we'll point you to it.
+**Service Autopilot:** Exporting can be switched off by default, so ask your account admin to make sure it's turned on for your login. Then look for an export option on the list and report screens (Clients, Invoices, Payments, Contracts and Schedules). Service Autopilot's support team can also run a full export for you. If you can't find a report, send us a screenshot of the screen and we'll point you to it.
 
-**Homeworks:** Look in **Reports** or the list views for **Customers, Jobs, Invoices, and Payments**, and use **Export** where available. If an export isn't offered, ask Homeworks support for a **full data export** and tell them it's for a migration. Allow a few business days.
+**Homeworks:** Check **Reports** and the list views for **Customers, Jobs, Invoices, and Payments** for an export option. Homeworks doesn't publish steps for exporting your data, so the most reliable route is to ask Homeworks support for a **full data export** as CSV files and tell them it's for a migration. Allow a few business days.
 
 > Menu names change between versions. If something doesn't match what you see, don't guess. Send us what you can find and we'll fill in the gaps.
 
