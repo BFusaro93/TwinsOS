@@ -33,6 +33,11 @@ import {
 } from "@/lib/hooks/use-client-custom-fields";
 import { useOrgList, useAddOrgListItem, useDeleteOrgListItem } from "@/lib/hooks/use-org-lists";
 import {
+  BUILT_IN_PAYMENT_METHODS,
+  CUSTOM_METHOD_LABEL_MAX,
+  isReservedPaymentMethodName,
+} from "@/lib/payments/payment-methods";
+import {
   useDiscounts,
   useCreateDiscount,
   useUpdateDiscount,
@@ -337,7 +342,16 @@ function UsersTab() {
 
 // ── CRMTab ────────────────────────────────────────────────────────────────────
 
-function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlaceholder?: string }) {
+function OrgListEditor({
+  listName,
+  addPlaceholder,
+  validate,
+}: {
+  listName: string;
+  addPlaceholder?: string;
+  /** Return an error message to refuse a new value (e.g. one that collides with a built-in). */
+  validate?: (value: string) => string | null;
+}) {
   const [confirm, confirmDialog] = useConfirm();
   const { data: items = [], isLoading } = useOrgList(listName);
   const { mutateAsync: addItem } = useAddOrgListItem();
@@ -347,6 +361,8 @@ function OrgListEditor({ listName, addPlaceholder }: { listName: string; addPlac
 
   async function handleAdd() {
     if (!newValue.trim()) return;
+    const problem = validate?.(newValue.trim());
+    if (problem) { toast.error(problem); return; }
     try {
       await addItem({ listName, value: newValue.trim() });
       toast.success("Added");
@@ -2002,9 +2018,32 @@ function AccountingTab() {
       </AccordionSection>
       <AccordionSection
         title="Payment Methods"
-        count={paymentMethods.length}
+        count={BUILT_IN_PAYMENT_METHODS.length + paymentMethods.filter((o) => !isReservedPaymentMethodName(o.value)).length}
+        description="The built-in methods are fixed because online payments and reports depend on them. Add your own below to track other ways you get paid."
       >
-        <OrgListEditor listName="payment_methods" addPlaceholder="e.g. Zelle" />
+        <div className="mb-4 rounded-md border border-border">
+          <p className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Built in</p>
+          <ul className="divide-y">
+            {BUILT_IN_PAYMENT_METHODS.map((m) => (
+              <li key={m.value} className="px-3 py-2 text-sm text-slate-800 dark:text-neutral-100">{m.label}</li>
+            ))}
+          </ul>
+        </div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Your methods</p>
+        <p className="mb-1 text-xs text-slate-500 dark:text-neutral-400">
+          These appear when recording a payment and are reported on by name. They count as &ldquo;Other&rdquo; wherever the built-in methods are grouped.
+        </p>
+        <OrgListEditor
+          listName="payment_methods"
+          addPlaceholder="e.g. Zelle"
+          validate={(v) =>
+            isReservedPaymentMethodName(v)
+              ? "That's already a built-in payment method."
+              : v.length > CUSTOM_METHOD_LABEL_MAX
+                ? `Keep it under ${CUSTOM_METHOD_LABEL_MAX} characters.`
+                : null
+          }
+        />
       </AccordionSection>
       <AccordionSection title="Discounts" count={discountsList.length} description="Each discount needs a default rate — a percent off or a flat dollar amount.">
         <DiscountsEditor />

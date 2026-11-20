@@ -8644,6 +8644,7 @@ export type Database = {
           is_credit: boolean
           is_prepayment: boolean
           memo: string | null
+          method_label: string | null
           method: string
           notes: string | null
           org_id: string
@@ -8671,6 +8672,7 @@ export type Database = {
           is_credit?: boolean
           is_prepayment?: boolean
           memo?: string | null
+          method_label?: string | null
           method?: string
           notes?: string | null
           org_id?: string
@@ -8698,6 +8700,7 @@ export type Database = {
           is_credit?: boolean
           is_prepayment?: boolean
           memo?: string | null
+          method_label?: string | null
           method?: string
           notes?: string | null
           org_id?: string
@@ -20204,6 +20207,7 @@ export type Database = {
           is_credit: boolean | null
           is_prepayment: boolean | null
           memo: string | null
+          method_label: string | null
           method: string | null
           net_amount_cents: number | null
           org_id: string | null

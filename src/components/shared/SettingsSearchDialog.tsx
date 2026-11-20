@@ -81,7 +81,7 @@ export function SettingsSearchDialog() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput placeholder="Search settings, e.g. invoice numbering, time zone, QuickBooks…" />
-      <CommandList>
+      <CommandList className="max-h-none flex-1">
         <CommandEmpty>No settings match that search.</CommandEmpty>
         {groups.map(({ area, items }) => (
           <CommandGroup

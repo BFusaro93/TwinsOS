@@ -17,6 +17,7 @@ const PAYMENT_METHODS: [string, string][] = [
   ["Credit Card– Visa / MasterCard / AmEx / Discover", "One method per card network, so reporting can split card volume by network."],
   ["AR Write-off", "Zeroes out a balance you're not going to collect (bad debt) without pretending real money changed hands. Non-cash — excluded from every cash/collected report. Offered in the invoice's Enter Payment dialog as well as on the Payments page, and can never exceed the invoice's remaining balance."],
   ["Other", "Anything that doesn't fit the above — barter, a manual adjustment, etc."],
+  ["Your own methods", "Add Venmo, Zelle, gift cards or anything else under Settings → Accounting → Payment Methods. They appear when you record a payment, show by name on the Payments page, and can be reported on by name (Custom Method Name). Everywhere the built-in methods are grouped, they count as Other. The built-in methods themselves can't be changed."],
 ];
 
 const STATUS_ROWS: [string, string, string][] = [
