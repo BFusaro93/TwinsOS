@@ -158,7 +158,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   const areaFieldName = (areaDef as { field_label?: string } | null)?.field_label ?? null;
   if (!areaFieldId) {
     notes.push(
-      "Set an Area Custom Field under Settings > Chemical Tracking to estimate concentrate quantities for visits without an entered application record."
+      "Set a Default Area Measurement under Settings > Chemical Tracking to estimate concentrate quantities for visits without an entered application record."
     );
   }
 

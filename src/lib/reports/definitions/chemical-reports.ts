@@ -180,7 +180,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       "For every product (chemical or general material): quantity needed for outstanding scheduled and waiting-list jobs, amount on hand, amount on order, and the resulting shortfall — with the ability to create a Requisition or PO directly from a shortfall.",
     filters: [],
     notes: [
-      "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
+      "Chemical quantities require a Default Area Measurement under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
       "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product, less any quantity already received against those PO lines.",
       "Demand counts visits in Scheduled, Dispatched, or In Progress status, plus waiting-list jobs that have not been dispatched yet. Job products already marked Invoiced or Used are excluded — their quantity has already come out of on-hand.",
     ],
@@ -194,7 +194,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       "What each crew needs to load on the truck for a given day — chemicals (concentrate amount and finished spray-mix volume) and general materials, grouped by crew.",
     filters: [],
     notes: [
-      "Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate x an Area Custom Field on the property (same estimate as Materials Needed).",
+      "Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate x the property's area measurement (same estimate as Materials Needed).",
       "Mix volume is the total finished spray solution (e.g. gallons of mix), computed from the product's default rate's dilution settings — it only appears when that rate has a Mixed with Water/Product ratio configured with convertible units.",
       "Crew is the visit's crew override if set, otherwise the job's default crew. Visits/jobs with no crew assigned appear under Unassigned.",
     ],
