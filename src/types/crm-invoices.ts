@@ -179,6 +179,8 @@ export interface CRMPayment {
   processingFeeCents: number;
   paymentDate: string;
   method: PaymentMethod;
+  /** The org's own name when `method` is "Other" and it was a custom method (Venmo, Zelle...). */
+  methodLabel?: string | null;
   reference: string | null;
   memo: string | null;
   notes: string | null;

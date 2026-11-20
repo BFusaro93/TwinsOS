@@ -63,6 +63,12 @@ const PAYMENT_COLUMNS: ColumnDef[] = [
   { key: "invoice",   label: "Invoice" },
   { key: "amount",    label: "Amount" },
 ];
+import {
+  paymentMethodDisplay,
+  selectedPaymentMethod,
+  toStoredPaymentMethod,
+  useCustomPaymentMethods,
+} from "@/lib/payments/payment-methods";
 import { toast } from "sonner";
 import type { CRMInvoice } from "@/types/crm-invoices";
 
@@ -210,7 +216,11 @@ export function AddPaymentDialog({
   const [paymentDate, setPaymentDate] = useState(payment?.paymentDate ?? todayLocal());
   const [amount, setAmount] = useState(payment ? (payment.amountCents / 100).toFixed(2) : "");
   const [checkNumber, setCheckNumber] = useState(payment?.reference ?? "");
-  const [method, setMethod] = useState<string>(payment?.method ?? (mode === "credit" ? ACCOUNT_CREDIT_METHOD : "Check"));
+  const [method, setMethod] = useState<string>(payment ? selectedPaymentMethod(payment.method, payment.methodLabel) : (mode === "credit" ? ACCOUNT_CREDIT_METHOD : "Check"));
+  const customMethods = useCustomPaymentMethods();
+  // An edited payment can carry a custom name the org has since removed: keep it selectable so the picker isn't blank.
+  const customMethodOptions =
+    toStoredPaymentMethod(method).methodLabel && !customMethods.includes(method) ? [...customMethods, method] : customMethods;
   const [memo, setMemo] = useState(payment?.memo ?? "");
   const [isPrepayment, setIsPrepayment] = useState(payment?.isPrepayment ?? false);
   const [autoAllocate, setAutoAllocate] = useState(false);
@@ -230,7 +240,7 @@ export function AddPaymentDialog({
       setPaymentDate(payment.paymentDate);
       setAmount((payment.amountCents / 100).toFixed(2));
       setCheckNumber(payment.reference ?? "");
-      setMethod(payment.method);
+      setMethod(selectedPaymentMethod(payment.method, payment.methodLabel));
       setMemo(payment.memo ?? "");
       setIsPrepayment(payment.isPrepayment);
     }
@@ -482,6 +492,7 @@ export function AddPaymentDialog({
     const activeAllocations = allocations
       .filter((a) => a.amountCents > 0)
       .map((a) => ({ invoiceId: a.invoiceId, amountCents: a.amountCents }));
+    const storedMethod = toStoredPaymentMethod(method);
     try {
       if (isEdit && payment) {
         await update({
@@ -489,7 +500,8 @@ export function AddPaymentDialog({
           clientId,
           amountCents,
           paymentDate,
-          method,
+          method: storedMethod.method,
+          methodLabel: storedMethod.methodLabel,
           reference: checkNumber || undefined,
           memo: memo || undefined,
           allocations: activeAllocations,
@@ -501,7 +513,8 @@ export function AddPaymentDialog({
           clientId,
           amountCents,
           paymentDate,
-          method,
+          method: storedMethod.method,
+          methodLabel: storedMethod.methodLabel,
           reference: checkNumber || undefined,
           memo: memo || undefined,
           isPrepayment,
@@ -716,6 +729,9 @@ export function AddPaymentDialog({
                     <SelectContent>
                       {PAYMENT_METHODS.map((m) => (
                         <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                      {customMethodOptions.map((name) => (
+                        <SelectItem key={`custom:${name}`} value={name}>{name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -994,7 +1010,7 @@ export function PaymentsList({ clientId }: Props) {
   const deletedPayments = useMemo(() => (payments ?? []).filter((p) => p.deletedAt != null), [payments]);
 
   const methodOptions = useMemo(
-    () => Array.from(new Set((payments ?? []).map((p) => p.method).filter(Boolean))).sort(),
+    () => Array.from(new Set((payments ?? []).map((p) => paymentMethodDisplay(p.method, p.methodLabel)).filter(Boolean))).sort(),
     [payments]
   );
 
@@ -1026,14 +1042,14 @@ export function PaymentsList({ clientId }: Props) {
       });
     }
 
-    if (methodFilters.length > 0) list = list.filter((p) => methodFilters.includes(p.method));
+    if (methodFilters.length > 0) list = list.filter((p) => methodFilters.includes(paymentMethodDisplay(p.method, p.methodLabel)));
 
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((p) =>
         (p.clientName ?? "").toLowerCase().includes(q) ||
         (p.reference ?? "").toLowerCase().includes(q) ||
-        p.method.toLowerCase().includes(q)
+        paymentMethodDisplay(p.method, p.methodLabel).toLowerCase().includes(q)
       );
     }
 
@@ -1277,7 +1293,7 @@ export function PaymentsList({ clientId }: Props) {
                     {p.reference ?? ""}
                   </td>
                   <td className="px-3 py-2.5 text-slate-700 dark:text-neutral-300 text-xs">
-                    {p.method}
+                    {paymentMethodDisplay(p.method, p.methodLabel)}
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1366,7 +1382,7 @@ export function PaymentsList({ clientId }: Props) {
               )}
               <div className="flex justify-between py-1 border-b">
                 <span className="text-muted-foreground">Method</span>
-                <span>{viewPayment.method}</span>
+                <span>{paymentMethodDisplay(viewPayment.method, viewPayment.methodLabel)}</span>
               </div>
               {viewPayment.reference && (
                 <div className="flex justify-between py-1 border-b">

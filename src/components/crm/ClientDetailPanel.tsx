@@ -104,6 +104,7 @@ import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { AerialMeasurementDialog } from "./AerialMeasurementDialog";
 import { SavedPaymentMethodDialog } from "./clients/SavedPaymentMethodDialog";
 import { AccountStatementDialog } from "./clients/AccountStatementDialog";
+import { useCustomPaymentMethods } from "@/lib/payments/payment-methods";
 import { useRemoveSavedPaymentMethod, useSetAutopayEnabled } from "@/lib/hooks/use-saved-payment-methods";
 import {
   useQuickBooksClientLink,
@@ -813,6 +814,7 @@ function ClientCombobox({
 
 
 function EditClientDialog({ client, open, onOpenChange }: { client: Client; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const customPaymentMethods = useCustomPaymentMethods();
   const { mutateAsync: update, isPending } = useUpdateClient();
   const [askConfirm, askConfirmDialog] = useConfirm();
   const qc = useQueryClient();
@@ -1504,6 +1506,9 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                   <SelectContent>
                     {PAYMENT_METHOD_OPTIONS.map((o) => (
                       <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                    {customPaymentMethods.map((name) => (
+                      <SelectItem key={`custom:${name}`} value={name}>{name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

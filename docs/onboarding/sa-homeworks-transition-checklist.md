@@ -24,8 +24,6 @@ Work top to bottom. Items marked **YOU** are things we need from you. Items mark
 - [ ] **YOU:** Your **invoice settings**: invoice number format (and the **next invoice number** so numbering continues), payment terms (Net 15, Net 30), late-fee rules, and any standard invoice footer or notes
 - [ ] **YOU:** **Sales tax** rates and which services are taxable
 - [ ] **YOU:** Your **client account number format** (and the next number to use, so new clients don't collide with existing ones)
-- [ ] **YOU:** A sample **invoice** and **estimate** from your old system (PDF) so we can match the look and wording
-- [ ] **YOU:** Your **email "from" address** and the domain it sends from (we'll help with the DNS records)
 
 ---
 

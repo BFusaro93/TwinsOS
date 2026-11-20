@@ -451,6 +451,7 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "payment_date", label: "Payment Date", type: "date" },
       { key: "client_name", label: "Client", type: "text" },
       { key: "method", label: "Method", type: "text" },
+      { key: "method_label", label: "Custom Method Name", type: "text" },
       { key: "reference", label: "Reference #", type: "text" },
       { key: "memo", label: "Memo", type: "text" },
       { key: "amount_cents", label: "Amount", type: "money" },

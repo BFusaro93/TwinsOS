@@ -103,7 +103,7 @@ export function SettingsSidebar() {
           onClick={openSettingsSearch}
           title="Search settings"
           className={cn(
-            "flex w-full items-center gap-2 rounded-md border border-[#2f2f2f] bg-white/5 px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200",
+            "flex w-full items-center gap-2 rounded-md border border-[#2f2f2f] bg-white/5 px-3 py-2 text-sm text-neutral-400 transition-colors hover:bg-white/10 hover:text-neutral-200",
             sidebarCollapsed && "justify-center px-0"
           )}
         >

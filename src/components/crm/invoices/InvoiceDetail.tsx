@@ -44,6 +44,11 @@ import { computeInvoiceTotals } from "@/lib/invoices/totals";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useOtherCharges } from "@/lib/hooks/use-other-charges";
 import {
+  paymentMethodDisplay,
+  toStoredPaymentMethod,
+  useCustomPaymentMethods,
+} from "@/lib/payments/payment-methods";
+import {
   formatPercentBps,
   otherChargeBaseCents,
   otherChargeLineDescription,
@@ -692,7 +697,8 @@ function RecordPaymentDialog({
   const [amount, setAmount] = useState((balanceCents/100).toFixed(2));
   const orgTimeZone = useOrgTimeZone();
   const [date, setDate] = useState(todayInZone(orgTimeZone));
-  const [method, setMethod] = useState<PaymentMethod>("Check");
+  const [method, setMethod] = useState<string>("Check");
+  const customMethods = useCustomPaymentMethods();
   const [ref, setRef] = useState("");
   const { mutateAsync: record, isPending } = useRecordPayment();
 
@@ -716,9 +722,11 @@ function RecordPaymentDialog({
   // the payment as unused credit on the client's account.
   const appliedCents = Math.min(amountCents, Math.max(0, balanceCents));
   const overageCents = Math.max(0, amountCents - appliedCents);
-  const isWriteOff = method === "AR Write-off";
+  // `method` is the picker value (a built-in or one of the org's custom names); `stored` is what crm_payments holds.
+  const stored = toStoredPaymentMethod(method);
+  const isWriteOff = stored.method === "AR Write-off";
   // Debit cards are recorded as "Debit Card- …" (#395); they are just as electronic as credit.
-  const isElectronicMethod = method.startsWith("Credit Card") || method.startsWith("Debit Card") || method === "ACH/E-Check";
+  const isElectronicMethod = stored.method.startsWith("Credit Card") || stored.method.startsWith("Debit Card") || stored.method === "ACH/E-Check";
 
   async function submit() {
     if (!amountCents || amountCents <= 0) { toast.error("Enter a valid amount"); return; }
@@ -731,7 +739,8 @@ function RecordPaymentDialog({
         clientId,
         amountCents,
         paymentDate: date,
-        method,
+        method: stored.method,
+        methodLabel: stored.methodLabel,
         reference: ref || undefined,
         allocations: invoiceId && appliedCents > 0 ? [{ invoiceId, amountCents: appliedCents }] : [],
       });
@@ -790,17 +799,18 @@ function RecordPaymentDialog({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Method</Label>
-              <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
+              <Select value={method} onValueChange={setMethod}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                  {customMethods.map((name) => <SelectItem key={`custom:${name}`} value={name}>{name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           </div>
           {isElectronicMethod && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
-              Only pick {method.startsWith("Credit Card") || method.startsWith("Debit Card") ? "a card" : "ACH"} here if it was already collected elsewhere
+              Only pick {stored.method.startsWith("Credit Card") || stored.method.startsWith("Debit Card") ? "a card" : "ACH"} here if it was already collected elsewhere
               (e.g. a separate terminal) — nothing is charged by saving this.
             </p>
           )}
@@ -837,7 +847,7 @@ function PaymentDetailDialog({ payment, open, onOpenChange }: {
             </>
           )}
           <dt className="text-slate-400 dark:text-neutral-500">Date</dt><dd>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</dd>
-          <dt className="text-slate-400 dark:text-neutral-500">Method</dt><dd className="capitalize">{payment.method}</dd>
+          <dt className="text-slate-400 dark:text-neutral-500">Method</dt><dd className="capitalize">{paymentMethodDisplay(payment.method, payment.methodLabel)}</dd>
           <dt className="text-slate-400 dark:text-neutral-500">Reference</dt><dd>{payment.reference ?? "—"}</dd>
           {payment.memo && <><dt className="text-slate-400 dark:text-neutral-500">Memo</dt><dd>{payment.memo}</dd></>}
         </dl>
@@ -872,6 +882,7 @@ export function InvoiceDetail({
   const { mutateAsync: updateStatus } = useUpdateInvoiceStatus();
   const { mutateAsync: updateFinancials } = useUpdateInvoiceFinancials();
   const { mutateAsync: updateHeader } = useUpdateInvoiceHeader();
+  const customPaymentMethods = useCustomPaymentMethods();
   const { mutateAsync: setLock } = useSetInvoiceLock();
   const { mutateAsync: assignNumber } = useAssignInvoiceNumber();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
@@ -1866,6 +1877,7 @@ export function InvoiceDetail({
                         </SelectTrigger>
                         <SelectContent>
                           {METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                          {customPaymentMethods.map((name) => <SelectItem key={`custom:${name}`} value={name}>{name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </td>
@@ -2152,7 +2164,7 @@ export function InvoiceDetail({
                       <tr key={p.id} className="border-b hover:bg-brand-50 dark:hover:bg-brand-900/30 cursor-pointer" onClick={() => setSelectedPayment(p)}>
                         <td className="px-4 py-2.5 text-brand-700 dark:text-brand-400 hover:underline font-medium">{fmtDate(p.paymentDate)}</td>
                         <td className="px-4 py-2.5 capitalize">
-                          {p.method}
+                          {paymentMethodDisplay(p.method, p.methodLabel)}
                           {p.isSplitAllocation && <span className="ml-1 text-slate-400 dark:text-neutral-500">(split)</span>}
                           {/* Payment recorded against a parent client_id (e.g. one
                               check from a property manager covering several

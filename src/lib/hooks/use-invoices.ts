@@ -176,6 +176,7 @@ function mapPayment(row: any): CRMPayment {
     processingFeeCents: row.processing_fee_cents ?? 0,
     paymentDate: row.payment_date,
     method: row.method,
+    methodLabel: row.method_label ?? null,
     reference: row.reference,
     memo: row.memo ?? null,
     notes: row.notes,
@@ -1361,6 +1362,7 @@ export function useRecordPayment() {
       amountCents,
       paymentDate,
       method,
+      methodLabel,
       reference,
       memo,
       isPrepayment,
@@ -1371,6 +1373,8 @@ export function useRecordPayment() {
       amountCents: number;
       paymentDate: string;
       method: string;
+      /** The org's own name for a custom method (stored with method "Other"). */
+      methodLabel?: string | null;
       reference?: string;
       memo?: string;
       isPrepayment?: boolean;
@@ -1397,6 +1401,13 @@ export function useRecordPayment() {
       if (rpcErr) throw rpcErr;
       const rec = rpcData as { payment_id: string; newly_paid_invoice_ids: string[]; has_allocations: boolean };
       const inserted = { id: rec.payment_id };
+      if (methodLabel) {
+        // Non-money column, so a direct write is allowed (the money guards only cover amounts/status).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: labelErr } = await (supabase as any)
+          .from("crm_payments").update({ method_label: methodLabel }).eq("id", rec.payment_id);
+        if (labelErr) throw new Error(`Payment recorded, but its method name couldn't be saved: ${labelErr.message}`);
+      }
       const newlyPaidInvoiceIds: string[] = rec.newly_paid_invoice_ids ?? [];
       const hasAlloc = rec.has_allocations;
 
@@ -1477,6 +1488,7 @@ export function useUpdatePayment() {
       amountCents,
       paymentDate,
       method,
+      methodLabel,
       reference,
       memo,
       allocations,
@@ -1486,6 +1498,8 @@ export function useUpdatePayment() {
       amountCents: number;
       paymentDate: string;
       method: string;
+      /** The org's own name for a custom method (stored with method "Other"); null clears it. */
+      methodLabel?: string | null;
       reference?: string;
       memo?: string;
       allocations?: { invoiceId: string; amountCents: number }[];
@@ -1511,6 +1525,11 @@ export function useUpdatePayment() {
         p_allocations: (allocations ?? []).map((a) => ({ invoice_id: a.invoiceId, amount_cents: a.amountCents })),
       });
       if (rpcErr) throw rpcErr;
+      // Always written (null clears a label when a payment moves back to a built-in method).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: labelErr } = await (supabase as any)
+        .from("crm_payments").update({ method_label: methodLabel ?? null }).eq("id", id);
+      if (labelErr) throw new Error(`Payment updated, but its method name couldn't be saved: ${labelErr.message}`);
       const statusAfter = await invoiceStatusById(supabase, touchedIds);
       return {
         newlyPaid: touchedIds
@@ -2004,6 +2023,7 @@ function mapPaymentFull(row: any): CRMPayment {
     processingFeeCents: row.processing_fee_cents ?? 0,
     paymentDate: row.payment_date,
     method: row.method,
+    methodLabel: row.method_label ?? null,
     reference: row.reference,
     memo: row.memo ?? null,
     notes: row.notes,
