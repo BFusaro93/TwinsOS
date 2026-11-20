@@ -9,24 +9,29 @@ import {
 } from "@/components/docs/DocsBrand";
 
 const NAV_TABS: [string, string, string][] = [
-  ["Home", "/portal", "A greeting with the balance due (or an all-caught-up message), the next visit, credits on account (a parent account also sees each sub-account's credit listed separately, since a credit only applies to its own account's invoices), upcoming visits, open estimates (the version the client was last sent; a Good/Better/Best proposal shows its price range across the packages), recent invoices, and completed-visit history, plus quick actions (Pay balance, My schedule, Request service, Estimates). Always shown."],
+  ["Home", "/portal", "A greeting with the balance due (or an all-caught-up message), the next visit, credits on account (a parent account also sees each sub-account's credit listed separately, since a credit only applies to its own account's invoices), upcoming visits, open estimates (the version the client was last sent; a Good/Better/Best proposal shows its price range across the packages), recent invoices, and completed-visit history, plus quick actions (Pay balance, My schedule, Request service, Estimates). If the org wrote a Welcome Message it appears under the greeting. The next-visit and upcoming-service cards follow “View Upcoming Services” and the recent-service history follows “View Service History” (see below). Always shown."],
   ["Billing", "/portal/billing", "Every invoice, split into Outstanding and History, with Pay and PDF-download actions. Always shown."],
-  ["Services", "/portal/services", "Upcoming and completed job visits, with a live in-progress banner. Always shown."],
+  ["Services", "/portal/services", "Upcoming and completed job visits, with a live in-progress banner. Each section can be hidden (“View Upcoming Services”, “View Service History”); the tab disappears when both are off."],
   ["Estimates", "/portal/estimates", "Open and past estimates, with Accept / Decline / Request Changes on open ones. Hidden if the org turns off “Show Estimates.”"],
   ["Tickets", "/portal/tickets", "Tickets the client submitted from the portal, plus any ticket staff chose to share with them, and a New Ticket form (clients can attach up to 5 photos, which show on the ticket for staff). Hidden if the org turns off “Allow Tickets.”"],
   ["Documents", "/portal/documents", "A shared document library (same files for every client of that org), grouped by category, with separate View (opens in a tab, for files a browser can display) and Download buttons. Hidden if the org turns off “Document Library.”"],
-  ["Account", "/portal/account", "Contact info, billing address, saved payment method, and additional contacts. Always shown."],
+  ["Account", "/portal/account", "Contact info, billing address, saved payment method with the Autopay switch, and additional contacts. Always shown. Adding, updating and removing the payment method and turning autopay on follow the Portal Payments settings (see below)."],
 ];
 
 const SETTINGS_ROWS: [string, string][] = [
   ["Company Name", "Shown in the portal header, browser tab area, and outbound emails (invite email, etc.). Falls back to the org’s own name if blank."],
   ["Accent Color", "Used for the logo-placeholder tile and various accents when no logo is set."],
-  ["Logo URL", "A public image URL. Recommended 200×60px PNG or SVG. Replaces the accent-color letter tile in the header when set."],
-  ["Welcome Message", "Free text; stored but not yet rendered anywhere in the current portal pages."],
-  ["Support Phone / Support Email", "Shown in the header (phone) and mobile menu / footer (phone and email) as tel: and mailto: links."],
+  ["Logo", "Upload a PNG, JPG, WebP or GIF (up to 2 MB, about 200×60px works best) with Upload logo / Replace / Remove, or paste a public image URL instead. The upload is applied when you click Save Portal Settings. It replaces the accent-color letter tile in the header; with no portal logo the portal uses the company logo from Settings → Branding."],
+  ["Welcome Message", "Free text shown under the greeting on the portal Home page (line breaks are kept). Leave it blank and nothing extra is shown."],
+  ["Support Phone / Support Email", "Shown in the header (phone) and mobile menu / footer (phone and email) as tel: and mailto: links. The Support Email is also where new-ticket emails go (see the next switch)."],
   ["Show Estimates", "Toggles the Estimates nav tab."],
   ["Allow Tickets", "Toggles the Tickets nav tab and the ability to submit new tickets."],
+  ["Email Support Email on new tickets", "Off by default. When on, every new portal ticket is also emailed to the Support Email, in addition to the client’s sales rep (one email if they are the same address). The switch is disabled until a Support Email is set. Staff in-app and email notifications are unchanged by it."],
   ["Document Library", "Toggles the Documents nav tab."],
+  ["Allow Autopay", "On by default. When off, clients can’t turn autopay on and the autopay checkbox is hidden when they save a card. Clients can always turn autopay off, and autopay already set up keeps running."],
+  ["Allow Clients to Manage Payment Method", "On by default. When off, clients can’t add, update or remove the card or bank account on file in the portal — only your team can; the Account page tells them to contact you. The server refuses the change as well."],
+  ["Card / ACH Max Payment Amount", "Blank means no limit. Otherwise the most a client can pay online in one payment by that method — the invoice balance (or combined balance of the invoices selected) or the prepayment amount, before any card fee and before account credit is applied. A larger payment is refused with a message showing the limit. Does not apply to autopay or payments staff record."],
+  ["View Upcoming Services / View Service History", "On by default. Hide the scheduled visits and/or the completed visits from the Services page and the Home page. With both off the Services tab and the “My schedule” quick action disappear."],
   ["Visible Ticket Categories", "A checklist of the org’s CRM ticket categories (Settings → CRM). Only checked categories appear in the client-facing “New Ticket” category dropdown — keep internal-only categories like “Collections” unchecked."],
 ];
 
@@ -163,7 +168,7 @@ export function ClientPortalGuide() {
       <Section id="nav" title="What a client sees">
         <p>
           The portal shell is a lightweight top nav (with a mobile hamburger menu) built around seven possible
-          tabs. Three feature tabs can be turned off per org from Landscapt settings — see{" "}
+          tabs. Four tabs can be turned off per org (Services only when both of its sections are hidden) from Landscapt settings — see{" "}
           <a href="#branding" className="text-[#60ab45] hover:underline">Branding and portal settings</a> below.
         </p>
         <Table>
@@ -282,7 +287,7 @@ export function ClientPortalGuide() {
             account, with a subject of up to 200 characters and a description of up to 5,000. New
             tickets always arrive open, normal priority and unassigned &mdash; the same limits apply
             however the ticket is submitted. Each new portal ticket is emailed to the client&apos;s sales
-            rep, or to the portal&apos;s support email when the client has no active rep.
+            rep, or to the portal&apos;s support email when the client has no active rep. Turn on <strong>Email Support Email on new tickets</strong> in settings to send every new ticket to the support email as well as the rep.
           </li>
           <li>
             <strong>Tickets for a sub-account.</strong> A property manager signed in to the portal can file a
@@ -400,7 +405,10 @@ export function ClientPortalGuide() {
             <strong>Property managers see their sub-accounts.</strong> A client with sub-accounts (commercial property managers) sees the sub-accounts&apos; invoices, estimates, visits and tickets alongside their own when they sign in, each tagged with the sub-account&apos;s name. They can pay a sub-account&apos;s invoice on its own (recorded on that sub-account) or together with their own invoices in one payment (recorded on the property manager&apos;s account and applied to each invoice), and choose which account a new ticket is for. Saved cards and autopay stay with the account that saved them.
           </li>
           <li>
-            <strong>Autopay is the client&apos;s choice.</strong> On the Account page a client with a saved card sees an <strong>Autopay</strong> switch. Saving a card has a “Use this card for autopay” checkbox that starts unticked, and removing the saved card turns autopay off.
+            <strong>Autopay is the client&apos;s choice.</strong> On the Account page a client with a saved card sees an <strong>Autopay</strong> switch. Saving a card has a “Use this card for autopay” checkbox that starts unticked, and removing the saved card turns autopay off. Staff can switch the whole thing off with <strong>Allow Autopay</strong> in Client Portal settings (clients can still turn it off), and can stop clients changing the saved card with <strong>Allow Clients to Manage Payment Method</strong>.
+          </li>
+          <li>
+            <strong>Online payment limits.</strong> Set a <strong>Card Max Payment Amount</strong> and/or <strong>ACH Max Payment Amount</strong> in Client Portal settings to cap a single online payment; blank means no limit. The check uses the invoice balance or prepayment amount before any card fee and before credit is applied, and applies to single-invoice payments, multi-invoice payments and prepayments, not to autopay or payments staff record.
           </li>
           <li>
             <strong>Accepting an invite while signed in.</strong> If the invited person is already signed in with the invited email (for example an owner who is also a customer of another company), the invite page shows <strong>Add this company to my account</strong> with no password fields.

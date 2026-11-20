@@ -85,9 +85,9 @@ export async function POST(req: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("client_portal_settings")
-      .select("allow_tickets, portal_ticket_categories, support_email, company_name")
+      .select("allow_tickets, portal_ticket_categories, support_email, company_name, email_support_on_new_ticket")
       .eq("org_id", ctx.orgId)
-      .single() as Promise<{ data: Pick<PortalSettingsRow, "allow_tickets" | "portal_ticket_categories" | "support_email" | "company_name"> | null }>,
+      .single() as Promise<{ data: Pick<PortalSettingsRow, "allow_tickets" | "portal_ticket_categories" | "support_email" | "company_name" | "email_support_on_new_ticket"> | null }>,
 
     supabase
       .from("clients")
@@ -186,10 +186,11 @@ export async function POST(req: Request) {
   });
 
   // ── Send notification email ─────────────────────────────────────────────────
-  // Priority: sales rep assigned to client → support_email in portal settings → skip
+  // Recipients: the client's sales rep; the portal Support Email when the org has
+  // no rep to send to, or always when "email the Support Email on every new
+  // ticket" is on. One email per distinct address.
   const client = clientRes.data;
-  let notifyEmail: string | null = null;
-  let notifyName: string | null = null;
+  const recipients: { email: string; name: string | null; reason: "rep" | "support" }[] = [];
 
   if (client?.sales_rep_id) {
     // clients.sales_rep_id references crm_employees, not profiles.
@@ -203,17 +204,21 @@ export async function POST(req: Request) {
       .is("deleted_at", null)
       .maybeSingle();
     if (rep?.email) {
-      notifyEmail = rep.email;
-      notifyName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim() || null;
+      recipients.push({
+        email: rep.email,
+        name: `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim() || null,
+        reason: "rep",
+      });
     }
   }
 
-  if (!notifyEmail && settings?.support_email) {
-    notifyEmail = settings.support_email;
-    notifyName = settings.company_name ?? null;
+  const supportEmail = settings?.support_email?.trim() || null;
+  const supportAlreadyCovered = recipients.some((r) => r.email.toLowerCase() === supportEmail?.toLowerCase());
+  if (supportEmail && !supportAlreadyCovered && (recipients.length === 0 || settings?.email_support_on_new_ticket === true)) {
+    recipients.push({ email: supportEmail, name: settings?.company_name ?? null, reason: "support" });
   }
 
-  if (notifyEmail) {
+  if (recipients.length > 0) {
     const clientName = client?.display_name ?? "A client";
     const orgName = settings?.company_name ?? "Your company";
     // Was `/crm/tickets` with no `?open=` param (and a different env var than
@@ -226,33 +231,38 @@ export async function POST(req: Request) {
     // Best-effort — don't fail the ticket if email errors. after() keeps the
     // serverless function alive until the send settles; a bare un-awaited
     // promise could be dropped once the response was returned.
-    const html = buildTicketNotificationEmail({
-      ticketNumber: ticket.ticket_number,
-      subject: subject.trim(),
-      body: body?.trim() ?? null,
-      category,
-      clientName,
-      recipientName: notifyName ?? notifyEmail,
-      orgName,
-      ticketUrl,
-    });
-    const to = notifyEmail;
+    const emails = recipients.map((r) => ({
+      to: r.email,
+      html: buildTicketNotificationEmail({
+        ticketNumber: ticket.ticket_number,
+        subject: subject.trim(),
+        body: body?.trim() ?? null,
+        category,
+        clientName,
+        recipientName: r.name ?? r.email,
+        orgName,
+        ticketUrl,
+        reason: r.reason,
+      }),
+    }));
     after(async () => {
-      try {
-        const { error } = await resend.emails.send({
-          // Tenant-branded sender on the shared verified domain — never a
-          // hard-coded tenant name.
-          from: orgEmailFrom(settings?.company_name),
-          to,
-          subject: `[Ticket #${ticket.ticket_number}] ${subject.trim()} — ${clientName}`,
-          html,
-        });
-        if (error) log.error("notification email failed", { ticketId: ticket.id, error: error.message });
-      } catch (err) {
-        log.error("notification email error", {
-          ticketId: ticket.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
+      for (const { to, html } of emails) {
+        try {
+          const { error } = await resend.emails.send({
+            // Tenant-branded sender on the shared verified domain — never a
+            // hard-coded tenant name.
+            from: orgEmailFrom(settings?.company_name),
+            to,
+            subject: `[Ticket #${ticket.ticket_number}] ${subject.trim()} — ${clientName}`,
+            html,
+          });
+          if (error) log.error("notification email failed", { ticketId: ticket.id, error: error.message });
+        } catch (err) {
+          log.error("notification email error", {
+            ticketId: ticket.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     });
   }
@@ -269,6 +279,7 @@ function buildTicketNotificationEmail({
   recipientName,
   orgName,
   ticketUrl,
+  reason,
 }: {
   ticketNumber: number;
   subject: string;
@@ -278,7 +289,12 @@ function buildTicketNotificationEmail({
   recipientName: string;
   orgName: string;
   ticketUrl: string;
+  reason: "rep" | "support";
 }) {
+  const footer =
+    reason === "rep"
+      ? `This notification was sent because you are ${escapeHtml(clientName)}'s assigned account manager in ${escapeHtml(orgName)}.`
+      : `This notification was sent to the client portal Support Email for ${escapeHtml(orgName)}.`;
   return `
 <!DOCTYPE html>
 <html>
@@ -321,7 +337,7 @@ function buildTicketNotificationEmail({
         <tr>
           <td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 32px">
             <p style="margin:0;font-size:12px;color:#94a3b8">
-              This notification was sent because you are ${escapeHtml(clientName)}'s assigned account manager in ${escapeHtml(orgName)}.
+              ${footer}
             </p>
           </td>
         </tr>

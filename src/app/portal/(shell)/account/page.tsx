@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getPortalContext, getPortalOrgChoices } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import PortalAccountPage from "@/components/portal/PortalAccountPage";
+import { loadPortalFeatureSettings } from "@/lib/portal/portal-feature-settings";
 
 export default async function AccountPage() {
   const ctx = await getPortalContext();
@@ -9,7 +10,7 @@ export default async function AccountPage() {
 
   const supabase = createServiceClient();
 
-  const [clientRes, contactsRes, orgChoices] = await Promise.all([
+  const [clientRes, contactsRes, orgChoices, features] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -28,6 +29,7 @@ export default async function AccountPage() {
       .order("created_at", { ascending: true }),
 
     getPortalOrgChoices(),
+    loadPortalFeatureSettings(ctx.orgId),
   ]);
 
   return (
@@ -36,6 +38,8 @@ export default async function AccountPage() {
       email={ctx.email}
       contacts={contactsRes.data ?? []}
       hasMultipleCompanies={orgChoices.length > 1}
+      allowCardManagement={features.allowCardManagement}
+      allowAutopay={features.allowAutopay}
     />
   );
 }

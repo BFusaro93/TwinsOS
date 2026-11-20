@@ -27,6 +27,7 @@ interface Branding {
   allowTickets?: boolean;
   allowEstimates?: boolean;
   allowDocuments?: boolean;
+  allowServices?: boolean;
 }
 
 interface PortalShellProps {
@@ -38,7 +39,7 @@ interface PortalShellProps {
 const NAV_ITEMS = [
   { label: "Home",      href: "/portal",           icon: Home,        always: true },
   { label: "Billing",   href: "/portal/billing",   icon: CreditCard,  always: true },
-  { label: "Services",  href: "/portal/services",  icon: CalendarDays, always: true },
+  { label: "Services",  href: "/portal/services",  icon: CalendarDays, key: "allowServices" },
   { label: "Estimates", href: "/portal/estimates", icon: FileText,    key: "allowEstimates" },
   { label: "Tickets",   href: "/portal/tickets",   icon: Ticket,      key: "allowTickets" },
   { label: "Documents", href: "/portal/documents", icon: FolderOpen,  key: "allowDocuments" },
@@ -67,6 +68,7 @@ export default function PortalShell({ branding, clientName, children }: PortalSh
     if ("key" in item && item.key === "allowEstimates") return branding.allowEstimates !== false;
     if ("key" in item && item.key === "allowTickets") return branding.allowTickets !== false;
     if ("key" in item && item.key === "allowDocuments") return branding.allowDocuments !== false;
+    if ("key" in item && item.key === "allowServices") return branding.allowServices !== false;
     return true;
   });
 

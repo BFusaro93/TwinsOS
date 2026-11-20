@@ -98,6 +98,11 @@ interface Props {
   today: string;
   allowTickets: boolean;
   allowEstimates: boolean;
+  /** Org-written note shown under the greeting; null/blank shows nothing. */
+  welcomeMessage?: string | null;
+  /** The org can hide the upcoming-service card and the recent-service history. */
+  showUpcoming?: boolean;
+  showHistory?: boolean;
   /** False when the org can't take online payments — the balance button reads "View Billing", not "Pay Now". */
   cardPaymentsAvailable?: boolean;
 }
@@ -114,6 +119,9 @@ export default function PortalDashboard({
   today,
   allowTickets,
   allowEstimates,
+  welcomeMessage = null,
+  showUpcoming = true,
+  showHistory = true,
   cardPaymentsAvailable = true,
 }: Props) {
   const [upcomingVisits, setUpcomingVisits] = useState(initialVisits);
@@ -137,7 +145,7 @@ export default function PortalDashboard({
 
   const quickActions = [
     { label: balanceCents > 0 ? "Pay balance" : "Billing", href: "/portal/billing", icon: CreditCard, show: true },
-    { label: "My schedule", href: "/portal/services", icon: CalendarDays, show: true },
+    { label: "My schedule", href: "/portal/services", icon: CalendarDays, show: showUpcoming || showHistory },
     { label: "Request service", href: "/portal/tickets", icon: MessageSquarePlus, show: allowTickets },
     { label: "Estimates", href: "/portal/estimates", icon: FileText, show: allowEstimates },
   ].filter((a) => a.show);
@@ -170,6 +178,9 @@ export default function PortalDashboard({
                   ? `You have ${fmt(balanceCents)} due on your account.`
                   : "Your account is all caught up. Thanks for being a great customer!"}
               </p>
+              {welcomeMessage && (
+                <p className="mt-3 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-white/90">{welcomeMessage}</p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               {quickActions.map(({ label, href, icon: Icon }, i) => (
@@ -190,7 +201,7 @@ export default function PortalDashboard({
           </div>
 
           {/* Next visit */}
-          <div className="w-full shrink-0 rounded-xl bg-white/10 p-4 ring-1 ring-inset ring-white/20 backdrop-blur-sm lg:w-72">
+          {showUpcoming && <div className="w-full shrink-0 rounded-xl bg-white/10 p-4 ring-1 ring-inset ring-white/20 backdrop-blur-sm lg:w-72">
             {nextVisit ? (
               <>
                 <p className="text-xs font-semibold uppercase tracking-wide text-white/70">
@@ -217,7 +228,7 @@ export default function PortalDashboard({
                 <p className="mt-2 text-sm text-white/80">Nothing on the schedule right now.</p>
               </>
             )}
-          </div>
+          </div>}
         </div>
       </section>
 
@@ -274,7 +285,7 @@ export default function PortalDashboard({
         </Card>
 
         {/* Upcoming */}
-        <Card title="Upcoming Service" icon={CalendarDays} tone="sky">
+        {showUpcoming && <Card title="Upcoming Service" icon={CalendarDays} tone="sky">
           {upcomingVisits.length === 0 ? (
             <p className="text-sm text-slate-400">No upcoming visits scheduled.</p>
           ) : (
@@ -295,7 +306,7 @@ export default function PortalDashboard({
             </ul>
           )}
           <CardLink href="/portal/services">View all services</CardLink>
-        </Card>
+        </Card>}
 
         {/* Estimates */}
         {allowEstimates && (
@@ -369,7 +380,7 @@ export default function PortalDashboard({
           )}
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white lg:col-span-2">
+        {showHistory && <section className="rounded-xl border border-slate-200 bg-white lg:col-span-2">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <CheckCircle2 className="h-4 w-4 text-slate-400" />
@@ -401,7 +412,7 @@ export default function PortalDashboard({
               ))}
             </ol>
           )}
-        </section>
+        </section>}
       </div>
     </div>
   );

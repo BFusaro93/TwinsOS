@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { loadPortalFeatureSettings, portalPaymentLimitError } from "@/lib/portal/portal-feature-settings";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
@@ -83,6 +84,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
       }
     }
+
+    const limitError = portalPaymentLimitError(await loadPortalFeatureSettings(ctx.orgId), paymentMethod, amountCents);
+    if (limitError) return NextResponse.json({ error: limitError, code: "over_payment_limit" }, { status: 400 });
 
     const customerId = await ensureIntentCustomer({
       stripe,

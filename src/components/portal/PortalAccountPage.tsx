@@ -241,9 +241,15 @@ function AddContactForm({ onAdded }: { onAdded: (c: Contact) => void }) {
 function PaymentMethodCard({
   initialSummary,
   initialAutopay,
+  allowCardManagement,
+  allowAutopay,
 }: {
   initialSummary: string | null;
   initialAutopay: boolean;
+  /** False when the service provider manages the payment method on file. */
+  allowCardManagement: boolean;
+  /** False when autopay can't be turned on in the portal (turning it off is always allowed). */
+  allowAutopay: boolean;
 }) {
   const [summary, setSummary] = useState(initialSummary);
   const [autopay, setAutopay] = useState(initialAutopay);
@@ -286,24 +292,31 @@ function PaymentMethodCard({
       {summary ? (
         <div className="flex items-center justify-between">
           <span className="text-sm text-slate-800">{summary}</span>
-          <div className="flex gap-3">
-            <button onClick={() => setDialogOpen(true)} className="text-xs text-brand-600 hover:underline">
-              Update
-            </button>
-            <button onClick={handleRemove} disabled={removing} className="text-xs text-red-600 hover:underline disabled:opacity-50">
-              Remove
-            </button>
-          </div>
+          {allowCardManagement && (
+            <div className="flex gap-3">
+              <button onClick={() => setDialogOpen(true)} className="text-xs text-brand-600 hover:underline">
+                Update
+              </button>
+              <button onClick={handleRemove} disabled={removing} className="text-xs text-red-600 hover:underline disabled:opacity-50">
+                Remove
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-between">
           <span className="text-sm text-slate-400">No payment method on file.</span>
-          <button onClick={() => setDialogOpen(true)} className="text-xs text-brand-600 hover:underline">
-            Add
-          </button>
+          {allowCardManagement && (
+            <button onClick={() => setDialogOpen(true)} className="text-xs text-brand-600 hover:underline">
+              Add
+            </button>
+          )}
         </div>
       )}
-      {summary && (
+      {!allowCardManagement && (
+        <p className="mt-2 text-xs text-slate-400">To change your payment method, please contact us.</p>
+      )}
+      {summary && (allowAutopay || autopay) && (
         <div className="mt-3 border-t border-slate-100 pt-3">
           <label className="flex items-center justify-between gap-3 text-sm text-slate-700">
             <span>
@@ -327,6 +340,7 @@ function PaymentMethodCard({
       <SavedPaymentMethodDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
+        allowAutopay={allowAutopay}
         onSaved={(newSummary, newAutopay) => {
           setSummary(newSummary);
           setAutopay(newAutopay);
@@ -341,11 +355,15 @@ export default function PortalAccountPage({
   email,
   contacts: initialContacts,
   hasMultipleCompanies = false,
+  allowCardManagement = true,
+  allowAutopay = true,
 }: {
   client: Client | null;
   email: string;
   contacts: Contact[];
   hasMultipleCompanies?: boolean;
+  allowCardManagement?: boolean;
+  allowAutopay?: boolean;
 }) {
   const [contacts, setContacts] = useState(initialContacts);
 
@@ -398,7 +416,12 @@ export default function PortalAccountPage({
           <p className="text-sm text-slate-700">{address || "No address on file."}</p>
         </div>
 
-        <PaymentMethodCard initialSummary={client.saved_payment_method_summary} initialAutopay={client.autopay_enabled === true} />
+        <PaymentMethodCard
+          initialSummary={client.saved_payment_method_summary}
+          initialAutopay={client.autopay_enabled === true}
+          allowCardManagement={allowCardManagement}
+          allowAutopay={allowAutopay}
+        />
       </div>
 
       {/* Contacts */}

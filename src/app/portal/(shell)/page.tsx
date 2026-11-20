@@ -119,9 +119,9 @@ export default async function PortalHomePage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (createServiceClient() as any)
       .from("client_portal_settings")
-      .select("allow_tickets, allow_estimates")
+      .select("allow_tickets, allow_estimates, show_upcoming_services, show_service_history, welcome_message")
       .eq("org_id", ctx.orgId)
-      .maybeSingle() as Promise<{ data: { allow_tickets: boolean | null; allow_estimates: boolean | null } | null }>,
+      .maybeSingle() as Promise<{ data: { allow_tickets: boolean | null; allow_estimates: boolean | null; show_upcoming_services: boolean | null; show_service_history: boolean | null; welcome_message: string | null } | null }>,
   ]);
 
   const client = clientRes.data;
@@ -182,8 +182,11 @@ export default async function PortalHomePage() {
     windowEnd: labels.get(v.id)?.windowEnd ?? null,
     accountName: accountNames.get(v.client_id) ?? null,
   });
-  const upcomingVisits = upcomingRows.map(mapVisit);
-  const recentVisits = recentRows.map(mapVisit);
+  // Sections the org hides never leave the server.
+  const showUpcoming = settingsRes.data?.show_upcoming_services !== false;
+  const showHistory = settingsRes.data?.show_service_history !== false;
+  const upcomingVisits = showUpcoming ? upcomingRows.map(mapVisit) : [];
+  const recentVisits = showHistory ? recentRows.map(mapVisit) : [];
 
   return (
     <PortalDashboard
@@ -205,6 +208,9 @@ export default async function PortalHomePage() {
       today={today}
       allowTickets={settingsRes.data?.allow_tickets !== false}
       allowEstimates={settingsRes.data?.allow_estimates !== false}
+      welcomeMessage={settingsRes.data?.welcome_message?.trim() || null}
+      showUpcoming={showUpcoming}
+      showHistory={showHistory}
       estimates={openEstimates}
       cardPaymentsAvailable={cardPaymentsAvailable}
     />

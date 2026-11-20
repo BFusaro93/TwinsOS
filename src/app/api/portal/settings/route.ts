@@ -26,6 +26,14 @@ const SettingsSchema = z.object({
   allow_documents: z.boolean().nullish(),
   welcome_message: optText(2000),
   portal_ticket_categories: z.array(z.string().trim().min(1).max(100)).max(50).nullish(),
+  email_support_on_new_ticket: z.boolean().nullish(),
+  allow_autopay: z.boolean().nullish(),
+  allow_card_management: z.boolean().nullish(),
+  // Cents; null/absent = no limit. Capped at $1M so a typo can't overflow the integer column.
+  card_max_payment_cents: z.number().int().min(1).max(100_000_000).nullish(),
+  ach_max_payment_cents: z.number().int().min(1).max(100_000_000).nullish(),
+  show_upcoming_services: z.boolean().nullish(),
+  show_service_history: z.boolean().nullish(),
 });
 
 export async function GET() {
@@ -66,6 +74,13 @@ export async function PUT(req: Request) {
     allow_documents: body.allow_documents ?? true,
     welcome_message: body.welcome_message || null,
     portal_ticket_categories: body.portal_ticket_categories ?? [],
+    email_support_on_new_ticket: body.email_support_on_new_ticket ?? false,
+    allow_autopay: body.allow_autopay ?? true,
+    allow_card_management: body.allow_card_management ?? true,
+    card_max_payment_cents: body.card_max_payment_cents ?? null,
+    ach_max_payment_cents: body.ach_max_payment_cents ?? null,
+    show_upcoming_services: body.show_upcoming_services ?? true,
+    show_service_history: body.show_service_history ?? true,
     updated_at: new Date().toISOString(),
   };
 

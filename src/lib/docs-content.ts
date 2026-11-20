@@ -1436,7 +1436,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "What a client can do",
             detail:
-              "Not read-only: a client can pay invoices via Stripe (card or ACH), and can accept (with e-signature), decline, or request changes on estimates. Up to seven tabs are available — Home, Billing, Services, Estimates, Tickets, Documents, Account — and an org can hide three of them.",
+              "Not read-only: a client can pay invoices via Stripe (card or ACH), and can accept (with e-signature), decline, or request changes on estimates. Up to seven tabs are available — Home, Billing, Services, Estimates, Tickets, Documents, Account — and an org can hide Estimates, Tickets and Documents, plus Services when it hides both upcoming services and service history.",
           },
           {
             step: "What stays hidden, and sharing tickets",
@@ -1446,7 +1446,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Configuring what's visible",
             detail:
-              "Landscapt Settings > Client Portal controls which optional tabs are shown.",
+              "Landscapt Settings > Client Portal controls the portal: logo (upload a PNG, JPG, WebP or GIF, or paste a URL), a Welcome Message shown under the greeting on Home (blank shows nothing), and which tabs are shown. Switches there let you email the portal Support Email on every new ticket (in addition to the sales rep), allow or block autopay and card management by clients, set Card and ACH max payment amounts for online payments, and hide upcoming services or service history.",
           },
           {
             step: "Full guide",
@@ -3141,7 +3141,23 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Can clients turn autopay on or off themselves?",
-        a: "Yes. A client with a saved card has an Autopay switch on the portal Account page. Saving a card asks whether to use it for autopay (off by default), and removing the saved card turns autopay off.",
+        a: "Yes. A client with a saved card has an Autopay switch on the portal Account page. Saving a card asks whether to use it for autopay (off by default), and removing the saved card turns autopay off. In Landscapt Settings > Client Portal, Allow Autopay stops clients turning it on (they can always turn it off, and autopay already running continues), and Allow Clients to Manage Payment Method stops them adding, updating or removing the saved card.",
+      },
+      {
+        q: "Can I limit how much a client can pay online in one payment?",
+        a: "Yes. In Landscapt Settings > Client Portal, set a Card Max Payment Amount and/or an ACH Max Payment Amount; blank means no limit. A client who tries to pay more by that method in one payment (or one prepayment) is told the limit and can pay a smaller amount or contact you. The limit is checked against the invoice balance before any card fee and before account credit is applied, and doesn't affect autopay or payments you record yourself.",
+      },
+      {
+        q: "Who gets notified when a client submits a ticket in the portal?",
+        a: "The ticket arrives open and unassigned. Staff get the usual new-ticket in-app notification and email (all admins and managers unless you picked recipients in notification settings). The client's sales rep is also emailed, or the portal Support Email when the client has no active rep. Turn on Email Support Email on new tickets in Settings > Client Portal to email the Support Email every time, in addition to the rep.",
+      },
+      {
+        q: "Can I hide upcoming services or service history from the portal?",
+        a: "Yes. In Landscapt Settings > Client Portal, turn off View Upcoming Services and/or View Service History. The hidden section disappears from the Services page and the portal Home page, and with both off the Services tab itself is removed.",
+      },
+      {
+        q: "Where does the portal Welcome Message show, and can I upload a portal logo?",
+        a: "The Welcome Message appears under the greeting on the portal Home page; leave it blank and nothing extra is shown. For the logo, Settings > Client Portal has an Upload logo button (PNG, JPG, WebP or GIF up to 2 MB) as well as a URL box, applied when you save. With no portal logo the portal uses the company logo from Settings > Branding.",
       },
       {
         q: "Can a client pay several invoices at once or pay ahead from the portal?",

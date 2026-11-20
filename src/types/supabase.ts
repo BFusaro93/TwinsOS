@@ -1543,15 +1543,22 @@ export type Database = {
       client_portal_settings: {
         Row: {
           accent_color: string
+          ach_max_payment_cents: number | null
+          allow_autopay: boolean
+          allow_card_management: boolean
           allow_documents: boolean
           allow_estimates: boolean
           allow_tickets: boolean
+          card_max_payment_cents: number | null
           company_name: string | null
           created_at: string
+          email_support_on_new_ticket: boolean
           id: string
           logo_url: string | null
           org_id: string
           portal_ticket_categories: string[]
+          show_service_history: boolean
+          show_upcoming_services: boolean
           support_email: string | null
           support_phone: string | null
           updated_at: string
@@ -1559,15 +1566,22 @@ export type Database = {
         }
         Insert: {
           accent_color?: string
+          ach_max_payment_cents?: number | null
+          allow_autopay?: boolean
+          allow_card_management?: boolean
           allow_documents?: boolean
           allow_estimates?: boolean
           allow_tickets?: boolean
+          card_max_payment_cents?: number | null
           company_name?: string | null
           created_at?: string
+          email_support_on_new_ticket?: boolean
           id?: string
           logo_url?: string | null
           org_id: string
           portal_ticket_categories?: string[]
+          show_service_history?: boolean
+          show_upcoming_services?: boolean
           support_email?: string | null
           support_phone?: string | null
           updated_at?: string
@@ -1575,15 +1589,22 @@ export type Database = {
         }
         Update: {
           accent_color?: string
+          ach_max_payment_cents?: number | null
+          allow_autopay?: boolean
+          allow_card_management?: boolean
           allow_documents?: boolean
           allow_estimates?: boolean
           allow_tickets?: boolean
+          card_max_payment_cents?: number | null
           company_name?: string | null
           created_at?: string
+          email_support_on_new_ticket?: boolean
           id?: string
           logo_url?: string | null
           org_id?: string
           portal_ticket_categories?: string[]
+          show_service_history?: boolean
+          show_upcoming_services?: boolean
           support_email?: string | null
           support_phone?: string | null
           updated_at?: string
