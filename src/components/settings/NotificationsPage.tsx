@@ -332,6 +332,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Estimate Expiring Soon" description="When an estimate you created is expiring within 3 days and hasn't been accepted">
                 <Switch checked={prefs.emailEstimateExpiring} onCheckedChange={() => toggle("emailEstimateExpiring")} />
               </SettingRow>
+              <SettingRow label="Estimate Change Requested" description="When a client leaves a change request on an estimate (admins, managers and the estimate's salesperson)">
+                <Switch checked={prefs.emailEstimateChangeRequest} onCheckedChange={() => toggle("emailEstimateChangeRequest")} />
+              </SettingRow>
               <div className="pb-1 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Tickets</p>
               </div>
@@ -448,6 +451,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               </SettingRow>
               <SettingRow label="Estimate Change Requested" description="When a client leaves a change request on an estimate">
                 <Switch checked={prefs.inAppEstimateChangeRequest} onCheckedChange={() => toggle("inAppEstimateChangeRequest")} />
+              </SettingRow>
+              <SettingRow label="Estimate Expiring Soon" description="When an estimate you created is expiring within 3 days and hasn't been accepted">
+                <Switch checked={prefs.inAppEstimateExpiring} onCheckedChange={() => toggle("inAppEstimateExpiring")} />
               </SettingRow>
               <div className="pb-1 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Tickets</p>

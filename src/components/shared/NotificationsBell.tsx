@@ -94,6 +94,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <MessageSquare className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
     case "estimate_change_request":
       return <MessageSquarePlus className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
+    case "estimate_expiring":
+      return <CalendarClock className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "estimate_client_accepted":
       return <ThumbsUp className={cn(cls, "text-emerald-500 dark:text-emerald-400")} />;
     case "estimate_client_rejected":
@@ -227,7 +229,7 @@ export function NotificationsBell() {
         .from("notifications")
         .select("id, type, title, message, entity_id, entity_type, created_at")
         .eq("user_id", currentUser.id)
-        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "estimate_deposit_unaccepted", "estimate_deposit_skipped", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed", "payment_failed", "approved", "rejected"])
+        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_expiring", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "estimate_deposit_unaccepted", "estimate_deposit_skipped", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed", "payment_failed", "approved", "rejected"])
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -379,10 +381,11 @@ export function NotificationsBell() {
 
     // Persisted DB notifications — each of these is inserted directly into the
     // `notifications` table by server-side code (estimate-client-notify.ts,
-    // ticket-notify.ts, estimate-change-requests.ts) rather than synthesized
+    // ticket-notify.ts, estimate-change-requests.ts, the estimate expiry cron) rather than synthesized
     // client-side like the sections above.
     const DB_NOTIF_META: Record<string, { href: (entityId: string | null) => string; title: string }> = {
       estimate_change_request:    { href: (id) => `/crm/estimates/${id}`, title: "Change Requested" },
+      estimate_expiring:          { href: (id) => `/crm/estimates/${id}`, title: "Estimate Expiring" },
       estimate_client_accepted:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Accepted" },
       estimate_client_rejected:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Declined" },
       estimate_deposit_excess:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Exceeds Total" },
