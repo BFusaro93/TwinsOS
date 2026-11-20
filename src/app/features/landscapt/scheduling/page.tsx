@@ -76,7 +76,7 @@ export default function SchedulingFeaturePage() {
         ]}
       />
 
-      <FeatureSubpageCTA />
+      <FeatureSubpageCTA guideSlug="dispatch" />
       <MarketingFooter />
     </div>
   );

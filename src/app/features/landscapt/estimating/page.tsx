@@ -76,7 +76,7 @@ export default function EstimatingFeaturePage() {
         ]}
       />
 
-      <FeatureSubpageCTA />
+      <FeatureSubpageCTA guideSlug="estimating" />
       <MarketingFooter />
     </div>
   );

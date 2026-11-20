@@ -150,8 +150,17 @@ function AccordionSection({
   useEffect(() => {
     if (openWhenQuery && new URLSearchParams(window.location.search).has(openWhenQuery)) setOpen(true);
   }, [openWhenQuery]);
+  // Settings search deep-links here with ?section=<title>: open the section and bring it into view.
+  const sectionParam = useSearchParams().get("section");
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sectionParam && sectionParam.toLowerCase() === title.toLowerCase()) {
+      setOpen(true);
+      requestAnimationFrame(() => rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }, [sectionParam, title]);
   return (
-    <div className="border-b last:border-0">
+    <div ref={rootRef} className="border-b last:border-0">
       <button
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
@@ -2937,6 +2946,7 @@ export function LandscaptSettingsTabs() {
           setActiveTab(tab as TabKey);
           const params = new URLSearchParams(searchParams.toString());
           params.set("tab", tab);
+          params.delete("section"); // a section deep link belongs to the tab it was made for
           router.replace(`${pathname}?${params.toString()}`, { scroll: false });
         }}
         className="mt-4"

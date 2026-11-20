@@ -43,6 +43,7 @@ Equipt covers the maintenance lifecycle for the same company's fleet and equipme
 ## Company
 
 - [Contact](https://landscapt.com/contact): sales, demo booking, and support
-- [Support](https://landscapt.com/help): searchable how-to guides
+- [Support](https://landscapt.com/help): searchable how-to guides and downloadable PDF feature guides
+- [Switching from Service Autopilot or Homeworks](https://landscapt.com/switch): transition checklist
 - [Privacy Policy](https://landscapt.com/legal/privacy-policy)
 - [SMS Terms & Conditions](https://landscapt.com/legal/sms-terms)

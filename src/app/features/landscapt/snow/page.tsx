@@ -62,7 +62,7 @@ export default function SnowFeaturePage() {
 
       <FeatureDeepDive items={ITEMS} accent="#60ab45" />
 
-      <FeatureSubpageCTA />
+      <FeatureSubpageCTA guideSlug="snow" />
       <MarketingFooter />
     </div>
   );

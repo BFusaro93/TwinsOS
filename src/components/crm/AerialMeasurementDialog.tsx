@@ -907,7 +907,7 @@ export function AerialMeasurementDialog({
                   {areaZones.map((z) => (
                     <div
                       key={z._id}
-                      className={`grid grid-cols-[1fr_7.5rem_12rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50 dark:bg-red-950/40" : ""}`}
+                      className={`grid grid-cols-[1fr_7.5rem_12rem_6rem_2.5rem] items-start gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50 dark:bg-red-950/40" : ""}`}
                     >
                       <div className="min-w-0">
                         <Input
@@ -945,7 +945,7 @@ export function AerialMeasurementDialog({
                       />
                       {z.path ? (
                         <span
-                          className={`text-right text-sm ${z.mode === "subtract" ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-neutral-400"}`}
+                          className={`flex h-7 items-center justify-end text-sm ${z.mode === "subtract" ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-neutral-400"}`}
                         >
                           {z.mode === "subtract" ? "−" : ""}
                           {z.sqft.toLocaleString()}

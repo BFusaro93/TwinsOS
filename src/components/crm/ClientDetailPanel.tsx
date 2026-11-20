@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordRecentClient } from "@/lib/hooks/use-record-recent-client";
 import { isBuiltInAreaKey } from "@/lib/chemical-area";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -3814,6 +3815,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   // Photos tab is part of the paid Job Photos add-on (allowed while loading).
   const { allowed: hasJobPhotos } = useAddonAccess("job_photos");
   const { data: client, isLoading } = useClient(clientId);
+  useRecordRecentClient(client);
   const { data: contacts } = useClientContacts(clientId);
   // Archived properties are listed too (to unarchive); pickers elsewhere hide them.
   const { data: properties } = useClientProperties(clientId, { includeArchived: true });

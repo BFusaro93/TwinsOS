@@ -1,0 +1,118 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Landscapt Dispatch &amp; Scheduling</title>
+<style>
+@page{size:Letter;margin:0.5in 0.65in}
+*{box-sizing:border-box}
+body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:#1f2937;font-size:9.6pt;line-height:1.38;margin:0}
+.hero{background:#005642;color:#fff;padding:28px 34px;border-radius:10px;margin-bottom:16px}
+.hero .k{letter-spacing:.14em;font-size:8.5pt;color:#b7d433;font-weight:700;text-transform:uppercase}
+.hero h1{margin:6px 0 8px;font-size:26pt;line-height:1.15}
+.hero p{margin:0;font-size:11.5pt;color:#d9efe6;max-width:5.6in}
+h2{font-size:14pt;color:#005642;margin:16px 0 4px;padding-bottom:4px;border-bottom:2px solid #b7d433;break-after:avoid}
+h2 small{display:block;font-size:9.5pt;color:#6b7280;font-weight:400;margin-top:1px}
+p{margin:6px 0}
+ul{margin:6px 0 6px 18px;padding:0}li{margin:3px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}
+.card{border:1px solid #d7e3de;border-radius:8px;padding:11px 14px;background:#f7fbf9;break-inside:avoid}
+.card b{color:#005642}
+.flow{display:flex;gap:6px;margin:12px 0;break-inside:avoid}
+.step{flex:1;background:#eef6f2;border-radius:8px;padding:9px 8px;text-align:center;font-size:9pt}
+.step i{display:block;font-style:normal;font-weight:700;color:#005642;font-size:9.5pt;margin-bottom:2px}
+table{border-collapse:collapse;width:100%;font-size:9.5pt;margin:8px 0;break-inside:avoid}
+td,th{border:1px solid #d7e3de;padding:5px 8px;text-align:left;vertical-align:top}
+th{background:#005642;color:#fff;font-weight:600}
+tr:nth-child(even) td{background:#f7fbf9}
+.note{background:#fff8e6;border-left:4px solid #e0a800;padding:8px 12px;font-size:9.5pt;border-radius:4px;margin:10px 0;break-inside:avoid}
+.foot{margin-top:14px;padding-top:10px;border-top:1px solid #d7e3de;font-size:9pt;color:#6b7280}
+.pb{break-before:page}
+</style></head><body>
+
+<div class="hero"><div class="k">Landscapt · Dispatch &amp; Scheduling</div>
+<h1>Every crew, every job, every day: scheduled once and dispatched from one board</h1>
+<p>Recurring schedules that generate their own visits, a daily dispatch board, a waiting list for opportunistic work, remembered route order, and a crew app whose clock-outs flow straight into invoicing.</p></div>
+
+<div class="flow">
+<div class="step"><i>1 · Schedule</i>Jobs create their own visits</div>
+<div class="step"><i>2 · Dispatch</i>Daily board, crews, tablet-friendly</div>
+<div class="step"><i>3 · Waiting list</i>Fill gaps when a crew is nearby</div>
+<div class="step"><i>4 · Route</i>Stop order, optimized and remembered</div>
+<div class="step"><i>5 · In the field</i>Crew app: clock, notes, photos</div>
+<div class="step"><i>6 · Invoice</i>Complete a visit, draft invoice follows</div>
+</div>
+
+<h2>1. One schedule for every kind of work<small>Five job types you can dispatch from the same board</small></h2>
+<table>
+<tr><th style="width:20%">Job type</th><th>What it is</th></tr>
+<tr><td><b>Recurring</b></td><td>A repeating service on a schedule you pick (weekly Monday, every 3 weeks, bi-weekly even weeks), with a start date and an optional season end. Visits are created automatically.</td></tr>
+<tr><td><b>One time</b></td><td>A single visit on a set date.</td></tr>
+<tr><td><b>Waiting list</b></td><td>No fixed date, just a window. Held until it makes sense to send a crew (section 4).</td></tr>
+<tr><td><b>Package</b></td><td>A bundled program such as a multi-step fertilizer plan: each step has its own date window and a minimum number of days after the step before it, billed as one fixed monthly amount.</td></tr>
+<tr><td><b>Project</b></td><td>A larger one-off job, tracked on its own rather than as routine service.</td></tr>
+</table>
+<ul>
+<li>Create a job directly, or <b>convert an accepted estimate</b>: its services, quantities, pricing, and crew size carry over, so nothing is retyped.</li>
+<li>Recurring visits are <b>generated through the season end</b>. Change the schedule or dates later and you see how many untouched upcoming visits are affected before anything is removed. Set a visit cap on a service (say 30 mows) and a skipped or cancelled visit is made up later in the season.</li>
+<li><b>Package spacing is enforced.</b> Move a step too close to the one before it and Landscapt refuses with the earliest allowed date, unless you choose to override for that step. Renew a package for next season in one click, singly or in bulk.</li>
+<li>Each job carries <b>notes to the crew</b> (with bold, lists, and numbered steps) and <b>office-only notes</b>, plus an <b>equipment-to-bring list</b> drawn from your trucks and equipment records. Edit a crew note and upcoming visits get the new text, so a changed gate code reaches the next stop.</li>
+</ul>
+
+<h2 class="pb">2. The daily dispatch board<small>Every stop for the day, by crew, in one list</small></h2>
+<ul>
+<li>The board shows <b>visits</b>, one trip to one property on one day. A job's status (the whole engagement) and each visit's status are tracked separately, so completing today's stop never closes a recurring job.</li>
+<li>Visit statuses run <b>Scheduled, Dispatched, In Progress, Completed, Skipped, Cancelled</b>. Skipping or cancelling asks for a reason (weather, client requested delay, crew unavailable, or your own) and writes it to the client's timeline, so "why didn't you come Tuesday?" is answered from the client record.</li>
+<li>Per-visit columns include crew, start and end window, <b>budgeted vs. actual hours with variance</b>, crew size, quantity, rate, and amount. Skipped and cancelled visits drop out of the day's totals so the numbers reflect work actually in front of the crews.</li>
+<li><b>Filter and search</b> the day, work in saved views and quick date ranges, or flip to a <b>week calendar</b> with a row per crew and a budget bar on each card. Drag a card to another day or crew. A <b>Crew Board</b> view is built for a shop TV, showing who is on each crew and what equipment is loaded.</li>
+<li><b>Bulk actions</b> on checked visits: change status, re-assign crew, move to another day, or email the selected clients in one pass. Bulk changes apply to every selected visit or to none, so a crew's running stop is never overwritten.</li>
+<li>The board works at phone and tablet width, so you can dispatch from the truck.</li>
+</ul>
+
+<h2>3. Crews and assignment<small>Put the right people on the right stops</small></h2>
+<ul>
+<li><b>Team Assign</b> groups the day's visits into a column per crew plus an Unassigned column. Drag a visit to a crew, or on a tablet tap the visit and then the crew. Moving a person works the same way, and a one-day loan returns them to their usual crew the next day automatically.</li>
+<li><b>Two crews on one stop:</b> add another crew to a big cleanup or install. Each crew clocks its own hours.</li>
+<li>Give an individual employee their own schedule when they work solo. Every crew change is recorded in the audit trail with who made it and when.</li>
+<li><b>Protected stops:</b> while a crew is clocked in you can't cancel, skip, or move their visit, so hours are never lost mid-stop. Moving a visit to a new day is logged on the client's timeline.</li>
+</ul>
+
+<h2>4. Waiting list: fill the gaps<small>Jobs with a date window wait until a crew is already in the neighborhood</small></h2>
+<ul>
+<li>Waiting-list jobs, and package steps that haven't been given a date, live on the <b>Waiting List</b> with a date window (From X, X to Y, or any time). Pick a window preset such as the next 30 days, then filter by client, service, city, zip, crew, or sales rep.</li>
+<li><b>Schedule</b> a row (or a checked batch) with a date and an optional crew. It becomes a real visit on that day's dispatch board and leaves the list. A multi-service job can send one service out and keep the others waiting.</li>
+<li><b>Nearby Waiting List</b> on the dispatch board uses actual driving locations to find waiting jobs within a radius of today's scheduled stops (3 miles by default). <b>Schedule Today</b> sends one out with one click, so a crew that finishes early heads next door instead of back to the shop.</li>
+<li>Package steps tell you when they are <b>"Too soon"</b> with the earliest allowed date, and a <b>Ready to dispatch</b> filter hides everything that isn't due yet.</li>
+<li>A stop that rained out can be sent back with <b>Return to Waiting List</b>. A job whose only visits were skipped or cancelled returns to the list on its own.</li>
+</ul>
+
+<h2 class="pb">5. Route order and optimization<small>Route a recurring run once, then stop redoing it</small></h2>
+<ul>
+<li>Stops are numbered <b>per crew</b>. Reorder by dragging, typing stop numbers and applying them to every crew at once, reversing the run, or grouping stops by zip area.</li>
+<li><b>Save Order</b> and Landscapt remembers it for that crew on that weekday. Next Monday's run comes up already in sequence; a Wednesday run keeps its own order. New stops added later sort to the bottom until you place them.</li>
+<li><b>Optimize Route</b> sequences each crew's stops by real driving time, anchored at that crew's own starting address (or your company address). Choose <b>nearest first</b> or <b>furthest first</b> so the crew finishes near the yard. Every row then shows its drive time, and the total is reported. An optimized order is a proposal until you save it.</li>
+</ul>
+<div class="note"><b>Good to know:</b> Route optimization needs a Google Maps key (or a plan that includes it) and is included on Enterprise and available as an add-on on other plans. Nearby Waiting List uses the same map service.</div>
+
+<h2>6. In the truck: the crew app<small>Runs in the phone's browser, in English or Spanish</small></h2>
+<ul>
+<li><b>My Schedule</b> lists the day's stops in route order with address, services, tap-to-call, gate code, and directions in the phone's maps app. A stop is a property visit, so several services at one address mean one clock-in.</li>
+<li><b>Clock in and out:</b> Start Job, Take a Break, Resume, Stop Job. Skip works per service with a reason. <b>Start Day</b> and <b>End Day</b> clock the whole crew for payroll, and Edit Crew handles anyone late, out, or leaving early. Taps made without signal are saved and sent in order when it returns, stamped with the time they were tapped.</li>
+<li><b>Notes and photos:</b> crews read and acknowledge the office's notes before clocking in, send notes back to the office, and attach photos to the stop. You can require a <b>Before</b> photo to start and an <b>After</b> photo to stop.</li>
+<li><b>Materials and equipment:</b> check off equipment and materials as they are loaded, mark planned materials used with the real quantity, and request materials for the office to approve.</li>
+<li><b>Suggest work:</b> crews photograph something the client needs and send it to the office as a lead to quote, with no prices shown to the crew.</li>
+<li>Crews see only their own stops. You can hide pricing from crews, and job totals and costs are never shown to a crew login.</li>
+</ul>
+
+<h2>7. From completion to invoice<small>What the crew records is what the office sees, with nothing re-entered</small></h2>
+<ul>
+<li>Clock in and the stop moves to <b>In Progress</b> on the board. Stop Job marks it <b>Completed</b> and works out the hours. Status, actual hours against budget, notes, skip reasons, and photos all show up on the board in real time.</li>
+<li><b>Completing a visit creates its draft invoice.</b> If an invoice can't be created, the visit still completes and you are warned, then bill it from the visit. Completing in bulk never bills an already-completed visit twice.</li>
+<li>Each service's invoice description reaches its invoice line. Package and contract work follow the billing rules of the package or contract, with fixed monthly amounts billed through the contract.</li>
+<li>Job costing compares expected and actual hours, labor, and materials from the same visit data, and the crew's day clock lands in the payroll report ready to correct and export.</li>
+</ul>
+
+<h2 class="pb">8. Setup &amp; control<small>Configured to how your operation works</small></h2>
+<div class="grid">
+<div class="card"><b>What you configure</b><ul><li>Crews with colors, rosters, and starting addresses</li><li>Schedule templates for recurring jobs</li><li>Packages with steps, spacing, and rates</li><li>Required before/after photos and crew pricing visibility</li><li>Your time zone, so "today" is your company's day</li></ul></div>
+<div class="card"><b>Control and history</b><ul><li>Role-based permissions for dispatching, scheduling, and the waiting list</li><li>Timeline entry for every dispatch, move, skip, and cancel</li><li>Audit trail on every crew change</li><li>Crew logins can't edit a visit's date, crew, price, or status</li></ul></div>
+</div>
+
+<div class="foot">Landscapt is a cloud platform for landscape and field-service operations, with CRM, scheduling, invoicing, purchasing, and maintenance in one system. Ask us for a live walkthrough using your own crews and routes.</div>
+</body></html>

@@ -3,7 +3,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, UserCog, Wrench, Sprout, HelpCircle, Library } from "lucide-react";
+import { ArrowLeft, UserCog, Wrench, Sprout, HelpCircle, Library, Search } from "lucide-react";
+import { openSettingsSearch } from "@/components/shared/SettingsSearchDialog";
 import { BrandMark } from "./BrandMark";
 import { cn } from "@/lib/utils";
 import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
@@ -93,6 +94,22 @@ export function SettingsSidebar() {
             </>
           )}
         </div>
+      </div>
+
+      {/* Search settings */}
+      <div className={cn("shrink-0 pt-3", sidebarCollapsed ? "px-2" : "px-3")}>
+        <button
+          type="button"
+          onClick={openSettingsSearch}
+          title="Search settings"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md border border-[#2f2f2f] bg-white/5 px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200",
+            sidebarCollapsed && "justify-center px-0"
+          )}
+        >
+          <Search className="h-4 w-4 shrink-0" />
+          {!sidebarCollapsed && <span className="flex-1 text-left">Search settings</span>}
+        </button>
       </div>
 
       {/* Navigation */}
