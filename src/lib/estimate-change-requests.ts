@@ -3,6 +3,10 @@
 // creates a record staff can see and notifies admins/managers — plus the
 // estimate's salesperson — in-app.
 
+import { Resend } from "resend";
+import { EMAIL_FROM, sendEmailRetryingRateLimit } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
+
 export const MAX_CHANGE_REQUEST_MESSAGE_CHARS = 4000;
 
 export async function submitEstimateChangeRequest(
@@ -50,7 +54,7 @@ export async function submitEstimateChangeRequest(
   // Notify admins/managers in-app (same audience pattern used for new maintenance requests)
   const { data: staff } = await supabase
     .from("profiles")
-    .select("id, notification_prefs")
+    .select("id, email, name, notification_prefs")
     .eq("org_id", orgId)
     .neq("status", "inactive")
     .in("role", ["admin", "manager"]);
@@ -82,7 +86,7 @@ export async function submitEstimateChangeRequest(
     if (repUserId && !recipients.some((p: any) => p.id === repUserId)) {
       const { data: rep } = await supabase
         .from("profiles")
-        .select("id, notification_prefs")
+        .select("id, email, name, notification_prefs")
         .eq("id", repUserId)
         .eq("org_id", orgId)
         // A deactivated login must not keep getting change-request notifications.
@@ -109,5 +113,37 @@ export async function submitEstimateChangeRequest(
         entity_type: "estimate",
       }))
     );
+  }
+
+  // Email the same audience, each person honoring their own email preference.
+  // Best-effort: one failed send must not fail the client's request or block
+  // the other recipients. The message and requester name are client-typed
+  // free text — escaped before going into HTML.
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const emailEligible = recipients.filter((p: any) => p.email && (p.notification_prefs ?? {}).emailEstimateChangeRequest !== false);
+  if (!emailEligible.length) return;
+
+  const resend = new Resend(resendKey);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
+  const link = `${siteUrl}/crm/estimates/${estimateId}`;
+  const subject = `Change requested — Estimate #${estimateNumber}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const p of emailEligible as any[]) {
+    await sendEmailRetryingRateLimit(resend, {
+      from: EMAIL_FROM,
+      to: p.email,
+      subject,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+        <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Change requested</h2>
+        <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(p.name ?? "there")},</p>
+        <p style="margin:0 0 16px;color:#475569"><strong>${escapeHtml(requesterName)}</strong> asked for changes on Estimate <strong>#${estimateNumber}</strong>:</p>
+        <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f1f5f9;border-left:3px solid #94a3b8;color:#334155;white-space:pre-wrap">${escapeHtml(message)}</blockquote>
+        <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Estimate</a>
+      </div>`,
+    }).catch(() => {
+      // Non-fatal — see above.
+    });
   }
 }

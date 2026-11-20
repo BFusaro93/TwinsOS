@@ -14,7 +14,8 @@ export const maxDuration = 300;
 // Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
 // GET request, so this must be GET, not POST, or it silently never fires.
 // Finds estimates expiring in the next 3 days (not yet won/lost/expired) and
-// emails the created_by user (or, when that is null, the sales rep's login) as an in-app notification proxy.
+// notifies the created_by user (or, when that is null, the sales rep's login) by email
+// and in-app, each channel honoring its own preference.
 
 const serviceClient = () =>
   createClient(
@@ -101,9 +102,12 @@ export async function GET(req: NextRequest) {
       .neq("status", "inactive")
       .maybeSingle();
 
-    if (!profile?.email) continue;
+    if (!profile) continue;
     const prefs = (profile.notification_prefs ?? {}) as Record<string, unknown>;
-    if (prefs.emailEstimateExpiring === false) continue;
+    // Each channel is independent: someone with email off can still get the bell.
+    const wantsEmail = !!profile.email && prefs.emailEstimateExpiring !== false;
+    const wantsInApp = prefs.inAppEstimateExpiring !== false;
+    if (!wantsEmail && !wantsInApp) continue;
 
     const org = est.organizations as Record<string, unknown> | null;
     const client = est.clients as Record<string, unknown> | null;
@@ -142,23 +146,43 @@ export async function GET(req: NextRequest) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any).from("estimates").update({ expiry_notified_at: null }).eq("id", est.id as string);
 
-    try {
-      const { error: sendErr } = await resend.emails.send({
-        from: orgEmailFrom(orgName),
-        to: profile.email,
-        subject: `Estimate #${estimateNum} ${expiryPhrase(daysLeft)} — ${clientName}`,
-        html,
+    // In-app first: it is a plain insert, and a failed email must not re-send it tomorrow.
+    let delivered = false;
+    if (wantsInApp) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: inAppErr } = await (supabase as any).from("notifications").insert({
+        org_id: est.org_id as string,
+        user_id: createdBy,
+        type: "estimate_expiring",
+        title: `Estimate #${estimateNum} ${expiryPhrase(daysLeft)}`,
+        message: `${clientName} · ${totalFormatted} · valid until ${validUntil}`,
+        entity_id: est.id as string,
+        entity_type: "estimate",
       });
-      // The Resend SDK reports a rejected send (rate limit, bad address) in `error` rather than
-      // throwing; release the claim so tomorrow's run tries again.
-      if (sendErr) {
-        await release();
-        continue;
-      }
-      notified++;
-    } catch {
-      await release();
+      if (!inAppErr) delivered = true;
     }
+
+    if (wantsEmail) {
+      try {
+        const { error: sendErr } = await resend.emails.send({
+          from: orgEmailFrom(orgName),
+          to: profile.email,
+          subject: `Estimate #${estimateNum} ${expiryPhrase(daysLeft)} — ${clientName}`,
+          html,
+        });
+        // The Resend SDK reports a rejected send (rate limit, bad address) in `error` rather than
+        // throwing; if nothing else was delivered, release the claim so tomorrow's run tries again.
+        if (!sendErr) delivered = true;
+      } catch {
+        // handled by the `delivered` check below
+      }
+    }
+
+    if (!delivered) {
+      await release();
+      continue;
+    }
+    notified++;
   }
 
   return NextResponse.json({ notified });
