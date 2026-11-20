@@ -96,7 +96,7 @@ export function SettingsSidebar() {
         </div>
       </div>
 
-      {/* Search settings (Cmd/Ctrl+K) */}
+      {/* Search settings */}
       <div className={cn("shrink-0 pt-3", sidebarCollapsed ? "px-2" : "px-3")}>
         <button
           type="button"
@@ -108,12 +108,7 @@ export function SettingsSidebar() {
           )}
         >
           <Search className="h-4 w-4 shrink-0" />
-          {!sidebarCollapsed && (
-            <>
-              <span className="flex-1 text-left">Search settings</span>
-              <kbd className="rounded border border-[#3a3a3a] px-1.5 text-[10px] text-slate-500">⌘K</kbd>
-            </>
-          )}
+          {!sidebarCollapsed && <span className="flex-1 text-left">Search settings</span>}
         </button>
       </div>
 

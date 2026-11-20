@@ -30,8 +30,8 @@ export function openSettingsSearch() {
 }
 
 /**
- * "Search settings" palette. Mounted once in the settings layout; Cmd/Ctrl+K or the sidebar button
- * opens it. Only lists settings the signed-in user can actually reach (same rules as the sidebar and
+ * "Search settings" palette. Mounted once in the settings layout; the sidebar button opens it. (No
+ * keyboard shortcut: Cmd/Ctrl+K already opens the global search in the top bar.) Only lists settings the signed-in user can actually reach (same rules as the sidebar and
  * each hub's tab list), so a result never leads to an access-denied page.
  */
 export function SettingsSearchDialog() {
@@ -43,18 +43,8 @@ export function SettingsSearchDialog() {
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setOpen((v) => !v);
-      }
-    };
     window.addEventListener(OPEN_SETTINGS_SEARCH_EVENT, onOpen);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener(OPEN_SETTINGS_SEARCH_EVENT, onOpen);
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener(OPEN_SETTINGS_SEARCH_EVENT, onOpen);
   }, []);
 
   const entries = useMemo(() => {
