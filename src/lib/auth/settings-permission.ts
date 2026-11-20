@@ -14,3 +14,15 @@ export async function hasAnySettingsPermission(supabase: RpcClient, keys: string
   }
   return false;
 }
+
+/**
+ * Master Account Settings gate for routes behind the Organization, Branding,
+ * Subscription and Integrations tabs: admins always pass; anyone else needs a
+ * role with the account_settings permission. Users (invite / reset password /
+ * deactivate) and API keys stay admin-only on purpose — they can mint or take
+ * over an admin, or read the whole org through the public API.
+ */
+export async function canManageMasterAccount(supabase: RpcClient, profileRole: string | null | undefined): Promise<boolean> {
+  if (profileRole === "admin") return true;
+  return hasAnySettingsPermission(supabase, ["account_settings"]);
+}

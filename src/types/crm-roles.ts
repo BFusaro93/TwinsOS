@@ -108,7 +108,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           lead_allow_edit: "Allow Edit",
           lead_allow_delete: "Allow Close as Lost",
           lead_bulk_create: "Bulk Create",
-          lead_estimates: "Estimates",
+          lead_estimates: "Add an Estimate",
           lead_add: "Add Lead",
           lead_convert_close: "Convert/Close",
         },

@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient, generateZapierApiKey } from "@/lib/integrations/zapier";
 import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
+import { canManageMasterAccount } from "@/lib/auth/settings-permission";
 
 /**
  * POST /api/integrations/zapier — (re)generates the org's Zapier API key.
@@ -25,7 +26,7 @@ export async function POST() {
     .eq("id", user.id)
     .single();
   // Service-role upsert below: a deactivated admin's still-valid token must not mint a key.
-  if (!profile || profile.role !== "admin" || profile.status === "inactive") {
+  if (!profile || profile.status === "inactive" || !(await canManageMasterAccount(supabase, profile.role))) {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
 

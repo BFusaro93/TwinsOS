@@ -9,6 +9,7 @@ import { removePurchasedBundledAddons } from "@/lib/stripe/bundled-addon-reconci
 import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 import { releaseOrgSmsResources } from "@/lib/twilio/provisioning";
 import { logger } from "@/lib/logger";
+import { canManageMasterAccount } from "@/lib/auth/settings-permission";
 
 const log = logger.child("billing addons");
 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
-  if (profile.role !== "admin" || profile.status === "inactive") {
+  if (profile.status === "inactive" || !(await canManageMasterAccount(supabase, profile.role))) {
     return NextResponse.json({ error: "Only admins can manage billing" }, { status: 403 });
   }
   // Billing acts on profiles.org_id (the HOME org). While staff impersonate,
