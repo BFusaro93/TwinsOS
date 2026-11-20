@@ -58,7 +58,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   L("general", "General", "Company info", "organization name address phone"),
   L("users", "Roles", "Roles and permissions", "access crm roles who can"),
   L("crm", "Clients", "Client defaults", "account numbering billing terms prefix", "Client Defaults"),
-  L("crm", "Clients", "Service lines you offer", "turn on services lines", "Services"),
+  L("crm", "Clients", "Service lines you offer", "turn on services lines we offer snow services turn off hide snow jobs invoicing plow", "Services"),
   L("crm", "Clients", "Crew app settings", "crew tablet clock in", "Crew App"),
   L("crm", "Clients", "Cancellation reasons", undefined, "Cancellation Reasons"),
   L("crm", "Clients", "Client sources", "lead source referral", "Client Sources"),

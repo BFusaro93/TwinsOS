@@ -3709,7 +3709,7 @@ export function useCRMScheduleCustomers(name: string | null) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
           .from('crm_jobs')
-          .select('id, client_id, job_number, status, service_address, service_city, service_zip, clients(display_name), crm_job_services(service_name)')
+          .select('id, client_id, job_number, status, service_address, service_city, service_state, service_zip, clients(display_name, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip), client_properties(address, city, state, zip), crm_job_services(service_name)')
           .eq('schedule', name!)
           .is('deleted_at', null)
           .not('status', 'in', '("completed","cancelled")')
@@ -3720,18 +3720,27 @@ export function useCRMScheduleCustomers(name: string | null) {
         if (!data || data.length < 1000) break;
       }
       return rows
-        .map((r) => ({
-          jobId: r.id as string,
-          clientId: r.client_id as string,
-          clientName: (r.clients?.display_name as string | undefined) ?? '—',
-          jobNumber: (r.job_number as number | null) ?? null,
-          services: ((r.crm_job_services ?? []) as { service_name: string | null }[])
-            .map((sv) => sv.service_name).filter(Boolean).join(', '),
-          address: (r.service_address as string | null) ?? '',
-          city: (r.service_city as string | null) ?? '',
-          zip: (r.service_zip as string | null) ?? '',
-          status: r.status as string,
-        }))
+        .map((r) => {
+          // The same order every other board uses (job address, linked property, client service, client
+          // billing): most jobs carry no address of their own, so reading only the job left them blank.
+          const where = resolveStopAddress({
+            job: r,
+            property: embeddedOne(r.client_properties),
+            client: embeddedOne(r.clients),
+          })?.parts;
+          return {
+            jobId: r.id as string,
+            clientId: r.client_id as string,
+            clientName: (embeddedOne(r.clients)?.display_name as string | undefined) ?? '—',
+            jobNumber: (r.job_number as number | null) ?? null,
+            services: ((r.crm_job_services ?? []) as { service_name: string | null }[])
+              .map((sv) => sv.service_name).filter(Boolean).join(', '),
+            address: where?.address ?? '',
+            city: where?.city ?? '',
+            zip: where?.zip ?? '',
+            status: r.status as string,
+          };
+        })
         .sort((a, b) => a.clientName.localeCompare(b.clientName, undefined, { sensitivity: 'base' }));
     },
   });
