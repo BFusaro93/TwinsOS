@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import {
   Building2,
@@ -240,8 +241,17 @@ function AccordionSection({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // Settings search deep-links here with ?section=<title>: open the section and bring it into view.
+  const sectionParam = useSearchParams().get("section");
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sectionParam && sectionParam.toLowerCase() === title.toLowerCase()) {
+      setOpen(true);
+      requestAnimationFrame(() => rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }, [sectionParam, title]);
   return (
-    <div className="border-b last:border-0">
+    <div ref={rootRef} className="border-b last:border-0">
       <button
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
@@ -1394,7 +1404,26 @@ const TAB_KEYS = [
 // Settings being admin-only.
 const EQUIPT_SETTINGS_ROLES = new Set(["admin", "manager"]);
 
+/** useSearchParams (tab + section deep links) needs a Suspense boundary above it. */
 export function EquiptSettingsTabs() {
+  return (
+    <Suspense>
+      <EquiptSettingsTabsInner />
+    </Suspense>
+  );
+}
+
+function EquiptSettingsTabsInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<string>(
+    (TAB_KEYS as readonly string[]).includes(requestedTab ?? "") ? (requestedTab as string) : "customizations"
+  );
+  useEffect(() => {
+    if (requestedTab && (TAB_KEYS as readonly string[]).includes(requestedTab)) setActiveTab(requestedTab);
+  }, [requestedTab]);
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
   // Requisitions/POs, Vendors, and Products are shared with Landscapt-only
   // orgs (no Equipt module) — this whole page is still reachable to them
@@ -1434,7 +1463,17 @@ export function EquiptSettingsTabs() {
             : "Vendors, requisition & PO approval flows, and inventory costing"}
         </p>
       </div>
-      <Tabs defaultValue="customizations" className="mt-4">
+      <Tabs
+        value={(visibleTabs as readonly string[]).includes(activeTab) ? activeTab : "customizations"}
+        onValueChange={(tab) => {
+          setActiveTab(tab);
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("tab", tab);
+          params.delete("section"); // a section deep link belongs to the tab it was made for
+          router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        }}
+        className="mt-4"
+      >
         <div className="border-b px-4 md:px-6">
           <TabsList className="h-auto flex-wrap gap-0 rounded-none bg-transparent p-0">
             {visibleTabs.map((tab) => (

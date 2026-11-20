@@ -8,6 +8,7 @@ import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { FeedbackButton } from "@/components/shared/FeedbackButton";
 import { AskAIButton } from "@/components/shared/AskAIButton";
+import { SettingsSearchDialog } from "@/components/shared/SettingsSearchDialog";
 import { useUIStore, SidebarDrawerProvider } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 
@@ -47,6 +48,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         </div>
         <main className="flex-1 overflow-auto p-4 md:p-6 print:overflow-visible print:p-0">{children}</main>
       </div>
+      <SettingsSearchDialog />
       <AskAIButton />
       <FeedbackButton />
     </div>
