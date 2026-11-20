@@ -110,6 +110,20 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
           </p>
         </div>
 
+        {(competitor.slug === "service-autopilot" || competitor.slug === "homeworks") && (
+          <div className="mt-14 rounded-xl border border-[#d7e3de] bg-[#f1f6f4] p-6">
+            <div className="font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+              Already on {competitor.name}?
+            </div>
+            <p className="mt-1.5 text-[14.5px] leading-relaxed text-[#5a5a56]">
+              Our transition checklist lists exactly what to export and send, and what we handle for you.{" "}
+              <Link href="/switch" className="font-semibold text-[#005642] hover:underline">
+                See how switching works &rarr;
+              </Link>
+            </p>
+          </div>
+        )}
+
         <div className="mt-16">
           <h2 className="font-[family-name:var(--font-heading)] mb-6 text-2xl font-bold text-[#0a0a0a]">
             Why teams switch to {competitor.product}

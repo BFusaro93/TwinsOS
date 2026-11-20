@@ -106,6 +106,12 @@ export default function PricingPage() {
           <Button asChild size="lg" className="bg-[#60ab45] hover:bg-[#4a8a33]">
             <Link href="/signup">Start free trial</Link>
           </Button>
+          <p className="mt-5 text-sm text-[#4a6b1a]">
+            Switching from Service Autopilot or Homeworks?{" "}
+            <Link href="/switch" className="font-semibold text-[#005642] underline">
+              See the transition checklist
+            </Link>
+          </p>
         </Reveal>
       </div>
 

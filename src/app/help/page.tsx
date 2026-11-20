@@ -7,6 +7,7 @@ import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { Reveal } from "@/components/marketing/Reveal";
 import { HelpBrowser } from "@/components/marketing/HelpBrowser";
+import { GuideDownloads } from "@/components/marketing/GuideDownloads";
 import { SUPPORT_EMAIL } from "@/components/marketing/config";
 
 export const metadata: Metadata = buildMetadata({
@@ -39,6 +40,8 @@ export default function SupportPage() {
       </div>
 
       <HelpBrowser />
+
+      <GuideDownloads />
 
       <div className="bg-[#eef4e2] px-6 py-20 text-center sm:px-12">
         <Reveal>

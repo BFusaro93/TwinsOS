@@ -61,6 +61,8 @@ export async function updateSession(request: NextRequest) {
     pathname === "/integrations" ||
     pathname === "/contact" ||
     pathname === "/help" ||
+    pathname === "/switch" || // public switching-from-SA/Homeworks page
+    pathname.startsWith("/guides/") || // public downloadable PDF guides (public/guides)
     pathname.startsWith("/help/") || // public, indexable product guides
     pathname === "/compare" ||
     pathname.startsWith("/compare/") ||

@@ -76,7 +76,7 @@ export default function InvoicingFeaturePage() {
         ]}
       />
 
-      <FeatureSubpageCTA />
+      <FeatureSubpageCTA guideSlug="invoicing" />
       <MarketingFooter />
     </div>
   );

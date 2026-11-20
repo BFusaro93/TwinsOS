@@ -67,7 +67,7 @@ export default function WorkOrdersFeaturePage() {
 
       <RealScreenshot src="/screenshots/work-orders.png" alt="Real Work Orders list in Equipt" tab="Work Orders" accent="#2aa9e0" />
 
-      <FeatureSubpageCTA backHref="/features/equipt" backLabel="Back to Equipt overview" />
+      <FeatureSubpageCTA guideSlug="equipt" backHref="/features/equipt" backLabel="Back to Equipt overview" />
       <MarketingFooter />
     </div>
   );

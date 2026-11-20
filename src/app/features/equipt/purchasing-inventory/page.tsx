@@ -78,7 +78,7 @@ export default function PurchasingInventoryFeaturePage() {
         ]}
       />
 
-      <FeatureSubpageCTA backHref="/features/equipt" backLabel="Back to Equipt overview" />
+      <FeatureSubpageCTA guideSlug="equipt" backHref="/features/equipt" backLabel="Back to Equipt overview" />
       <MarketingFooter />
     </div>
   );
