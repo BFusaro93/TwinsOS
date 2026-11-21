@@ -82,7 +82,10 @@ export function ClientPortalTab() {
         if (!r.ok) throw new Error((d as { error?: string }).error ?? `HTTP ${r.status}`);
         const loaded = (d as { settings?: Partial<PortalSettings> }).settings;
         if (loaded) {
-          setForm({ ...DEFAULTS, ...loaded });
+          // The API stores blank text fields as null; a null must not override the "" default
+          // (the form calls .trim() on them), so only non-null saved values replace defaults.
+          const saved = Object.fromEntries(Object.entries(loaded).filter(([, v]) => v !== null)) as Partial<PortalSettings>;
+          setForm({ ...DEFAULTS, ...saved });
           setCardMax(centsToDollarInput(loaded.card_max_payment_cents));
           setAchMax(centsToDollarInput(loaded.ach_max_payment_cents));
         }
@@ -338,7 +341,7 @@ export function ClientPortalTab() {
             <Switch
               checked={form.email_support_on_new_ticket}
               onCheckedChange={(v) => patch("email_support_on_new_ticket", v)}
-              disabled={!form.support_email.trim()}
+              disabled={!(form.support_email ?? "").trim()}
             />
           </div>
           <div className="flex items-center justify-between">
