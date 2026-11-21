@@ -3332,6 +3332,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot Sq. Ft. Without it the service uses the org's Default Area Measurement from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
       },
       {
+        q: "How do I rename or delete an item in the Chemical Tracking lists?",
+        a: "In Settings > Chemical Tracking, click the pencil to rename an application method, target, volume unit or area treated, and the X to delete one. The switch still turns an item off without removing it. An item already used on a rate or an application can't be deleted (turn it off instead); renaming is always safe because records point to the item, not its name. Area units can't be renamed because their name carries their scale (1,000 Sq Ft, 100 Linear Ft), so add a new one instead. New companies start with the standard application methods and areas treated already filled in.",
+      },
+      {
         q: "What happens if the chemical area field is blank, or the service isn't treating turf?",
         a: "The amount is sized from the first area that resolves: a treated area entered on the job service, else the service's own Area measurement for chemical quantities, else the default field in Settings > Chemical Tracking. If none gives a number for that property, no amount is estimated and the quantity is left to enter by hand. The same applies when auto-calculate quantity is off or a rate per linear foot meets a square-foot field. For non-turf work set the service's own field (for example Parking Lot Sq. Ft.) or enter a treated area on the job.",
       },

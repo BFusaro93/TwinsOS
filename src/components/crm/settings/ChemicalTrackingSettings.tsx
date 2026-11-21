@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import {
   useChemicalSettings,
@@ -20,6 +21,7 @@ import {
   useChemicalLookupItems,
   useCreateChemicalLookupItem,
   useUpdateChemicalLookupItem,
+  useDeleteChemicalLookupItem,
 } from "@/lib/hooks/use-chemical-tracking";
 import { useCustomFieldDefs } from "@/lib/hooks/use-rate-matrix";
 import { useCustomFieldDefs as useClientFieldDefs } from "@/lib/hooks/use-client-custom-fields";
@@ -322,8 +324,16 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
   const { data: items = [], isLoading } = useChemicalLookupItems(listType);
   const create = useCreateChemicalLookupItem();
   const update = useUpdateChemicalLookupItem();
+  const remove = useDeleteChemicalLookupItem();
+  const [confirm, confirmDialog] = useConfirm();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
+  // Rename / delete, like the other Settings lists. Area unit names carry their scale
+  // ("1,000 Sq Ft", "100 Linear Ft" — see areaBasis), so renaming one would silently change
+  // every amount sized from it: those can be turned off or deleted but not renamed.
+  const canRename = listType !== "area_unit";
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const seedInFlightRef = useRef(false);
   const seedAttemptsRef = useRef(0);
   const resumeSeedRef = useRef(false);
@@ -374,6 +384,30 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
     })();
   }, [listType, isLoading, items, canCreate, create, update]);
 
+  function commitRename(id: string, current: string) {
+    const next = editName.trim();
+    if (!next || next === current) { setEditingId(null); return; }
+    if (items.some((i) => i.id !== id && i.name.trim().toLowerCase() === next.toLowerCase())) {
+      toast.error(`"${next}" already exists in this list`);
+      return;
+    }
+    update.mutate(
+      { id, name: next },
+      {
+        onSuccess: () => { toast.success("Renamed"); setEditingId(null); },
+        onError: (err) => toast.error(`Failed to rename: ${(err as Error).message}`),
+      }
+    );
+  }
+
+  async function handleDelete(id: string, name: string) {
+    if (!(await confirm({ title: `Delete "${name}"?`, description: "An item already used on chemical records can't be deleted; turn it off instead.", confirmLabel: "Delete", destructive: true }))) return;
+    remove.mutate(id, {
+      onSuccess: () => toast.success("Deleted"),
+      onError: (err) => toast.error((err as { message?: string })?.message ?? "Failed to delete"),
+    });
+  }
+
   function commitAdd() {
     const name = newName.trim();
     if (!name) return;
@@ -406,7 +440,27 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
       )}
       {items.map((item) => (
         <div key={item.id} className="flex items-center gap-3 py-2.5">
-          <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{item.name}</span>
+          {editingId === item.id ? (
+            <input
+              autoFocus
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={() => commitRename(item.id, item.name)}
+              onKeyDown={(e) => { if (e.key === "Enter") commitRename(item.id, item.name); if (e.key === "Escape") setEditingId(null); }}
+              className="flex-1 rounded-md border border-brand-400 px-3 py-1 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            />
+          ) : (
+            <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{item.name}</span>
+          )}
+          {canCreate && canRename && editingId !== item.id && (
+            <button
+              onClick={() => { setEditingId(item.id); setEditName(item.name); }}
+              className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-slate-100 dark:hover:bg-neutral-800 hover:text-slate-700 dark:hover:text-neutral-200"
+              title="Rename"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
           <button
             role="switch"
             aria-checked={item.isActive}
@@ -421,6 +475,15 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
               }`}
             />
           </button>
+          {canCreate && (
+            <button
+              onClick={() => void handleDelete(item.id, item.name)}
+              className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
+              title="Delete"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       ))}
 
@@ -451,6 +514,7 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
           </button>
         </div>
       ) : null}
+      {confirmDialog}
     </div>
   );
 }
