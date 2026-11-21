@@ -214,7 +214,7 @@ export function SalesMeetingsGuide() {
         <p>
           <strong>Who is reminded.</strong> The meeting&apos;s assigned rep. If that rep has left
           (deleted or deactivated) or has no login or email to reach, the reminder goes to the
-          client&apos;s account manager instead, and if there isn&apos;t one, to the organization&apos;s
+          Sales Rep on the client&apos;s record instead, and if there isn&apos;t one, to the organization&apos;s
           admins, so a reminder is never silently dropped. Each recipient&apos;s own notification
           settings still apply. If nobody can be reached the reminder isn&apos;t marked as sent, so it
           goes out on a later run once someone is set up while the meeting is still in its window.
