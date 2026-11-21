@@ -320,13 +320,13 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Estimate Approval Required" description="When an estimate requires your approval">
                 <Switch checked={prefs.emailEstimateApprovalRequired} onCheckedChange={() => toggle("emailEstimateApprovalRequired")} />
               </SettingRow>
-              <SettingRow label="Estimate Accepted by Client" description="When a client accepts your estimate via the proposal link or client portal">
+              <SettingRow label="Estimate Accepted by Client" description="When a client accepts an estimate via the proposal link or client portal. Sent to the Estimate Decision Recipients (all admins and managers by default) and the estimate's salesperson.">
                 <Switch checked={prefs.emailEstimateClientAccepted} onCheckedChange={() => toggle("emailEstimateClientAccepted")} />
               </SettingRow>
-              <SettingRow label="Estimate Declined by Client" description="When a client declines your estimate via the proposal link or client portal">
+              <SettingRow label="Estimate Declined by Client" description="When a client declines an estimate via the proposal link or client portal. Sent to the Estimate Decision Recipients (all admins and managers by default) and the estimate's salesperson.">
                 <Switch checked={prefs.emailEstimateClientRejected} onCheckedChange={() => toggle("emailEstimateClientRejected")} />
               </SettingRow>
-              <SettingRow label="Proposal Deposit Failed" description="When a client's deposit payment is declined or returned by their bank after they accepted">
+              <SettingRow label="Proposal Deposit Failed" description="When a client's deposit payment is declined or returned by their bank after they accepted. Sent to the Estimate Decision Recipients (all admins and managers by default) and the estimate's salesperson.">
                 <Switch checked={prefs.emailEstimateDepositFailed} onCheckedChange={() => toggle("emailEstimateDepositFailed")} />
               </SettingRow>
               <SettingRow label="Estimate Expiring Soon" description="When an estimate you created is expiring within 3 days and hasn't been accepted">
@@ -440,13 +440,13 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Estimate Approval Required" description="When an estimate requires your approval">
                 <Switch checked={prefs.inAppEstimateApprovalRequired} onCheckedChange={() => toggle("inAppEstimateApprovalRequired")} />
               </SettingRow>
-              <SettingRow label="Estimate Accepted by Client" description="When a client accepts your estimate via the proposal link or client portal">
+              <SettingRow label="Estimate Accepted by Client" description="When a client accepts an estimate via the proposal link or client portal. Sent to the Estimate Decision Recipients (all admins and managers by default) and the estimate's salesperson.">
                 <Switch checked={prefs.inAppEstimateClientAccepted} onCheckedChange={() => toggle("inAppEstimateClientAccepted")} />
               </SettingRow>
-              <SettingRow label="Estimate Declined by Client" description="When a client declines your estimate via the proposal link or client portal">
+              <SettingRow label="Estimate Declined by Client" description="When a client declines an estimate via the proposal link or client portal. Sent to the Estimate Decision Recipients (all admins and managers by default) and the estimate's salesperson.">
                 <Switch checked={prefs.inAppEstimateClientRejected} onCheckedChange={() => toggle("inAppEstimateClientRejected")} />
               </SettingRow>
-              <SettingRow label="Proposal Deposit Failed" description="When a client's deposit payment is declined or returned by their bank after they accepted">
+              <SettingRow label="Proposal Deposit Failed" description="When a client's deposit payment is declined or returned by their bank after they accepted. Sent to the Estimate Decision Recipients (all admins and managers by default) and the estimate's salesperson.">
                 <Switch checked={prefs.inAppEstimateDepositFailed} onCheckedChange={() => toggle("inAppEstimateDepositFailed")} />
               </SettingRow>
               <SettingRow label="Estimate Change Requested" description="When a client leaves a change request on an estimate">
