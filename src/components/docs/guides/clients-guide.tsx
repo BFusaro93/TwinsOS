@@ -777,6 +777,9 @@ export function ClientsGuide() {
             <strong>Tags you type.</strong> A new tag typed on a client is also added to Settings → Tags (when your role can edit CRM settings), so you can filter and bulk-tag by it.
           </li>
           <li>
+            <strong>Tag categories.</strong> In Settings → Tags each tag can sit in a category (Marketing, Packages, Billing and so on). The Add Tag list on a client and the bulk tag dialog then show tags under their category headings, categories A to Z with uncategorized tags last. The pencil renames a tag everywhere it is used, so clients keep it under the new name.
+          </li>
+          <li>
             <strong>Custom fields that didn&apos;t load.</strong> If a client&apos;s custom fields fail to load, the Custom Fields tab says so and saving the client leaves them unchanged.
           </li>
           <li>
