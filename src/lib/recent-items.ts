@@ -2,6 +2,8 @@
 // leads, invoices and estimates this person opened or picked from search. Kept in this browser only
 // (localStorage, one list per signed-in user) so nothing about it is stored on the server.
 
+import { createClient } from "@/lib/supabase/client";
+
 export type RecentItemKind = "client" | "lead" | "invoice" | "estimate";
 
 export type RecentItem = {
@@ -38,5 +40,38 @@ export function pushRecentItem(userId: string, item: RecentItem): void {
     window.localStorage.setItem(storageKey(userId), JSON.stringify([item, ...rest].slice(0, MAX_ITEMS)));
   } catch {
     // Private mode or storage full: recents are a convenience, so skip silently.
+  }
+}
+
+const TABLE_FOR_KIND: Record<RecentItemKind, "clients" | "crm_invoices" | "estimates"> = {
+  client: "clients",
+  lead: "clients",
+  invoice: "crm_invoices",
+  estimate: "estimates",
+};
+
+/** Drops recents whose record has since been deleted (or is no longer visible to this person),
+ *  and saves the trimmed list. If the lookup fails the list is returned untouched. */
+export async function pruneMissingRecentItems(userId: string, items: RecentItem[]): Promise<RecentItem[]> {
+  if (!userId || items.length === 0) return items;
+  try {
+    const supabase = createClient();
+    const tables = Array.from(new Set(items.map((i) => TABLE_FOR_KIND[i.kind])));
+    const alive = new Set<string>();
+    await Promise.all(
+      tables.map(async (table) => {
+        const ids = items.filter((i) => TABLE_FOR_KIND[i.kind] === table).map((i) => i.id);
+        const { data, error } = await supabase.from(table).select("id").in("id", ids).is("deleted_at", null);
+        if (error) throw error;
+        for (const row of data ?? []) alive.add(`${table}:${row.id}`);
+      })
+    );
+    const kept = items.filter((i) => alive.has(`${TABLE_FOR_KIND[i.kind]}:${i.id}`));
+    if (kept.length !== items.length) {
+      window.localStorage.setItem(storageKey(userId), JSON.stringify(kept));
+    }
+    return kept;
+  } catch {
+    return items;
   }
 }
