@@ -1088,7 +1088,7 @@ export function InvoicesList({ clientId }: Props) {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-3 py-3">
+              <th className="w-10 px-3 py-2.5">
                 <input
                   type="checkbox"
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -1102,7 +1102,7 @@ export function InvoicesList({ clientId }: Props) {
                 return (
                   <th
                     key={col.key}
-                    className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400" : "")}
+                    className={cn("px-2 py-2.5 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400" : "")}
                     onClick={sortable ? () => toggleSort(col.key) : undefined}
                   >
                     {col.label}
@@ -1118,7 +1118,7 @@ export function InvoicesList({ clientId }: Props) {
               Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: colSpan }).map((__, j) => (
-                    <td key={j} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -1139,7 +1139,7 @@ export function InvoicesList({ clientId }: Props) {
                   )}
                   onClick={() => setOpenInvoiceId(inv.id)}
                 >
-                  <td className="w-10 px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="w-10 px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -1151,13 +1151,13 @@ export function InvoicesList({ clientId }: Props) {
                     switch (col.key) {
                       case "number":
                         return (
-                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 font-mono text-xs text-slate-400 dark:text-neutral-500">
+                          <td key={col.key} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 font-mono text-xs text-slate-400 dark:text-neutral-500">
                             {inv.invoiceNumber != null ? `#${inv.invoiceNumber}` : "—"}
                           </td>
                         );
                       case "client":
                         return (
-                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px]">
+                          <td key={col.key} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px]">
                             <Link
                               href={`/crm/clients/${inv.clientId}`}
                               onClick={(e) => e.stopPropagation()}
@@ -1179,7 +1179,7 @@ export function InvoicesList({ clientId }: Props) {
                         const overdue = isOverdue(inv, todayYmd);
                         const showOverdueLabel = overdue && inv.status !== "draft";
                         return (
-                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
+                          <td key={col.key} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6">
                             <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", overdue ? STATUS_COLOR.overdue : STATUS_COLOR[inv.status])}>
                               {showOverdueLabel ? "overdue" : inv.status}
                             </span>
@@ -1200,10 +1200,10 @@ export function InvoicesList({ clientId }: Props) {
                         );
                       }
                       case "date":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-muted-foreground">{formatDate(inv.invoiceDate)}</td>;
+                        return <td key={col.key} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-muted-foreground">{formatDate(inv.invoiceDate)}</td>;
                       case "due":
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs", isOverdue(inv, todayYmd) ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground")}>
+                          <td key={col.key} className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs", isOverdue(inv, todayYmd) ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground")}>
                             {inv.dueDate
                               ? formatDate(inv.dueDate)
                               : inv.terms === "due_on_receipt" && inv.invoiceDate
@@ -1212,17 +1212,17 @@ export function InvoicesList({ clientId }: Props) {
                           </td>
                         );
                       case "total":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(inv.totalCents)}</td>;
+                        return <td key={col.key} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(inv.totalCents)}</td>;
                       case "balance":
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", inv.balanceCents > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400")}>
+                          <td key={col.key} className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", inv.balanceCents > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400")}>
                             {formatCurrency(inv.balanceCents)}
                           </td>
                         );
                       case "accountBalance": {
                         const acct = accountBalanceByClient.get(inv.clientId) ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", acct > 0 ? "text-red-600 dark:text-red-400" : acct < 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
+                          <td key={col.key} className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", acct > 0 ? "text-red-600 dark:text-red-400" : acct < 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
                             {acct < 0 ? "−" : ""}{formatCurrency(Math.abs(acct))}
                           </td>
                         );
@@ -1230,7 +1230,7 @@ export function InvoicesList({ clientId }: Props) {
                       case "prepay": {
                         const prepay = inv.clientPrepayCents ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", prepay > 0 ? "text-blue-600 dark:text-blue-400" : "text-slate-400 dark:text-neutral-500")}>
+                          <td key={col.key} className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", prepay > 0 ? "text-blue-600 dark:text-blue-400" : "text-slate-400 dark:text-neutral-500")}>
                             {formatCurrency(prepay)}
                           </td>
                         );
@@ -1238,21 +1238,21 @@ export function InvoicesList({ clientId }: Props) {
                       case "credits": {
                         const credits = inv.clientCreditsCents ?? 0;
                         return (
-                          <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", credits > 0 ? "text-green-600 dark:text-green-400" : "text-slate-400 dark:text-neutral-500")}>
+                          <td key={col.key} className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", credits > 0 ? "text-green-600 dark:text-green-400" : "text-slate-400 dark:text-neutral-500")}>
                             {formatCurrency(credits)}
                           </td>
                         );
                       }
                       case "paymentType":
                         return (
-                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">
+                          <td key={col.key} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">
                             {paymentTypeLabel(inv) || "—"}
                           </td>
                         );
                       case "delivery":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">{deliveryLabel(inv)}</td>;
+                        return <td key={col.key} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">{deliveryLabel(inv)}</td>;
                       case "frequency":
-                        return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">{frequencyLabel(inv)}</td>;
+                        return <td key={col.key} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground">{frequencyLabel(inv)}</td>;
                       default: return null;
                     }
                   })}
