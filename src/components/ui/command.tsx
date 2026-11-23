@@ -30,7 +30,7 @@ const CommandDialog = ({ children, filter, shouldFilter, ...props }: CommandDial
   return (
     <Dialog {...props}>
       {/* The search row is a fixed 48px so the dialog's close X (top-4, 16px tall) sits centered on it. Fixed height, so the box doesn't grow and shrink as results come and go; the list scrolls inside it. */}
-      <DialogContent className="h-[min(560px,85dvh)] max-w-2xl grid-rows-[minmax(0,1fr)] overflow-hidden p-0 shadow-lg">
+      <DialogContent className="h-[min(560px,85dvh)] max-w-2xl grid-rows-[minmax(0,1fr)] overflow-hidden p-0 shadow-lg sm:p-0">
         <Command
           filter={filter}
           shouldFilter={shouldFilter}
