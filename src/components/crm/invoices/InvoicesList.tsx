@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+import { dollars, exportSelection, type BulkExportFormat } from "@/lib/bulk-export";
 // Shared with Settings → Import / Export so both import the same columns.
 import { INVOICE_REQUIRED_COLUMNS, INVOICE_TEMPLATE_COLUMNS, invoiceToCsvRow } from "@/lib/crm/import-export-columns";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -474,6 +475,35 @@ export function InvoicesList({ clientId }: Props) {
     });
     return list;
   }, [allInvoices, idsFilter, quickFilter, search, filterEntries, statusFilters, methodFilters, tagFilters, sortKey, sortDir, accountBalanceByClient, todayYmd]);
+
+  // Export the ticked rows exactly as the table shows them (current sort), as a
+  // spreadsheet-friendly report: money as numbers, not "$1,234.00" text.
+  async function exportSelected(format: BulkExportFormat) {
+    const selected = filtered.filter((i) => selectedIds.has(i.id));
+    if (selected.length === 0) return;
+    await exportSelection(
+      format,
+      "invoices",
+      "Invoices",
+      ["Invoice #", "Client", "Description", "Status", "Invoice Date", "Due Date", "Terms", "PO #", "Subtotal", "Discount", "Tax", "Total", "Paid", "Balance"],
+      selected.map((i) => [
+        i.invoiceNumber != null ? i.invoiceNumber : "",
+        i.clientName ?? "",
+        i.description ?? "",
+        effectiveStatus(i, todayYmd),
+        i.invoiceDate ?? "",
+        i.dueDate ?? "",
+        i.terms ?? "",
+        i.poNumber ?? "",
+        dollars(i.subtotalCents),
+        dollars(i.discountCents),
+        dollars(i.taxCents),
+        dollars(i.totalCents),
+        dollars(i.amountPaidCents),
+        dollars(i.balanceCents),
+      ])
+    );
+  }
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -929,6 +959,12 @@ export function InvoicesList({ clientId }: Props) {
               >
                 Print Selected
               </DropdownMenuItem>
+              <DropdownMenuItem disabled={!someSelected} onSelect={() => void exportSelected("csv")}>
+                Export Selected (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!someSelected} onSelect={() => void exportSelected("xlsx")}>
+                Export Selected (Excel)
+              </DropdownMenuItem>
               {onChargeTab && can("acct_add_modify_payments") && (
                 <>
                   <DropdownMenuSeparator />
@@ -1121,9 +1157,10 @@ export function InvoicesList({ clientId }: Props) {
                         );
                       case "client":
                         return (
-                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                          <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px]">
                             <Link
                               href={`/crm/clients/${inv.clientId}`}
+                              onClick={(e) => e.stopPropagation()}
                               title={inv.clientName ?? undefined}
                               className="block font-medium text-brand-600 dark:text-brand-400 hover:underline truncate"
                             >

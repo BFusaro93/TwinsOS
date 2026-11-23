@@ -10,7 +10,8 @@ export type CommentRecordType =
   | "damage_case"
   | "injury_case"
   | "ticket"
-  | "crm_estimate";
+  | "crm_estimate"
+  | "crm_invoice";
 
 export interface Comment extends BaseRecord {
   recordType: CommentRecordType;

@@ -1096,6 +1096,9 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
       // Not editable in this panel editor — carried through so saving a
       // template-seeded monthly trend doesn't silently turn it daily.
       dateBucket: visualType === "bar" || visualType === "line" ? panel.visual.dateBucket : undefined,
+      dateBucketRatio: visualType === "bar" || visualType === "line" ? panel.visual.dateBucketRatio : undefined,
+      seriesColumn: visualType === "bar" || visualType === "line" ? panel.visual.seriesColumn : undefined,
+      rangeBuckets: visualType === "bar" || visualType === "line" ? panel.visual.rangeBuckets : undefined,
       savedReportId,
       formatRules,
       colorSpectrumColumns,

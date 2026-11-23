@@ -1195,7 +1195,7 @@ export function useUpdateInvoiceStatus() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: current, error: currentErr } = await (supabase as any)
         .from("crm_invoices")
-        .select("status, total_cents, amount_paid_cents, client_id, invoice_number")
+        .select("status, total_cents, amount_paid_cents, client_id, invoice_number, locked")
         .eq("id", id)
         .single();
       if (currentErr) throw currentErr;
@@ -1207,6 +1207,13 @@ export function useUpdateInvoiceStatus() {
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patch: Record<string, any> = { status };
+      // Marking an invoice sent or printed freezes its amounts, same as actually
+      // emailing or printing it does — otherwise it stays editable. Keeps the
+      // original locked_at if it was already locked.
+      if ((status === "sent" || status === "printed") && !current?.locked) {
+        patch.locked = true;
+        patch.locked_at = new Date().toISOString();
+      }
       // A manual status can't contradict the payments on the invoice. This hook
       // writes only `status`, so "Mark as Paid" on an unpaid invoice produced
       // status=paid with the full balance still owed (still in AR and still

@@ -1025,9 +1025,9 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                     <PriorityBadge priority={t.priority} />
                   </td>
                   {!clientId && (
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3">
                       {t.clientId ? (
-                        <Link href={`/crm/clients/${t.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+                        <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${t.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                           {t.clientName ?? "—"}
                         </Link>
                       ) : (

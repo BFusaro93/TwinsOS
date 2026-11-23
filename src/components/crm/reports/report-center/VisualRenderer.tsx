@@ -336,11 +336,61 @@ function PipelineVisual({ result, visual }: { result: ReportResult; visual: Visu
   );
 }
 
-function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualSpec }) {
-  const labelCol = colFor(result.columns, visual.labelColumn);
-  const valueCols = visual.valueColumns
-    .map((key) => colFor(result.columns, key))
+function ChartVisual({ result: rawResult, visual }: { result: ReportResult; visual: VisualSpec }) {
+  // Monthly trends are built client-side off a daily query (see dateBucket).
+  // Three optional extras all work by registering synthetic columns so the
+  // rest of the chart code (tooltips, axis formats) treats them like real ones:
+  //  - dateBucketRatio: a ratio of two monthly sums (e.g. revenue ÷ man-hours)
+  //  - seriesColumn: one series per distinct value of a text column
+  //  - rangeBuckets: numeric label column grouped into labelled ranges
+  const monthly =
+    visual.dateBucket === "month" && (visual.type === "bar" || visual.type === "line");
+  const ratio = monthly ? visual.dateBucketRatio : undefined;
+  const seriesKey = monthly ? visual.seriesColumn : undefined;
+  const ranges =
+    visual.type === "bar" || visual.type === "line" ? visual.rangeBuckets : undefined;
+
+  const baseValueCols = visual.valueColumns
+    .map((key) => colFor(rawResult.columns, key))
     .filter((c): c is ReportColumnDef => !!c);
+
+  // Distinct series values, biggest first (by the first value column).
+  const seriesValues: string[] = [];
+  if (seriesKey && baseValueCols.length > 0) {
+    const totals = new Map<string, number>();
+    for (const row of rawResult.rows) {
+      const sv = String(row[seriesKey] ?? "—");
+      totals.set(sv, (totals.get(sv) ?? 0) + Math.abs(Number(row[baseValueCols[0].key]) || 0));
+    }
+    seriesValues.push(...[...totals.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k));
+  }
+  const seriesCols: ReportColumnDef[] = seriesValues.flatMap((sv) =>
+    baseValueCols.map(
+      (vc) =>
+        ({
+          key: `${vc.key}|${sv}`,
+          label: baseValueCols.length > 1 ? `${sv} · ${vc.label}` : sv,
+          type: vc.type,
+        }) as ReportColumnDef
+    )
+  );
+  const ratioCol = ratio
+    ? ({ key: ratio.key, label: ratio.label, type: ratio.type } as ReportColumnDef)
+    : undefined;
+
+  const result: ReportResult =
+    ratioCol || seriesCols.length > 0
+      ? {
+          ...rawResult,
+          columns: [...rawResult.columns, ...seriesCols, ...(ratioCol ? [ratioCol] : [])],
+        }
+      : rawResult;
+  const labelCol = colFor(result.columns, visual.labelColumn);
+  const valueCols: ReportColumnDef[] = ratioCol
+    ? [ratioCol]
+    : seriesCols.length > 0
+      ? seriesCols
+      : baseValueCols;
 
   if (!labelCol || valueCols.length === 0) {
     return (
@@ -353,23 +403,67 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
   // Monthly trend off a daily query: sum the value columns per calendar
   // month, oldest first.
   const bucketByMonth =
-    visual.dateBucket === "month" &&
-    (visual.type === "bar" || visual.type === "line") &&
-    (labelCol.type === "date" || labelCol.type === "datetime");
+    monthly && (labelCol.type === "date" || labelCol.type === "datetime");
   let sourceRows = result.rows;
   if (bucketByMonth) {
     const byMonth = new Map<string, Record<string, unknown>>();
-    for (const row of result.rows) {
+    // Ratio operands may name a pivoted series ("count_all|accepted"); the
+    // plain column underneath is what each row carries.
+    // An operand may also add several ("count_all|accepted+count_all|invoiced").
+    const operandParts = (op: string) => op.split("+");
+    const baseKey = (k: string) => k.split("|")[0];
+    const operandValue = (row: Record<string, unknown>, op: string) =>
+      operandParts(op).reduce((sum, part) => sum + (Number(row[part]) || 0), 0);
+    const sumKeys = ratio
+      ? [
+          ...new Set(
+            [...operandParts(ratio.numerator), ...operandParts(ratio.denominator)].map(baseKey)
+          ),
+        ]
+      : baseValueCols.map((vc) => vc.key);
+    for (const row of rawResult.rows) {
       const ym = String(row[labelCol.key] ?? "").slice(0, 7);
       if (!/^\d{4}-\d{2}$/.test(ym)) continue;
       const acc = byMonth.get(ym) ?? { [labelCol.key]: ym };
-      for (const vc of valueCols) {
-        acc[vc.key] = (Number(acc[vc.key]) || 0) + (Number(row[vc.key]) || 0);
+      const sv = seriesKey ? String(row[seriesKey] ?? "—") : undefined;
+      for (const key of sumKeys) {
+        const v = Number(row[key]) || 0;
+        acc[key] = (Number(acc[key]) || 0) + v;
+        if (sv !== undefined) acc[`${key}|${sv}`] = (Number(acc[`${key}|${sv}`]) || 0) + v;
       }
       byMonth.set(ym, acc);
     }
-    sourceRows = [...byMonth.keys()].sort().map((ym) => byMonth.get(ym)!);
+    sourceRows = [...byMonth.keys()]
+      .sort()
+      .map((ym) => byMonth.get(ym)!)
+      .filter((row) => !ratio || operandValue(row, ratio.denominator) > 0)
+      .map((row) =>
+        ratio
+          ? {
+              ...row,
+              [ratio.key]:
+                (operandValue(row, ratio.numerator) / operandValue(row, ratio.denominator)) *
+                (ratio.scale ?? 1),
+            }
+          : row
+      );
+  } else if (ranges && ranges.length > 0) {
+    // Numeric label column grouped into labelled ranges (e.g. days overdue →
+    // "1–30", "31–60"); each range sums the value columns of rows inside it.
+    sourceRows = ranges.map((range) => {
+      const acc: Record<string, unknown> = { [labelCol.key]: range.label };
+      for (const vc of valueCols) acc[vc.key] = 0;
+      for (const row of result.rows) {
+        const n = Number(row[labelCol.key]);
+        if (!Number.isFinite(n)) continue;
+        if (range.min !== undefined && n < range.min) continue;
+        if (range.max !== undefined && n > range.max) continue;
+        for (const vc of valueCols) acc[vc.key] = (Number(acc[vc.key]) || 0) + (Number(row[vc.key]) || 0);
+      }
+      return acc;
+    });
   }
+  const rangeLabelled = !bucketByMonth && !!ranges && ranges.length > 0;
 
   let data = sourceRows.map((row) => {
     const point: Record<string, unknown> = {
@@ -378,7 +472,9 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
             month: "short",
             year: "2-digit",
           })
-        : formatCellValue(row[labelCol.key], labelCol.type),
+        : rangeLabelled
+          ? String(row[labelCol.key])
+          : formatCellValue(row[labelCol.key], labelCol.type),
     };
     for (const vc of valueCols) point[vc.key] = Number(row[vc.key]) || 0;
     return point;

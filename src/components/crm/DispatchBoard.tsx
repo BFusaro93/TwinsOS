@@ -2063,6 +2063,7 @@ import { DispatchCalendar } from "@/components/crm/dispatch/DispatchCalendar";
 import { DispatchWorkMap, type DispatchWorkMapStop } from "@/components/crm/dispatch/DispatchWorkMap";
 import { DispatchWeather } from "@/components/crm/dispatch/DispatchWeather";
 import { CalendarRange, List as ListIcon, LayoutDashboard } from "lucide-react";
+import { stopRowClickOnControls } from "@/lib/utils/row-click";
 
 /** Route-sheet blank fill-in field — an underlined space for the crew to write on the printed page. */
 function WriteInBlank({ className = "" }: { className?: string }) {
@@ -3838,7 +3839,7 @@ function VisitRow({
       </td>
 
       {/* St */}
-      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+      <td className="px-2 py-2" onClick={stopRowClickOnControls}>
         <StatusCycleButton visit={visit} isDriving={isDrivingToThis} onSaveTime={saveVisitTime} />
       </td>
 
@@ -3847,7 +3848,7 @@ function VisitRow({
       {/* Below lg the table scrolls sideways inside its own box; the client
           stays pinned (bg-inherit keeps the selected/hover tint) so you
           always know which row you're looking at. */}
-      <td className="min-w-[200px] px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:min-w-[160px] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
+      <td className="min-w-[200px] px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:min-w-[160px] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={stopRowClickOnControls}>
         <div className="flex items-center gap-1">
           {visit.effectiveHighPriority && (
             <span title="High priority" className="shrink-0"><Flame className="h-3 w-3 text-red-500 dark:text-red-400" /></span>
