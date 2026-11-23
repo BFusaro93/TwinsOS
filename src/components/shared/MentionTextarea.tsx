@@ -95,9 +95,18 @@ export function MentionTextarea({
 
   const { display, ranges } = useMemo(() => toDisplay(value), [value]);
 
-  const matches = query
-    ? (users ?? []).filter((u) => u.name.toLowerCase().includes(query.text.toLowerCase())).slice(0, 6)
-    : [];
+  // Everyone who can actually be notified: skip deactivated logins and the
+  // shared per-crew field accounts. No small cap — the list scrolls — so large
+  // orgs can still reach everyone (it used to stop at the first 6).
+  const matches = useMemo(() => {
+    if (!query) return [];
+    const q = query.text.toLowerCase();
+    return (users ?? [])
+      .filter((u) => u.status !== "inactive" && u.role !== "crew")
+      .filter((u) => u.name.toLowerCase().includes(q))
+      .sort((a, b) => Number(b.name.toLowerCase().startsWith(q)) - Number(a.name.toLowerCase().startsWith(q)))
+      .slice(0, 50);
+  }, [query, users]);
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const nextDisplay = e.target.value;
@@ -176,7 +185,7 @@ export function MentionTextarea({
               ? { bottom: `calc(100% - ${query.anchor.top}px + 4px)` }
               : { top: query.anchor.bottom + 4 }),
           }}
-          className={`absolute z-20 w-64 overflow-hidden rounded-md border shadow-lg ${
+          className={`absolute z-20 max-h-56 w-64 overflow-y-auto rounded-md border shadow-lg ${
             dark ? "border-[#3a3a3a] bg-[#2a2a2a]" : "border-border bg-card"
           }`}
         >
@@ -187,6 +196,7 @@ export function MentionTextarea({
               <button
                 key={u.id}
                 type="button"
+                ref={i === highlighted ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
                 onMouseDown={(e) => { e.preventDefault(); pick(u); }}
                 className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm ${
                   i === highlighted

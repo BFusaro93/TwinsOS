@@ -122,6 +122,7 @@ import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { cn, formatCurrency, formatDate, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { isValidEmail } from "@/lib/utils/email";
+import { confirmEmailNotTypo } from "@/lib/utils/email-typo";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract, InvoiceStatus } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
@@ -1043,6 +1044,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       toast.error("Enter a valid billing email address");
       return;
     }
+    if (!confirmEmailNotTypo(form.primaryEmail, form.billingEmail)) return;
     // Setting a client Inactive asks the same "Cancel their N upcoming visits?" question
     // as Cancel (a lead can't be scheduled, so it has none). Answered before saving,
     // acted on only once the status change has saved.
@@ -1800,6 +1802,7 @@ function ContactDialog({
   async function handleSave() {
     if (!firstName.trim()) { toast.error("First name is required"); return; }
     if (email.trim() && !isValidEmail(email)) { toast.error("Enter a valid email address"); return; }
+    if (!confirmEmailNotTypo(email)) return;
     const validPhones = phones.filter((p) => p.phone.trim());
     const payload = {
       firstName: firstName.trim(),

@@ -63,6 +63,8 @@ import { AlertTriangle, Download, FileText, Globe, Loader2, Mail, RotateCcw, Tra
 import { TicketEmailDialog } from "@/components/crm/tickets/TicketEmailDialog";
 import { toast } from "sonner";
 import type { TicketEmail } from "@/lib/hooks/use-tickets";
+import type { Client } from "@/types/crm";
+import { useClient } from "@/lib/hooks/use-clients";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
 import { escapeHtml } from "@/lib/utils/escape-html";
 
@@ -107,43 +109,90 @@ const FALLBACK_CATEGORIES: string[] = [...DEFAULT_TICKET_CATEGORIES];
 // (escapeHtml itself now lives in lib/utils/escape-html — see its own
 // comment for why it isn't imported from lib/email/send.)
 
-function printTicket(ticket: CRMTicket) {
-  const win = window.open("", "_blank", "width=700,height=900");
+type PrintClient = Pick<
+  Client,
+  "displayName" | "source" | "primaryEmail" | "primaryPhone" | "serviceAddress" | "serviceCity" | "serviceState" | "serviceZip"
+>;
+
+function printTicket(ticket: CRMTicket, client?: PrintClient | null) {
+  const win = window.open("", "_blank", "width=800,height=1000");
   if (!win) { toast.error("Pop-up blocked — allow pop-ups to print tickets"); return; }
+  const fmtDate = (d: string, noon = false) =>
+    new Date(noon ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const field = (label: string, value: string | null | undefined, extra = "", wide = false) =>
+    `<div class="f${wide ? " wide" : ""}"><div class="fl">${escapeHtml(label)}</div><div class="fv" ${extra}>${value ? escapeHtml(value) : "—"}</div></div>`;
+  const cityLine = [client?.serviceCity, [client?.serviceState, client?.serviceZip].filter(Boolean).join(" ")]
+    .filter(Boolean).join(", ");
+  const address = [client?.serviceAddress, cityLine].filter(Boolean).join("\n");
+  const clientName = client?.displayName ?? ticket.clientName;
+  const statusClass = `st-${ticket.status}`;
   win.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <title>Ticket #${escapeHtml(String(ticket.ticketNumber))}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, sans-serif; padding: 32px; color: #111; font-size: 14px; }
-    h1 { font-size: 22px; margin-bottom: 4px; }
-    .meta { color: #555; margin-bottom: 24px; font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
-    td:first-child { font-weight: 600; width: 140px; color: #555; }
-    .body-section { margin-top: 20px; border-top: 2px solid #eee; padding-top: 16px; }
-    .body-section h2 { font-size: 13px; text-transform: uppercase; letter-spacing:.05em; color:#888; margin-bottom:8px; }
-    .body-text { white-space: pre-wrap; line-height: 1.6; }
+    body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; padding: 36px; color: #1f2937; font-size: 13px; line-height: 1.45; }
+    .top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #16a34a; padding-bottom: 14px; margin-bottom: 20px; }
+    .num { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #16a34a; }
+    h1 { font-size: 22px; line-height: 1.25; margin-top: 4px; max-width: 480px; }
+    .pills { display: flex; gap: 6px; margin-top: 6px; justify-content: flex-end; }
+    .pill { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: #f3f4f6; color: #374151; text-transform: capitalize; }
+    .st-open { background: #dbeafe; color: #1d4ed8; } .st-pending { background: #fef3c7; color: #b45309; }
+    .st-on_hold { background: #ede9fe; color: #6d28d9; } .st-closed { background: #dcfce7; color: #15803d; }
+    .printed { font-size: 11px; color: #9ca3af; text-align: right; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; }
+    .card h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; margin-bottom: 10px; }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+    .f.wide { grid-column: 1 / -1; }
+    .fl { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; margin-bottom: 1px; }
+    .fv { font-size: 13px; font-weight: 500; white-space: pre-line; word-break: break-word; }
+    .notes { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; }
+    .notes h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; margin-bottom: 8px; }
+    .body-text { white-space: pre-wrap; line-height: 1.6; font-size: 13px; }
     @page { size: letter portrait; margin: 0.6in; }
-    @media print { body { padding: 0; } }
+    @media print { body { padding: 0; } .card, .notes { break-inside: avoid; } }
   </style>
 </head>
 <body>
-  <h1>Ticket #${escapeHtml(String(ticket.ticketNumber))}</h1>
-  <div class="meta">Printed ${new Date().toLocaleString()}</div>
-  <table>
-    <tr><td>Subject</td><td>${escapeHtml(ticket.subject ?? "(no subject)")}</td></tr>
-    <tr><td>Type</td><td style="text-transform:capitalize">${escapeHtml(ticket.type)}</td></tr>
-    <tr><td>Status</td><td>${escapeHtml(TICKET_STATUS_LABEL[ticket.status])}</td></tr>
-    <tr><td>Priority</td><td style="text-transform:capitalize">${escapeHtml(ticket.priority)}</td></tr>
-    <tr><td>Category</td><td>${escapeHtml(ticket.category ?? "—")}</td></tr>
-    <tr><td>Client</td><td>${escapeHtml(ticket.clientName ?? "—")}</td></tr>
-    <tr><td>Assigned To</td><td>${escapeHtml(ticket.assignedTo ?? "—")}</td></tr>
-    <tr><td>Due Date</td><td>${ticket.dueDate ? new Date(ticket.dueDate + "T12:00:00").toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" }) : "—"}</td></tr>
-    <tr><td>Created</td><td>${new Date(ticket.createdAt).toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" })}</td></tr>
-  </table>
-  ${ticket.body ? `<div class="body-section"><h2>Notes</h2><p class="body-text">${escapeHtml(ticket.body)}</p></div>` : ""}
+  <div class="top">
+    <div>
+      <div class="num">Ticket #${escapeHtml(String(ticket.ticketNumber))}</div>
+      <h1>${escapeHtml(ticket.subject ?? "(no subject)")}</h1>
+    </div>
+    <div>
+      <div class="pills">
+        <span class="pill ${statusClass}">${escapeHtml(TICKET_STATUS_LABEL[ticket.status])}</span>
+        <span class="pill">${escapeHtml(ticket.priority)} priority</span>
+      </div>
+      <div class="printed" style="margin-top:8px">Printed ${escapeHtml(new Date().toLocaleString())}</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h2>Ticket</h2>
+      <div class="fields">
+        ${field("Type", ticket.type, 'style="text-transform:capitalize"')}
+        ${field("Category", ticket.category)}
+        ${field("Assigned To", ticket.assignedTo)}
+        ${field("Due Date", ticket.dueDate ? fmtDate(ticket.dueDate, true) : null)}
+        ${field("Created", fmtDate(ticket.createdAt))}
+        ${field("Closed", ticket.closedAt ? fmtDate(ticket.closedAt) : null)}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Client</h2>
+      <div class="fields">
+        ${field("Name", clientName, "", true)}
+        ${field("Source", client?.source)}
+        ${field("Phone", client?.primaryPhone)}
+        ${field("Email", client?.primaryEmail, "", true)}
+        ${field("Address", address || null, "", true)}
+      </div>
+    </div>
+  </div>
+  ${ticket.body ? `<div class="notes"><h2>Notes</h2><p class="body-text">${escapeHtml(ticket.body)}</p></div>` : ""}
   <script>window.onload=function(){window.print();}<\/script>
 </body>
 </html>`);
@@ -207,7 +256,7 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
               className={cn(
                 "flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
                 form.type === t.value
-                  ? "border-slate-900 bg-slate-900 text-white"
+                  ? "border-slate-900 bg-slate-900 text-white dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100"
                   : "border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
               )}>
               {t.label}
@@ -780,6 +829,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
   const canModify = !permissionsLoading && can("tickets_view_modify");
   const [emailOpen, setEmailOpen] = useState(false);
   const { data: contributors } = useTicketContributors(ticket?.id ?? "");
+  const { data: ticketClient } = useClient(ticket?.clientId ?? "");
   const [editing, setEditing] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -881,7 +931,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
               />
               <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
               <Button variant="outline" size="sm" className="gap-1.5"
-                onClick={() => printTicket(ticket)}>
+                onClick={() => printTicket(ticket, ticketClient)}>
                 <Download className="h-3.5 w-3.5" />
                 PDF
               </Button>

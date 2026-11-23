@@ -176,7 +176,7 @@ function useBreadcrumbs() {
 type QuickAddItem = { label: string; quickAdd?: NonNullable<QuickAddType>; href?: string };
 
 const CRM_QUICK_ADD: QuickAddItem[] = [
-  { label: "Client",   quickAdd: "client" },
+  { label: "Client / Lead", quickAdd: "client" },
   { label: "Job",      quickAdd: "job" },
   { label: "Estimate", quickAdd: "estimate" },
   { label: "Ticket",   quickAdd: "ticket" },
