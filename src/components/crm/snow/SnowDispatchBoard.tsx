@@ -90,6 +90,7 @@ import {
   ListChecks, ThermometerSnowflake, Ruler, HelpCircle, MapPin, ArrowUp, ArrowDown, Route as RouteIcon, Search, Tag, Mail, ArrowUpDown, MessageSquare, Download, BarChart3, SkipForward, Undo2, Eraser,
 } from "lucide-react";
 import type { CRMJobVisit, VisitStatus, StormEventStatus } from "@/types/crm-jobs";
+import { stopRowClickOnControls } from "@/lib/utils/row-click";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -2578,8 +2579,8 @@ export function SnowDispatchBoard() {
                             </div>
                           )}
                         </td>
-                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><StatusCycleButton visit={v} /></td>
-                        <td className="px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-2 py-2" onClick={stopRowClickOnControls}><StatusCycleButton visit={v} /></td>
+                        <td className="px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={stopRowClickOnControls}>
                           <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{v.clientName ?? "—"}</Link>
                           {(v.pushNumber ?? 1) > 1 && (
                             <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
@@ -2657,7 +2658,7 @@ export function SnowDispatchBoard() {
                           )}
                         </td>
                         {isVisible("date") && (
-                          <td className="px-2 py-2 text-muted-foreground whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <td className="px-2 py-2 text-muted-foreground whitespace-nowrap" onClick={stopRowClickOnControls}>
                             <VisitDateCell visit={v} canEdit={canManage} onSave={saveVisitDate} />
                           </td>
                         )}
@@ -2668,7 +2669,7 @@ export function SnowDispatchBoard() {
                         {isVisible("zip") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceZip ?? "—"}</td>}
                         {isVisible("priority") && <td className="px-2 py-2 text-muted-foreground capitalize">{v.clientPriority ?? "—"}</td>}
                         {isVisible("trigger") && <td className="px-2 py-2 text-muted-foreground">{v.job?.inchTrigger != null ? `${v.job.inchTrigger}"` : "—"}</td>}
-                        {isVisible("crew") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                        {isVisible("crew") && <td className="px-2 py-2" onClick={stopRowClickOnControls}>
                           {canManage ? (
                             <Select value={effectiveCrewIdOf(v) ?? "none"} onValueChange={(c) => void changeCrew([v.id], c === "none" ? null : c)}>
                               <SelectTrigger className="h-7 w-48 text-[11px]"><SelectValue /></SelectTrigger>

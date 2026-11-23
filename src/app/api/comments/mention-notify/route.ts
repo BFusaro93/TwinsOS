@@ -13,7 +13,7 @@ import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
  */
 const RECORD_TYPES = new Set([
   "requisition", "po", "receiving", "project", "work_order",
-  "job_photo", "damage_case", "ticket", "crm_estimate", "injury_case",
+  "job_photo", "damage_case", "ticket", "crm_estimate", "injury_case", "crm_invoice",
 ]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

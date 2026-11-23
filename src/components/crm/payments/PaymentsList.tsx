@@ -25,6 +25,7 @@ import { guardStripeDialogDismiss, STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/strip
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { exportCSV } from "@/lib/csv";
+import { dollars, exportSelection, type BulkExportFormat } from "@/lib/bulk-export";
 import { AR_WRITE_OFF_METHOD } from "@/lib/reports/helpers";
 // Shared with Settings → Import / Export so both import the same columns.
 import { PAYMENT_REQUIRED_COLUMNS, PAYMENT_TEMPLATE_COLUMNS, paymentToCsvRow } from "@/lib/crm/import-export-columns";
@@ -46,9 +47,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
-import { Plus, RotateCcw, X, Loader2, Check, CreditCard } from "lucide-react";
+import { Plus, RotateCcw, X, Loader2, Check, CreditCard, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
@@ -999,6 +1006,10 @@ export function PaymentsList({ clientId }: Props) {
   const [search, setSearch] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PAYMENT_COLUMNS.map((c) => c.key));
   const [viewPayment, setViewPayment] = useState<CRMPayment | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // null = the order the list loaded in; a header click overrides it.
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // paymentDate is a calendar date — compare calendar dates on the org's clock.
   const orgTimeZone = useOrgTimeZone();
@@ -1053,8 +1064,79 @@ export function PaymentsList({ clientId }: Props) {
       );
     }
 
+    if (sortKey) {
+      const sign = sortDir === "asc" ? 1 : -1;
+      const value = (p: (typeof list)[number]): number | string => {
+        switch (sortKey) {
+          case "date": return p.paymentDate;
+          case "client": return (p.clientName ?? "").toLowerCase();
+          case "amount": return p.amountCents;
+          case "unused": return p.unusedAmountCents;
+          case "refunded": return p.refundedAmountCents;
+          case "reference": return (p.reference ?? "").toLowerCase();
+          case "method": return paymentMethodDisplay(p.method, p.methodLabel).toLowerCase();
+          default: return 0;
+        }
+      };
+      // Total order (date desc, then id) so a background refetch never reshuffles tied rows.
+      list = [...list].sort((a, b) => {
+        const av = value(a), bv = value(b);
+        const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+        if (cmp !== 0) return cmp * sign;
+        if (a.paymentDate !== b.paymentDate) return a.paymentDate < b.paymentDate ? 1 : -1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+    }
+
     return list;
-  }, [payments, activeTab, filterEntries, methodFilters, search, thirtyDaysAgo]);
+  }, [payments, activeTab, filterEntries, methodFilters, search, thirtyDaysAgo, sortKey, sortDir]);
+
+  const allSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
+  const someSelected = selectedIds.size > 0;
+  function toggleAll() {
+    setSelectedIds(allSelected ? new Set() : new Set(filtered.map((p) => p.id)));
+  }
+  function toggleRow(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  // Export the ticked rows in the order shown, as a spreadsheet-friendly report.
+  async function exportSelected(format: BulkExportFormat) {
+    const selected = filtered.filter((p) => selectedIds.has(p.id));
+    if (selected.length === 0) return;
+    await exportSelection(
+      format,
+      "payments",
+      "Payments",
+      ["Date", "Client", "Amount", "Unused", "Refunded", "Payment Method", "Reference #", "Memo", "Invoice #"],
+      selected.map((p) => [
+        p.paymentDate,
+        p.clientName ?? "",
+        dollars(p.amountCents),
+        dollars(p.unusedAmountCents),
+        dollars(p.refundedAmountCents),
+        paymentMethodDisplay(p.method, p.methodLabel),
+        p.reference ?? "",
+        p.memo ?? "",
+        p.invoiceNumber != null ? p.invoiceNumber : "",
+      ])
+    );
+  }
+
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+  function SortIcon({ col }: { col: string }) {
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-300 dark:text-neutral-500" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />
+      : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />;
+  }
 
   if (!permissionsLoading && !can("acct_view_payment_list")) {
     return (
@@ -1192,6 +1274,26 @@ export function PaymentsList({ clientId }: Props) {
       {/* Dark actions bar */}
       <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3"
+              >
+                Actions {someSelected && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>}
+                <ChevronDown className="ml-1 h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem disabled={!someSelected} onSelect={() => void exportSelected("csv")}>
+                Export Selected (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!someSelected} onSelect={() => void exportSelected("xlsx")}>
+                Export Selected (Excel)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             onClick={() => refetch()}
             className="flex h-7 w-7 items-center justify-center rounded border border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
@@ -1230,26 +1332,76 @@ export function PaymentsList({ clientId }: Props) {
 
       {/* Table */}
       <div className="flex-1 overflow-auto bg-card">
-        <table className="w-full text-xs">
+        <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="px-3 py-3">Date</th>
+              <th className="w-10 px-3 py-3">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                />
+              </th>
+              <th
+                className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                onClick={() => toggleSort("date")}
+              >
+                Date
+                <SortIcon col="date" />
+              </th>
               {!clientId && (
-                <th className="min-w-[200px] px-3 py-3">Client</th>
+                <th
+                  className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "min-w-[200px]")}
+                  onClick={() => toggleSort("client")}
+                >
+                  Client
+                  <SortIcon col="client" />
+                </th>
               )}
-              <th className="px-3 py-3 text-right">Amount</th>
-              <th className="px-3 py-3 text-right">Unused Amt</th>
-              <th className="px-3 py-3 text-right">Refunded Amt</th>
-              <th className="px-3 py-3">Reference #</th>
-              <th className="px-3 py-3">Payment Method</th>
+              <th
+                className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                onClick={() => toggleSort("amount")}
+              >
+                Amount
+                <SortIcon col="amount" />
+              </th>
+              <th
+                className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                onClick={() => toggleSort("unused")}
+              >
+                Unused Amt
+                <SortIcon col="unused" />
+              </th>
+              <th
+                className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                onClick={() => toggleSort("refunded")}
+              >
+                Refunded Amt
+                <SortIcon col="refunded" />
+              </th>
+              <th
+                className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                onClick={() => toggleSort("reference")}
+              >
+                Reference #
+                <SortIcon col="reference" />
+              </th>
+              <th
+                className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                onClick={() => toggleSort("method")}
+              >
+                Payment Method
+                <SortIcon col="method" />
+              </th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-b">
-                  {Array.from({ length: clientId ? 6 : 7 }).map((__, j) => (
-                    <td key={j} className="px-3 py-3">
+                  {Array.from({ length: clientId ? 7 : 8 }).map((__, j) => (
+                    <td key={j} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   ))}
@@ -1257,45 +1409,57 @@ export function PaymentsList({ clientId }: Props) {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={clientId ? 6 : 7} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
+                <td colSpan={clientId ? 7 : 8} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {activeTab === "deleted" ? "No deleted payments" : "No payments recorded yet"}
                 </td>
               </tr>
             ) : (
               filtered.map((p) => (
-                <tr key={p.id} className="group cursor-pointer border-b hover:bg-slate-50 dark:hover:bg-muted/40" onClick={() => setViewPayment(p)}>
-                  <td className="px-3 py-2.5 text-slate-700 dark:text-neutral-300 font-medium">
+                <tr
+                  key={p.id}
+                  className={cn("group cursor-pointer border-b hover:bg-slate-50 dark:hover:bg-muted/40", selectedIds.has(p.id) && "bg-brand-50 dark:bg-brand-900/30")}
+                  onClick={() => setViewPayment(p)}
+                >
+                  <td className="w-10 px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
+                      checked={selectedIds.has(p.id)}
+                      onChange={() => toggleRow(p.id)}
+                    />
+                  </td>
+                  <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-muted-foreground">
                     {new Date(p.paymentDate + "T12:00:00").toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
                     })}
                   </td>
                   {!clientId && (
-                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <Link href={`/crm/clients/${p.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+                    <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
+                      <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${p.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                         {p.clientName ?? "—"}
                       </Link>
                       {p.clientAddress && (
-                        <div className="text-xs text-slate-400 dark:text-neutral-500">{p.clientAddress}</div>
+                        <div className="text-[10px] text-slate-400 dark:text-neutral-500">{p.clientAddress}</div>
                       )}
                     </td>
                   )}
-                  <td className="px-3 py-2.5 text-right font-medium text-slate-800 dark:text-neutral-100">
+                  <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-800 dark:text-neutral-100">
                     {formatCurrency(p.amountCents)}
                     <CardFeeLine payment={p} />
                   </td>
-                  <td className="px-3 py-2.5 text-right text-slate-600 dark:text-neutral-400">
+                  <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right text-slate-600 dark:text-neutral-400">
                     {formatCurrency(p.unusedAmountCents)}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-slate-600 dark:text-neutral-400">
+                  <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right text-slate-600 dark:text-neutral-400">
                     {formatCurrency(p.refundedAmountCents)}
                   </td>
-                  <td className="px-3 py-2.5 text-muted-foreground text-xs">
+                  <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-muted-foreground text-xs">
                     {p.reference ?? ""}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-700 dark:text-neutral-300 text-xs">
+                  <td className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-slate-700 dark:text-neutral-300 text-xs">
                     {paymentMethodDisplay(p.method, p.methodLabel)}
                   </td>
-                  <td className="px-3 py-2.5 text-right">
+                  <td className="px-3 py-3 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {p.deletedAt == null && (p.isCredit ? can("acct_add_modify_credits") : canModify) && (
                         <button

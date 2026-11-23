@@ -13,6 +13,7 @@ const RECORD_PATHS: Record<string, (id: string) => string> = {
   po:           (id) => `/po/orders?id=${id}`,
   requisition:  (id) => `/po/requisitions?id=${id}`,
   crm_estimate: (id) => `/crm/estimates/${id}`,
+  crm_invoice:  (id) => `/crm/accounting/invoices/${id}`,
   receiving:    () => "/po/receiving",
   project:      () => "/po/projects",
   damage_case:  () => "/tools/damage-cases",

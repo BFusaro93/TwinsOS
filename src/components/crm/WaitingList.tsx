@@ -438,8 +438,8 @@ function WaitingJobRow({
         />
       </td>
       {isVisible("client") && (
-        <td className="min-w-[200px] px-4 py-3" onClick={(e) => e.stopPropagation()}>
-          <Link href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+        <td className="min-w-[200px] px-4 py-3">
+          <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
             {job.clientName ?? "—"}
           </Link>
           {job.serviceAddress && (

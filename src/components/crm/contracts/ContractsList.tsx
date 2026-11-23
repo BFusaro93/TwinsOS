@@ -2179,8 +2179,8 @@ export function ContractsList({ clientId }: Props) {
                     )}
                   </td>
                   {!clientId && visibleKeys.includes("client") && (
-                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <Link href={`/crm/clients/${c.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+                    <td className="px-3 py-2.5">
+                      <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${c.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                         {c.clientName ?? "—"}
                       </Link>
                     </td>

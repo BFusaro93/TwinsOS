@@ -241,6 +241,41 @@ export const visualSpecSchema = z.object({
    *  query like "group by worked_date" can still draw a monthly trend). Only
    *  meaningful for additive value columns (hours, dollars, counts). */
   dateBucket: z.enum(["month"]).optional(),
+  /** "bar"/"line" with `dateBucket` only — plots a RATIO per month instead of
+   *  the summed value columns: the month's summed `numerator` column divided
+   *  by its summed `denominator` column (ratio of sums, never an average of
+   *  daily ratios, which over-weights tiny days). Both must be aggregate
+   *  output columns of the query (an operand may also be a pivoted series
+   *  "<column>|<value>", or several joined with "+"). `type` formats the result ("money" expects
+   *  a numerator in cents). Months with a zero denominator are skipped. */
+  dateBucketRatio: z
+    .object({
+      key: z.string().min(1),
+      label: z.string().min(1),
+      numerator: z.string().min(1),
+      denominator: z.string().min(1),
+      type: z.enum(["money", "number", "percent"]),
+      /** Multiplier applied to the ratio (100 for a "percent" display). */
+      scale: z.number().finite().optional(),
+    })
+    .optional(),
+  /** "bar"/"line" with `dateBucket` only — one series per distinct value of
+   *  this text column (must also be in the query's groupBy), e.g. a stacked
+   *  bar of monthly revenue per sales rep. Ratio operands can name a single
+   *  series as "<column>|<value>" (e.g. "count_all|accepted"). */
+  seriesColumn: z.string().optional(),
+  /** "bar"/"line" only — group a numeric label column into labelled ranges
+   *  (min/max inclusive, either may be omitted), summing the value columns
+   *  inside each. Gives aging buckets off a per-day query. */
+  rangeBuckets: z
+    .array(
+      z.object({
+        label: z.string().min(1),
+        min: z.number().optional(),
+        max: z.number().optional(),
+      })
+    )
+    .optional(),
   /** "crosstab" visual only — the column whose distinct values become
    *  pivoted column headers. Rows come from `labelColumn`, cell values are
    *  `valueColumns[0]` summed per (label, header) pair — a client-side pivot

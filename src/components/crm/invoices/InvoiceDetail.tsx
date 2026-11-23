@@ -95,6 +95,7 @@ import { todayInZone } from "@/lib/time/zone";
 import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment, CRMOtherCharge } from "@/types/crm-invoices";
 import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { CommentsSection } from "@/components/shared/CommentsSection";
 import { InvoicePhotosPanel } from "@/components/crm/invoices/InvoicePhotosPanel";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { ChargeCardDialog } from "@/components/crm/invoices/ChargeCardDialog";
@@ -902,7 +903,7 @@ export function InvoiceDetail({
   const { data: connectStatus } = useConnectStatus();
   const cardPaymentsReady = connectStatus?.chargesEnabled ?? false;
 
-  const [activeTab, setActiveTab] = useState<"invoice" | "photos" | "audit">("invoice");
+  const [activeTab, setActiveTab] = useState<"invoice" | "photos" | "comments" | "audit">("invoice");
   const [lineItemPickerOpen, setLineItemPickerOpen] = useState(false);
   const [lineItemSearch, setLineItemSearch] = useState("");
   const lineItemSearchRef = useRef<HTMLInputElement>(null);
@@ -1571,7 +1572,7 @@ export function InvoiceDetail({
       {/* Wraps instead of scrolling sideways: on a phone the status / Locked pills used to sit
           off-screen to the right of a scrolling tab row. */}
       <div className="flex flex-wrap items-center border-b bg-card px-4 md:px-8">
-        {(["invoice", "photos", "audit"] as const).map((tab) => (
+        {(["invoice", "photos", "comments", "audit"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1582,7 +1583,7 @@ export function InvoiceDetail({
                 : "border-transparent text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
             )}
           >
-            {tab === "audit" ? "Audit Trail" : tab === "photos" ? "Photos" : "Invoice"}
+            {tab === "audit" ? "Audit Trail" : tab === "photos" ? "Photos" : tab === "comments" ? "Comments" : "Invoice"}
           </button>
         ))}
         {/* Status pills sit beside the tabs so the action buttons above never shift with them */}
@@ -1606,6 +1607,12 @@ export function InvoiceDetail({
       {activeTab === "photos" ? (
         <div className="flex-1 overflow-auto bg-card px-4 py-5 md:px-8">
           <InvoicePhotosPanel invoiceId={invoice.id} canEdit={can("acct_add_modify_invoices") || can("acct_send_invoices")} />
+        </div>
+      ) : activeTab === "comments" ? (
+        <div className="flex-1 overflow-auto bg-slate-50 px-4 py-5 dark:bg-muted/40 md:px-8">
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <CommentsSection recordType="crm_invoice" recordId={invoice.id} />
+          </div>
         </div>
       ) : activeTab === "audit" ? (
         <div className="flex-1 overflow-auto bg-card">

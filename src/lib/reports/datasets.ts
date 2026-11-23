@@ -393,6 +393,11 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "billing_city", label: "Billing City", type: "text" },
       { key: "billing_zip", label: "Billing Zip", type: "text" },
       { key: "days_overdue", label: "Days Overdue", type: "number" },
+      // Fully paid invoices only (blank while open): the date of the last
+      // payment applied, and the days from invoice date to that date
+      // (floored at 0 for prepayments). AR write-offs don't count as paid.
+      { key: "paid_date", label: "Paid Date", type: "date" },
+      { key: "days_to_pay", label: "Days to Pay", type: "number", totalable: false },
       { key: "created_at", label: "Created At", type: "datetime" },
     ],
   },

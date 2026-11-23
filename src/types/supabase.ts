@@ -20008,6 +20008,7 @@ export type Database = {
           client_name: string | null
           created_at: string | null
           days_overdue: number | null
+          days_to_pay: number | null
           description: string | null
           discount_cents: number | null
           due_date: string | null
@@ -20016,6 +20017,7 @@ export type Database = {
           invoice_number: number | null
           is_issued: boolean | null
           org_id: string | null
+          paid_date: string | null
           payment_method: string | null
           po_number: string | null
           revenue_ex_tax_cents: number | null

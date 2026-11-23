@@ -446,8 +446,8 @@ function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () =
 
   return (
     <tr className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors cursor-pointer" onClick={onClick}>
-      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-        <Link href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
+      <td className="px-4 py-3">
+        <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
           {job.clientName ?? "—"}
         </Link>
         {job.serviceAddress && (

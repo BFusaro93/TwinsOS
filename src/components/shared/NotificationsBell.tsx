@@ -54,6 +54,7 @@ const MENTION_RECORD_ENTITY_TYPES: Record<string, NotificationEntityType> = {
   po:           "purchase_order",
   requisition:  "requisition",
   crm_estimate: "estimate",
+  crm_invoice:  null,
   receiving:    null,
   project:      null,
   damage_case:  null,
