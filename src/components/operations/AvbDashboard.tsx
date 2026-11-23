@@ -563,7 +563,7 @@ function Summary({ cur, employees, crewDefs, onEditWeek, onImportNew }: SummaryP
                   <td className="py-3 pl-4 font-medium">{cr.code}<span className="ml-1 text-xs text-slate-400 dark:text-neutral-500">{cr.name}</span></td>
                   <Td right>{t.budgeted>0?t.budgeted.toFixed(1):"—"}</Td>
                   <Td right>{t.actual>0?t.actual.toFixed(1):"—"}</Td>
-                  <Td right>{t.budgeted>0?<span className={avbV>=0?"text-green-600 dark:text-green-400":"text-red-600 dark:text-red-400"}>{avbV>=0?"+":""}{avbV.toFixed(1)}</span>:"—"}</Td>
+                  <Td right>{t.budgeted>0||t.actual>0?<span className={avbV>=0?"text-green-600 dark:text-green-400":"text-red-600 dark:text-red-400"}>{avbV>=0?"+":""}{avbV.toFixed(1)}</span>:"—"}</Td>
                   <Td right>{t.gusto>0?t.gusto.toFixed(1):<span className="text-slate-300 dark:text-neutral-500">—</span>}</Td>
                   <Td right>{gap!==null?<span className={Math.abs(gap)>3?"text-red-600 dark:text-red-400":Math.abs(gap)>1?"text-amber-500 dark:text-amber-400":"text-green-600 dark:text-green-400"}>{gap>=0?"+":""}{gap.toFixed(1)}</span>:"—"}</Td>
                   <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>
@@ -1068,7 +1068,7 @@ function Ytd({ weeks, crewDefs }: YtdProps) {
                   <td className="py-3 pl-4 font-medium">{cr.code}<span className="ml-1 text-xs text-slate-400 dark:text-neutral-500">{cr.name}</span></td>
                   <Td right>{t.budgeted>0?t.budgeted.toFixed(1):"—"}</Td>
                   <Td right>{t.actual>0?t.actual.toFixed(1):"—"}</Td>
-                  <Td right>{t.budgeted>0?<span className={avbV>=0?"text-green-600 dark:text-green-400":"text-red-600 dark:text-red-400"}>{avbV>=0?"+":""}{avbV.toFixed(1)}</span>:"—"}</Td>
+                  <Td right>{t.budgeted>0||t.actual>0?<span className={avbV>=0?"text-green-600 dark:text-green-400":"text-red-600 dark:text-red-400"}>{avbV>=0?"+":""}{avbV.toFixed(1)}</span>:"—"}</Td>
                   <Td right>{t.gusto>0?t.gusto.toFixed(1):"—"}</Td>
                   <Td right>{gap!==null?<span className={Math.abs(gap)>10?"text-red-600 dark:text-red-400":"text-green-600 dark:text-green-400"}>{gap>=0?"+":""}{gap.toFixed(1)}</span>:"—"}</Td>
                   <Td right>{ep!==null?<span className={`${epBadge(ep)} rounded-full px-2 py-0.5 text-xs font-semibold`}>{ep}%</span>:"—"}</Td>

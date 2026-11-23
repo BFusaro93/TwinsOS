@@ -400,7 +400,7 @@ export function KpiDashboard() {
       labor_efficiency: totalGustoHrs > 0 && totalActual > 0
         ? parseFloat((totalActual / totalGustoHrs * 100).toFixed(1)) : null,
       // avb_variance = budgeted on-site − actual on-site
-      avb_variance: totalBudgeted > 0
+      avb_variance: totalBudgeted > 0 || totalActual > 0
         ? parseFloat((totalBudgeted - totalActual).toFixed(1)) : null,
       ot_pct_hours: totalGustoHrs > 0
         ? parseFloat((totalOtHrs / totalGustoHrs * 100).toFixed(1)) : null,
