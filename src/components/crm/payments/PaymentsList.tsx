@@ -868,16 +868,16 @@ export function AddPaymentDialog({
                         )}
                         {group.rows.map((a) => (
                           <tr key={a.invoiceId} className="border-b last:border-0">
-                            <td className="px-3 py-2 font-medium text-slate-700 dark:text-neutral-300">
+                            <td className="px-3 py-1.5 font-medium text-slate-700 dark:text-neutral-300">
                               #{a.invoiceNumber}
                             </td>
-                            <td className="px-3 py-2 text-center">
+                            <td className="px-3 py-1.5 text-center">
                               <Checkbox
                                 checked={a.payInFull}
                                 onCheckedChange={(c) => togglePayInFull(a.invoiceId, !!c)}
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-1.5">
                               <CurrencyInput
                                 className="h-6 w-20 text-xs px-1.5"
                                 cents={a.amountCents}
@@ -886,15 +886,15 @@ export function AddPaymentDialog({
                                 aria-label={`Amount to apply to invoice #${a.invoiceNumber}`}
                               />
                             </td>
-                            <td className="px-3 py-2 text-right font-medium">
+                            <td className="px-3 py-1.5 text-right font-medium">
                               {formatCurrency(a.balanceCents)}
                             </td>
-                            <td className="px-3 py-2 text-right text-muted-foreground">
+                            <td className="px-3 py-1.5 text-right text-muted-foreground">
                               {new Date(a.invoiceDate + "T12:00:00").toLocaleDateString("en-US", {
                                 month: "2-digit", day: "2-digit", year: "numeric",
                               })}
                             </td>
-                            <td className="px-3 py-2 text-muted-foreground">
+                            <td className="px-3 py-1.5 text-muted-foreground">
                               {a.clientName ?? selectedClient?.displayName ?? ""}
                               {a.clientAddress && <div>{a.clientAddress}</div>}
                             </td>
@@ -1335,7 +1335,7 @@ export function PaymentsList({ clientId }: Props) {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-3 py-2.5">
+              <th className="w-10 px-3 py-2">
                 <input
                   type="checkbox"
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -1344,7 +1344,7 @@ export function PaymentsList({ clientId }: Props) {
                 />
               </th>
               <th
-                className={cn("px-2 py-2.5 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
                 onClick={() => toggleSort("date")}
               >
                 Date
@@ -1352,7 +1352,7 @@ export function PaymentsList({ clientId }: Props) {
               </th>
               {!clientId && (
                 <th
-                  className={cn("px-2 py-2.5 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "min-w-[200px]")}
+                  className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "min-w-[200px]")}
                   onClick={() => toggleSort("client")}
                 >
                   Client
@@ -1360,35 +1360,35 @@ export function PaymentsList({ clientId }: Props) {
                 </th>
               )}
               <th
-                className={cn("px-2 py-2.5 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
                 onClick={() => toggleSort("amount")}
               >
                 Amount
                 <SortIcon col="amount" />
               </th>
               <th
-                className={cn("px-2 py-2.5 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
                 onClick={() => toggleSort("unused")}
               >
                 Unused Amt
                 <SortIcon col="unused" />
               </th>
               <th
-                className={cn("px-2 py-2.5 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
                 onClick={() => toggleSort("refunded")}
               >
                 Refunded Amt
                 <SortIcon col="refunded" />
               </th>
               <th
-                className={cn("px-2 py-2.5 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
                 onClick={() => toggleSort("reference")}
               >
                 Reference #
                 <SortIcon col="reference" />
               </th>
               <th
-                className={cn("px-2 py-2.5 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
                 onClick={() => toggleSort("method")}
               >
                 Payment Method
@@ -1401,7 +1401,7 @@ export function PaymentsList({ clientId }: Props) {
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: clientId ? 7 : 8 }).map((__, j) => (
-                    <td key={j} className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6">
+                    <td key={j} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   ))}
@@ -1420,7 +1420,7 @@ export function PaymentsList({ clientId }: Props) {
                   className={cn("group cursor-pointer border-b hover:bg-slate-50 dark:hover:bg-muted/40", selectedIds.has(p.id) && "bg-brand-50 dark:bg-brand-900/30")}
                   onClick={() => setViewPayment(p)}
                 >
-                  <td className="w-10 px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <td className="w-10 px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -1428,13 +1428,13 @@ export function PaymentsList({ clientId }: Props) {
                       onChange={() => toggleRow(p.id)}
                     />
                   </td>
-                  <td className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-muted-foreground">
+                  <td className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 whitespace-nowrap text-xs text-muted-foreground">
                     {new Date(p.paymentDate + "T12:00:00").toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
                     })}
                   </td>
                   {!clientId && (
-                    <td className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6">
+                    <td className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6">
                       <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${p.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                         {p.clientName ?? "—"}
                       </Link>
@@ -1443,23 +1443,23 @@ export function PaymentsList({ clientId }: Props) {
                       )}
                     </td>
                   )}
-                  <td className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-800 dark:text-neutral-100">
+                  <td className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-800 dark:text-neutral-100">
                     {formatCurrency(p.amountCents)}
                     <CardFeeLine payment={p} />
                   </td>
-                  <td className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-right text-slate-600 dark:text-neutral-400">
+                  <td className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-right text-slate-600 dark:text-neutral-400">
                     {formatCurrency(p.unusedAmountCents)}
                   </td>
-                  <td className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-right text-slate-600 dark:text-neutral-400">
+                  <td className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-right text-slate-600 dark:text-neutral-400">
                     {formatCurrency(p.refundedAmountCents)}
                   </td>
-                  <td className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-muted-foreground text-xs">
+                  <td className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-muted-foreground text-xs">
                     {p.reference ?? ""}
                   </td>
-                  <td className="px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 text-slate-700 dark:text-neutral-300 text-xs">
+                  <td className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-slate-700 dark:text-neutral-300 text-xs">
                     {paymentMethodDisplay(p.method, p.methodLabel)}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-1.5 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {p.deletedAt == null && (p.isCredit ? can("acct_add_modify_credits") : canModify) && (
                         <button
