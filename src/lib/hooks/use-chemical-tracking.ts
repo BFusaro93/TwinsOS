@@ -198,6 +198,23 @@ export function useUpdateChemicalLookupItem() {
   });
 }
 
+/**
+ * Soft-deletes a chemical list item, but only when no chemical record uses it (the database
+ * refuses otherwise, with a message that says to turn it off instead).
+ */
+export function useDeleteChemicalLookupItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).rpc("delete_chemical_lookup_item", { p_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chemical-lookup-items"] }),
+  });
+}
+
 // ── org-level general chemical settings ─────────────────────────────────────
 
 const DEFAULT_SETTINGS: Omit<ChemicalSettings, "id" | "orgId" | "updatedAt"> = {
