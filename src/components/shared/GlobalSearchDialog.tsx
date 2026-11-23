@@ -44,7 +44,7 @@ import { useClientSearch } from "@/lib/hooks/use-clients";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useInvoiceSearch, useEstimateSearch } from "@/lib/hooks/use-global-search";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
-import { pushRecentItem, readRecentItems, type RecentItem, type RecentItemKind } from "@/lib/recent-items";
+import { pruneMissingRecentItems, pushRecentItem, readRecentItems, type RecentItem, type RecentItemKind } from "@/lib/recent-items";
 import {
   WO_STATUS_LABELS,
   PO_STATUS_LABELS,
@@ -169,7 +169,14 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   // live groups so a shortcut never reveals a record type they can't search for.
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   useEffect(() => {
-    setRecentItems(readRecentItems(currentUser.id));
+    const stored = readRecentItems(currentUser.id);
+    setRecentItems(stored);
+    // Then drop any whose record was deleted since (a deleted client used to linger here).
+    let cancelled = false;
+    void pruneMissingRecentItems(currentUser.id, stored).then((kept) => {
+      if (!cancelled) setRecentItems(kept);
+    });
+    return () => { cancelled = true; };
   }, [currentUser.id]);
   const recentVisible: Record<RecentItemKind, boolean> = {
     client: showClients,
