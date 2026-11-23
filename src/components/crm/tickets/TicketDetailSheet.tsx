@@ -65,6 +65,8 @@ import { toast } from "sonner";
 import type { TicketEmail } from "@/lib/hooks/use-tickets";
 import type { Client } from "@/types/crm";
 import { useClient } from "@/lib/hooks/use-clients";
+import { useComments } from "@/lib/hooks/use-comments";
+import { stripMentionTokens } from "@/lib/mentions";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
 import { escapeHtml } from "@/lib/utils/escape-html";
 
@@ -111,10 +113,19 @@ const FALLBACK_CATEGORIES: string[] = [...DEFAULT_TICKET_CATEGORIES];
 
 type PrintClient = Pick<
   Client,
-  "displayName" | "source" | "primaryEmail" | "primaryPhone" | "serviceAddress" | "serviceCity" | "serviceState" | "serviceZip"
+  "displayName" | "status" | "accountType" | "source" | "primaryEmail" | "primaryPhone" | "serviceAddress" | "serviceCity" | "serviceState" | "serviceZip"
 >;
 
-function printTicket(ticket: CRMTicket, client?: PrintClient | null) {
+interface PrintExtras {
+  contributors: string[];
+  comments: Array<{ author: string; at: string; text: string }>;
+}
+
+const CLIENT_STATUS_LABEL: Record<string, string> = {
+  active: "Client", inactive: "Client (inactive)", lead: "Lead", cancelled: "Client (cancelled)", lost: "Lead (lost)",
+};
+
+function printTicket(ticket: CRMTicket, client?: PrintClient | null, extras?: PrintExtras) {
   const win = window.open("", "_blank", "width=800,height=1000");
   if (!win) { toast.error("Pop-up blocked — allow pop-ups to print tickets"); return; }
   const fmtDate = (d: string, noon = false) =>
@@ -126,13 +137,25 @@ function printTicket(ticket: CRMTicket, client?: PrintClient | null) {
   const address = [client?.serviceAddress, cityLine].filter(Boolean).join("\n");
   const clientName = client?.displayName ?? ticket.clientName;
   const statusClass = `st-${ticket.status}`;
+  const clientKind = client
+    ? `${CLIENT_STATUS_LABEL[client.status] ?? client.status} · ${client.accountType === "commercial" ? "Commercial" : "Residential"}`
+    : null;
+  const fmtDateTime = (d: string) =>
+    new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  const contributorsHtml = extras && extras.contributors.length > 0
+    ? `<div class="notes"><h2>Contributors</h2><p class="body-text">${escapeHtml(extras.contributors.join(", "))}</p></div>`
+    : "";
+  const commentsHtml = extras && extras.comments.length > 0
+    ? `<div class="notes"><h2>Internal Comments</h2>${extras.comments.map((c) =>
+        `<div class="comment"><div class="cmeta"><strong>${escapeHtml(c.author)}</strong> · ${escapeHtml(fmtDateTime(c.at))}</div><p class="body-text">${escapeHtml(c.text)}</p></div>`).join("")}</div>`
+    : "";
   win.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <title>Ticket #${escapeHtml(String(ticket.ticketNumber))}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; padding: 36px; color: #1f2937; font-size: 13px; line-height: 1.45; }
+    body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1f2937; font-size: 13px; line-height: 1.45; }
     .top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #16a34a; padding-bottom: 14px; margin-bottom: 20px; }
     .num { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #16a34a; }
     h1 { font-size: 22px; line-height: 1.25; margin-top: 4px; max-width: 480px; }
@@ -151,8 +174,14 @@ function printTicket(ticket: CRMTicket, client?: PrintClient | null) {
     .notes { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; }
     .notes h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; margin-bottom: 8px; }
     .body-text { white-space: pre-wrap; line-height: 1.6; font-size: 13px; }
-    @page { size: letter portrait; margin: 0.6in; }
-    @media print { body { padding: 0; } .card, .notes { break-inside: avoid; } }
+    .notes + .notes { margin-top: 14px; }
+    .comment { border-top: 1px solid #f3f4f6; padding-top: 8px; margin-top: 8px; }
+    .comment:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+    .cmeta { font-size: 11px; color: #6b7280; margin-bottom: 2px; }
+    /* margin:0 suppresses the browser's own date/title/URL header and footer; the body padding is the page margin. */
+    @page { size: letter portrait; margin: 0; }
+    body { padding: 0.6in; }
+    @media print { .card, .notes, .comment { break-inside: avoid; } }
   </style>
 </head>
 <body>
@@ -185,6 +214,7 @@ function printTicket(ticket: CRMTicket, client?: PrintClient | null) {
       <h2>Client</h2>
       <div class="fields">
         ${field("Name", clientName, "", true)}
+        ${field("Type", clientKind)}
         ${field("Source", client?.source)}
         ${field("Phone", client?.primaryPhone)}
         ${field("Email", client?.primaryEmail, "", true)}
@@ -193,6 +223,8 @@ function printTicket(ticket: CRMTicket, client?: PrintClient | null) {
     </div>
   </div>
   ${ticket.body ? `<div class="notes"><h2>Notes</h2><p class="body-text">${escapeHtml(ticket.body)}</p></div>` : ""}
+  ${contributorsHtml}
+  ${commentsHtml}
   <script>window.onload=function(){window.print();}<\/script>
 </body>
 </html>`);
@@ -830,6 +862,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
   const [emailOpen, setEmailOpen] = useState(false);
   const { data: contributors } = useTicketContributors(ticket?.id ?? "");
   const { data: ticketClient } = useClient(ticket?.clientId ?? "");
+  const { data: ticketComments } = useComments("ticket", ticket?.id ?? "");
   const [editing, setEditing] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -931,7 +964,10 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
               />
               <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
               <Button variant="outline" size="sm" className="gap-1.5"
-                onClick={() => printTicket(ticket, ticketClient)}>
+                onClick={() => printTicket(ticket, ticketClient, {
+                  contributors: (contributors ?? []).map((c) => c.userName),
+                  comments: (ticketComments ?? []).map((c) => ({ author: c.authorName, at: c.createdAt, text: stripMentionTokens(c.body) })),
+                })}>
                 <Download className="h-3.5 w-3.5" />
                 PDF
               </Button>
