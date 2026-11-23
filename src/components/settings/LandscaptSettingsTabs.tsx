@@ -378,6 +378,8 @@ function TagsEditor() {
       await addItem({ listName: "client_tags", value: newValue.trim(), group: newGroup });
       toast.success("Added");
       setNewValue("");
+      // Cleared too: the next Add form used to open with the last tag's category already filled in.
+      setNewGroup("");
       setAdding(false);
     } catch (err) { toast.error(`Failed to add: ${err instanceof Error ? err.message : JSON.stringify(err)}`); }
   }
