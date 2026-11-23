@@ -734,7 +734,7 @@ export function EstimatesList({ clientId }: Props) {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-3 py-3">
+              <th className="w-10 px-3 py-2">
                 <input
                   type="checkbox"
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -746,7 +746,7 @@ export function EstimatesList({ clientId }: Props) {
                 <th
                   key={col.key}
                   className={cn(
-                    "px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400",
+                    "px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400",
                     ["prob","income","gp","margin"].includes(col.key) ? "text-right" : ""
                   )}
                   onClick={() => toggleSort(col.key)}
@@ -755,7 +755,7 @@ export function EstimatesList({ clientId }: Props) {
                   <SortIcon col={col.key} />
                 </th>
               ))}
-              <th className="px-3 py-3" />
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -763,7 +763,7 @@ export function EstimatesList({ clientId }: Props) {
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: colSpan }).map((__, j) => (
-                    <td key={j} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
+                    <td key={j} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   ))}
@@ -790,7 +790,7 @@ export function EstimatesList({ clientId }: Props) {
                     selectedIds.has(e.id) && "bg-brand-50 dark:bg-brand-900/30"
                   )} onClick={canEdit ? () => router.push(`/crm/estimates/${e.id}`) : undefined}>
 
-                    <td className="w-10 px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="w-10 px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -801,10 +801,10 @@ export function EstimatesList({ clientId }: Props) {
                     {visibleColumns.map((col) => {
                       switch (col.key) {
                         case "number":
-                          return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs font-mono text-slate-400 dark:text-neutral-500">{e.estimateNumber ? `#${e.estimateNumber}` : "—"}</td>;
+                          return <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-xs font-mono text-slate-400 dark:text-neutral-500">{e.estimateNumber ? `#${e.estimateNumber}` : "—"}</td>;
                         case "stage":
                           return (
-                            <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6">
+                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6">
                               {e.stage === "accepted" && estimateIdsWithJobs?.has(e.id) ? (
                                 // Display only: the stage stays Accepted (filters, tabs and pipeline use it).
                                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium whitespace-nowrap text-blue-700 dark:bg-blue-950 dark:text-blue-300">
@@ -819,7 +819,7 @@ export function EstimatesList({ clientId }: Props) {
                           );
                         case "client":
                           return (
-                            <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 max-w-[180px]">
+                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[180px]">
                               <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${e.clientId}`} className="block font-medium text-brand-600 dark:text-brand-400 hover:underline truncate">
                                 {e.clientName ?? "—"}
                               </Link>
@@ -835,43 +835,43 @@ export function EstimatesList({ clientId }: Props) {
                           );
                         case "description":
                           return (
-                            <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px]">
+                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px]">
                               <Link href={`/crm/estimates/${e.id}`} className="block text-slate-700 dark:text-neutral-300 hover:text-brand-600 dark:hover:text-brand-400 hover:underline truncate text-xs">
                                 {e.description || "(no description)"}
                               </Link>
                             </td>
                           );
                         case "date":
-                          return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground whitespace-nowrap">{e.estimateDate ? formatDate(e.estimateDate) : "—"}</td>;
+                          return <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground whitespace-nowrap">{e.estimateDate ? formatDate(e.estimateDate) : "—"}</td>;
                         case "valid_until":
-                          return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground whitespace-nowrap">{e.validUntilDate ? formatDate(e.validUntilDate) : "—"}</td>;
+                          return <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-xs text-muted-foreground whitespace-nowrap">{e.validUntilDate ? formatDate(e.validUntilDate) : "—"}</td>;
                         case "sales_rep":
-                          return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-600 dark:text-neutral-400">{e.salesRepName ?? "—"}</td>;
+                          return <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-600 dark:text-neutral-400">{e.salesRepName ?? "—"}</td>;
                         case "reason":
                           return (
-                            <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 max-w-[180px] truncate text-xs text-slate-600 dark:text-neutral-400" title={e.reason ?? undefined}>
+                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[180px] truncate text-xs text-slate-600 dark:text-neutral-400" title={e.reason ?? undefined}>
                               {e.stage === "accepted" || e.stage === "lost" ? (e.reason ?? "—") : "—"}
                             </td>
                           );
                         case "prob":
-                          return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right text-xs text-muted-foreground">{e.probabilityBps > 0 ? `${(e.probabilityBps / 100).toFixed(0)}%` : "—"}</td>;
+                          return <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-right text-xs text-muted-foreground">{e.probabilityBps > 0 ? `${(e.probabilityBps / 100).toFixed(0)}%` : "—"}</td>;
                         // Income / GP / Margin: "—" only when the estimate has no
                         // priced revenue yet (truly unknown). Once revenue exists,
                         // a $0 gross profit or 0% margin is a real figure — show it.
                         case "income":
-                          return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700 dark:text-neutral-300">{hasRevenue ? formatCurrency(e.revenueCents) : "—"}</td>;
+                          return <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700 dark:text-neutral-300">{hasRevenue ? formatCurrency(e.revenueCents) : "—"}</td>;
                         case "gp":
-                          return <td key={col.key} className="px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700 dark:text-neutral-300">{hasRevenue ? formatCurrency(e.grossProfitCents ?? 0) : "—"}</td>;
+                          return <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium text-slate-700 dark:text-neutral-300">{hasRevenue ? formatCurrency(e.grossProfitCents ?? 0) : "—"}</td>;
                         case "margin":
                           return (
-                            <td key={col.key} className={cn("px-2 py-3 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", marginBps >= 3000 ? "text-green-600 dark:text-green-400" : marginBps >= 1500 ? "text-yellow-600 dark:text-yellow-400" : marginBps > 0 ? "text-red-500 dark:text-red-400" : "text-slate-400 dark:text-neutral-500")}>
+                            <td key={col.key} className={cn("px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-right font-medium", marginBps >= 3000 ? "text-green-600 dark:text-green-400" : marginBps >= 1500 ? "text-yellow-600 dark:text-yellow-400" : marginBps > 0 ? "text-red-500 dark:text-red-400" : "text-slate-400 dark:text-neutral-500")}>
                               {hasRevenue ? bpsToPercent(marginBps) : "—"}
                             </td>
                           );
                         default: return null;
                       }
                     })}
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-1.5">
                       {/* The builder is edit-only, so a view-only role would land on "No access". */}
                       {canEdit && (
                         <Link href={`/crm/estimates/${e.id}`}>

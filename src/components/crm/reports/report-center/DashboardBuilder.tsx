@@ -1073,6 +1073,15 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
       type: visualType,
       config,
       useTabDateRange,
+      // Which date column the tab's date range filters on. Not editable here —
+      // carried through (when the panel's dataset still has that column) so
+      // saving a panel doesn't silently fall back to the dataset's default
+      // date field (e.g. "Average Days to Pay by Month" filters on paid_date,
+      // not invoice_date).
+      dateColumn:
+        panel.visual.dateColumn && fields.some((f) => f.key === panel.visual.dateColumn)
+          ? panel.visual.dateColumn
+          : undefined,
       useTabRepFilter: useTabRepFilter || undefined,
       relativeDateFilter: isRelativeDateFilter(relativeDateFilter) ? relativeDateFilter : undefined,
       labelColumn: labelColumn || undefined,
