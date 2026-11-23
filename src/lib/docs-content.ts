@@ -3332,12 +3332,20 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot Sq. Ft. Without it the service uses the org's Default Area Measurement from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
       },
       {
+        q: "How do I rename or delete an item in the Chemical Tracking lists?",
+        a: "In Settings > Chemical Tracking, click the pencil to rename an application method, target, volume unit or area treated, and the X to delete one. The switch still turns an item off without removing it. An item already used on a rate or an application can't be deleted (turn it off instead); renaming is always safe because records point to the item, not its name. Area units can't be renamed because their name carries their scale (1,000 Sq Ft, 100 Linear Ft), so add a new one instead. New companies start with the standard application methods and areas treated already filled in.",
+      },
+      {
         q: "What happens if the chemical area field is blank, or the service isn't treating turf?",
         a: "The amount is sized from the first area that resolves: a treated area entered on the job service, else the service's own Area measurement for chemical quantities, else the default field in Settings > Chemical Tracking. If none gives a number for that property, no amount is estimated and the quantity is left to enter by hand. The same applies when auto-calculate quantity is off or a rate per linear foot meets a square-foot field. For non-turf work set the service's own field (for example Parking Lot Sq. Ft.) or enter a treated area on the job.",
       },
       {
         q: "How do I estimate a perimeter or barrier product that is labelled per linear foot?",
         a: "In Settings > Chemical Tracking add an area unit such as Linear Ft, 100 Linear Ft or 1,000 Linear Ft (new orgs already have all three) and use it on the product's Application Rate. Then open the service's Chemicals tab and set Area measurement for chemical quantities to a linear-foot field such as Linear Ft. Perimeter. A linear-foot rate is only sized from a linear-foot field and a square-foot rate only from an area field; when they don't match no amount is estimated and the Daily Load List and application panel say why.",
+      },
+      {
+        q: "What are the lists in Settings > Chemical Tracking for?",
+        a: "Application Methods (how it was applied: backpack sprayer, drop spreader), Targets (what it treats: grubs, broadleaf weeds), Volume Units (ounces, gallons, pounds, with the conversion the mix calculator uses), Area Units (Square Foot, 1,000 Sq Ft, Acre, Linear Ft, 100 and 1,000 Linear Ft) and Areas Treated (turf, mulch beds, hardscape, parking lot / pavement, perimeter). They feed the product's application rates, the application log, the compliance report and the client notice. Each header shows how many items it holds, the switch turns an item off without removing it, and the pencil and X rename and delete.",
       },
       {
         q: "How do I skip one step of a package on an estimate?",
@@ -4083,6 +4091,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "I invited someone who's already on the team. What happens?",
         a: "Nothing is sent. Landscapt tells you they're already an active member, and their role isn't changed. Change it on the Users page instead.",
+      },
+      {
+        q: "What does a new company start with already filled in?",
+        a: "Estimate stages, starter roles, 11 ticket categories, the property takeoff fields, the standard chemical volume and area units, chemical Application Methods and Areas Treated, nine cancellation reasons and eight contact types. Not filled in, because they differ by company: Targets, Client Sources, Tags, Discounts, Custom fields and Other Charges (Settings > Accounting > Other Charges has an Add common charges button). Companies that already existed keep the lists they have.",
       },
       {
         q: "What does the Account Settings permission do?",

@@ -293,7 +293,7 @@ function buildTicketNotificationEmail({
 }) {
   const footer =
     reason === "rep"
-      ? `This notification was sent because you are ${escapeHtml(clientName)}'s assigned account manager in ${escapeHtml(orgName)}.`
+      ? `This notification was sent because you are the Sales Rep on ${escapeHtml(clientName)}'s account in ${escapeHtml(orgName)}.`
       : `This notification was sent to the client portal Support Email for ${escapeHtml(orgName)}.`;
   return `
 <!DOCTYPE html>
