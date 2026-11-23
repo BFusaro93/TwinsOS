@@ -931,14 +931,14 @@ export function InvoicesList({ clientId }: Props) {
       </div>
 
       {/* ── Dark actions bar with quick-filter tabs (matches Payments dark bar) ── */}
-      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2 lg:flex-nowrap lg:gap-x-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1 lg:flex-1 lg:flex-nowrap">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3"
+                className="h-7 shrink-0 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3"
               >
                 Actions {someSelected && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>}
                 <ChevronDown className="ml-1 h-3 w-3" />
@@ -1036,7 +1036,7 @@ export function InvoicesList({ clientId }: Props) {
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
           {/* Quick-filter tabs in dark bar */}
-          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
+          <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto lg:flex-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {QUICK_FILTERS.map(({ key, label }) => {
               const count = counts[key];
               return (
@@ -1071,16 +1071,20 @@ export function InvoicesList({ clientId }: Props) {
             value={search}
             onChange={setSearch}
             placeholder="Search…"
-            className="ml-2 w-44"
+            className="ml-2 w-44 shrink-0"
             inputClassName="h-7 text-xs"
           />
         </div>
 
-        <ColumnChooser
+        <div className="shrink-0">
+
+          <ColumnChooser
           columns={clientId ? INVOICE_COLUMNS.filter((c) => c.key !== "client") : INVOICE_COLUMNS}
           visibleKeys={visibleKeys}
           onVisibleKeysChange={setVisibleKeys}
         />
+
+        </div>
       </div>
 
       {/* Table */}
