@@ -2,6 +2,7 @@
 
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { isValidEmail } from "@/lib/utils/email";
+import { confirmEmailNotTypo } from "@/lib/utils/email-typo";
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -200,6 +201,7 @@ export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     if (rf.isRequired("primary_phone") && !form.primaryPhone.trim()) { toast.error("Phone is required"); return; }
     if (rf.isRequired("primary_email") && !form.primaryEmail.trim()) { toast.error("Email is required"); return; }
     if (form.primaryEmail.trim() && !isValidEmail(form.primaryEmail)) { toast.error("Enter a valid email address"); return; }
+    if (!confirmEmailNotTypo(form.primaryEmail)) return;
     if (rf.isRequired("source") && !form.source.trim()) { toast.error("Source is required"); return; }
     if (rf.isRequired("service_address") && !form.serviceAddress.trim()) { toast.error("Service address is required"); return; }
     // Same email or phone as an existing client/lead: show the matches and wait for "Create anyway".

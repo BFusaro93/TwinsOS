@@ -244,7 +244,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
                   className={cn(
                     "flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
                     form.type === t.value
-                      ? "border-slate-900 bg-slate-900 text-white"
+                      ? "border-slate-900 bg-slate-900 text-white dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100"
                       : "border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                   )}
                 >

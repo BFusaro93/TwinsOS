@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { isValidEmail } from "@/lib/utils/email";
+import { confirmEmailNotTypo } from "@/lib/utils/email-typo";
 import {
   Dialog,
   DialogContent,
@@ -76,6 +77,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
     if (rf.isRequired("primary_phone") && !primaryPhone.trim()) { toast.error("Phone is required"); return; }
     if (rf.isRequired("primary_email") && !primaryEmail.trim()) { toast.error("Email is required"); return; }
     if (primaryEmail.trim() && !isValidEmail(primaryEmail)) { toast.error("Enter a valid email address"); return; }
+    if (!confirmEmailNotTypo(primaryEmail)) return;
     if (rf.isRequired("service_address") && !serviceAddress.trim()) { toast.error("Service address is required"); return; }
     if (rf.isRequired("source") && !source.trim()) { toast.error("Source is required"); return; }
     // Same email or phone as an existing client/lead: show the matches and wait for

@@ -15,6 +15,7 @@ import type { EstimateStage } from "@/types/crm-estimates";
 import type { InvoiceStatus } from "@/types/crm-invoices";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useQuickAddStore } from "@/stores/quick-add-store";
 import { RevenueSnapshot, canViewRevenueSnapshot } from "@/components/crm/reports/RevenueSnapshot";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { formatInZone, hourInZone, isoInZone, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
@@ -105,6 +106,7 @@ export function MyDay() {
   // Revenue/AR snapshot is Report Center / accounting data — hide it (and skip
   // its queries) for logins that hold neither permission.
   const { can, isLoading: permsLoading } = usePermissions();
+  const openQuickAdd = useQuickAddStore((st) => st.open);
   const showRevenueSnapshot = !permsLoading && canViewRevenueSnapshot(can);
   // Every widget below reads data the role may not be allowed to open from the
   // sidebar (RLS only checks CRM access), so each one follows the same key as
@@ -203,13 +205,14 @@ export function MyDay() {
           ))}
         </div>
         <PermissionGate permission="tickets_view_modify">
-          <Link
-            href="/crm/tickets"
+          <button
+            type="button"
+            onClick={() => openQuickAdd("ticket")}
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Ticket
-          </Link>
+          </button>
         </PermissionGate>
         </div>
       </div>
@@ -572,40 +575,44 @@ export function MyDay() {
             <p className="text-sm font-semibold text-slate-700 dark:text-neutral-300 pb-2 border-b mb-3">Quick Actions</p>
             <div className="grid grid-cols-2 gap-2">
               <PermissionGate permission="client_add">
-                <Link
-                  href="/crm/clients"
-                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
+                <button
+                  type="button"
+                  onClick={() => openQuickAdd("client")}
+                  className="w-full text-left flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
                 >
                   <UserRound className="h-4 w-4 text-green-500 dark:text-green-400" />
                   New Client
-                </Link>
+                </button>
               </PermissionGate>
               <PermissionGate permission="estimate_add">
-                <Link
-                  href="/crm/estimates"
-                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
+                <button
+                  type="button"
+                  onClick={() => openQuickAdd("estimate")}
+                  className="w-full text-left flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
                 >
                   <ClipboardSignature className="h-4 w-4 text-blue-500 dark:text-blue-400" />
                   New Estimate
-                </Link>
+                </button>
               </PermissionGate>
               <PermissionGate permission="tickets_view_modify">
-                <Link
-                  href="/crm/tickets"
-                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
+                <button
+                  type="button"
+                  onClick={() => openQuickAdd("ticket")}
+                  className="w-full text-left flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
                 >
                   <Ticket className="h-4 w-4 text-orange-500 dark:text-orange-400" />
                   New Ticket
-                </Link>
+                </button>
               </PermissionGate>
-              <PermissionGate permission="acct_view_invoice_list">
-                <Link
-                  href="/crm/accounting/invoices"
-                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
+              <PermissionGate permission="acct_add_modify_invoices">
+                <button
+                  type="button"
+                  onClick={() => openQuickAdd("invoice")}
+                  className="w-full text-left flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors"
                 >
                   <Receipt className="h-4 w-4 text-red-500 dark:text-red-400" />
                   New Invoice
-                </Link>
+                </button>
               </PermissionGate>
             </div>
           </div>
