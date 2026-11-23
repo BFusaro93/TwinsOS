@@ -449,7 +449,7 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Proposal Deposit Failed" description="When a client's deposit payment is declined or returned by their bank after they accepted. Sent to the Estimate Decision Recipients (all admins and managers by default) and the estimate's salesperson.">
                 <Switch checked={prefs.inAppEstimateDepositFailed} onCheckedChange={() => toggle("inAppEstimateDepositFailed")} />
               </SettingRow>
-              <SettingRow label="Estimate Change Requested" description="When a client leaves a change request on an estimate">
+              <SettingRow label="Estimate Change Requested" description="When a client leaves a change request on an estimate (admins, managers and the estimate's salesperson)">
                 <Switch checked={prefs.inAppEstimateChangeRequest} onCheckedChange={() => toggle("inAppEstimateChangeRequest")} />
               </SettingRow>
               <SettingRow label="Estimate Expiring Soon" description="When an estimate you created is expiring within 3 days and hasn't been accepted">
