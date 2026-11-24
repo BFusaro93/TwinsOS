@@ -33,6 +33,8 @@ export interface PayrollRow {
   breakOverride: number | null;
   /** Unpaid lunch the office deducted for the day, separate from breakMinutes (min off). */
   lunchDeductionMinutes: number;
+  /** Lunch the crew recorded on the tablet (the default when the office hasn't set its own). */
+  recordedLunchMinutes: number;
   /** Day span net of breaks and gaps; 0 while the shift is still open. */
   shiftHours: number;
   /** Hours on jobs (stop punches) — what Job Costing sees. */
@@ -114,6 +116,8 @@ interface ShiftRow {
   source: string;
   /** "Crew pauses are unpaid" as it stood when the day ended (null = not ended yet). */
   breaks_unpaid: boolean | null;
+  /** Lunch minutes recorded with Start/End Lunch on the crew tablet. */
+  lunch_minutes?: number | null;
 }
 
 /**
@@ -149,7 +153,7 @@ export async function computePayroll(
   const shifts = await fetchAllRows<ShiftRow>(() =>
     supabase
       .from("crm_crew_day_shifts")
-      .select("crew_member_id, work_date, started_at, ended_at, break_minutes, source, breaks_unpaid")
+      .select("crew_member_id, work_date, started_at, ended_at, break_minutes, source, breaks_unpaid, lunch_minutes")
       .eq("org_id", orgId)
       .is("deleted_at", null)
       // One day of lead-in: a shift that started the evening before `from`
@@ -268,7 +272,9 @@ export async function computePayroll(
     // The office's lunch deduction is separate from "min off": that figure is also the alert for
     // time away from jobs, so a fixed lunch typed there hid the alert (and replaced the recorded
     // minutes). Paid time = shift - min off - lunch.
-    const lunchDeductionMinutes = Math.max(0, Number(adj?.lunch_override ?? 0));
+    // Lunch recorded on the tablet (Start/End Lunch) is the default; the office's figure replaces it.
+    const recordedLunchMinutes = Math.max(0, Number(shift?.lunch_minutes ?? 0));
+    const lunchDeductionMinutes = adj?.lunch_override != null ? Math.max(0, Number(adj.lunch_override)) : recordedLunchMinutes;
     const shiftHours = start && end
       ? Math.max(0, r2(hoursBetween(start, end) - breakMinutes / 60 - lunchDeductionMinutes / 60))
       : 0;
@@ -293,6 +299,7 @@ export async function computePayroll(
       endOverride: adj?.end_override ?? null,
       breakOverride: adj?.break_override != null ? Number(adj.break_override) : null,
       lunchDeductionMinutes,
+      recordedLunchMinutes,
       shiftHours,
       jobHours,
       otherHours: end ? Math.max(0, r2(shiftHours - jobHours)) : 0,
@@ -304,7 +311,7 @@ export async function computePayroll(
       totalHours: r2(base + extra + pto),
       regularHours: r2(base + extra + pto),
       overtimeHours: 0,
-      adjusted: !!adj && (override != null || extra > 0 || pto > 0 || !!adj.note || !!adj.start_override || !!adj.end_override || adj.break_override != null || lunchDeductionMinutes > 0),
+      adjusted: !!adj && (override != null || extra > 0 || pto > 0 || !!adj.note || !!adj.start_override || !!adj.end_override || adj.break_override != null || adj.lunch_override != null),
       noShift,
       autoStart: !adj?.start_override && shift?.source === "auto_first_job",
       openShift,

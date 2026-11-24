@@ -342,6 +342,7 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
   const [endTime, setEndTime] = useState(initEnd);
   const [breakMins, setBreakMins] = useState(initBreak);
   const initLunch = row.lunchDeductionMinutes ? String(row.lunchDeductionMinutes) : "";
+  const recordedLunch = row.recordedLunchMinutes ?? 0;
   const [lunchMins, setLunchMins] = useState(initLunch);
 
   const parse = (s: string): number | null => (s.trim() === "" || Number.isNaN(Number(s)) ? null : Math.max(0, Number(s)));
@@ -361,13 +362,14 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
       startTime: clear || !startTime || startTime === wall(row.recordedStart) ? null : startTime,
       endTime: clear || !endTime || endTime === wall(row.recordedEnd) ? null : endTime,
       breakMinutes: clear || breakValue == null || breakValue === row.recordedBreakMinutes ? null : breakValue,
-      lunchMinutes: clear || parse(lunchMins) == null || parse(lunchMins) === 0 ? null : Math.round(parse(lunchMins) as number),
+      // Only a figure that differs from what the crew recorded is saved as the office's own.
+      lunchMinutes: clear || Math.round(parse(lunchMins) ?? 0) === recordedLunch ? null : Math.round(parse(lunchMins) ?? 0),
       extraHours: clear ? 0 : parse(extra) ?? 0,
       ptoHours: clear ? 0 : parse(pto) ?? 0,
       note: clear ? null : note.trim() || null,
     });
     if (clear) {
-      setLunchMins("");
+      setLunchMins(recordedLunch ? String(recordedLunch) : "");
       setHours(""); setExtra(""); setPto(""); setNote("");
       setStartTime(wall(row.recordedStart)); setEndTime(wall(row.recordedEnd)); setBreakMins(String(row.recordedBreakMinutes));
     }
@@ -415,9 +417,11 @@ function DayRow({ row, tz, locked }: { row: PayrollRow; tz: string; locked: bool
           <span className="text-xs text-muted-foreground">lunch</span>
         </div>
         <p className="mt-1 text-[11px] leading-tight text-muted-foreground">
-          {row.lunchMinutes > 0
-            ? `The crew already logged ${row.lunchMinutes} min of lunch (it's in min off) — leave Lunch blank unless there's more to take off.`
-            : "Lunch is deducted in addition to min off — don't enter the same time in both."}
+          {recordedLunch > 0
+            ? `The crew recorded ${recordedLunch} min of lunch on the tablet and it's already in Lunch — change it only to correct it.`
+            : row.lunchMinutes > 0
+              ? `The crew already logged ${row.lunchMinutes} min of lunch on a job (it's in min off) — leave Lunch blank unless there's more to take off.`
+              : "Lunch is deducted in addition to min off — don't enter the same time in both."}
         </p>
         <Input disabled={locked} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (why adjusted)" className="mt-1 h-8 text-xs" />
       </TableCell>

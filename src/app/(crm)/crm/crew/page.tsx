@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO, differenceInMinutes } from "date-fns";
-import { Package, Square, CheckSquare, Truck, MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, BookOpen, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
+import { Package, Square, CheckSquare, Truck, MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, BookOpen, UserCircle2, Navigation, Car, Loader2, Coffee, Play } from "lucide-react";
 import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction, useCrewTap, useCrewEquipment, useCrewMaterials, useToggleCrewLoaded } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
@@ -176,6 +176,13 @@ export default function CrewSchedulePage() {
   const dayFromYesterday = !!crewDay?.workDate && dayMembers.some(
     (m) => m.startedAt && !m.endedAt && !!m.shiftWorkDate && m.shiftWorkDate < crewDay.workDate
   );
+  // Lunch between jobs (a job's own break is "Take a Break" on the stop): running while any member on
+  // the clock has a lunch started.
+  const lunchStartedAt = dayMembers
+    .filter((m) => m.startedAt && !m.endedAt && m.lunchStartedAt)
+    .map((m) => m.lunchStartedAt as string)
+    .sort()[0] ?? null;
+  const onLunch = !!lunchStartedAt;
 
   return (
     <div className="flex flex-col min-h-dvh">
@@ -271,6 +278,7 @@ export default function CrewSchedulePage() {
             )}
           </>
         ) : dayOpen ? (
+          <>
           <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-green-800 dark:text-green-300">{dayFromYesterday ? t("Day started yesterday {time}", { time: clock(dayStartedAt) }) : t("Day started {time}", { time: clock(dayStartedAt) })}</p>
@@ -292,6 +300,43 @@ export default function CrewSchedulePage() {
               {t("End Day")}
             </Button>
           </div>
+          {/* Lunch between jobs. While a job is open, "Take a Break" on the job is the right button — the
+              job's own time already stops for it, so a day lunch on top would take the time off twice. */}
+          {onLunch ? (
+            <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-800 dark:bg-blue-950/40">
+              <div>
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-300">{t("On lunch since {time}", { time: clock(lunchStartedAt as string) })}</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400">{t("Tap End Lunch when the crew is back to work.")}</p>
+              </div>
+              <Button
+                size="sm"
+                className="gap-1.5 bg-blue-600 text-white hover:bg-blue-700"
+                onClick={() => dayAction.mutate({ action: "end_lunch" })}
+                disabled={dayAction.isPending}
+              >
+                {dayAction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                {t("End Lunch")}
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-2">
+              <Button
+                variant="outline"
+                className="min-h-11 w-full gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                onClick={() => dayAction.mutate({ action: "start_lunch" })}
+                disabled={dayAction.isPending || anyJobActive}
+              >
+                <Coffee className="h-4 w-4" />
+                {t("Start Lunch")}
+              </Button>
+              {anyJobActive && (
+                <p className="mt-1 text-center text-xs text-slate-400 dark:text-neutral-500">
+                  {t("A job is in progress — use Take a Break on the job instead.")}
+                </p>
+              )}
+            </div>
+          )}
+          </>
         ) : (
           <p className="text-xs text-center text-slate-400 dark:text-neutral-500">
             {dayEnded && t("Day ended — everyone is clocked out.")}

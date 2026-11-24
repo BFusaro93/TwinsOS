@@ -4272,6 +4272,8 @@ export type Database = {
           deleted_at: string | null
           ended_at: string | null
           id: string
+          lunch_minutes: number
+          lunch_started_at: string | null
           org_id: string
           source: string
           started_at: string
@@ -4287,6 +4289,8 @@ export type Database = {
           deleted_at?: string | null
           ended_at?: string | null
           id?: string
+          lunch_minutes?: number
+          lunch_started_at?: string | null
           org_id?: string
           source?: string
           started_at: string
@@ -4302,6 +4306,8 @@ export type Database = {
           deleted_at?: string | null
           ended_at?: string | null
           id?: string
+          lunch_minutes?: number
+          lunch_started_at?: string | null
           org_id?: string
           source?: string
           started_at?: string
