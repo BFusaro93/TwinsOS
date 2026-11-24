@@ -19,6 +19,7 @@ import {
   UserPlus,
   Receipt,
   ClipboardList,
+  Ticket,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -42,7 +43,7 @@ import { useProjects } from "@/lib/hooks/use-projects";
 import { usePhotoJobs } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useClientSearch } from "@/lib/hooks/use-clients";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import { useInvoiceSearch, useEstimateSearch } from "@/lib/hooks/use-global-search";
+import { useInvoiceSearch, useEstimateSearch, useTicketSearch } from "@/lib/hooks/use-global-search";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
 import { pruneMissingRecentItems, pushRecentItem, readRecentItems, type RecentItem, type RecentItemKind } from "@/lib/recent-items";
 import {
@@ -131,6 +132,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   const showLeads = !permsLoading && canCrm("lead_list");
   const showInvoices = !permsLoading && canCrm("acct_view_invoice_list");
   const showEstimates = !permsLoading && canCrm("estimate_list");
+  const showTickets = !permsLoading && canCrm("tickets_view_modify");
   // Clients are searched server-side (an org can have thousands) — leads are
   // left out because they have their own group below.
   const [query, setQuery] = useState("");
@@ -151,6 +153,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   // in the org on first open. Each query is off while its group is hidden.
   const { data: invoices = [] } = useInvoiceSearch(clientTerm, showFullSearch && showInvoices);
   const { data: estimates = [] } = useEstimateSearch(clientTerm, showFullSearch && showEstimates);
+  const { data: tickets = [] } = useTicketSearch(clientTerm, showFullSearch && showTickets);
 
   // Only surface stocked and project materials in search (maintenance_parts are already in Parts)
   const catalogProducts = allProducts.filter(
@@ -370,7 +373,34 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
           </CommandGroup>
         )}
 
-        {showFullSearch && (estimates.length > 0 || invoices.length > 0) && workOrders.length > 0 && <CommandSeparator />}
+        {showFullSearch && estimates.length > 0 && tickets.length > 0 && <CommandSeparator />}
+
+        {showFullSearch && showTickets && tickets.length > 0 && (
+          <CommandGroup heading="Tickets">
+            {tickets.map((tk) => {
+              const label = tk.ticketNumber != null ? `Ticket #${tk.ticketNumber}` : "Ticket";
+              return (
+                <CommandItem
+                  key={tk.id}
+                  value={`${label} ${tk.subject} ${tk.clientName ?? ""} ticket ${query}`}
+                  onSelect={() => go(`/crm/tickets?open=${tk.id}`)}
+                  className="flex items-center gap-3"
+                >
+                  <Ticket className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium">{label} — {tk.subject}</span>
+                    {tk.clientName && (
+                      <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{tk.clientName}</span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-xs capitalize text-muted-foreground">{tk.status.replace(/_/g, " ")}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        )}
+
+        {showFullSearch && (tickets.length > 0 || estimates.length > 0 || invoices.length > 0) && workOrders.length > 0 && <CommandSeparator />}
 
         {showFullSearch && workOrders.length > 0 && (
           <CommandGroup heading="Work Orders">

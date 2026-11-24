@@ -147,3 +147,58 @@ export function useEstimateSearch(term: string, enabled = true) {
     },
   });
 }
+
+export interface TicketSearchHit {
+  id: string;
+  ticketNumber: number | null;
+  subject: string;
+  status: string;
+  clientName: string | null;
+}
+
+export function useTicketSearch(term: string, enabled = true) {
+  const t = term.trim();
+  return useQuery({
+    queryKey: ["global-search", "tickets", t],
+    enabled: enabled && t.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    queryFn: async (): Promise<TicketSearchHit[]> => {
+      const supabase = createClient();
+      const num = numberInTerm(t);
+      const select = "id, ticket_number, subject, status, clients(display_name)";
+      const byNumber = num != null
+        ? supabase.from("crm_tickets").select(select).is("deleted_at", null).eq("ticket_number", num).limit(GLOBAL_SEARCH_LIMIT)
+        : null;
+      const bySubject = supabase
+        .from("crm_tickets")
+        .select(select)
+        .is("deleted_at", null)
+        .ilike("subject", containsPattern(t))
+        .order("created_at", { ascending: false })
+        .order("id")
+        .limit(GLOBAL_SEARCH_LIMIT);
+      const byClient = supabase
+        .from("crm_tickets")
+        .select("id, ticket_number, subject, status, clients!inner(display_name)")
+        .is("deleted_at", null)
+        .ilike("clients.display_name", containsPattern(t))
+        .order("created_at", { ascending: false })
+        .order("id")
+        .limit(GLOBAL_SEARCH_LIMIT);
+      const [numRes, subjRes, clientRes] = await Promise.all([byNumber, bySubject, byClient]);
+      if (numRes?.error) throw numRes.error;
+      if (subjRes.error) throw subjRes.error;
+      if (clientRes.error) throw clientRes.error;
+      const map = (rows: { id: string; ticket_number: number | null; subject: string; status: string; clients: ClientEmbed }[]) =>
+        rows.map((r) => ({
+          id: r.id,
+          ticketNumber: r.ticket_number,
+          subject: r.subject,
+          status: r.status,
+          clientName: embeddedName(r.clients),
+        }));
+      return mergeById([map(numRes?.data ?? []), map(subjRes.data ?? []), map(clientRes.data ?? [])]);
+    },
+  });
+}
