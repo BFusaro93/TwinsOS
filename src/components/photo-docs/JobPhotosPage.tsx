@@ -634,16 +634,14 @@ export function JobPhotosPage() {
         )}
 
         {/* Search + Filters — inline single row */}
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <SearchInput
             value={search}
             onChange={setSearch}
             placeholder="Search jobs…"
-            // Top-aligned (not bottom-aligned with the pills) so the box sits at the same height as the
-            // search on every other page, e.g. Warranties — the Status/View labels made this row taller.
-            className="w-full max-w-xs self-start"
+            className="w-full max-w-xs"
           />
-          <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Status</span>
             <div className="flex flex-wrap gap-1.5">
               {STATUS_FILTERS.map((f) => (
@@ -655,7 +653,7 @@ export function JobPhotosPage() {
             </div>
           </div>
           <div className="h-8 w-px bg-slate-200 dark:bg-neutral-700" />
-          <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">View</span>
             <div className="flex gap-1.5">
               {(["current", "archived"] as ArchiveFilter[]).map((f) => (
