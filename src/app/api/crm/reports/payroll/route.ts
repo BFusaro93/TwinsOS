@@ -41,6 +41,8 @@ const PutBody = z.object({
   endTime: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
   /** Unpaid minutes off the clock for the day (replaces the recorded break). */
   breakMinutes: z.number().int().min(0).max(1440).nullable(),
+  /** Unpaid lunch deducted on top of the break above. Optional so older clients keep working. */
+  lunchMinutes: z.number().int().min(0).max(480).nullable().optional().default(null),
   /** Extra worked time — counts toward overtime. */
   extraHours: z.number().min(0).max(MAX_DAY_HOURS),
   /** Paid time off — paid, never overtime. Optional so older clients keep working. */
@@ -101,7 +103,7 @@ export async function PUT(request: Request) {
 
   const note = b.note?.trim() || null;
   const now = new Date().toISOString();
-  const isEmpty = b.hoursOverride == null && b.startTime == null && b.endTime == null && b.breakMinutes == null && b.extraHours === 0 && b.ptoHours === 0 && !note;
+  const isEmpty = b.hoursOverride == null && b.startTime == null && b.endTime == null && b.breakMinutes == null && b.lunchMinutes == null && b.extraHours === 0 && b.ptoHours === 0 && !note;
 
   const { data: existing } = await auth.db
     .from("crm_payroll_adjustments")
@@ -151,6 +153,7 @@ export async function PUT(request: Request) {
     start_override: startAt ? startAt.toISOString() : null,
     end_override: endAt ? endAt.toISOString() : null,
     break_override: b.breakMinutes,
+    lunch_override: b.lunchMinutes,
     hours_override: b.hoursOverride,
     extra_hours: b.extraHours,
     pto_hours: b.ptoHours,

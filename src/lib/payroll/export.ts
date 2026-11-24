@@ -96,7 +96,7 @@ export function breakDetail(d: Pick<PayrollRow, "breakGaps" | "lunchMinutes" | "
 
 export const DAILY_HEADERS = [
   "Employee", "Crew", "Date", "Clock In", "Clock Out", "Break (min)", "Break Times", "Day Hours", "Job Hours", "Extra Hours", "PTO Hours", "Total Hours",
-  "Regular Hours", "OT Hours", "Status", "Note",
+  "Regular Hours", "OT Hours", "Status", "Note", "Lunch Deducted (min)",
 ];
 
 /** Flags a day that needs a look before it is paid. */
@@ -115,7 +115,7 @@ export function dailyRows(members: PayrollMemberTotals[], tz: string): (string |
   return members.flatMap((m) =>
     m.days.map((d) => [
       m.memberName, d.crewName ?? "", d.workDate, clock(d.shiftStart, tz), clock(d.shiftEnd, tz), d.breakMinutes, breakDetail(d, tz),
-      r2(d.baseHours), r2(d.jobHours), r2(d.extraHours), r2(d.ptoHours ?? 0), r2(d.totalHours), r2(d.regularHours), r2(d.overtimeHours), dayStatus(d), d.note ?? "",
+      r2(d.baseHours), r2(d.jobHours), r2(d.extraHours), r2(d.ptoHours ?? 0), r2(d.totalHours), r2(d.regularHours), r2(d.overtimeHours), dayStatus(d), d.note ?? "", d.lunchDeductionMinutes ?? 0,
     ])
   );
 }
