@@ -105,7 +105,7 @@ const PRIORITY_CLASS: Record<TicketPriority, string> = {
 
 function StatusBadge({ status }: { status: TicketStatus }) {
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] leading-4 font-medium whitespace-nowrap", STATUS_CLASS[status])}>
+    <span className={cn("inline-flex items-center rounded-full px-1.5 py-0 text-[10px] leading-[14px] font-medium whitespace-nowrap", STATUS_CLASS[status])}>
       {STATUS_LABEL[status] ?? status}
     </span>
   );
@@ -114,7 +114,7 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 function PriorityBadge({ priority }: { priority: TicketPriority }) {
   if (priority !== "urgent" && priority !== "high") return null;
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] leading-4 font-medium capitalize", PRIORITY_CLASS[priority])}>
+    <span className={cn("inline-flex items-center rounded-full px-1.5 py-0 text-[10px] leading-[14px] font-medium capitalize", PRIORITY_CLASS[priority])}>
       {priority}
     </span>
   );
@@ -875,7 +875,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between flex-wrap gap-y-2 bg-[#4a4a4a] px-4 py-2">
+      <div className="flex items-center justify-between flex-wrap gap-y-2 bg-[#4a4a4a] px-4 py-2 min-h-[3.25rem]">
         <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           {/* Actions dropdown */}
           <DropdownMenu>

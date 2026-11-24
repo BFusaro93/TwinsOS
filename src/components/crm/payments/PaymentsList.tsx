@@ -1272,7 +1272,7 @@ export function PaymentsList({ clientId }: Props) {
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2 min-h-[3.25rem]">
         <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

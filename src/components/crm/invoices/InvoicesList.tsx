@@ -931,7 +931,7 @@ export function InvoicesList({ clientId }: Props) {
       </div>
 
       {/* ── Dark actions bar with quick-filter tabs (matches Payments dark bar) ── */}
-      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2 lg:flex-nowrap lg:gap-x-3">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2 min-h-[3.25rem] lg:flex-nowrap lg:gap-x-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1 lg:flex-1 lg:flex-nowrap">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

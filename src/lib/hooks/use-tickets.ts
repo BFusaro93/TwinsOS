@@ -40,7 +40,7 @@ function mapTicket(row: any): CRMTicket {
   };
 }
 
-export function useTickets(filters?: { status?: TicketStatus; clientId?: string }) {
+export function useTickets(filters?: { status?: TicketStatus; statuses?: TicketStatus[]; clientId?: string }) {
   return useQuery({
     queryKey: ["crm-tickets", filters],
     queryFn: async () => {
@@ -57,6 +57,7 @@ export function useTickets(filters?: { status?: TicketStatus; clientId?: string 
           .order("id");
 
         if (filters?.status) query = query.eq("status", filters.status);
+        if (filters?.statuses?.length) query = query.in("status", filters.statuses);
         if (filters?.clientId) query = query.eq("client_id", filters.clientId);
         return query;
       });

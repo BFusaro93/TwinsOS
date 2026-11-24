@@ -310,7 +310,7 @@ export function FormResponses({ formId }: Props) {
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center bg-[#4a4a4a] px-4 py-2">
+      <div className="flex items-center bg-[#4a4a4a] px-4 py-2 min-h-[3.25rem]">
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

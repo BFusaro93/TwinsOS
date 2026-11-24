@@ -58,7 +58,7 @@ export function VendorsPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex h-full flex-col gap-4">
       <PageHeader
         title="Vendors"
         description="Manage your supplier and vendor contacts"

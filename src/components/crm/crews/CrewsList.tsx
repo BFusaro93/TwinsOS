@@ -794,7 +794,7 @@ export function CrewsList() {
       />
 
       {/* Dark toolbar (SA style) */}
-      <div className="border-b bg-[#4a4a4a] px-4 py-2 flex items-center flex-wrap gap-y-2">
+      <div className="border-b bg-[#4a4a4a] px-4 py-2 min-h-[3.25rem] flex items-center flex-wrap gap-y-2">
         {TAB_FILTERS.map((t) => (
           <button
             key={t.value}
