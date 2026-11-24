@@ -25,6 +25,9 @@ import type { CRMJob } from "@/types/crm-jobs";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { ColumnChooser } from "@/components/shared/ColumnChooser";
+import type { ColumnDef } from "@/components/shared/ColumnChooser";
+import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 
 // One row per JOB, not per visit. Recurring/package jobs can have dozens of
 // generated visits — showing one row per visit made the same job appear to
@@ -47,6 +50,23 @@ interface JobSummary {
 }
 
 const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
+
+// Columns the person can switch on and off. Street address and state are opt-in: the address already
+// rides next to the client name, and state is almost always the same value, so City and Zip are the
+// useful defaults for spotting jobs that cluster by area.
+const JOB_COLUMNS: (ColumnDef & { width?: string; px?: number })[] = [
+  { key: "client",   label: "Client",   locked: true },
+  { key: "services", label: "Services" },
+  { key: "type",     label: "Type",     width: "w-24", px: 96 },
+  { key: "crew",     label: "Crew",     width: "w-32", px: 128 },
+  { key: "address",  label: "Address",  width: "w-56", px: 224, defaultHidden: true },
+  { key: "city",     label: "City",     width: "w-32", px: 128 },
+  { key: "state",    label: "State",    width: "w-16", px: 64,  defaultHidden: true },
+  { key: "zip",      label: "Zip",      width: "w-20", px: 80 },
+  { key: "revenue",  label: "Revenue",  width: "w-24", px: 96 },
+  { key: "status",   label: "Status",   width: "w-64", px: 256 },
+];
+const DEFAULT_JOB_COLUMN_KEYS = JOB_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key);
 
 function summarizeJob(job: CRMJob, window?: { from: string; to: string }, today?: string): JobSummary {
   const visits = job.visits ?? [];
@@ -174,6 +194,8 @@ export function JobsList() {
     setToDate(w.to);
   }, [orgTimeZone]);
   const [newJobOpen, setNewJobOpen] = useState(false);
+  const [visibleKeys, setVisibleKeys] = usePersistedColumns("jobs_list", DEFAULT_JOB_COLUMN_KEYS);
+  const shownColumns = JOB_COLUMNS.filter((c) => c.locked || visibleKeys.includes(c.key));
   const [renewOpen, setRenewOpen] = useState(false);
 
   // Status/date filtering happens client-side below, per-occurrence — a job's
@@ -311,7 +333,7 @@ export function JobsList() {
               className={cn(
                 "px-3 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:focus-visible:ring-neutral-600 focus-visible:ring-offset-2",
                 viewMode === mode
-                  ? "bg-slate-800 text-white"
+                  ? "bg-slate-800 dark:bg-neutral-700 text-white dark:text-neutral-100"
                   : "bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
               )}
             >
@@ -364,6 +386,9 @@ export function JobsList() {
             Clear filters
           </Button>
         )}
+        <div className="ml-auto">
+          <ColumnChooser columns={JOB_COLUMNS} visibleKeys={visibleKeys} onVisibleKeysChange={setVisibleKeys} />
+        </div>
       </div>
 
       {/* Jobs grouped by date */}
@@ -381,33 +406,28 @@ export function JobsList() {
         // Below lg the fixed percentage columns squeezed Revenue into Crew and the status badge
         // over the chevron; scroll sideways at a readable minimum width instead.
         <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm table-fixed">
+          <table
+            className="w-full text-sm table-fixed"
+            style={{ minWidth: 32 + 300 + shownColumns.reduce((sum, c) => sum + (c.px ?? 0), 0) }}
+          >
             {/* Narrow columns are fixed; Client and Services split whatever is left, so there are
                 no wide empty gaps and the status pills have room to sit side by side. */}
             <colgroup>
-              <col />
-              <col />
-              <col className="w-24" />
-              <col className="w-32" />
-              <col className="w-24" />
-              <col className="w-64" />
+              {shownColumns.map((c) => <col key={c.key} className={c.width} />)}
               <col className="w-8" />
             </colgroup>
             <thead>
               <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                <th className="px-3 py-2 text-left">Client</th>
-                <th className="px-3 py-2 text-left">Services</th>
-                <th className="px-3 py-2 text-left">Type</th>
-                <th className="px-3 py-2 text-left">Crew</th>
-                <th className="px-3 py-2 text-right">Revenue</th>
-                <th className="px-3 py-2 text-left">Status</th>
+                {shownColumns.map((c) => (
+                  <th key={c.key} className={cn("px-3 py-2", c.key === "revenue" ? "text-right" : "text-left")}>{c.label}</th>
+                ))}
                 <th className="px-3 py-2 w-8" />
               </tr>
             </thead>
             {dateKeys.map((dateKey) => (
               <tbody key={dateKey}>
                 <tr className="bg-slate-50/60 dark:bg-muted/40">
-                  <td colSpan={7} className="px-4 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <td colSpan={shownColumns.length + 1} className="px-4 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     {dateKey === "Unscheduled"
                       ? "Unscheduled"
                       : new Date(dateKey + "T00:00:00").toLocaleDateString("en-US", {
@@ -419,7 +439,7 @@ export function JobsList() {
                   </td>
                 </tr>
                 {grouped[dateKey].map((o) => (
-                  <JobRow key={o.key} occurrence={o} onClick={() => router.push(`/crm/scheduling/jobs/${o.job.id}`)} />
+                  <JobRow key={o.key} occurrence={o} columns={shownColumns.map((c) => c.key)} onClick={() => router.push(`/crm/scheduling/jobs/${o.job.id}`)} />
                 ))}
               </tbody>
             ))}
@@ -435,7 +455,8 @@ export function JobsList() {
   );
 }
 
-function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () => void }) {
+function JobRow({ occurrence, columns, onClick }: { occurrence: JobSummary; columns: string[]; onClick: () => void }) {
+  const show = (key: string) => columns.includes(key);
   const { job, status, crewName, jobServiceId, visitCount, completedCount, overdueCount } = occurrence;
   // Package jobs carry every step (e.g. all 5 Fert applications) on job.services,
   // but this occurrence is only for the ONE step its visit is linked to — show
@@ -453,26 +474,38 @@ function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () =
           <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${job.clientId}`} className="max-w-[60%] shrink-0 truncate font-medium text-brand-600 dark:text-brand-400 hover:underline">
             {job.clientName ?? "—"}
           </Link>
-          {job.serviceAddress && (
+          {job.serviceAddress && !show("address") && (
             <span className="min-w-0 truncate text-xs text-slate-400 dark:text-neutral-500" title={job.serviceAddress}>{job.serviceAddress}</span>
           )}
         </div>
       </td>
-      <td className="px-3 py-1.5">
+      {show("services") && (<td className="px-3 py-1.5">
         <p className="text-slate-700 dark:text-neutral-300 text-xs truncate" title={serviceNames || undefined}>
           {serviceNames || <span className="text-slate-400 dark:text-neutral-500 italic">No services</span>}
         </p>
-      </td>
-      <td className="px-3 py-1.5 text-muted-foreground text-xs">
+      </td>)}
+      {show("type") && (<td className="px-3 py-1.5 text-muted-foreground text-xs">
         {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
-      </td>
-      <td className="truncate px-3 py-1.5 text-slate-600 dark:text-neutral-400 text-xs">
+      </td>)}
+      {show("crew") && (<td className="truncate px-3 py-1.5 text-slate-600 dark:text-neutral-400 text-xs">
         {crewName ?? <span className="text-slate-400 dark:text-neutral-500 italic">Unassigned</span>}
-      </td>
-      <td className="px-3 py-1.5 text-right tabular-nums text-slate-700 dark:text-neutral-300 text-sm">
+      </td>)}
+      {show("address") && (
+        <td className="truncate px-3 py-1.5 text-xs text-slate-600 dark:text-neutral-400" title={job.serviceAddress ?? undefined}>{job.serviceAddress ?? "—"}</td>
+      )}
+      {show("city") && (
+        <td className="truncate px-3 py-1.5 text-xs text-slate-600 dark:text-neutral-400">{job.serviceCity ?? "—"}</td>
+      )}
+      {show("state") && (
+        <td className="px-3 py-1.5 text-xs text-slate-600 dark:text-neutral-400">{job.serviceState ?? "—"}</td>
+      )}
+      {show("zip") && (
+        <td className="px-3 py-1.5 text-xs text-slate-600 dark:text-neutral-400">{job.serviceZip ?? "—"}</td>
+      )}
+      {show("revenue") && (<td className="px-3 py-1.5 text-right tabular-nums text-slate-700 dark:text-neutral-300 text-sm">
         {formatCurrency(jobRevenueCents(job))}
-      </td>
-      <td className="px-3 py-1.5">
+      </td>)}
+      {show("status") && (<td className="px-3 py-1.5">
         <div className="flex items-center gap-1.5 whitespace-nowrap">
         <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[status] ?? "bg-muted text-muted-foreground")}>
           {STATUS_LABEL[status] ?? status}
@@ -490,7 +523,7 @@ function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () =
           <span className="text-[10px] text-slate-400 dark:text-neutral-500">{completedCount}/{visitCount} visits</span>
         )}
         </div>
-      </td>
+      </td>)}
       <td className="px-3 py-1.5 text-center">
         <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
       </td>
