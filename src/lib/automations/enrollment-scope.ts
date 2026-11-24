@@ -25,6 +25,8 @@ export const JOB_SCOPED_TRIGGERS: ReadonlySet<TriggerType> = new Set<TriggerType
   "job_cancelled",
   "package_created",
   "package_renewed",
+  "waiting_list_ending",
+  "waiting_list_window_passed",
 ]);
 
 export function isVisitScopedTrigger(t: string | null | undefined): boolean {

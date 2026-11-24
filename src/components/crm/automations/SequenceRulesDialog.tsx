@@ -45,7 +45,7 @@ import { defaultDateGapDays, resolveDateGapDays } from "@/lib/automations/activa
 
 // Trigger types that fire off a day-count gap rather than an event — the
 // builder shows a "days" input for these instead of just the type selector.
-const DATE_GAP_TRIGGER_TYPES = new Set<TriggerType>(["estimate_expiring", "estimate_no_response", "visit_coming_up"]);
+const DATE_GAP_TRIGGER_TYPES = new Set<TriggerType>(["estimate_expiring", "estimate_no_response", "visit_coming_up", "waiting_list_ending"]);
 
 // Trigger types that fire off a minute-count gap before a scheduled moment —
 // the builder shows a "minutes before" input for these instead of "days".
@@ -189,6 +189,8 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "visit_skipped", label: "Visit was skipped" },
       { value: "visit_date_changed", label: "Visit date changed" },
       { value: "visit_moved_to_waiting_list", label: "Visit moved to waiting list" },
+      { value: "waiting_list_ending", label: "Waiting list window is ending" },
+      { value: "waiting_list_window_passed", label: "Waiting list window passed" },
     ],
   },
   {
@@ -643,7 +645,9 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                         ? "days before expiry"
                         : t.triggerType === "visit_coming_up"
                           ? "days before the visit"
-                          : "days since sent"}
+                          : t.triggerType === "waiting_list_ending"
+                            ? "days before the window ends"
+                            : "days since sent"}
                     </span>
                   </div>
                 )}
