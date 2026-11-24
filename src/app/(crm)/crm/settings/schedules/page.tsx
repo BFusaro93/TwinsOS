@@ -963,13 +963,13 @@ function SchedulesPageContent() {
       <div className="rounded-lg border border-border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 dark:bg-muted/40 border-b border-border">
-            <tr>
-              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Frequency</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Day</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Season</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Active</th>
-              <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Actions</th>
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="px-4 py-2">Name</th>
+              <th className="px-4 py-2">Frequency</th>
+              <th className="px-4 py-2">Day</th>
+              <th className="px-4 py-2">Season</th>
+              <th className="px-4 py-2">Active</th>
+              <th className="px-4 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -981,16 +981,16 @@ function SchedulesPageContent() {
             )}
             {schedules.map((s) => (
               <tr key={s.id} className="border-b border-slate-100 dark:border-neutral-800 last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
-                <td className="px-4 py-3 font-medium text-slate-900 dark:text-neutral-100">{s.name}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">{FREQUENCY_LABELS[s.frequency]}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
+                <td className="px-4 py-1.5 font-medium text-slate-900 dark:text-neutral-100">{s.name}</td>
+                <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">{FREQUENCY_LABELS[s.frequency]}</td>
+                <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">
                   {s.frequency === 'custom'
                     ? `${s.customDates?.length ?? 0} dates`
                     : s.frequency === 'monthly' && s.weekOfMonth
                     ? `${WEEK_OF_MONTH_LABELS[s.weekOfMonth]} ${s.dayOfWeek}`
                     : s.dayOfWeek}
                 </td>
-                <td className="px-4 py-3 text-slate-600 dark:text-neutral-400 text-xs">
+                <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400 text-xs">
                   {s.frequency === 'custom'
                     ? <span className="text-slate-400 dark:text-neutral-500">—</span>
                     : s.seasonStart && s.seasonEnd
@@ -999,10 +999,10 @@ function SchedulesPageContent() {
                     : s.seasonEnd ? `Until ${s.seasonEnd}`
                     : <span className="text-slate-400 dark:text-neutral-500">Year-round</span>}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-1.5">
                   <Switch checked={s.isActive} onCheckedChange={() => handleToggleActive(s)} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-1.5">
                   <div className="flex items-center justify-end gap-1">
                     <SchedulePreviewPopover schedule={s} />
                     <Button variant="ghost" size="sm" onClick={() => openEdit(s)} className="h-8 w-8 p-0">

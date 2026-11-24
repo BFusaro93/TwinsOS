@@ -368,7 +368,7 @@ export function FormResponses({ formId }: Props) {
       <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="w-4 px-4 py-2" />
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Submitted By</th>

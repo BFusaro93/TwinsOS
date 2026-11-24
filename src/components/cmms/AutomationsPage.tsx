@@ -257,7 +257,7 @@ export function AutomationsPage() {
       <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50 dark:bg-muted/40 [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-slate-400 dark:[&>th]:text-neutral-500">
+            <TableRow className="bg-slate-50 dark:bg-muted/40 [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-muted-foreground">
               <TableHead>Name</TableHead>
               <TableHead>Trigger</TableHead>
               <TableHead>Action</TableHead>

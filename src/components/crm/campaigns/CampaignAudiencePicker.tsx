@@ -68,7 +68,7 @@ export function CampaignAudiencePicker({
 
       <div className="max-h-52 overflow-y-auto rounded border">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted text-[10px] uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted text-[10px] uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="w-8 px-2 py-1.5"></th>
               <th className="px-2 py-1.5 text-left">Client</th>
