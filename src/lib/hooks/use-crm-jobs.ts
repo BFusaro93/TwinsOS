@@ -2455,7 +2455,8 @@ export function useJobsList(filters?: {
           .from("crm_jobs")
           .select(`
             ${JOB_READ_COLUMNS},
-            clients(display_name, primary_phone),
+            clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
+            client_properties(address, city, state, zip),
             crm_crews(name),
             crm_job_services(*),
             crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id, crm_crews!crm_job_visits_crew_id_fkey(name))
@@ -2481,7 +2482,18 @@ export function useJobsList(filters?: {
       // jobs — past 1000 the later-dated ones silently vanished from the page.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await fetchAllRows<any>(buildQuery);
-      return (data.map(mapJob)) as CRMJob[];
+      // Show the address the stop is really served at: the job's own snapshot when it has one,
+      // else the linked property, the client's service address, then billing (the order the board,
+      // snow board and crew app use). Most jobs are created straight off a client and never copied
+      // an address onto the job row, so reading the row alone left City/Zip blank for them.
+      return (data.map((row) => mapJob({
+        ...row,
+        ...stopAddressJobFields(resolveStopAddress({
+          job: row,
+          property: embeddedOne(row.client_properties),
+          client: embeddedOne(row.clients),
+        })),
+      }))) as CRMJob[];
     },
   });
 }
