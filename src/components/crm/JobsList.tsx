@@ -381,25 +381,27 @@ export function JobsList() {
         // Below lg the fixed percentage columns squeezed Revenue into Crew and the status badge
         // over the chevron; scroll sideways at a readable minimum width instead.
         <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm table-fixed">
+          <table className="w-full min-w-[900px] text-sm table-fixed">
+            {/* Narrow columns are fixed; Client and Services split whatever is left, so there are
+                no wide empty gaps and the status pills have room to sit side by side. */}
             <colgroup>
-              <col className="w-[26%]" />
-              <col className="w-[26%]" />
-              <col className="w-[12%]" />
-              <col className="w-[14%]" />
-              <col className="w-[12%]" />
-              <col className="w-[8%]" />
+              <col />
+              <col />
+              <col className="w-24" />
+              <col className="w-32" />
+              <col className="w-24" />
+              <col className="w-64" />
               <col className="w-8" />
             </colgroup>
             <thead>
               <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                <th className="px-4 py-2.5 text-left">Client</th>
-                <th className="px-4 py-2.5 text-left">Services</th>
-                <th className="px-4 py-2.5 text-left">Type</th>
-                <th className="px-4 py-2.5 text-left">Crew</th>
-                <th className="px-4 py-2.5 text-right">Revenue</th>
-                <th className="px-4 py-2.5 text-center">Status</th>
-                <th className="px-4 py-2.5 w-8" />
+                <th className="px-3 py-2 text-left">Client</th>
+                <th className="px-3 py-2 text-left">Services</th>
+                <th className="px-3 py-2 text-left">Type</th>
+                <th className="px-3 py-2 text-left">Crew</th>
+                <th className="px-3 py-2 text-right">Revenue</th>
+                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 w-8" />
               </tr>
             </thead>
             {dateKeys.map((dateKey) => (
@@ -446,46 +448,50 @@ function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () =
 
   return (
     <tr className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors cursor-pointer" onClick={onClick}>
-      <td className="px-4 py-3">
-        <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
-          {job.clientName ?? "—"}
-        </Link>
-        {job.serviceAddress && (
-          <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">{job.serviceAddress}</p>
-        )}
+      <td className="px-3 py-1.5">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${job.clientId}`} className="max-w-[60%] shrink-0 truncate font-medium text-brand-600 dark:text-brand-400 hover:underline">
+            {job.clientName ?? "—"}
+          </Link>
+          {job.serviceAddress && (
+            <span className="min-w-0 truncate text-xs text-slate-400 dark:text-neutral-500" title={job.serviceAddress}>{job.serviceAddress}</span>
+          )}
+        </div>
       </td>
-      <td className="px-4 py-3">
-        <p className="text-slate-700 dark:text-neutral-300 text-xs max-w-xs truncate">
+      <td className="px-3 py-1.5">
+        <p className="text-slate-700 dark:text-neutral-300 text-xs truncate" title={serviceNames || undefined}>
           {serviceNames || <span className="text-slate-400 dark:text-neutral-500 italic">No services</span>}
         </p>
       </td>
-      <td className="px-4 py-3 text-muted-foreground text-xs">
+      <td className="px-3 py-1.5 text-muted-foreground text-xs">
         {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
       </td>
-      <td className="px-4 py-3 text-slate-600 dark:text-neutral-400 text-xs">
+      <td className="truncate px-3 py-1.5 text-slate-600 dark:text-neutral-400 text-xs">
         {crewName ?? <span className="text-slate-400 dark:text-neutral-500 italic">Unassigned</span>}
       </td>
-      <td className="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-neutral-300 text-sm">
+      <td className="px-3 py-1.5 text-right tabular-nums text-slate-700 dark:text-neutral-300 text-sm">
         {formatCurrency(jobRevenueCents(job))}
       </td>
-      <td className="px-4 py-3 text-center">
+      <td className="px-3 py-1.5">
+        <div className="flex items-center gap-1.5 whitespace-nowrap">
         <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[status] ?? "bg-muted text-muted-foreground")}>
           {STATUS_LABEL[status] ?? status}
         </Badge>
         {overdueCount > 0 && (
           <Badge
             variant="outline"
-            className="ml-1 text-[10px] border-transparent bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"
+            className="text-[10px] border-transparent bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"
             title={`${overdueCount} earlier visit${overdueCount > 1 ? "s were" : " was"} never completed, skipped or cancelled`}
           >
             {overdueCount} overdue
           </Badge>
         )}
         {visitCount > 1 && (
-          <p className="mt-0.5 text-[10px] text-slate-400 dark:text-neutral-500">{completedCount}/{visitCount} visits</p>
+          <span className="text-[10px] text-slate-400 dark:text-neutral-500">{completedCount}/{visitCount} visits</span>
         )}
+        </div>
       </td>
-      <td className="px-4 py-3 text-center">
+      <td className="px-3 py-1.5 text-center">
         <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
       </td>
     </tr>
