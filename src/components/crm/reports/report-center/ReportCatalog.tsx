@@ -86,7 +86,7 @@ function SectionRows({
   return (
     <>
       <tr className="border-b bg-muted">
-        <td colSpan={2} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-neutral-300">
+        <td colSpan={2} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </td>
       </tr>
