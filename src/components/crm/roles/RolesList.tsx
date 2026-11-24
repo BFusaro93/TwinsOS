@@ -322,16 +322,16 @@ export function RolesList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-card">
+      <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted">
-            <tr className="text-left text-xs font-semibold text-muted-foreground">
-              <th className="w-10 px-4 py-3"><input type="checkbox" className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500" /></th>
-              <th className="px-4 py-3">Role Name</th>
-              <th className="px-4 py-3">Description</th>
-              <th className="px-4 py-3">Active</th>
-              <th className="px-4 py-3">Modified</th>
-              <th className="w-10 px-4 py-3" />
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+              <th className="w-10 px-4 py-2"><input type="checkbox" className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500" /></th>
+              <th className="px-4 py-2">Role Name</th>
+              <th className="px-4 py-2">Description</th>
+              <th className="px-4 py-2">Active</th>
+              <th className="px-4 py-2">Modified</th>
+              <th className="w-10 px-4 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -339,7 +339,7 @@ export function RolesList() {
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: 6 }).map((__, j) => (
-                    <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-4 py-1.5"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -359,15 +359,15 @@ export function RolesList() {
                   className={`border-b ${canManageRoles ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40" : "cursor-default"}`}
                   onClick={() => canManageRoles && setDialogRole(role)}
                 >
-                  <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-1.5">
                     <span className="text-brand-600 dark:text-brand-400 hover:underline font-medium">{role.name}</span>
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{role.description ?? "—"}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground">{role.description ?? "—"}</td>
                   <td
-                    className="px-4 py-2.5"
+                    className="px-4 py-1.5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -377,12 +377,12 @@ export function RolesList() {
                       {role.isActive ? "Active" : "Inactive"}
                     </button>
                   </td>
-                  <td className="px-4 py-2.5 text-slate-400 dark:text-neutral-500 text-xs">
+                  <td className="px-4 py-1.5 text-slate-400 dark:text-neutral-500 text-xs">
                     {new Date(role.updatedAt).toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
                     })}
                   </td>
-                  <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
                     <PermissionGate permission="allow_roles_access">
                       <button
                         onClick={() => void handleDelete(role)}
