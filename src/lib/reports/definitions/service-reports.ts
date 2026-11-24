@@ -6,6 +6,7 @@ import {
   dateRangeFilterDef,
   dateRangeFilters,
   eqFilter,
+  inFilter,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { todayInZone } from "@/lib/time/zone";
@@ -41,6 +42,20 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         ],
       },
       { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
+      { key: "services", label: "Services", type: "multiselect", optionsSource: "serviceIds" },
+      {
+        key: "job_type",
+        label: "Job Type",
+        type: "select",
+        options: [
+          { value: "recurring", label: "Recurring" },
+          { value: "one_time", label: "One Time" },
+          { value: "waiting_list", label: "Waiting List" },
+          { value: "package", label: "Package" },
+          { value: "snow", label: "Snow" },
+          { value: "project", label: "Project" },
+        ],
+      },
       { key: "zip", label: "Service Zip", type: "text", placeholder: "Any zip" },
     ],
     notes: ["Budgeted Man-Hours and Actual Man-Hours are both duration × number of men."],
@@ -51,6 +66,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         "client_name",
         "service_names",
         "crew_name",
+        "job_type",
         "status",
         "budgeted_hours",
         // actual_hours and man_hours are the same figure in the view — show it once.
@@ -64,6 +80,8 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
         ...eqFilter("status", params.status),
         ...eqFilter("crew_name", params.crew),
+        ...eqFilter("job_type", params.job_type),
+        ...inFilter("service_ids", params.services),
         ...containsFilter("service_zip", params.zip),
       ],
       groupBy: [],

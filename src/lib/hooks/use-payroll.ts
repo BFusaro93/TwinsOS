@@ -40,6 +40,8 @@ export interface PayrollAdjustmentInput {
   startTime: string | null;
   endTime: string | null;
   breakMinutes: number | null;
+  /** Unpaid lunch deducted on top of the break; null = none. */
+  lunchMinutes?: number | null;
   /** Extra worked time — counts toward overtime. */
   extraHours: number;
   /** Paid time off — paid, never overtime. */

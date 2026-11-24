@@ -9,20 +9,20 @@ import { isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { resolveWorkingMemberIds, stopPunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { memberWorksOn } from "@/lib/crew/roster-days";
 import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
-import { startCrewDay, endCrewDay, closeMemberOpenShift, openShiftLookbackDate, isCurrentOpenShift, CARRY_OVER_SHIFT_MS } from "@/lib/crew/day-shifts";
+import { startCrewDay, endCrewDay, startCrewLunch, endCrewLunch, closeMemberOpenShift, openShiftLookbackDate, isCurrentOpenShift, CARRY_OVER_SHIFT_MS } from "@/lib/crew/day-shifts";
 import { shiftYmd } from "@/lib/time/zone";
 import { assertOrgWritable, inCrewCloseOutGrace } from "@/lib/org-writable";
 
 /**
  * The crew's paid day (shop to shop).
  *   GET  — today's roster with each member's shift and absent flag.
- *   POST — { action: "start_day" | "end_day" | "member_in" | "member_out" | "add_member" }.
+ *   POST — { action: "start_day" | "end_day" | "start_lunch" | "end_lunch" | "member_in" | "member_out" | "add_member" }.
  *
  * Crew logins only, and only for their own crew's roster. The work date is the
  * org's today, computed here — never taken from the request.
  */
 const Body = z.object({
-  action: z.enum(["start_day", "end_day", "member_in", "member_out", "add_member"]),
+  action: z.enum(["start_day", "end_day", "start_lunch", "end_lunch", "member_in", "member_out", "add_member"]),
   crewMemberId: z.string().uuid().optional(),
   /** The stop's anchor visit, when one is in progress — keeps its job punch in step. */
   visitId: z.string().uuid().optional(),
@@ -61,15 +61,15 @@ export async function GET(request: Request) {
       // Today's shifts plus last evening's still-open one (storm work crosses
       // midnight): without it the crew saw "Start Day" and no End Day after
       // midnight, and a second Start Day opened an overlapping shift.
-      ? db.from("crm_crew_day_shifts").select("crew_member_id, work_date, started_at, ended_at").eq("org_id", orgId)
+      ? db.from("crm_crew_day_shifts").select("crew_member_id, work_date, started_at, ended_at, lunch_started_at").eq("org_id", orgId)
           .gte("work_date", openShiftLookbackDate(workDate)).lte("work_date", workDate)
           .is("deleted_at", null).in("crew_member_id", memberIds)
       : { data: [] },
     db.from("crm_crew_day_absences").select("crew_member_id").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null),
   ]);
-  const shiftBy = new Map<string, { work_date: string; started_at: string; ended_at: string | null }>();
+  const shiftBy = new Map<string, { work_date: string; started_at: string; ended_at: string | null; lunch_started_at?: string | null }>();
   const nowMs = Date.now();
-  for (const s of (shifts ?? []) as { crew_member_id: string; work_date: string; started_at: string; ended_at: string | null }[]) {
+  for (const s of (shifts ?? []) as { crew_member_id: string; work_date: string; started_at: string; ended_at: string | null; lunch_started_at?: string | null }[]) {
     if (s.work_date === workDate) {
       shiftBy.set(s.crew_member_id, s);
     } else if (!s.ended_at && isCurrentOpenShift(s, workDate, nowMs) && !shiftBy.has(s.crew_member_id)) {
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
     }
   }
   // A shift for today always wins over a carried-over one, whatever the row order.
-  for (const s of (shifts ?? []) as { crew_member_id: string; work_date: string; started_at: string; ended_at: string | null }[]) {
+  for (const s of (shifts ?? []) as { crew_member_id: string; work_date: string; started_at: string; ended_at: string | null; lunch_started_at?: string | null }[]) {
     if (s.work_date === workDate) shiftBy.set(s.crew_member_id, s);
   }
   const absent = new Set(((absences ?? []) as { crew_member_id: string }[]).map((a) => a.crew_member_id));
@@ -109,6 +109,8 @@ export async function GET(request: Request) {
       absent: absent.has(m.id),
       startedAt: shiftBy.get(m.id)?.started_at ?? null,
       endedAt: shiftBy.get(m.id)?.ended_at ?? null,
+      /** Set while the crew is on lunch (Start Lunch tapped, End Lunch not yet). */
+      lunchStartedAt: shiftBy.get(m.id)?.lunch_started_at ?? null,
       /** The shift's own work date — yesterday's for a shift that crossed midnight, so the app can say so. */
       shiftWorkDate: shiftBy.get(m.id)?.work_date ?? null,
     })),
@@ -149,6 +151,16 @@ export async function POST(request: Request) {
     if (action === "end_day") {
       const closed = await endCrewDay(admin, { orgId, crewId, workDate, at: now });
       return NextResponse.json({ ok: true, closed });
+    }
+    // Lunch between jobs (a job's own break is "Take a Break" on the stop). Recorded on each working
+    // member's shift; payroll deducts it separately from min off.
+    if (action === "start_lunch") {
+      const started = await startCrewLunch(admin, { orgId, crewId, workDate, at: now });
+      return NextResponse.json({ ok: true, started });
+    }
+    if (action === "end_lunch") {
+      const ended = await endCrewLunch(admin, { orgId, crewId, workDate, at: now });
+      return NextResponse.json({ ok: true, ended });
     }
 
     if (!crewMemberId) return NextResponse.json({ error: "crewMemberId is required" }, { status: 400 });

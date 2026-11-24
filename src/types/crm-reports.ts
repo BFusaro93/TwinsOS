@@ -520,7 +520,9 @@ export type ReportFilterInputType =
   | "select"
   | "text"
   | "number"
-  | "checkbox";
+  | "checkbox"
+  /** Checkbox list; the param holds the chosen values comma-joined (empty = all). */
+  | "multiselect";
 
 export interface ReportFilterOption {
   value: string;
@@ -538,7 +540,7 @@ export interface ReportFilterDef {
   type: ReportFilterInputType;
   options?: ReportFilterOption[];
   /** Load options dynamically instead of a static list. */
-  optionsSource?: "services" | "salesReps" | "crews" | "paymentMethods" | "products" | "crewMembers";
+  optionsSource?: "services" | "salesReps" | "crews" | "paymentMethods" | "products" | "crewMembers" | "serviceIds";
   /**
    * For dateRange: a preset key — "this_month" | "last_month" | "last_30" |
    * "last_90" | "this_year" | "all_time". For other types: the literal

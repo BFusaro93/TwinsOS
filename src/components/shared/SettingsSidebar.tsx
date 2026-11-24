@@ -157,7 +157,7 @@ export function SettingsSidebar() {
         <Link
           href="/home"
           className={cn(
-            "flex items-center gap-2 rounded-md px-3 py-2 text-xs text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200",
+            "flex items-center gap-2 rounded-md px-3 py-2 text-xs text-neutral-400 transition-colors hover:bg-white/5 hover:text-neutral-200",
             sidebarCollapsed && "justify-center px-2"
           )}
           title={sidebarCollapsed ? "Home" : undefined}

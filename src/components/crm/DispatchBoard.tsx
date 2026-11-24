@@ -3771,7 +3771,7 @@ function VisitRow({
     <tr
       className={cn(
         "group border-b border-slate-100 dark:border-neutral-800 text-xs cursor-pointer transition-colors",
-        isDragOver ? "bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700" : selected ? "bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40" : "bg-card hover:bg-slate-50 dark:hover:bg-muted/40"
+        isDragOver ? "bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700" : selected ? "bg-blue-50 dark:bg-muted hover:bg-blue-100 dark:hover:bg-muted/80" : "bg-card hover:bg-slate-50 dark:hover:bg-muted/40"
       )}
       onClick={() => onOpen(visit)}
       draggable={manualRouteMode}
