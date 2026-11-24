@@ -2338,8 +2338,13 @@ function LinkParentDialog({
 
 // ── JobBorderColor ────────────────────────────────────────────────────────────
 
+/** job_type stays 'waiting_list' after a visit is dispatched, so "still waiting" means no live visit yet. */
+function isStillWaiting(job: CRMJob): boolean {
+  return job.jobType === "waiting_list" && !(job.visits ?? []).some((v) => v.status !== "cancelled");
+}
+
 function jobBorderColor(job: CRMJob): string {
-  if (job.jobType === "waiting_list") return "border-l-yellow-400";
+  if (job.jobType === "waiting_list") return isStillWaiting(job) ? "border-l-yellow-400" : "border-l-green-400";
   if (job.jobType === "package") return "border-l-blue-400";
   return "border-l-green-400";
 }
@@ -2584,7 +2589,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-xs font-semibold capitalize text-slate-800 dark:text-neutral-100 mb-0.5">
-                          {job.jobType.replace("_", " ")}
+                          {job.jobType === "waiting_list" && !isStillWaiting(job) ? "Scheduled (from waiting list)" : job.jobType.replace("_", " ")}
                         </p>
                         {(job.services ?? []).slice(0, 3).map((svc) => (
                           <p key={svc.id} className="truncate text-xs text-muted-foreground">
