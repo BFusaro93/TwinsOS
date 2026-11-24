@@ -56,13 +56,13 @@ const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
 // name instead.
 const JOB_COLUMNS: (ColumnDef & { width?: string; px?: number })[] = [
   { key: "client",   label: "Client",   locked: true, width: "w-[27%]", px: 240 },
-  { key: "services", label: "Services", width: "w-[22%]", px: 190 },
-  { key: "type",     label: "Type",     width: "w-28", px: 104 },
-  { key: "crew",     label: "Crew",     width: "w-36", px: 144 },
   { key: "address",  label: "Address",  width: "w-[20%]", px: 220 },
   { key: "city",     label: "City",     width: "w-36", px: 144 },
   { key: "state",    label: "State",    width: "w-16", px: 64,  defaultHidden: true },
   { key: "zip",      label: "Zip",      width: "w-20", px: 80 },
+  { key: "services", label: "Services", width: "w-[22%]", px: 190 },
+  { key: "type",     label: "Type",     width: "w-28", px: 104 },
+  { key: "crew",     label: "Crew",     width: "w-36", px: 144 },
   { key: "revenue",  label: "Revenue",  width: "w-24", px: 96 },
   { key: "status",   label: "Status",   width: "w-64", px: 256 },
 ];
@@ -489,17 +489,6 @@ function JobRow({ occurrence, columns, onClick }: { occurrence: JobSummary; colu
           )}
         </div>
       </td>
-      {show("services") && (<td className="px-3 py-1.5">
-        <p className="text-slate-700 dark:text-neutral-300 text-xs truncate" title={serviceNames || undefined}>
-          {serviceNames || <span className="text-slate-400 dark:text-neutral-500 italic">No services</span>}
-        </p>
-      </td>)}
-      {show("type") && (<td className="px-3 py-1.5 text-muted-foreground text-xs">
-        {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
-      </td>)}
-      {show("crew") && (<td className="truncate px-3 py-1.5 text-slate-600 dark:text-neutral-400 text-xs">
-        {crewName ?? <span className="text-slate-400 dark:text-neutral-500 italic">Unassigned</span>}
-      </td>)}
       {show("address") && (
         <td className="truncate px-3 py-1.5 text-xs text-slate-600 dark:text-neutral-400" title={job.serviceAddress ?? undefined}>{job.serviceAddress ?? "—"}</td>
       )}
@@ -512,6 +501,17 @@ function JobRow({ occurrence, columns, onClick }: { occurrence: JobSummary; colu
       {show("zip") && (
         <td className="px-3 py-1.5 text-xs text-slate-600 dark:text-neutral-400">{job.serviceZip ?? "—"}</td>
       )}
+      {show("services") && (<td className="px-3 py-1.5">
+        <p className="text-slate-700 dark:text-neutral-300 text-xs truncate" title={serviceNames || undefined}>
+          {serviceNames || <span className="text-slate-400 dark:text-neutral-500 italic">No services</span>}
+        </p>
+      </td>)}
+      {show("type") && (<td className="px-3 py-1.5 text-muted-foreground text-xs">
+        {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
+      </td>)}
+      {show("crew") && (<td className="truncate px-3 py-1.5 text-slate-600 dark:text-neutral-400 text-xs">
+        {crewName ?? <span className="text-slate-400 dark:text-neutral-500 italic">Unassigned</span>}
+      </td>)}
       {show("revenue") && (<td className="px-3 py-1.5 text-right tabular-nums text-slate-700 dark:text-neutral-300 text-sm">
         {formatCurrency(jobRevenueCents(job))}
       </td>)}
