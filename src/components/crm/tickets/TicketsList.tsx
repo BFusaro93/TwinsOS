@@ -1028,7 +1028,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: colCount }).map((__, j) => (
-                    <td key={j} className="px-4 py-3">
+                    <td key={j} className="px-4 py-1.5">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   ))}
@@ -1047,7 +1047,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                   className={cn("border-b hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer", selectedIds.has(t.id) && "bg-brand-50 dark:bg-brand-900/30")}
                   onClick={() => setSelectedTicketId(t.id)}
                 >
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(t.id)}
@@ -1055,17 +1055,17 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                       className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                     />
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-400 dark:text-neutral-500">
+                  <td className="px-4 py-1.5 font-mono text-xs text-slate-400 dark:text-neutral-500">
                     #{t.ticketNumber}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     <StatusBadge status={t.status} />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     <PriorityBadge priority={t.priority} />
                   </td>
                   {!clientId && (
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       {t.clientId ? (
                         <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${t.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                           {t.clientName ?? "—"}
@@ -1075,13 +1075,13 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                       )}
                     </td>
                   )}
-                  <td className="px-4 py-3 text-slate-800 dark:text-neutral-100 font-medium">
+                  <td className="px-4 py-1.5 text-slate-800 dark:text-neutral-100 font-medium">
                     {t.subject ?? "(no subject)"}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.category ?? "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.assignedTo ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(t.dueDate)}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(t.updatedAt)}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{t.category ?? "—"}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{t.assignedTo ?? "—"}</td>
+                  <td className="px-4 py-1.5 text-xs text-muted-foreground">{formatDate(t.dueDate)}</td>
+                  <td className="px-4 py-1.5 text-xs text-muted-foreground">{formatDate(t.updatedAt)}</td>
                 </tr>
               ))
             )}

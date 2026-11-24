@@ -364,7 +364,7 @@ function WaitingSortLabel({
     <button
       type="button"
       onClick={() => onSort(col)}
-      className={`inline-flex items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide hover:text-slate-900 dark:hover:text-neutral-100 ${active ? "text-slate-900 dark:text-neutral-100" : ""}`}
+      className={`inline-flex cursor-pointer select-none items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide hover:text-slate-600 dark:hover:text-neutral-400`}
       aria-label={`Sort by ${children}`}
     >
       {children}
