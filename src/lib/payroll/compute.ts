@@ -31,6 +31,8 @@ export interface PayrollRow {
   startOverride: string | null;
   endOverride: string | null;
   breakOverride: number | null;
+  /** Unpaid lunch the office deducted for the day, separate from breakMinutes (min off). */
+  lunchDeductionMinutes: number;
   /** Day span net of breaks and gaps; 0 while the shift is still open. */
   shiftHours: number;
   /** Hours on jobs (stop punches) — what Job Costing sees. */
@@ -162,7 +164,7 @@ export async function computePayroll(
     supabase.from("crm_crew_members").select("id, name, crew_id, employee_id").eq("org_id", orgId),
     supabase.from("crm_crews").select("id, name").eq("org_id", orgId),
     fetchAllRows<unknown>(() => supabase.from("crm_crew_daily_members").select("member_id, crew_id, work_date").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
-    fetchAllRows<unknown>(() => supabase.from("crm_payroll_adjustments").select("crew_member_id, work_date, hours_override, extra_hours, pto_hours, note, start_override, end_override, break_override").eq("org_id", orgId).is("deleted_at", null).gte("work_date", from).lte("work_date", to)),
+    fetchAllRows<unknown>(() => supabase.from("crm_payroll_adjustments").select("crew_member_id, work_date, hours_override, extra_hours, pto_hours, note, start_override, end_override, break_override, lunch_override").eq("org_id", orgId).is("deleted_at", null).gte("work_date", from).lte("work_date", to)),
     // Soft-deleted rows are the ones that matter: an absence is cleared (deleted_at = the
     // return time) when the person is put back on the day, which is what turns the gap into break.
     fetchAllRows<unknown>(() => supabase.from("crm_crew_day_absences").select("crew_member_id, work_date, created_at, deleted_at").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
@@ -178,8 +180,8 @@ export async function computePayroll(
   const overrideByDay = new Map<string, string>(
     ((overrides ?? []) as { member_id: string; crew_id: string; work_date: string }[]).map((o) => [`${o.member_id}|${o.work_date}`, o.crew_id])
   );
-  const adjByKey = new Map<string, { hours_override: number | null; extra_hours: number; pto_hours?: number | null; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null }>(
-    ((adjustments ?? []) as { crew_member_id: string; work_date: string; hours_override: number | null; extra_hours: number; pto_hours?: number | null; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null }[])
+  const adjByKey = new Map<string, { hours_override: number | null; extra_hours: number; pto_hours?: number | null; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null; lunch_override?: number | null }>(
+    ((adjustments ?? []) as { crew_member_id: string; work_date: string; hours_override: number | null; extra_hours: number; pto_hours?: number | null; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null; lunch_override?: number | null }[])
       .map((a) => [`${a.crew_member_id}|${a.work_date}`, a])
   );
   const gapsByKey = new Map<string, PayrollBreakGap[]>();
@@ -263,12 +265,16 @@ export async function computePayroll(
     const breakMinutes = adj?.break_override != null ? Number(adj.break_override) : recordedBreakMinutes;
     const hasDay = !!start;
     const openShift = hasDay && !end;
+    // The office's lunch deduction is separate from "min off": that figure is also the alert for
+    // time away from jobs, so a fixed lunch typed there hid the alert (and replaced the recorded
+    // minutes). Paid time = shift - min off - lunch.
+    const lunchDeductionMinutes = Math.max(0, Number(adj?.lunch_override ?? 0));
     const shiftHours = start && end
-      ? Math.max(0, r2(hoursBetween(start, end) - breakMinutes / 60))
+      ? Math.max(0, r2(hoursBetween(start, end) - breakMinutes / 60 - lunchDeductionMinutes / 60))
       : 0;
     const jobHours = r2(job.jobHours);
     const noShift = !hasDay;
-    const computed = noShift ? jobHours : shiftHours;
+    const computed = noShift ? Math.max(0, r2(jobHours - lunchDeductionMinutes / 60)) : shiftHours;
     const override = adj?.hours_override != null ? Number(adj.hours_override) : null;
     const base = override ?? computed;
     const extra = Number(adj?.extra_hours ?? 0);
@@ -286,6 +292,7 @@ export async function computePayroll(
       startOverride: adj?.start_override ?? null,
       endOverride: adj?.end_override ?? null,
       breakOverride: adj?.break_override != null ? Number(adj.break_override) : null,
+      lunchDeductionMinutes,
       shiftHours,
       jobHours,
       otherHours: end ? Math.max(0, r2(shiftHours - jobHours)) : 0,
@@ -297,7 +304,7 @@ export async function computePayroll(
       totalHours: r2(base + extra + pto),
       regularHours: r2(base + extra + pto),
       overtimeHours: 0,
-      adjusted: !!adj && (override != null || extra > 0 || pto > 0 || !!adj.note || !!adj.start_override || !!adj.end_override || adj.break_override != null),
+      adjusted: !!adj && (override != null || extra > 0 || pto > 0 || !!adj.note || !!adj.start_override || !!adj.end_override || adj.break_override != null || lunchDeductionMinutes > 0),
       noShift,
       autoStart: !adj?.start_override && shift?.source === "auto_first_job",
       openShift,

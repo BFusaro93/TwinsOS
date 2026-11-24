@@ -8796,6 +8796,7 @@ export type Database = {
       crm_payroll_adjustments: {
         Row: {
           break_override: number | null
+          lunch_override: number | null
           created_at: string
           created_by: string | null
           crew_member_id: string
@@ -8814,6 +8815,7 @@ export type Database = {
         }
         Insert: {
           break_override?: number | null
+          lunch_override?: number | null
           created_at?: string
           created_by?: string | null
           crew_member_id: string
@@ -8832,6 +8834,7 @@ export type Database = {
         }
         Update: {
           break_override?: number | null
+          lunch_override?: number | null
           created_at?: string
           created_by?: string | null
           crew_member_id?: string
