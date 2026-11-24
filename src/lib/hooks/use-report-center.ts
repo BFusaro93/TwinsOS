@@ -192,7 +192,8 @@ export type ReportFilterOptionsSource =
   | "crews"
   | "paymentMethods"
   | "products"
-  | "crewMembers";
+  | "crewMembers"
+  | "serviceIds";
 
 const PAYMENT_METHODS = [
   "Cash",
@@ -232,6 +233,20 @@ export function useReportFilterOptions(source?: ReportFilterOptionsSource) {
         return ((data ?? []) as { name: string | null }[])
           .filter((r): r is { name: string } => !!r.name)
           .map((r) => ({ value: r.name, label: r.name }));
+      }
+      if (source === "serviceIds") {
+        // Same list as "services" but valued by id, for views that expose an id column.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("crm_services")
+          .select("id, name")
+          .eq("is_active", true)
+          .is("deleted_at", null)
+          .order("name");
+        if (error) throw new Error(error.message);
+        return ((data ?? []) as { id: string; name: string | null }[])
+          .filter((r) => !!r.name)
+          .map((r) => ({ value: r.id, label: r.name as string }));
       }
       if (source === "salesReps") {
         // The rpt_* views' "sales_rep" text column is the rep's

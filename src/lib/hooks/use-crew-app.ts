@@ -1688,6 +1688,8 @@ export interface CrewDayMember {
   absent: boolean;
   startedAt: string | null;
   endedAt: string | null;
+  /** Set while the crew is on lunch (Start Lunch tapped, End Lunch not yet). */
+  lunchStartedAt?: string | null;
   /** Work date of the shift shown — the previous day's for one that crossed midnight. */
   shiftWorkDate?: string | null;
 }
@@ -1710,7 +1712,7 @@ export function useCrewDayAction() {
   // the tap, not from whenever the phone reconnected.
   return stampTapTime(useMutation({
     scope: CREW_ACTIONS_SCOPE,
-    mutationFn: async (input: { action: "start_day" | "end_day" | "member_in" | "member_out" | "add_member"; crewMemberId?: string; visitId?: string; occurredAt?: string }) => {
+    mutationFn: async (input: { action: "start_day" | "end_day" | "start_lunch" | "end_lunch" | "member_in" | "member_out" | "add_member"; crewMemberId?: string; visitId?: string; occurredAt?: string }) => {
       const res = await fetch("/api/crm/crew/day", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

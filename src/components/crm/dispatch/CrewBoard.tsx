@@ -927,7 +927,17 @@ function JobCard({
           {services && <div className="truncate text-muted-foreground">{services}</div>}
         </div>
         <div className="flex shrink-0 flex-col items-end">
-          {budget > 0 && <span className="font-medium tabular-nums">{formatHours(budget, 1)}h</span>}
+          {budget > 0 && (
+            <span
+              className="font-medium tabular-nums"
+              title={actual > 0 ? "Actual hours / budgeted hours" : "Budgeted hours"}
+            >
+              {actual > 0 ? `${formatHours(actual, 1)}h / ` : ""}{formatHours(budget, 1)}h
+            </span>
+          )}
+          {budget <= 0 && actual > 0 && (
+            <span className="font-medium tabular-nums" title="Actual hours">{formatHours(actual, 1)}h</span>
+          )}
           {done ? (
             <span className="text-[10px] font-semibold uppercase text-emerald-600">Done</span>
           ) : started ? (

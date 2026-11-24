@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MultiSelectDropdown } from "@/components/shared/MultiSelectDropdown";
 import { useReportFilterOptions } from "@/lib/hooks/use-report-center";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { ALL_TIME_RANGE_PARAM } from "@/lib/reports/helpers";
@@ -209,6 +210,31 @@ function SelectControl({
   );
 }
 
+function MultiSelectControl({
+  def,
+  value,
+  onChange,
+}: {
+  def: ReportFilterDef;
+  value: string;
+  onChange: (key: string, value: string) => void;
+}) {
+  const { data: dynamicOptions = [] } = useReportFilterOptions(
+    def.options ? undefined : def.optionsSource
+  );
+  const options = def.options ?? dynamicOptions;
+  return (
+    <Field label={def.label}>
+      <MultiSelectDropdown
+        options={options}
+        selected={value ? value.split(",").filter(Boolean) : []}
+        onChange={(vals) => onChange(def.key, vals.join(","))}
+        className="h-8 w-52 text-sm"
+      />
+    </Field>
+  );
+}
+
 // ── bar ───────────────────────────────────────────────────────────────────────
 
 interface ReportFilterBarProps {
@@ -246,6 +272,15 @@ export function ReportFilterBar({
             case "select":
               return (
                 <SelectControl
+                  key={def.key}
+                  def={def}
+                  value={values[def.key] ?? ""}
+                  onChange={onChange}
+                />
+              );
+            case "multiselect":
+              return (
+                <MultiSelectControl
                   key={def.key}
                   def={def}
                   value={values[def.key] ?? ""}
