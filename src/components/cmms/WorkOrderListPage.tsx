@@ -255,7 +255,7 @@ function UpcomingMaintenanceView({
       <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50 dark:bg-muted/40">
+            <TableRow className="bg-slate-50 dark:bg-muted/40 [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-slate-400 dark:[&>th]:text-neutral-500">
               <TableHead className="w-24">WO #</TableHead>
               <TableHead>Title</TableHead>
               <TableHead>Asset / Vehicle</TableHead>
@@ -266,7 +266,7 @@ function UpcomingMaintenanceView({
             </TableRow>
           </TableHeader>
 
-          <TableBody>
+          <TableBody className="[&>tr>td:not([colspan])]:py-1.5">
             {isLoading &&
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
@@ -544,7 +544,7 @@ export function WorkOrderListPage() {
       <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50 dark:bg-muted/40">
+            <TableRow className="bg-slate-50 dark:bg-muted/40 [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-slate-400 dark:[&>th]:text-neutral-500">
               <SortableTableHead label="WO #" sortKey="workOrderNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               <SortableTableHead label="Title" sortKey="title" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               {col("status")         && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
@@ -556,7 +556,7 @@ export function WorkOrderListPage() {
               {col("dueDate")        && <SortableTableHead label="Due Date" sortKey="dueDate" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="[&>tr>td:not([colspan])]:py-1.5">
             {isLoading &&
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>

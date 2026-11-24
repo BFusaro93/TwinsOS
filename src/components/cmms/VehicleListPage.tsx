@@ -264,7 +264,7 @@ export function VehicleListPage() {
       <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50 dark:bg-muted/40">
+            <TableRow className="bg-slate-50 dark:bg-muted/40 [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-slate-400 dark:[&>th]:text-neutral-500">
               {col("icon") && <TableHead className="w-12" />}
               <SortableTableHead label="Name" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               {col("assetTag") && <SortableTableHead label="Asset Tag" sortKey="assetTag" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
@@ -279,7 +279,7 @@ export function VehicleListPage() {
               {col("status") && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="[&>tr>td:not([colspan])]:py-1.5">
             {isLoading &&
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>
