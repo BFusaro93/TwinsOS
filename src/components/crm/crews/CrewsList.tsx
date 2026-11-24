@@ -802,7 +802,7 @@ export function CrewsList() {
             className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
               filter === t.value
                 ? "bg-card text-slate-800 dark:text-neutral-100"
-                : "text-slate-300 hover:text-white"
+                : "text-neutral-200 hover:text-white"
             }`}
           >
             {t.label}

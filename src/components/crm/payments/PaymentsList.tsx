@@ -1308,7 +1308,7 @@ export function PaymentsList({ clientId }: Props) {
                 className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                   activeTab === tab
                     ? "bg-card text-slate-800 dark:text-neutral-100"
-                    : "text-slate-300 hover:text-white"
+                    : "text-neutral-200 hover:text-white"
                 }`}
               >
                 {tab === "last30" ? "Last 30 Days" : tab === "all" ? "All" : "Deleted"}

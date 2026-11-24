@@ -723,7 +723,7 @@ export function CampaignsList() {
                     "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                     statusTab === t.key
                       ? "bg-card text-slate-800 dark:text-neutral-100"
-                      : "text-slate-300 hover:text-white"
+                      : "text-neutral-200 hover:text-white"
                   )}
                 >
                   {t.label}
