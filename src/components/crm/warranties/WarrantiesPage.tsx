@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { SearchInput } from "@/components/shared/SearchInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
@@ -43,25 +44,23 @@ export function WarrantiesPage() {
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Warranties</h1>
-          <p className="text-sm text-muted-foreground">
-            {warranties.length} total{expiring > 0 ? ` · ${expiring} expiring soon` : ""}
-          </p>
-        </div>
-        {can("warranty_manage") && (
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setTypesOpen(true)}><Settings2 className="mr-1 h-4 w-4" /> Types</Button>
-            <Button size="sm" onClick={() => setAddOpen(true)}><Plus className="mr-1 h-4 w-4" /> Add warranty</Button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Warranties"
+        description={`${warranties.length} total${expiring > 0 ? ` · ${expiring} expiring soon` : ""}`}
+        action={
+          can("warranty_manage") ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setTypesOpen(true)}><Settings2 className="mr-1 h-4 w-4" /> Types</Button>
+              <Button size="sm" onClick={() => setAddOpen(true)}><Plus className="mr-1 h-4 w-4" /> Add warranty</Button>
+            </>
+          ) : undefined
+        }
+      />
 
-      <div className="flex flex-wrap gap-2">
-        <Input className="max-w-xs" placeholder="Search client, project or warranty…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search client, project or warranty…" className="w-full max-w-xs" />
         <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="active">Active</SelectItem>
@@ -75,7 +74,7 @@ export function WarrantiesPage() {
 
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+          <thead className="bg-muted/50 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Warranty</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Project</th>
               <th className="px-3 py-2">Term</th><th className="px-3 py-2">Starts</th><th className="px-3 py-2">Expires</th>

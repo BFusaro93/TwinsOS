@@ -819,7 +819,7 @@ export function EstimatesList({ clientId }: Props) {
                           );
                         case "client":
                           return (
-                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[180px]">
+                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[220px] lg:max-w-[300px] xl:max-w-[380px] 2xl:max-w-[460px]">
                               <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${e.clientId}`} className="block font-medium text-brand-600 dark:text-brand-400 hover:underline truncate">
                                 {e.clientName ?? "—"}
                               </Link>
