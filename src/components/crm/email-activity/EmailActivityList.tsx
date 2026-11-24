@@ -441,10 +441,10 @@ export function EmailActivityList() {
           description="Emails sent to clients from invoices and automations will appear here."
         />
       ) : (
-        <div className="flex-1 overflow-auto bg-card">
+        <div className="-mt-4 flex-1 overflow-auto bg-card">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 dark:bg-muted/40">
+              <TableRow className="bg-slate-50 dark:bg-muted [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-slate-400 dark:[&>th]:text-neutral-500">
                 <TableHead className="w-10">
                   <input
                     type="checkbox"
@@ -465,7 +465,7 @@ export function EmailActivityList() {
               {filtered.map((e: EmailActivity) => (
                 <TableRow
                   key={e.id}
-                  className={cn("hover:bg-slate-50 dark:hover:bg-muted/40", selectedIds.has(e.id) && "bg-brand-50 dark:bg-brand-900/30")}
+                  className={cn("[&>td]:py-1.5 hover:bg-slate-50 dark:hover:bg-muted/40", selectedIds.has(e.id) && "bg-brand-50 dark:bg-brand-900/30")}
                   onClick={() => toggleOne(e.id)}
                 >
                   <TableCell onClick={(ev) => ev.stopPropagation()}>
