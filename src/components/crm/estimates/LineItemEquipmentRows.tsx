@@ -28,14 +28,16 @@ import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId: string }) {
   const [qty, setQty] = useState(String(row.qty));
-  const [rate, setRate] = useState((row.rateCents / 100).toFixed(2));
+  const [rate, setRate] = useState((effectiveChargeCents(row.rateCents, row.chargeRateCents) / 100).toFixed(2));
+  const chargeRateEach = effectiveChargeCents(row.rateCents, row.chargeRateCents);
   const { mutateAsync: upsert } = useUpsertLineEquipment();
   const { mutateAsync: remove } = useDeleteLineEquipment();
 
   async function save() {
     const nextQty = Math.max(0, Number(qty) || 0);
-    const nextRate = Math.max(0, Math.round((Number(rate) || 0) * 100));
-    if (nextQty === row.qty && nextRate === row.rateCents) return;
+    // The editable rate is the CHARGE rate (what we bill); the cost rate stays the catalog snapshot.
+    const nextCharge = Math.max(0, Math.round((Number(rate) || 0) * 100));
+    if (nextQty === row.qty && nextCharge === chargeRateEach) return;
     try {
       await upsert({
         lineItemId,
@@ -45,8 +47,8 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
           name: row.name,
           unit: row.unit,
           qty: nextQty,
-          rateCents: nextRate,
-          chargeRateCents: row.chargeRateCents,
+          rateCents: row.rateCents,
+          chargeRateCents: nextCharge === row.rateCents && row.chargeRateCents == null ? null : nextCharge,
           sortOrder: row.sortOrder,
         },
       });
@@ -65,7 +67,6 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
 
   // Snapshot charge rate × qty; with no markup set, the charge is just the cost.
   const chargeCents = Math.round(row.qty * effectiveChargeCents(row.rateCents, row.chargeRateCents));
-  const chargeRateEach = effectiveChargeCents(row.rateCents, row.chargeRateCents);
   const unitWord = row.unit === "hour" ? "hrs" : row.unit === "day" ? "days" : "×";
 
   return (
@@ -88,8 +89,8 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
             />
             {unitWord}
           </label>
-          <label className="flex items-center gap-1 text-muted-foreground" title="Internal cost rate (what the machine costs us). The charge rate is what you bill.">
-            cost $
+          <label className="flex items-center gap-1 text-muted-foreground" title="Charge rate: what you bill for this equipment. Edit it to change the price this estimate needs to cover.">
+            charge $
             <input
               type="number"
               min={0}
@@ -101,14 +102,9 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
             />
             {EQUIPMENT_UNIT_LABELS[row.unit]}
           </label>
-          {chargeRateEach !== row.rateCents && (
-            <span
-              className="tabular-nums font-semibold text-slate-800 dark:text-neutral-100"
-              title="The rate you bill for this equipment (charge rate), as opposed to the internal cost rate in the box"
-            >
-              charge {centsToDisplay(chargeRateEach)} {EQUIPMENT_UNIT_LABELS[row.unit]}
-            </span>
-          )}
+          <span className="tabular-nums text-muted-foreground" title="Internal cost rate from the equipment catalog (not shown to the client)">
+            cost {centsToDisplay(row.rateCents)} {EQUIPMENT_UNIT_LABELS[row.unit]}
+          </span>
           {chargeCents !== row.totalCostCents ? (
             <>
               <span
