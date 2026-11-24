@@ -1058,7 +1058,7 @@ export function WaitingList() {
               not the white "Select a Filter" text-search row). */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
                 <Users className="h-3 w-3" />
                 {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -1091,7 +1091,7 @@ export function WaitingList() {
           {/* Tag filter — client tags, "is any of" (OR) */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
                 <Tag className="h-3 w-3" />
                 {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -1121,7 +1121,7 @@ export function WaitingList() {
           {/* Priority filter — job high-priority flag + client priority level */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
                 <Flame className="h-3 w-3" />
                 {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -1171,7 +1171,7 @@ export function WaitingList() {
               "h-7 flex items-center gap-1.5 rounded border px-2.5 text-[10px] transition-colors",
               readyOnly
                 ? "bg-brand-500 border-brand-400 text-white"
-                : "bg-[#5a5a5a] border-[#6a6a6a] text-slate-200 hover:text-white"
+                : "bg-[#5a5a5a] border-[#6a6a6a] text-neutral-200 hover:text-white"
             )}
           >
             <Check className="h-3 w-3" />

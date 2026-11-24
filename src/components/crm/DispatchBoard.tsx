@@ -6063,7 +6063,7 @@ export function DispatchBoard() {
           onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
           disabled={isLoading}
           title="Refresh"
-          className="h-7 w-7 max-lg:h-9 max-lg:w-9 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-slate-300 hover:text-white transition-colors shrink-0"
+          className="h-7 w-7 max-lg:h-9 max-lg:w-9 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-neutral-200 hover:text-white transition-colors shrink-0"
         >
           <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
         </button>
@@ -6071,7 +6071,7 @@ export function DispatchBoard() {
         {/* Saved screen views — named snapshots of the filters below */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors max-w-[160px]">
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors max-w-[160px]">
               <Bookmark className="h-3 w-3 shrink-0" />
               <span className="truncate">{activeView ? activeView.name : "Saved views"}</span>
               <ChevronDown className="h-2.5 w-2.5 opacity-60 shrink-0" />
@@ -6147,7 +6147,7 @@ export function DispatchBoard() {
                   "px-2.5 py-1 max-lg:py-2.5 text-[10px] font-medium rounded transition-colors",
                   statusFilter === t.value
                     ? "bg-card text-slate-800 dark:text-neutral-100"
-                    : "text-slate-300 hover:text-white"
+                    : "text-neutral-200 hover:text-white"
                 )}
               >
                 {t.label}
@@ -6167,7 +6167,7 @@ export function DispatchBoard() {
         {/* Multi-crew filter */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
               <Users className="h-3 w-3" />
               {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
               <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -6200,7 +6200,7 @@ export function DispatchBoard() {
         {/* Tag filter — client tags, "is any of" (OR) */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
               <Tag className="h-3 w-3" />
               {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
               <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -6231,7 +6231,7 @@ export function DispatchBoard() {
             and the existing client priority (Low/Normal/High); any match shows. */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
               <Flame className="h-3 w-3" />
               {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
               <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -6530,7 +6530,7 @@ export function DispatchBoard() {
           <button
             onClick={() => setLegendOpen(true)}
             title="Show Legend"
-            className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors"
+            className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors"
           >
             <CircleHelp className="h-3 w-3" />
             Legend

@@ -338,7 +338,7 @@ export function FormResponses({ formId }: Props) {
                 onClick={() => setQuickFilter(key)}
                 className={cn(
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
-                  quickFilter === key ? "bg-card text-slate-800 dark:text-neutral-100" : "text-slate-300 hover:text-white"
+                  quickFilter === key ? "bg-card text-slate-800 dark:text-neutral-100" : "text-neutral-200 hover:text-white"
                 )}
               >
                 {label}
