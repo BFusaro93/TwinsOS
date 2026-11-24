@@ -43,6 +43,8 @@ export type TriggerType =
   | 'package_renewed'
   | 'visit_date_changed'
   | 'visit_moved_to_waiting_list'
+  | 'waiting_list_ending'
+  | 'waiting_list_window_passed'
   | 'visit_cancelled'
   | 'visit_completed'
   | 'visit_dispatched'

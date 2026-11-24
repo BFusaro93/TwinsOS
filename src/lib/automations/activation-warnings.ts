@@ -5,15 +5,18 @@
 type AnyClient = any;
 
 /** Date-gap trigger types (estimate_expiring, estimate_no_response, visit_coming_up) — they fire `days` before/after an anchor date. */
-export const DATE_GAP_TRIGGER_TYPE_LIST = ["estimate_expiring", "estimate_no_response", "visit_coming_up"] as const;
+export const DATE_GAP_TRIGGER_TYPE_LIST = ["estimate_expiring", "estimate_no_response", "visit_coming_up", "waiting_list_ending"] as const;
 
 /** Day count a date-gap trigger uses when the builder left the box blank (the placeholder the builder shows). */
 export const DEFAULT_DATE_GAP_DAYS = 7;
 /** A visit reminder defaults to the day before. */
 export const DEFAULT_VISIT_COMING_UP_DAYS = 1;
+/** A waiting-list heads-up defaults to three days before the window closes. */
+export const DEFAULT_WAITING_LIST_ENDING_DAYS = 3;
 
 /** The default day count for a date-gap trigger type. */
 export function defaultDateGapDays(triggerType: string | null | undefined): number {
+  if (triggerType === "waiting_list_ending") return DEFAULT_WAITING_LIST_ENDING_DAYS;
   return triggerType === "visit_coming_up" ? DEFAULT_VISIT_COMING_UP_DAYS : DEFAULT_DATE_GAP_DAYS;
 }
 

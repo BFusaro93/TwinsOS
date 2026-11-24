@@ -80,6 +80,10 @@
       "schedule": "5 14 * * *"
     },
     {
+      "path": "/api/cron/waiting-list-window",
+      "schedule": "5 14 * * *"
+    },
+    {
       "path": "/api/cron/ticket-past-due",
       "schedule": "5 14 * * *"
     },
