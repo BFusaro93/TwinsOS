@@ -148,15 +148,15 @@ export function ServicesList({ onAdd, onEdit }: Props) {
       <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              <th className="px-4 py-3 text-left">Service Type</th>
-              <th className="px-4 py-3 text-left">Code</th>
-              <th className="px-4 py-3 text-left">Svc Mode</th>
-              <th className="px-4 py-3 text-right">Default Rate</th>
-              <th className="px-4 py-3 text-right">Default B.Hrs</th>
-              <th className="px-4 py-3 text-left">Unit</th>
-              <th className="px-4 py-3 text-center">Active</th>
-              <th className="px-4 py-3 text-center w-20">Actions</th>
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-slate-400 dark:text-neutral-500 uppercase tracking-wide">
+              <th className="px-4 py-2 text-left">Service Type</th>
+              <th className="px-4 py-2 text-left">Code</th>
+              <th className="px-4 py-2 text-left">Svc Mode</th>
+              <th className="px-4 py-2 text-right">Default Rate</th>
+              <th className="px-4 py-2 text-right">Default B.Hrs</th>
+              <th className="px-4 py-2 text-left">Unit</th>
+              <th className="px-4 py-2 text-center">Active</th>
+              <th className="px-4 py-2 text-center w-20">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -180,30 +180,30 @@ export function ServicesList({ onAdd, onEdit }: Props) {
                 className={`border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 ${canEdit ? "cursor-pointer" : ""}`}
                 onClick={canEdit ? () => onEdit(s) : undefined}
               >
-                <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">
+                <td className="px-4 py-1.5 font-medium text-slate-800 dark:text-neutral-100">
                   <span style={depth > 0 ? { paddingLeft: depth * 20 } : undefined} className="inline-flex items-center gap-1.5">
                     {depth > 0 && <span className="text-slate-300 dark:text-neutral-500">↳</span>}
                     <span className={depth > 0 ? "font-normal text-slate-600 dark:text-neutral-400" : undefined}>{s.name}</span>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{s.code ?? "—"}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
+                <td className="px-4 py-1.5 text-muted-foreground">{s.code ?? "—"}</td>
+                <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">
                   {MODE_LABEL[s.serviceMode] ?? s.serviceMode}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">
+                <td className="px-4 py-1.5 text-right tabular-nums">
                   {s.defaultRateCents != null ? formatCurrency(s.defaultRateCents) : "—"}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">
+                <td className="px-4 py-1.5 text-right tabular-nums">
                   {s.defaultBHrs > 0 ? s.defaultBHrs.toFixed(2) : "—"}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{s.unit}</td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-1.5 text-muted-foreground">{s.unit}</td>
+                <td className="px-4 py-1.5 text-center">
                   <Badge variant={s.isActive ? "default" : "secondary"} className="text-[10px]">
                     {s.isActive ? "Yes" : "No"}
                   </Badge>
                 </td>
                 <td
-                  className="px-4 py-3 text-center"
+                  className="px-4 py-1.5 text-center"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-center gap-1">

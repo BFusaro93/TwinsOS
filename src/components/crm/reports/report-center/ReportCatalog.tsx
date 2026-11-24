@@ -44,9 +44,9 @@ export function ReportCatalog() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-slate-50 dark:bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <th className="w-[280px] px-4 py-2.5 text-left">Report</th>
-                <th className="px-4 py-2.5 text-left">Description</th>
+              <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <th className="w-[280px] px-4 py-2 text-left">Report</th>
+                <th className="px-4 py-2 text-left">Description</th>
               </tr>
             </thead>
             <tbody>
@@ -92,7 +92,7 @@ function SectionRows({
       </tr>
       {reports.map((def) => (
         <tr key={def.key} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
-          <td className="px-4 py-2.5 align-top">
+          <td className="px-4 py-1.5 align-top">
             <Link
               href={reportHref(def)}
               className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
@@ -100,7 +100,7 @@ function SectionRows({
               {def.name}
             </Link>
           </td>
-          <td className="px-4 py-2.5 align-top text-slate-600 dark:text-neutral-400">
+          <td className="px-4 py-1.5 align-top text-slate-600 dark:text-neutral-400">
             {def.description}
           </td>
         </tr>

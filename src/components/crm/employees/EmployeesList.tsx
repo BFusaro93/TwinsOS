@@ -1107,15 +1107,15 @@ function EmployeeTable({
     <table className="w-full text-sm">
       <thead className="sticky top-0 bg-slate-50 dark:bg-muted z-10">
         <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-          <th className="px-4 py-3">Name</th>
-          <th className="px-4 py-3">Resource Code</th>
-          <th className="px-4 py-3">Status</th>
-          <th className="px-4 py-3">Type</th>
-          <th className="px-4 py-3">Phone</th>
-          <th className="px-4 py-3">Email</th>
-          {showPayRate && <th className="px-4 py-3 text-right">Hourly Rate</th>}
-          <th className="px-4 py-3">Date Hired</th>
-          <th className="w-10 px-4 py-3" />
+          <th className="px-4 py-2">Name</th>
+          <th className="px-4 py-2">Resource Code</th>
+          <th className="px-4 py-2">Status</th>
+          <th className="px-4 py-2">Type</th>
+          <th className="px-4 py-2">Phone</th>
+          <th className="px-4 py-2">Email</th>
+          {showPayRate && <th className="px-4 py-2 text-right">Hourly Rate</th>}
+          <th className="px-4 py-2">Date Hired</th>
+          <th className="w-10 px-4 py-2" />
         </tr>
       </thead>
       <tbody>
@@ -1123,7 +1123,7 @@ function EmployeeTable({
           Array.from({ length: 5 }).map((_, i) => (
             <tr key={i} className="border-b">
               {Array.from({ length: colSpan }).map((__, j) => (
-                <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                <td key={j} className="px-4 py-1.5"><Skeleton className="h-4 w-full" /></td>
               ))}
             </tr>
           ))
@@ -1145,7 +1145,7 @@ function EmployeeTable({
                 ${!e.isActive ? "opacity-50" : ""}`}
               onClick={() => onSelect(e)}
             >
-              <td className="px-4 py-2.5">
+              <td className="px-4 py-1.5">
                 <div className="flex items-center gap-1.5">
                   <span className="font-medium text-slate-900 dark:text-neutral-100">{e.firstName} {e.lastName}</span>
                   {e.managerName && (
@@ -1153,26 +1153,26 @@ function EmployeeTable({
                   )}
                 </div>
               </td>
-              <td className="px-4 py-2.5 text-muted-foreground">{e.resourceCode ?? "—"}</td>
-              <td className="px-4 py-2.5">
+              <td className="px-4 py-1.5 text-muted-foreground">{e.resourceCode ?? "—"}</td>
+              <td className="px-4 py-1.5">
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_COLOR[e.employmentStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400"}`}>
                   {e.employmentStatus.replace("_", " ")}
                 </span>
               </td>
-              <td className="px-4 py-2.5 capitalize text-muted-foreground text-xs">{e.userType?.replace("_", " ") ?? "—"}</td>
-              <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{e.cellPhone ?? e.phone ?? "—"}</td>
-              <td className="px-4 py-2.5 text-muted-foreground">{e.email ?? "—"}</td>
+              <td className="px-4 py-1.5 capitalize text-muted-foreground text-xs">{e.userType?.replace("_", " ") ?? "—"}</td>
+              <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">{e.cellPhone ?? e.phone ?? "—"}</td>
+              <td className="px-4 py-1.5 text-muted-foreground">{e.email ?? "—"}</td>
               {showPayRate && (
-                <td className="px-4 py-2.5 text-right font-medium text-slate-700 dark:text-neutral-300">
+                <td className="px-4 py-1.5 text-right font-medium text-slate-700 dark:text-neutral-300">
                   {e.hourlyRateCents > 0 ? formatCurrency(e.hourlyRateCents) : "—"}
                 </td>
               )}
-              <td className="px-4 py-2.5 text-muted-foreground">
+              <td className="px-4 py-1.5 text-muted-foreground">
                 {e.dateHired ? new Date(e.dateHired + "T12:00:00").toLocaleDateString("en-US", {
                   month: "short", day: "numeric", year: "numeric",
                 }) : "—"}
               </td>
-              <td className="px-4 py-2.5" onClick={(ev) => ev.stopPropagation()}>
+              <td className="px-4 py-1.5" onClick={(ev) => ev.stopPropagation()}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted">

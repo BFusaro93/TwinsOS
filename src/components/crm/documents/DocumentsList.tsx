@@ -267,12 +267,12 @@ export function DocumentsList() {
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <th className="px-4 py-3 text-left">Title</th>
-              <th className="px-4 py-3 text-left">Type</th>
-              <th className="px-4 py-3 text-left">Description</th>
-              <th className="px-4 py-3 text-left">Date Modified</th>
-              <th className="w-12 px-4 py-3" />
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+              <th className="px-4 py-2 text-left">Title</th>
+              <th className="px-4 py-2 text-left">Type</th>
+              <th className="px-4 py-2 text-left">Description</th>
+              <th className="px-4 py-2 text-left">Date Modified</th>
+              <th className="w-12 px-4 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -280,7 +280,7 @@ export function DocumentsList() {
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: 5 }).map((__, j) => (
-                    <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-4 py-1.5"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -354,7 +354,7 @@ function DocumentRow({
       className={cn("border-b hover:bg-slate-50 dark:hover:bg-muted/40", canEdit && "cursor-pointer")}
       onClick={canEdit ? onEdit : undefined}
     >
-      <td className="px-4 py-2.5">
+      <td className="px-4 py-1.5">
         <span className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{doc.name}</span>
         {doc.isDefault && (
           <span className="ml-2 rounded-full bg-green-100 dark:bg-green-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 dark:text-green-400">
@@ -362,10 +362,10 @@ function DocumentRow({
           </span>
         )}
       </td>
-      <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{DOC_TYPE_LABELS[doc.docType]}</td>
-      <td className="max-w-xs truncate px-4 py-2.5 text-muted-foreground">{doc.description ?? "—"}</td>
-      <td className="px-4 py-2.5 text-muted-foreground">{fmtDate(doc.updatedAt)}</td>
-      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">{DOC_TYPE_LABELS[doc.docType]}</td>
+      <td className="max-w-xs truncate px-4 py-1.5 text-muted-foreground">{doc.description ?? "—"}</td>
+      <td className="px-4 py-1.5 text-muted-foreground">{fmtDate(doc.updatedAt)}</td>
+      <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="rounded p-1 hover:bg-muted">

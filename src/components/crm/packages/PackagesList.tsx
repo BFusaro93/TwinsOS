@@ -61,13 +61,13 @@ export function PackagesList({ onAdd, onEdit }: Props) {
       <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              <th className="px-4 py-3 text-left">Package</th>
-              <th className="px-4 py-3 text-left">Code</th>
-              <th className="px-4 py-3 text-center">Visits</th>
-              <th className="px-4 py-3 text-left">Services</th>
-              <th className="px-4 py-3 text-center">Active</th>
-              <th className="px-4 py-3 w-20" />
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-slate-400 dark:text-neutral-500 uppercase tracking-wide">
+              <th className="px-4 py-2 text-left">Package</th>
+              <th className="px-4 py-2 text-left">Code</th>
+              <th className="px-4 py-2 text-center">Visits</th>
+              <th className="px-4 py-2 text-left">Services</th>
+              <th className="px-4 py-2 text-center">Active</th>
+              <th className="px-4 py-2 w-20" />
             </tr>
           </thead>
           <tbody>
@@ -80,26 +80,26 @@ export function PackagesList({ onAdd, onEdit }: Props) {
             {filtered.map((pkg) => (
               <tr key={pkg.id} onClick={canEdit ? () => onEdit(pkg) : undefined}
                 className={`border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 ${canEdit ? "cursor-pointer" : ""}`}>
-                <td className="px-4 py-3">
+                <td className="px-4 py-1.5">
                   <p className="font-medium text-slate-800 dark:text-neutral-100">{pkg.name}</p>
                   {pkg.description && (
                     <p className="text-xs text-slate-400 dark:text-neutral-500 truncate max-w-xs mt-0.5">{pkg.description}</p>
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{pkg.code ?? "—"}</td>
-                <td className="px-4 py-3 text-center text-slate-600 dark:text-neutral-400">{(pkg.services ?? []).length}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">
+                <td className="px-4 py-1.5 text-muted-foreground">{pkg.code ?? "—"}</td>
+                <td className="px-4 py-1.5 text-center text-slate-600 dark:text-neutral-400">{(pkg.services ?? []).length}</td>
+                <td className="px-4 py-1.5 text-muted-foreground text-xs">
                   {(pkg.services ?? []).length > 0
                     ? (pkg.services ?? []).map((s) => s.serviceName).join(", ")
                     : <span className="italic text-slate-400 dark:text-neutral-500">None</span>
                   }
                 </td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-1.5 text-center">
                   <Badge variant={pkg.isActive ? "default" : "secondary"} className="text-[10px]">
                     {pkg.isActive ? "Yes" : "No"}
                   </Badge>
                 </td>
-                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-1">
                     {canEdit && (
                       <button onClick={() => onEdit(pkg)} className="rounded p-1 hover:bg-muted" title="Edit">

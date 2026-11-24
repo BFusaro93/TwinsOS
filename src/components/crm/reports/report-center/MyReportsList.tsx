@@ -98,12 +98,12 @@ export function MyReportsList() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-slate-50 dark:bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-2.5 text-left">Name</th>
-                  <th className="px-4 py-2.5 text-left">Description</th>
-                  <th className="px-4 py-2.5 text-left">Dataset</th>
-                  <th className="px-4 py-2.5 text-left">Last Updated</th>
-                  <th className="w-10 px-2 py-2.5" />
+                <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                  <th className="px-4 py-2 text-left">Name</th>
+                  <th className="px-4 py-2 text-left">Description</th>
+                  <th className="px-4 py-2 text-left">Dataset</th>
+                  <th className="px-4 py-2 text-left">Last Updated</th>
+                  <th className="w-10 px-2 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -112,7 +112,7 @@ export function MyReportsList() {
                     key={report.id}
                     className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40"
                   >
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-1.5">
                       <Link
                         href={`/crm/admin/reports/analysis/${report.id}`}
                         className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
@@ -120,17 +120,17 @@ export function MyReportsList() {
                         {report.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
+                    <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">
                       {report.description || "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
+                    <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">
                       {DATASET_MAP[report.config.dataset]?.label ??
                         report.config.dataset}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
+                    <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">
                       {formatDate(report.updatedAt)}
                     </td>
-                    <td className="px-2 py-2.5">
+                    <td className="px-2 py-1.5">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
