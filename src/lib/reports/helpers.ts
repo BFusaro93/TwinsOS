@@ -118,6 +118,22 @@ export function eqFilter(
   return [{ column, op: "eq", value }];
 }
 
+/** Comma-joined multi-select param -> the list of chosen values. */
+export function splitMultiParam(value: string | undefined): string[] {
+  return (value ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+}
+
+/** "in" filter for a multi-select param; nothing chosen = no filter. On an array column
+ *  it matches when ANY chosen value is present (see crm_run_report). */
+export function inFilter(
+  column: string,
+  value: string | undefined
+): AnalysisFilter[] {
+  const values = splitMultiParam(value);
+  if (values.length === 0) return [];
+  return [{ column, op: "in", value: values }];
+}
+
 /** ilike filter only when the param has a value. */
 export function containsFilter(
   column: string,
