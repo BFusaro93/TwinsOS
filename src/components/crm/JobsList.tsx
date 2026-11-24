@@ -51,15 +51,15 @@ interface JobSummary {
 
 const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
 
-// Columns the person can switch on and off. Street address and state are opt-in: the address already
-// rides next to the client name, and state is almost always the same value, so City and Zip are the
-// useful defaults for spotting jobs that cluster by area.
+// Columns the person can switch on and off. State is opt-in (it is almost always the same value).
+// Address is its own column by default; switch it off and the street address rides next to the client
+// name instead.
 const JOB_COLUMNS: (ColumnDef & { width?: string; px?: number })[] = [
   { key: "client",   label: "Client",   locked: true, width: "w-[27%]", px: 240 },
   { key: "services", label: "Services", width: "w-[22%]", px: 190 },
   { key: "type",     label: "Type",     width: "w-28", px: 104 },
   { key: "crew",     label: "Crew",     width: "w-36", px: 144 },
-  { key: "address",  label: "Address",  width: "w-56", px: 224, defaultHidden: true },
+  { key: "address",  label: "Address",  width: "w-[20%]", px: 220 },
   { key: "city",     label: "City",     width: "w-36", px: 144 },
   { key: "state",    label: "State",    width: "w-16", px: 64,  defaultHidden: true },
   { key: "zip",      label: "Zip",      width: "w-20", px: 80 },
@@ -413,7 +413,17 @@ export function JobsList() {
             {/* Client and Services take a share of the width and the rest are fixed, so on a wide screen
                 the spare room is spread across all the columns instead of piling up in Client. */}
             <colgroup>
-              {shownColumns.map((c) => <col key={c.key} className={c.width} />)}
+              {shownColumns.map((c) => (
+                <col
+                  key={c.key}
+                  className={
+                    // With Address as its own column Client and Services can be narrower.
+                    c.key === "client" && visibleKeys.includes("address") ? "w-[22%]"
+                    : c.key === "services" && visibleKeys.includes("address") ? "w-[18%]"
+                    : c.width
+                  }
+                />
+              ))}
               <col className="w-8" />
             </colgroup>
             <thead>
