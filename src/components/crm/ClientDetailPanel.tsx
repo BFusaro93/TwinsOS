@@ -2571,7 +2571,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           ))}
         </div>
 
-        <div>
+        <div className="xl:max-h-[calc(100vh-14rem)] xl:overflow-y-auto">
           {jobs.length === 0 ? (
             <p className="px-4 py-6 text-xs text-slate-400 dark:text-neutral-500 text-center">No jobs</p>
           ) : (
@@ -2710,7 +2710,8 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           </DropdownMenu>
         </div>
 
-        <div className="divide-y overflow-y-auto">
+        {/* Three columns only at xl: cap the list so a long history scrolls inside the card, header stays put. Stacked layouts flow normally. */}
+        <div className="divide-y xl:max-h-[calc(100vh-14rem)] xl:overflow-y-auto">
           {accountingRows.length === 0 ? (
             <p className="px-4 py-6 text-xs text-slate-400 dark:text-neutral-500 text-center">No transactions</p>
           ) : (
