@@ -352,18 +352,16 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
 type WaitingSortKey = "client" | "service" | "dateRange" | "city" | "zip" | "crew" | "rate";
 
 function WaitingSortLabel({
-  col, sort, onSort, children,
+  col, sort, children,
 }: {
   col: WaitingSortKey;
   sort: { key: WaitingSortKey; dir: "asc" | "desc" } | null;
-  onSort: (col: WaitingSortKey) => void;
-  children: string;
+    children: string;
 }) {
   const active = sort?.key === col;
   return (
     <button
       type="button"
-      onClick={() => onSort(col)}
       className={`inline-flex cursor-pointer select-none items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide hover:text-slate-600 dark:hover:text-neutral-400`}
       aria-label={`Sort by ${children}`}
     >
@@ -429,7 +427,7 @@ function WaitingJobRow({
       className={cn("cursor-pointer border-b border-slate-100 dark:border-neutral-800 text-sm hover:bg-slate-50 dark:hover:bg-muted/40", selected && "bg-brand-50 dark:bg-brand-900/30")}
       onClick={onOpenJob}
     >
-      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
           checked={selected}
@@ -438,7 +436,7 @@ function WaitingJobRow({
         />
       </td>
       {isVisible("client") && (
-        <td className="min-w-[200px] px-4 py-3">
+        <td className="min-w-[200px] px-4 py-1.5">
           <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
             {job.clientName ?? "—"}
           </Link>
@@ -448,7 +446,7 @@ function WaitingJobRow({
         </td>
       )}
       {isVisible("service") && (
-        <td className="min-w-[180px] px-4 py-3 text-slate-700 dark:text-neutral-300">
+        <td className="min-w-[180px] px-4 py-1.5 text-slate-700 dark:text-neutral-300">
           {serviceName}
           {eligibility?.spacingEarliest && (!eligibility.windowOpens || eligibility.spacingEarliest >= eligibility.windowOpens) && (
             <p
@@ -461,27 +459,27 @@ function WaitingJobRow({
         </td>
       )}
       {isVisible("dateRange") && service && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-1.5">
           <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-neutral-400">
             {formatDateRange(service.startDate, service.completeByDate)}
           </span>
         </td>
       )}
       {isVisible("dateRange") && !service && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-1.5">
           <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-neutral-400">
             {formatDateRange(job.waitingListStart, job.waitingListEnd)}
           </span>
         </td>
       )}
       {isVisible("city") && (
-        <td className="px-4 py-3 text-muted-foreground">{job.serviceCity ?? "—"}</td>
+        <td className="px-4 py-1.5 text-muted-foreground">{job.serviceCity ?? "—"}</td>
       )}
       {isVisible("zip") && (
-        <td className="px-4 py-3 text-xs text-slate-400 dark:text-neutral-500">{job.serviceZip ?? "—"}</td>
+        <td className="px-4 py-1.5 text-xs text-slate-400 dark:text-neutral-500">{job.serviceZip ?? "—"}</td>
       )}
       {isVisible("crew") && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-1.5">
           {effectiveCrew ? (
             <Badge variant="secondary" className="text-xs">
               {effectiveCrew}
@@ -492,12 +490,12 @@ function WaitingJobRow({
         </td>
       )}
       {isVisible("rate") && (
-        <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-neutral-300">
+        <td className="px-4 py-1.5 text-right font-medium text-slate-700 dark:text-neutral-300">
           {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
         </td>
       )}
       {isVisible("priority") && (
-        <td className="px-4 py-3 whitespace-nowrap">
+        <td className="px-4 py-1.5 whitespace-nowrap">
           <div className="flex items-center gap-1">
             {job.isHighPriority && <span title="High priority"><Flame className="h-3 w-3 text-red-500 dark:text-red-400" /></span>}
             <span className="text-xs capitalize text-muted-foreground">{job.clientPriority ?? "normal"}</span>
@@ -505,7 +503,7 @@ function WaitingJobRow({
         </td>
       )}
       {EXTRA_COLUMNS.filter((c) => c.key !== "priority").map((c) => isVisible(c.key) && (
-        <td key={c.key} className="max-w-[160px] truncate px-4 py-3 text-muted-foreground" title={extraColCellText(c.key, job)}>
+        <td key={c.key} className="max-w-[160px] truncate px-4 py-1.5 text-muted-foreground" title={extraColCellText(c.key, job)}>
           {extraColCellText(c.key, job)}
         </td>
       ))}
@@ -515,12 +513,12 @@ function WaitingJobRow({
         const val = jobCustomFieldValue(job.propertyCustomFieldValues, def);
         const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
         return (
-          <td key={key} className="max-w-[160px] truncate px-4 py-3 text-muted-foreground" title={display}>
+          <td key={key} className="max-w-[160px] truncate px-4 py-1.5 text-muted-foreground" title={display}>
             {display}
           </td>
         );
       })}
-      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onSchedule}>
           Schedule
         </Button>
@@ -1201,13 +1199,13 @@ export function WaitingList() {
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                 />
               </th>
-              {visibleKeys.includes("client") && <th className="min-w-[200px] px-4 py-2"><WaitingSortLabel col="client" sort={sort} onSort={toggleSort}>Client</WaitingSortLabel></th>}
-              {visibleKeys.includes("service") && <th className="min-w-[180px] px-4 py-2"><WaitingSortLabel col="service" sort={sort} onSort={toggleSort}>Service</WaitingSortLabel></th>}
-              {visibleKeys.includes("dateRange") && <th className="px-4 py-2"><WaitingSortLabel col="dateRange" sort={sort} onSort={toggleSort}>Date Range</WaitingSortLabel></th>}
-              {visibleKeys.includes("city") && <th className="px-4 py-2"><WaitingSortLabel col="city" sort={sort} onSort={toggleSort}>City</WaitingSortLabel></th>}
-              {visibleKeys.includes("zip") && <th className="px-4 py-2"><WaitingSortLabel col="zip" sort={sort} onSort={toggleSort}>Zip</WaitingSortLabel></th>}
-              {visibleKeys.includes("crew") && <th className="px-4 py-2"><WaitingSortLabel col="crew" sort={sort} onSort={toggleSort}>Crew</WaitingSortLabel></th>}
-              {visibleKeys.includes("rate") && <th className="px-4 py-2 text-right"><WaitingSortLabel col="rate" sort={sort} onSort={toggleSort}>Rate</WaitingSortLabel></th>}
+              {visibleKeys.includes("client") && <th className="min-w-[200px] px-4 py-2 cursor-pointer select-none" onClick={() => toggleSort("client")}><WaitingSortLabel col="client" sort={sort}>Client</WaitingSortLabel></th>}
+              {visibleKeys.includes("service") && <th className="min-w-[180px] px-4 py-2 cursor-pointer select-none" onClick={() => toggleSort("service")}><WaitingSortLabel col="service" sort={sort}>Service</WaitingSortLabel></th>}
+              {visibleKeys.includes("dateRange") && <th className="px-4 py-2 cursor-pointer select-none" onClick={() => toggleSort("dateRange")}><WaitingSortLabel col="dateRange" sort={sort}>Date Range</WaitingSortLabel></th>}
+              {visibleKeys.includes("city") && <th className="px-4 py-2 cursor-pointer select-none" onClick={() => toggleSort("city")}><WaitingSortLabel col="city" sort={sort}>City</WaitingSortLabel></th>}
+              {visibleKeys.includes("zip") && <th className="px-4 py-2 cursor-pointer select-none" onClick={() => toggleSort("zip")}><WaitingSortLabel col="zip" sort={sort}>Zip</WaitingSortLabel></th>}
+              {visibleKeys.includes("crew") && <th className="px-4 py-2 cursor-pointer select-none" onClick={() => toggleSort("crew")}><WaitingSortLabel col="crew" sort={sort}>Crew</WaitingSortLabel></th>}
+              {visibleKeys.includes("rate") && <th className="px-4 py-2 text-right cursor-pointer select-none" onClick={() => toggleSort("rate")}><WaitingSortLabel col="rate" sort={sort}>Rate</WaitingSortLabel></th>}
               {EXTRA_COLUMNS.map((c) => visibleKeys.includes(c.key) && <th key={c.key} className="px-4 py-2 whitespace-nowrap">{c.label}</th>)}
               {customFieldDefs.map((def) => visibleKeys.includes(customColKey(def.id)) && (
                 <th key={def.id} className="px-4 py-2 whitespace-nowrap">{def.name}</th>
@@ -1221,7 +1219,7 @@ export function WaitingList() {
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: colCount }).map((__, j) => (
-                    <td key={j} className="px-4 py-3">
+                    <td key={j} className="px-4 py-1.5">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   ))}
