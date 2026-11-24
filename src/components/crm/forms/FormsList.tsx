@@ -427,16 +427,16 @@ export function FormsList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-card">
+      <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Form Name</th>
-              <th className="px-4 py-3">Date Created</th>
-              <th className="px-4 py-3">Date Modified</th>
-              <th className="px-4 py-3 text-right">Responses</th>
-              <th className="px-4 py-3 w-10" />
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Form Name</th>
+              <th className="px-4 py-2">Date Created</th>
+              <th className="px-4 py-2">Date Modified</th>
+              <th className="px-4 py-2 text-right">Responses</th>
+              <th className="px-4 py-2 w-10" />
             </tr>
           </thead>
           <tbody>
@@ -444,7 +444,7 @@ export function FormsList() {
               Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: 6 }).map((__, j) => (
-                    <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-4 py-1.5"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -461,7 +461,7 @@ export function FormsList() {
                   className="border-b hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
                   onClick={() => router.push(`/crm/communication/forms/${form.id}`)}
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     <span className={cn(
                       "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide border",
                       form.status === "published"
@@ -471,17 +471,17 @@ export function FormsList() {
                       {form.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-brand-600 dark:text-brand-400 hover:underline">
+                  <td className="px-4 py-1.5 font-medium text-brand-600 dark:text-brand-400 hover:underline">
                     {form.name}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(form.createdAt)}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(form.updatedAt)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{fmtDate(form.createdAt)}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{fmtDate(form.updatedAt)}</td>
+                  <td className="px-4 py-1.5 text-right">
                     <span className={cn("font-medium tabular-nums", form.responseCount > 0 ? "text-brand-600 dark:text-brand-400" : "text-slate-400 dark:text-neutral-500")}>
                       {form.responseCount}
                     </span>
                   </td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
                     <FormRowMenu form={form} />
                   </td>
                 </tr>

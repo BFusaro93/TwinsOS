@@ -818,14 +818,14 @@ export function CrewsList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-card">
+      <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted">
-            <tr className="text-left text-xs font-semibold text-muted-foreground">
-              <th className="px-4 py-3">Description</th>
-              <th className="px-4 py-3">Team Code</th>
-              <th className="px-4 py-3">Members</th>
-              <th className="px-4 py-3">Active</th>
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+              <th className="px-4 py-2">Description</th>
+              <th className="px-4 py-2">Team Code</th>
+              <th className="px-4 py-2">Members</th>
+              <th className="px-4 py-2">Active</th>
             </tr>
           </thead>
           <tbody>
@@ -833,7 +833,7 @@ export function CrewsList() {
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: 5 }).map((__, j) => (
-                    <td key={j} className="px-4 py-3">
+                    <td key={j} className="px-4 py-1.5">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   ))}
@@ -857,21 +857,21 @@ export function CrewsList() {
                   className={`border-b ${canManageTeams ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40" : "cursor-default"}`}
                   onClick={() => canManageTeams && setDialogCrew(crew)}
                 >
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-1.5">
                     <span className="text-brand-600 dark:text-brand-400 hover:underline font-medium">
                       {crew.name}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-slate-600 dark:text-neutral-400">
+                  <td className="px-4 py-1.5 font-mono text-slate-600 dark:text-neutral-400">
                     {crew.code ?? "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
                     {crew.members && crew.members.length > 0
                       ? crew.members.map((m) => m.employeeName ?? "").join(", ")
                       : <span className="text-slate-300 dark:text-neutral-500">—</span>}
                   </td>
                   <td
-                    className="px-4 py-2.5 text-slate-600 dark:text-neutral-400"
+                    className="px-4 py-1.5 text-slate-600 dark:text-neutral-400"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <PermissionGate
