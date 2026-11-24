@@ -1003,8 +1003,8 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       <div className="-mt-4 shrink-0 overflow-x-auto bg-card lg:min-h-0 lg:flex-1 lg:shrink lg:overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-4 py-2">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="w-10 px-4 py-2 [&>input]:block [&>button]:block">
                 <input
                   type="checkbox"
                   checked={allSelected}

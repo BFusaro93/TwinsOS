@@ -1091,8 +1091,8 @@ export function InvoicesList({ clientId }: Props) {
       <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-3 py-2">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="w-10 px-3 py-2 [&>input]:block [&>button]:block">
                 <input
                   type="checkbox"
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -1106,7 +1106,7 @@ export function InvoicesList({ clientId }: Props) {
                 return (
                   <th
                     key={col.key}
-                    className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400" : "")}
+                    className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-foreground" : "")}
                     onClick={sortable ? () => toggleSort(col.key) : undefined}
                   >
                     {col.label}

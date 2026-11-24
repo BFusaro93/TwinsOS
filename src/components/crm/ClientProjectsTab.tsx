@@ -60,7 +60,7 @@ export function ClientProjectsTab({ clientId, clientName }: Props) {
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-2">Project</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Start</th>

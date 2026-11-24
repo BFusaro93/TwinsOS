@@ -690,7 +690,7 @@ function AddJobsDialog({
           ) : (
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="w-8 px-3 py-2">
                     <Checkbox
                       checked={visibleCandidates.every((c) => selectedIds.has(c.job.id)) ? true : visibleCandidates.some((c) => selectedIds.has(c.job.id)) ? "indeterminate" : false}
@@ -2465,7 +2465,7 @@ export function SnowDispatchBoard() {
           ) : (
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
-                <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                   <th className="w-8 px-2 py-2.5">
                     <Checkbox
                       checked={allShownSelected ? true : someShownSelected ? "indeterminate" : false}

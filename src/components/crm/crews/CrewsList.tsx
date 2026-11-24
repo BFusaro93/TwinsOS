@@ -821,7 +821,7 @@ export function CrewsList() {
       <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-2">Description</th>
               <th className="px-4 py-2">Team Code</th>
               <th className="px-4 py-2">Members</th>

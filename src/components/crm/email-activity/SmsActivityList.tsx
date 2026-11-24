@@ -235,7 +235,7 @@ export function SmsActivityList() {
         <div className="-mt-4 flex-1 overflow-auto bg-card">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 dark:bg-muted [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-slate-400 dark:[&>th]:text-neutral-500">
+              <TableRow className="bg-slate-50 dark:bg-muted [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-muted-foreground">
                 <TableHead className="w-10"></TableHead>
                 <TableHead className="whitespace-nowrap">Date</TableHead>
                 <TableHead>Message</TableHead>

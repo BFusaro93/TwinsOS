@@ -22,7 +22,7 @@ export function SortableTableHead({
   const isActive = sortKey === activeSortKey;
 
   return (
-    <TableHead className={cn("cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", className)} onClick={() => onToggle(sortKey)}>
+    <TableHead className={cn("cursor-pointer select-none hover:text-foreground", className)} onClick={() => onToggle(sortKey)}>
       <button
         type="button"
         className="inline-flex cursor-pointer items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide"

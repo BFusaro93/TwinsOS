@@ -1874,7 +1874,7 @@ function JobDetailSheet({
                 </div>
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b bg-slate-50 dark:bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                    <tr className="border-b bg-slate-50 dark:bg-muted/40 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       <th className="px-4 py-2">Service</th>
                       <th className="px-2 py-2 text-right">Qty</th>
                       <th className="px-2 py-2 text-right">Rate</th>
@@ -6667,7 +6667,7 @@ export function DispatchBoard() {
       <div className={`overscroll-x-contain bg-card max-lg:min-h-[60dvh] ${mapOpen ? "shrink-0 overflow-x-auto" : "flex-1 overflow-auto"}`}>
         <table className="w-full min-w-[1200px] text-xs">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
-            <tr className="border-b text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+            <tr className="border-b text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
               <th className="w-8 px-2 py-1.5" onClick={toggleSelectAll}>
                 <Checkbox
                   checked={displayVisits.length > 0 && selectedIds.size === displayVisits.length}
