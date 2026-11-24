@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRoles, useCreateRole, useUpdateRole, useDeleteRole } from "@/lib/hooks/use-roles";
 import { useEmployees } from "@/lib/hooks/use-employees";
 import {
+  PERMISSION_HELP,
   PERMISSION_TABS,
   allKeysInTab,
   allKeysInSection,
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -46,6 +48,7 @@ function PermSection({
   }
 
   return (
+    <TooltipProvider delayDuration={150}>
     <div className="rounded-lg border bg-card p-4 shadow-sm">
       {/* Section header with select-all checkbox */}
       <div className="flex items-center gap-2 mb-3 border-b pb-2">
@@ -65,13 +68,27 @@ function PermSection({
               onCheckedChange={(c) => onChange(key, !!c)}
               className="h-3.5 w-3.5 mt-0.5 shrink-0"
             />
-            <span className="text-xs text-slate-600 dark:text-neutral-400 group-hover:text-slate-900 dark:group-hover:text-neutral-100 leading-snug">
-              {label}
-            </span>
+            {PERMISSION_HELP[key] ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-slate-600 dark:text-neutral-400 group-hover:text-slate-900 dark:group-hover:text-neutral-100 leading-snug underline decoration-dotted decoration-slate-300 dark:decoration-neutral-600 underline-offset-2">
+                    {label}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs text-xs">
+                  {PERMISSION_HELP[key]}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="text-xs text-slate-600 dark:text-neutral-400 group-hover:text-slate-900 dark:group-hover:text-neutral-100 leading-snug">
+                {label}
+              </span>
+            )}
           </label>
         ))}
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 

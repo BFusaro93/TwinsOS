@@ -485,6 +485,29 @@ export function allKeysInTab(tabKey: string): string[] {
 }
 
 // Helper: all permission keys in a section
+/**
+ * Hover help for a permission's label in the role dialog, for the
+ * permissions whose name alone doesn't say what they unlock. Keyed by permission key;
+ * a key with no entry shows no help line.
+ */
+export const PERMISSION_HELP: Record<string, string> = {
+  account_settings:
+    "Master Account Settings: Organization, Branding, Subscription and Integrations. Users and API keys stay admin-only.",
+  company_settings: "Settings > General (company info).",
+  crm_settings:
+    "Settings > Clients, Chemical Tracking, Required Fields, Import / Export, Integrations and Client Portal.",
+  scheduling_settings: "Settings > Services (service prices and setup).",
+  accounting_settings: "Settings > Estimates and Accounting.",
+  client_activate_deactivate: "Cancel and reactivate clients. Does not include merging.",
+  client_allow_delete:
+    "Cancel and reactivate clients, and merge duplicate clients. There is no permanent delete.",
+  lead_allow_delete: "Close a lead as lost.",
+  client_view_credit_card: "Shows a client's saved card (type and last four digits) and its Autopay status.",
+  payroll_show_pay_rate: "Shows employees' hourly pay rates on payroll screens.",
+  payroll_show_wage_burden: "Shows the fully loaded labor cost (wage burden) on payroll screens.",
+  social_media_edit: "Log weekly social media numbers and edit goals and platforms. Admins and Managers always can.",
+};
+
 export function allKeysInSection(tabKey: string, sectionKey: string): string[] {
   return Object.keys(PERMISSION_TABS[tabKey]?.sections[sectionKey]?.permissions ?? {});
 }
