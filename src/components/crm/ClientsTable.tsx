@@ -485,7 +485,7 @@ export function ClientsTable({
               Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: visibleColumnCount }).map((__, j) => (
-                    <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-4 py-1.5"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -505,10 +505,10 @@ export function ClientsTable({
                     className={cn("group cursor-pointer border-b hover:bg-slate-50 dark:hover:bg-muted/40", isChecked && "bg-brand-50 dark:bg-brand-900/30")}
                     onClick={() => onSelect?.(client)}
                   >
-                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <Checkbox checked={isChecked} onCheckedChange={() => toggleOne(client.id)} aria-label={`Select ${client.displayName}`} />
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-1.5">
                       <div className="flex items-center gap-1.5">
                         {client.accountType === "commercial"
                           ? <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
@@ -518,7 +518,7 @@ export function ClientsTable({
                       </div>
                     </td>
                     {cols.tags && (
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-1.5">
                         {tags.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {tags.map((tag) => (
@@ -531,44 +531,44 @@ export function ClientsTable({
                       </td>
                     )}
                     {cols.type && (
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-1.5">
                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", ACCOUNT_TYPE_COLOR[client.accountType] ?? "bg-muted text-muted-foreground")}>
                           {client.accountType}
                         </span>
                       </td>
                     )}
                     {cols.status && (
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-1.5">
                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", STATUS_COLOR[client.status] ?? "bg-muted text-muted-foreground")}>
                           {client.status}
                         </span>
                       </td>
                     )}
-                    {cols.phone && <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{client.primaryPhone ?? "—"}</td>}
-                    {cols.email && <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{client.primaryEmail ?? "—"}</td>}
+                    {cols.phone && <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">{client.primaryPhone ?? "—"}</td>}
+                    {cols.email && <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">{client.primaryEmail ?? "—"}</td>}
                     {cols.city && (
-                      <td className="px-4 py-2.5 text-muted-foreground">
+                      <td className="px-4 py-1.5 text-muted-foreground">
                         {[client.serviceAddress, client.serviceCity, client.serviceState].filter(Boolean).join(", ") || "—"}
                       </td>
                     )}
-                    {cols.zip && <td className="px-4 py-2.5 text-muted-foreground">{client.serviceZip || client.billingZip || "—"}</td>}
+                    {cols.zip && <td className="px-4 py-1.5 text-muted-foreground">{client.serviceZip || client.billingZip || "—"}</td>}
                     {cols.balance && (
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-4 py-1.5 text-right">
                         {client.balanceOutstandingCents > 0
                           ? <span className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(client.balanceOutstandingCents)}</span>
                           : <span className="text-slate-400 dark:text-neutral-500">—</span>}
                       </td>
                     )}
-                    {cols.source && <td className="px-4 py-2.5 text-muted-foreground">{client.source ?? "—"}</td>}
+                    {cols.source && <td className="px-4 py-1.5 text-muted-foreground">{client.source ?? "—"}</td>}
                     {cols.clientSince && (
-                      <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-neutral-500">
+                      <td className="px-4 py-1.5 text-xs text-slate-400 dark:text-neutral-500">
                         {client.clientSince
                           ? new Date(client.clientSince + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                           : "—"}
                       </td>
                     )}
-                    {cols.accountNumber && <td className="px-4 py-2.5 text-muted-foreground">{client.accountNumber ?? "—"}</td>}
-                    <td className="px-4 py-2.5">
+                    {cols.accountNumber && <td className="px-4 py-1.5 text-muted-foreground">{client.accountNumber ?? "—"}</td>}
+                    <td className="px-4 py-1.5">
                       <button
                         onClick={(e) => { e.stopPropagation(); router.push(`/crm/clients/${client.id}`); }}
                         className="opacity-0 group-hover:opacity-100 rounded p-1 hover:bg-slate-200 dark:hover:bg-neutral-700 transition-opacity"

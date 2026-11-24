@@ -4,8 +4,8 @@ import { formatWarrantyCountdown, getWarrantyStatus } from "@/lib/utils/warranty
 import type { CRMWarranty } from "@/types/crm-warranties";
 
 const STYLE = {
-  pending: "border-slate-200 dark:border-neutral-700 bg-slate-50 dark:bg-muted/40 text-slate-600 dark:text-neutral-400",
-  void: "border-slate-200 dark:border-neutral-700 bg-slate-50 dark:bg-muted/40 text-slate-500 dark:text-neutral-500 line-through",
+  pending: "border-border dark:border-neutral-700 bg-slate-50 dark:bg-muted/40 text-slate-600 dark:text-neutral-400",
+  void: "border-border dark:border-neutral-700 bg-slate-50 dark:bg-muted/40 text-muted-foreground dark:text-neutral-500 line-through",
   active: "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400",
   expiring: "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400",
   expired: "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400",

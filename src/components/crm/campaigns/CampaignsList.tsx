@@ -470,7 +470,7 @@ function CampaignRow({
       className={cn("border-b transition-colors hover:bg-slate-50 dark:hover:bg-muted/40", canEdit && "cursor-pointer")}
       onClick={canEdit ? () => onEdit(campaign) : undefined}
     >
-      <td className="px-4 py-3">
+      <td className="px-4 py-1.5">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
             {campaign.type === "sms" ? (
@@ -487,7 +487,7 @@ function CampaignRow({
           </div>
         </div>
       </td>
-      <td className="px-3 py-3">
+      <td className="px-3 py-1.5">
         <span
           className={cn(
             "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
@@ -497,10 +497,10 @@ function CampaignRow({
           {STATUS_LABELS[campaign.status]}
         </span>
       </td>
-      <td className="px-3 py-3 text-xs text-muted-foreground">
+      <td className="px-3 py-1.5 text-xs text-muted-foreground">
         {SEGMENT_LABELS[campaign.targetSegment] ?? campaign.targetSegment}
       </td>
-      <td className="px-3 py-3 text-xs text-muted-foreground">
+      <td className="px-3 py-1.5 text-xs text-muted-foreground">
         {campaign.totalRecipients > 0 ? (
           <div className="flex items-center gap-1">
             <Users className="h-3 w-3" />
@@ -510,7 +510,7 @@ function CampaignRow({
           "—"
         )}
       </td>
-      <td className="px-3 py-3 text-xs text-muted-foreground">
+      <td className="px-3 py-1.5 text-xs text-muted-foreground">
         {openRate !== null ? (
           <div className="flex items-center gap-1">
             <BarChart2 className="h-3 w-3" />
@@ -520,14 +520,14 @@ function CampaignRow({
           "—"
         )}
       </td>
-      <td className="px-3 py-3 text-xs text-muted-foreground">
+      <td className="px-3 py-1.5 text-xs text-muted-foreground">
         {campaign.scheduledAt
           ? formatInZone(campaign.scheduledAt, orgTimeZone, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
           : campaign.sentAt
           ? formatInZone(campaign.sentAt, orgTimeZone, { month: "short", day: "numeric", year: "numeric" })
           : "—"}
       </td>
-      <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+      <td className="px-3 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -754,7 +754,7 @@ export function CampaignsList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
+      <div className="-mt-4 flex-1 overflow-auto">
         {isLoading ? (
           <div className="space-y-2 p-4">
             {[...Array(4)].map((_, i) => (
@@ -781,14 +781,14 @@ export function CampaignsList() {
         ) : (
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted">
-              <tr className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                <th className="px-4 py-2.5 text-left">Campaign</th>
-                <th className="px-3 py-2.5 text-left">Status</th>
-                <th className="px-3 py-2.5 text-left">Segment</th>
-                <th className="px-3 py-2.5 text-left">Recipients</th>
-                <th className="px-3 py-2.5 text-left">Performance</th>
-                <th className="px-3 py-2.5 text-left">Scheduled / Sent</th>
-                <th className="px-3 py-2.5 text-right"></th>
+              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <th className="px-4 py-2 text-left">Campaign</th>
+                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Segment</th>
+                <th className="px-3 py-2 text-left">Recipients</th>
+                <th className="px-3 py-2 text-left">Performance</th>
+                <th className="px-3 py-2 text-left">Scheduled / Sent</th>
+                <th className="px-3 py-2 text-right"></th>
               </tr>
             </thead>
             <tbody>

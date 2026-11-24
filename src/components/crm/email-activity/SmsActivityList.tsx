@@ -232,10 +232,10 @@ export function SmsActivityList() {
           description="Texts sent to clients from automations, and any replies they send back, will appear here."
         />
       ) : (
-        <div className="flex-1 overflow-auto bg-card">
+        <div className="-mt-4 flex-1 overflow-auto bg-card">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 dark:bg-muted/40">
+              <TableRow className="bg-slate-50 dark:bg-muted [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-slate-400 dark:[&>th]:text-neutral-500">
                 <TableHead className="w-10"></TableHead>
                 <TableHead className="whitespace-nowrap">Date</TableHead>
                 <TableHead>Message</TableHead>
@@ -246,7 +246,7 @@ export function SmsActivityList() {
             </TableHeader>
             <TableBody>
               {filtered.map((t) => (
-                <TableRow key={t.id} className="hover:bg-slate-50 dark:hover:bg-muted/40">
+                <TableRow key={t.id} className="[&>td]:py-1.5 hover:bg-slate-50 dark:hover:bg-muted/40">
                   <TableCell>
                     {t.direction === "inbound" ? (
                       <ArrowDownLeft className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" aria-label="Received" />

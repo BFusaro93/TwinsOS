@@ -835,17 +835,17 @@ export function CRMProjectsList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-card">
+      <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="px-4 py-3 min-w-[200px]">Project</th>
-              <th className="px-4 py-3">Client</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Progress</th>
-              <th className="px-4 py-3 text-right">Contract Price</th>
-              <th className="px-4 py-3">Start Date</th>
-              <th className="px-4 py-3">Actions</th>
+              <th className="px-4 py-2 min-w-[200px]">Project</th>
+              <th className="px-4 py-2">Client</th>
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Progress</th>
+              <th className="px-4 py-2 text-right">Contract Price</th>
+              <th className="px-4 py-2">Start Date</th>
+              <th className="px-4 py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -853,7 +853,7 @@ export function CRMProjectsList() {
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: 7 }).map((__, j) => (
-                    <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-4 py-1.5"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -875,27 +875,27 @@ export function CRMProjectsList() {
                   className={cn("border-b hover:bg-slate-50 dark:hover:bg-muted/40", canModify && "cursor-pointer")}
                   onClick={canModify ? () => setSelectedProject(p) : undefined}
                 >
-                  <td className="px-4 py-3 font-medium text-brand-600 dark:text-brand-400">{p.name}</td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
+                  <td className="px-4 py-1.5 font-medium text-brand-600 dark:text-brand-400">{p.name}</td>
+                  <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">
                     {p.clientName ?? p.customerName ?? "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     <Badge variant="outline" className={`capitalize border text-xs ${STATUS_COLOR[p.status]}`}>
                       {statusLabel(p.status)}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     <ProgressBar pct={p.progressPct} />
                   </td>
-                  <td className="px-4 py-3 text-right font-medium text-slate-800 dark:text-neutral-100">
+                  <td className="px-4 py-1.5 text-right font-medium text-slate-800 dark:text-neutral-100">
                     {formatCurrency(p.contractPrice)}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td className="px-4 py-1.5 text-muted-foreground">
                     {p.startDate ? new Date(p.startDate + "T12:00:00").toLocaleDateString("en-US", {
                       month: "short", day: "numeric", year: "numeric",
                     }) : "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     {canModify && (
                       <button
                         className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-brand-600 dark:hover:text-brand-400"

@@ -26,6 +26,7 @@ export const DARK_MODE_ROUTE_PREFIXES: readonly string[] = [
   "/crm/settings",
   "/crm/support",
   "/crm/team",
+  "/crm/warranties",
   "/crm/tickets",
   "/crm/vendors",
   "/dashboards/avb",

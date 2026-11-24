@@ -365,17 +365,17 @@ export function FormResponses({ formId }: Props) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-card">
+      <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-4 px-4 py-3" />
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Submitted By</th>
-              <th className="px-4 py-3">Date Submitted</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Source</th>
-              <th className="px-4 py-3">Result</th>
+              <th className="w-4 px-4 py-2" />
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Submitted By</th>
+              <th className="px-4 py-2">Date Submitted</th>
+              <th className="px-4 py-2">Email</th>
+              <th className="px-4 py-2">Source</th>
+              <th className="px-4 py-2">Result</th>
             </tr>
           </thead>
           <tbody>
@@ -383,7 +383,7 @@ export function FormResponses({ formId }: Props) {
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: 7 }).map((__, j) => (
-                    <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-4 py-1.5"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -400,12 +400,12 @@ export function FormResponses({ formId }: Props) {
                   className="border-b hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
                   onClick={() => openResponse(r)}
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     {!r.isRead && (
                       <span className="block h-2 w-2 rounded-full bg-brand-500" />
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     <span className={cn(
                       "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase border",
                       r.status === "completed"
@@ -419,11 +419,11 @@ export function FormResponses({ formId }: Props) {
                       {r.status.replace("_", " ")}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">{r.submittedByName ?? "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(r.createdAt)}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{r.submittedByEmail ?? "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{r.formLocation ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-neutral-400 text-xs">{r.result ?? "—"}</td>
+                  <td className="px-4 py-1.5 font-medium text-slate-800 dark:text-neutral-100">{r.submittedByName ?? "—"}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{fmtDate(r.createdAt)}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{r.submittedByEmail ?? "—"}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{r.formLocation ?? "—"}</td>
+                  <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400 text-xs">{r.result ?? "—"}</td>
                 </tr>
               ))
             )}

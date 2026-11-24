@@ -668,7 +668,7 @@ export function LeadsList({
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: visibleColumnCount }).map((__, j) => (
-                    <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td key={j} className="px-4 py-1.5"><Skeleton className="h-4 w-full" /></td>
                   ))}
                 </tr>
               ))
@@ -687,10 +687,10 @@ export function LeadsList({
                     className={cn("group border-b hover:bg-slate-50 dark:hover:bg-muted/40", onSelect && "cursor-pointer", isChecked && "bg-brand-50 dark:bg-brand-900/30")}
                     onClick={() => onSelect?.(lead)}
                   >
-                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <Checkbox checked={isChecked} onCheckedChange={() => toggleOne(lead.id)} aria-label={`Select ${lead.displayName}`} />
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-1.5">
                       <div className="flex items-center gap-1.5">
                         {lead.accountType === "commercial"
                           ? <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
@@ -704,36 +704,36 @@ export function LeadsList({
                       </div>
                     </td>
                     {cols.type && (
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-1.5">
                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", ACCOUNT_TYPE_COLOR[lead.accountType] ?? "bg-muted text-muted-foreground")}>
                           {lead.accountType}
                         </span>
                       </td>
                     )}
-                    {cols.phone && <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{lead.primaryPhone ?? "—"}</td>}
-                    {cols.email && <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{lead.primaryEmail ?? "—"}</td>}
+                    {cols.phone && <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">{lead.primaryPhone ?? "—"}</td>}
+                    {cols.email && <td className="px-4 py-1.5 text-slate-600 dark:text-neutral-400">{lead.primaryEmail ?? "—"}</td>}
                     {cols.city && (
-                      <td className="px-4 py-2.5 text-muted-foreground">
+                      <td className="px-4 py-1.5 text-muted-foreground">
                         {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") || "—"}
                       </td>
                     )}
                     {cols.zip && (
-                      <td className="px-4 py-2.5 text-muted-foreground">
+                      <td className="px-4 py-1.5 text-muted-foreground">
                         {lead.serviceZip || lead.billingZip || "—"}
                       </td>
                     )}
-                    {cols.source && <td className="px-4 py-2.5 text-muted-foreground">{lead.source ?? "—"}</td>}
+                    {cols.source && <td className="px-4 py-1.5 text-muted-foreground">{lead.source ?? "—"}</td>}
                     {cols.potential && (
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-4 py-1.5 text-right">
                         <LeadRevenuePotential leadId={lead.id} />
                       </td>
                     )}
                     {cols.dateAdded && (
-                      <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-neutral-500">
+                      <td className="px-4 py-1.5 text-xs text-slate-400 dark:text-neutral-500">
                         {formatDateAdded(lead, orgTimeZone)}
                       </td>
                     )}
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-1.5">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                         {canConvertLead && (
                           <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={(e) => { e.stopPropagation(); setConvertLead(lead); }}>

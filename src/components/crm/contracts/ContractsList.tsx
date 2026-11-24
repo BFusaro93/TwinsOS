@@ -72,7 +72,7 @@ import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search, FileSignature } from "lucide-react";
+import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, ArrowUpDown, Search, FileSignature } from "lucide-react";
 import { toast } from "sonner";
 import type { BillingFrequency, CRMContract, MonthlyAmounts, ContractStatus, SnowOutsideDates } from "@/types/crm-invoices";
 import { billingAnchor, contractBilledThrough, normalizeBillingFrequency, rescheduledBillingAnchor } from "@/lib/contract-billing";
@@ -144,6 +144,12 @@ function billingDayLabel(c: CRMContract): string {
 function amountLabel(c: CRMContract): string {
   const amount = summarizeContractAmount(c);
   return amount.isZero ? "—" : amount.label;
+}
+
+/** What the Amount column sorts on: the per-invoice figure it shows ("" when it shows —, so those sink). */
+function amountSortValue(c: CRMContract): number | "" {
+  const amount = summarizeContractAmount(c);
+  return amount.isZero || amount.perInvoiceCents == null ? "" : amount.perInvoiceCents;
 }
 
 function fmtDate(d: string | null) {
@@ -1846,7 +1852,19 @@ export function ContractsList({ clientId }: Props) {
   const lateCycle = useLateCyclePrompt();
 
   const baseContracts = (contracts ?? []);
-  const filtered = baseContracts.filter((c) => {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+  function SortIcon({ col }: { col: string }) {
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-300 dark:text-neutral-500" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />
+      : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />;
+  }
+  const filteredUnsorted = baseContracts.filter((c) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -1857,6 +1875,29 @@ export function ContractsList({ clientId }: Props) {
       (c.poNumber ?? "").toLowerCase().includes(q)
     );
   });
+  const filtered = !sortKey
+    ? filteredUnsorted
+    : [...filteredUnsorted].sort((a, b) => {
+        const val = (c: (typeof filteredUnsorted)[number]): string | number => {
+          switch (sortKey) {
+            case "client":      return (c.clientName ?? "").toLowerCase();
+            case "contract":    return c.title.toLowerCase();
+            case "status":      return c.status ?? "";
+            case "billing_day": return billingDayLabel(c);
+            case "amount":      return amountSortValue(c);
+            case "start_date":  return c.startDate ?? "";
+            case "end_date":    return c.endDate ?? "";
+            case "last_bill":   return c.lastBilledDate ?? "";
+            default:            return "";
+          }
+        };
+        const dir = sortDir === "asc" ? 1 : -1;
+        const av = val(a), bv = val(b);
+        // Blanks sink to the bottom whichever way it's sorted.
+        if (av === "" && bv !== "") return 1;
+        if (bv === "" && av !== "") return -1;
+        return av < bv ? -dir : av > bv ? dir : 0;
+      });
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -2108,11 +2149,11 @@ export function ContractsList({ clientId }: Props) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-card">
+      <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-3 py-3">
+              <th className="w-10 px-3 py-2">
                 <input
                   type="checkbox"
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -2120,16 +2161,16 @@ export function ContractsList({ clientId }: Props) {
                   onChange={(e) => e.target.checked ? selectAll() : clearSelection()}
                 />
               </th>
-              <th className="w-8 px-2 py-3" />
-              {!clientId && visibleKeys.includes("client") && <th className="min-w-[160px] px-3 py-3">Client</th>}
-              {visibleKeys.includes("contract") && <th className="min-w-[200px] px-3 py-3">Contract</th>}
-              {visibleKeys.includes("status") && <th className="px-3 py-3">Status</th>}
-              {visibleKeys.includes("billing_day") && <th className="px-3 py-3">Billing Day</th>}
-              {visibleKeys.includes("amount") && <th className="px-3 py-3 text-right">Amount</th>}
-              {visibleKeys.includes("start_date") && <th className="px-3 py-3">Start Date</th>}
-              {visibleKeys.includes("end_date") && <th className="px-3 py-3">End Date</th>}
-              {visibleKeys.includes("last_bill") && <th className="px-3 py-3">Last Bill Date</th>}
-              <th className="px-3 py-3" />
+              <th className="w-8 px-2 py-2" />
+              {!clientId && visibleKeys.includes("client") && <th className="min-w-[160px] whitespace-nowrap cursor-pointer select-none px-3 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("client")}>Client<SortIcon col="client" /></th>}
+              {visibleKeys.includes("contract") && <th className="min-w-[200px] whitespace-nowrap cursor-pointer select-none px-3 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("contract")}>Contract<SortIcon col="contract" /></th>}
+              {visibleKeys.includes("status") && <th className="whitespace-nowrap cursor-pointer select-none px-3 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("status")}>Status<SortIcon col="status" /></th>}
+              {visibleKeys.includes("billing_day") && <th className="whitespace-nowrap cursor-pointer select-none px-3 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("billing_day")}>Billing Day<SortIcon col="billing_day" /></th>}
+              {visibleKeys.includes("amount") && <th className="whitespace-nowrap cursor-pointer select-none px-3 py-2 hover:text-slate-600 dark:hover:text-neutral-400 text-right" onClick={() => toggleSort("amount")}>Amount<SortIcon col="amount" /></th>}
+              {visibleKeys.includes("start_date") && <th className="whitespace-nowrap cursor-pointer select-none px-3 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("start_date")}>Start Date<SortIcon col="start_date" /></th>}
+              {visibleKeys.includes("end_date") && <th className="whitespace-nowrap cursor-pointer select-none px-3 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("end_date")}>End Date<SortIcon col="end_date" /></th>}
+              {visibleKeys.includes("last_bill") && <th className="whitespace-nowrap cursor-pointer select-none px-3 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("last_bill")}>Last Bill Date<SortIcon col="last_bill" /></th>}
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>

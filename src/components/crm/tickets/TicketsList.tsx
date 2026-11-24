@@ -55,7 +55,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Plus, RotateCcw, Trash2, Undo2, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Plus, RotateCcw, Trash2, Undo2, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
@@ -561,6 +561,9 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     closed:  stats.closed,
   };
 
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
   const filtered = useMemo(() => {
     let list = all;
     if (typeFilter) list = list.filter((t) => t.type === typeFilter);
@@ -597,8 +600,45 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       );
     }
 
+    if (sortKey) {
+      const PRIORITY_RANK: Record<string, number> = { low: 0, medium: 1, normal: 1, high: 2, urgent: 3 };
+      const val = (t: (typeof list)[number]): string | number => {
+        switch (sortKey) {
+          case "number":   return t.ticketNumber ?? 0;
+          case "status":   return t.status ?? "";
+          case "priority": return PRIORITY_RANK[t.priority] ?? 0;
+          case "client":   return (t.clientName ?? "").toLowerCase();
+          case "subject":  return (t.subject ?? "").toLowerCase();
+          case "category": return (t.category ?? "").toLowerCase();
+          case "assigned": return (t.assignedTo ?? "").toLowerCase();
+          case "due":      return t.dueDate ?? "";
+          case "updated":  return t.updatedAt ?? "";
+          default:         return "";
+        }
+      };
+      const dir = sortDir === "asc" ? 1 : -1;
+      list = [...list].sort((a, b) => {
+        const av = val(a), bv = val(b);
+        // Blank values (no due date, no category…) always sink to the bottom.
+        if (av === "" && bv !== "") return 1;
+        if (bv === "" && av !== "") return -1;
+        return av < bv ? -dir : av > bv ? dir : 0;
+      });
+    }
+
     return list;
-  }, [all, statusFilter, priorityFilter, categoryFilter, filterEntries, categoryFilters, assignedFilters, priorityFilters, search, toISODate]);
+  }, [all, statusFilter, priorityFilter, categoryFilter, filterEntries, categoryFilters, assignedFilters, priorityFilters, search, toISODate, sortKey, sortDir]);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+  function SortIcon({ col }: { col: string }) {
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-300 dark:text-neutral-500" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />
+      : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />;
+  }
 
   const colCount = clientId ? 9 : 10; // +1 for checkbox
 
@@ -960,11 +1000,11 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       </div>
 
       {/* Table */}
-      <div className="shrink-0 overflow-x-auto bg-card lg:min-h-0 lg:flex-1 lg:shrink lg:overflow-auto">
+      <div className="-mt-4 shrink-0 overflow-x-auto bg-card lg:min-h-0 lg:flex-1 lg:shrink lg:overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-4 py-3">
+              <th className="w-10 px-4 py-2">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -972,15 +1012,15 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                 />
               </th>
-              <th className="px-4 py-3">{listTypeLabel} #</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Priority</th>
-              {!clientId && <th className="px-4 py-3">Client</th>}
-              <th className="px-4 py-3">Subject</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Assignment</th>
-              <th className="px-4 py-3">Due Date</th>
-              <th className="px-4 py-3">Last Updated</th>
+<th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("number")}>{listTypeLabel} #<SortIcon col="number" /></th>
+              <th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("status")}>Status<SortIcon col="status" /></th>
+              <th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("priority")}>Priority<SortIcon col="priority" /></th>
+              {!clientId && <th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("client")}>Client<SortIcon col="client" /></th>}
+              <th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("subject")}>Subject<SortIcon col="subject" /></th>
+              <th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("category")}>Category<SortIcon col="category" /></th>
+              <th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("assigned")}>Assignment<SortIcon col="assigned" /></th>
+              <th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("due")}>Due Date<SortIcon col="due" /></th>
+              <th className="whitespace-nowrap cursor-pointer select-none px-4 py-2 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => toggleSort("updated")}>Last Updated<SortIcon col="updated" /></th>
             </tr>
           </thead>
           <tbody>
@@ -988,7 +1028,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: colCount }).map((__, j) => (
-                    <td key={j} className="px-4 py-3">
+                    <td key={j} className="px-4 py-1.5">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   ))}
@@ -1007,7 +1047,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                   className={cn("border-b hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer", selectedIds.has(t.id) && "bg-brand-50 dark:bg-brand-900/30")}
                   onClick={() => setSelectedTicketId(t.id)}
                 >
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(t.id)}
@@ -1015,17 +1055,17 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                       className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                     />
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-400 dark:text-neutral-500">
+                  <td className="px-4 py-1.5 font-mono text-xs text-slate-400 dark:text-neutral-500">
                     #{t.ticketNumber}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     <StatusBadge status={t.status} />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-1.5">
                     <PriorityBadge priority={t.priority} />
                   </td>
                   {!clientId && (
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       {t.clientId ? (
                         <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${t.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
                           {t.clientName ?? "—"}
@@ -1035,13 +1075,13 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                       )}
                     </td>
                   )}
-                  <td className="px-4 py-3 text-slate-800 dark:text-neutral-100 font-medium">
+                  <td className="px-4 py-1.5 text-slate-800 dark:text-neutral-100 font-medium">
                     {t.subject ?? "(no subject)"}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.category ?? "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.assignedTo ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(t.dueDate)}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(t.updatedAt)}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{t.category ?? "—"}</td>
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">{t.assignedTo ?? "—"}</td>
+                  <td className="px-4 py-1.5 text-xs text-muted-foreground">{formatDate(t.dueDate)}</td>
+                  <td className="px-4 py-1.5 text-xs text-muted-foreground">{formatDate(t.updatedAt)}</td>
                 </tr>
               ))
             )}

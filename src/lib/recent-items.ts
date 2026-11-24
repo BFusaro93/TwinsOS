@@ -4,7 +4,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 
-export type RecentItemKind = "client" | "lead" | "invoice" | "estimate";
+export type RecentItemKind = "client" | "lead" | "invoice" | "estimate" | "ticket";
 
 export type RecentItem = {
   kind: RecentItemKind;
@@ -43,11 +43,12 @@ export function pushRecentItem(userId: string, item: RecentItem): void {
   }
 }
 
-const TABLE_FOR_KIND: Record<RecentItemKind, "clients" | "crm_invoices" | "estimates"> = {
+const TABLE_FOR_KIND: Record<RecentItemKind, "clients" | "crm_invoices" | "estimates" | "crm_tickets"> = {
   client: "clients",
   lead: "clients",
   invoice: "crm_invoices",
   estimate: "estimates",
+  ticket: "crm_tickets",
 };
 
 /** Drops recents whose record has since been deleted (or is no longer visible to this person),
