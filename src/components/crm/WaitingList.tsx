@@ -364,7 +364,7 @@ function WaitingSortLabel({
     <button
       type="button"
       onClick={() => onSort(col)}
-      className={`inline-flex items-center gap-1 font-semibold hover:text-slate-900 dark:hover:text-neutral-100 ${active ? "text-slate-900 dark:text-neutral-100" : ""}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide hover:text-slate-900 dark:hover:text-neutral-100 ${active ? "text-slate-900 dark:text-neutral-100" : ""}`}
       aria-label={`Sort by ${children}`}
     >
       {children}
@@ -1193,7 +1193,7 @@ export function WaitingList() {
         <table className="w-full min-w-[900px] text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
             <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-4 py-3">
+              <th className="w-10 px-4 py-2">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -1201,18 +1201,18 @@ export function WaitingList() {
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
                 />
               </th>
-              {visibleKeys.includes("client") && <th className="min-w-[200px] px-4 py-3"><WaitingSortLabel col="client" sort={sort} onSort={toggleSort}>Client</WaitingSortLabel></th>}
-              {visibleKeys.includes("service") && <th className="min-w-[180px] px-4 py-3"><WaitingSortLabel col="service" sort={sort} onSort={toggleSort}>Service</WaitingSortLabel></th>}
-              {visibleKeys.includes("dateRange") && <th className="px-4 py-3"><WaitingSortLabel col="dateRange" sort={sort} onSort={toggleSort}>Date Range</WaitingSortLabel></th>}
-              {visibleKeys.includes("city") && <th className="px-4 py-3"><WaitingSortLabel col="city" sort={sort} onSort={toggleSort}>City</WaitingSortLabel></th>}
-              {visibleKeys.includes("zip") && <th className="px-4 py-3"><WaitingSortLabel col="zip" sort={sort} onSort={toggleSort}>Zip</WaitingSortLabel></th>}
-              {visibleKeys.includes("crew") && <th className="px-4 py-3"><WaitingSortLabel col="crew" sort={sort} onSort={toggleSort}>Crew</WaitingSortLabel></th>}
-              {visibleKeys.includes("rate") && <th className="px-4 py-3 text-right"><WaitingSortLabel col="rate" sort={sort} onSort={toggleSort}>Rate</WaitingSortLabel></th>}
-              {EXTRA_COLUMNS.map((c) => visibleKeys.includes(c.key) && <th key={c.key} className="px-4 py-3 whitespace-nowrap">{c.label}</th>)}
+              {visibleKeys.includes("client") && <th className="min-w-[200px] px-4 py-2"><WaitingSortLabel col="client" sort={sort} onSort={toggleSort}>Client</WaitingSortLabel></th>}
+              {visibleKeys.includes("service") && <th className="min-w-[180px] px-4 py-2"><WaitingSortLabel col="service" sort={sort} onSort={toggleSort}>Service</WaitingSortLabel></th>}
+              {visibleKeys.includes("dateRange") && <th className="px-4 py-2"><WaitingSortLabel col="dateRange" sort={sort} onSort={toggleSort}>Date Range</WaitingSortLabel></th>}
+              {visibleKeys.includes("city") && <th className="px-4 py-2"><WaitingSortLabel col="city" sort={sort} onSort={toggleSort}>City</WaitingSortLabel></th>}
+              {visibleKeys.includes("zip") && <th className="px-4 py-2"><WaitingSortLabel col="zip" sort={sort} onSort={toggleSort}>Zip</WaitingSortLabel></th>}
+              {visibleKeys.includes("crew") && <th className="px-4 py-2"><WaitingSortLabel col="crew" sort={sort} onSort={toggleSort}>Crew</WaitingSortLabel></th>}
+              {visibleKeys.includes("rate") && <th className="px-4 py-2 text-right"><WaitingSortLabel col="rate" sort={sort} onSort={toggleSort}>Rate</WaitingSortLabel></th>}
+              {EXTRA_COLUMNS.map((c) => visibleKeys.includes(c.key) && <th key={c.key} className="px-4 py-2 whitespace-nowrap">{c.label}</th>)}
               {customFieldDefs.map((def) => visibleKeys.includes(customColKey(def.id)) && (
-                <th key={def.id} className="px-4 py-3 whitespace-nowrap">{def.name}</th>
+                <th key={def.id} className="px-4 py-2 whitespace-nowrap">{def.name}</th>
               ))}
-              <th className="px-4 py-3" />
+              <th className="px-4 py-2" />
             </tr>
           </thead>
 
