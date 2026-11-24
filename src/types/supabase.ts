@@ -14847,6 +14847,7 @@ export type Database = {
           status: string
           support_email: string | null
           support_phone: string | null
+          twilio_a2p_profile_sid: string | null
           twilio_api_key_sid: string | null
           twilio_api_secret_vault_id: string | null
           twilio_auth_token_vault_id: string | null
@@ -14888,6 +14889,7 @@ export type Database = {
           status?: string
           support_email?: string | null
           support_phone?: string | null
+          twilio_a2p_profile_sid?: string | null
           twilio_api_key_sid?: string | null
           twilio_api_secret_vault_id?: string | null
           twilio_auth_token_vault_id?: string | null
@@ -14929,6 +14931,7 @@ export type Database = {
           status?: string
           support_email?: string | null
           support_phone?: string | null
+          twilio_a2p_profile_sid?: string | null
           twilio_api_key_sid?: string | null
           twilio_api_secret_vault_id?: string | null
           twilio_auth_token_vault_id?: string | null
