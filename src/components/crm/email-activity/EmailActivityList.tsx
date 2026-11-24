@@ -53,6 +53,18 @@ interface EmailActivity {
   createdByName: string | null;
   refTable: string | null;
   refId: string | null;
+  /** Why a hard bounce happened (from the mail server), when Resend reported one. */
+  bounceReason: string | null;
+}
+
+/** Where a sent email stands. Delivered wins; the rest partition "Not Delivered". */
+type DeliveryStatus = "delivered" | "bounced" | "failed" | "pending";
+
+function deliveryStatus(e: Pick<EmailActivity, "deliveredAt" | "bouncedAt" | "failedAt">): DeliveryStatus {
+  if (e.deliveredAt) return "delivered";
+  if (e.bouncedAt) return "bounced";
+  if (e.failedAt) return "failed";
+  return "pending";
 }
 
 // ── Data hook ─────────────────────────────────────────────────────────────────
@@ -78,6 +90,7 @@ function useEmailActivity() {
           occurred_at,
           ref_table,
           ref_id,
+          resend_message_id,
           clients!inner(display_name),
           profiles(name)
         `)
@@ -85,6 +98,22 @@ function useEmailActivity() {
         .order("occurred_at", { ascending: false })
         .limit(ACTIVITY_LIMIT);
       if (error) throw error;
+      // Hard bounces keep the mail server's reason in crm_email_bounces, keyed by the
+      // Resend message id. Cleared bounces are soft-deleted but keep their reason.
+      // A failed read just means no reasons are shown.
+      const reasonByMessage = new Map<string, string>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- crm_email_bounces is newer than the generated types
+      const { data: bounces } = await (supabase as any)
+        .from("crm_email_bounces")
+        .select("source_message_id, bounce_message")
+        .not("bounce_message", "is", null)
+        .order("bounced_at", { ascending: false })
+        .limit(1000);
+      for (const b of (bounces ?? []) as { source_message_id: string | null; bounce_message: string }[]) {
+        if (b.source_message_id && !reasonByMessage.has(b.source_message_id)) {
+          reasonByMessage.set(b.source_message_id, b.bounce_message);
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((row: any): EmailActivity => ({
         id: row.id,
@@ -100,6 +129,7 @@ function useEmailActivity() {
         createdByName: row.profiles?.name ?? null,
         refTable: row.ref_table ?? null,
         refId: row.ref_id ?? null,
+        bounceReason: row.resend_message_id ? reasonByMessage.get(row.resend_message_id) ?? null : null,
       }));
     },
   });
@@ -131,13 +161,48 @@ function fmtPct(num: number, den: number) {
   return `${((num / den) * 100).toFixed(2)}%`;
 }
 
-type QuickFilter = "all" | "delivered" | "not_delivered";
+type QuickFilter = "all" | "delivered" | "not_delivered" | "failed" | "bounced" | "pending";
 
 const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: "all",           label: "All" },
   { key: "delivered",     label: "Delivered" },
   { key: "not_delivered", label: "Not Delivered" },
+  // The three kinds of "not delivered".
+  { key: "failed",        label: "Failed" },
+  { key: "bounced",       label: "Bounced" },
+  { key: "pending",       label: "Pending" },
 ];
+
+const STATUS_BADGE: Record<DeliveryStatus, { label: string; className: string }> = {
+  delivered: { label: "Yes", className: "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 ring-1 ring-green-200 dark:ring-green-800" },
+  bounced:   { label: "Bounced", className: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 ring-1 ring-orange-200 dark:ring-orange-800" },
+  failed:    { label: "Failed", className: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800" },
+  pending:   { label: "Pending", className: "bg-muted text-muted-foreground" },
+};
+
+function statusTooltip(e: EmailActivity, status: DeliveryStatus): string | undefined {
+  if (status === "bounced") {
+    return e.bounceReason
+      ? `Bounced: ${e.bounceReason}`
+      : "Bounced. The mail server didn't give a reason (or it was a temporary bounce).";
+  }
+  if (status === "failed") return "Resend could not send this email. No further reason is recorded.";
+  if (status === "pending") return "No delivery confirmation received yet.";
+  return undefined;
+}
+
+function DeliveryBadge({ email }: { email: EmailActivity }) {
+  const status = deliveryStatus(email);
+  const { label, className } = STATUS_BADGE[status];
+  return (
+    <span
+      title={statusTooltip(email, status)}
+      className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", className)}
+    >
+      {label}
+    </span>
+  );
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -165,7 +230,10 @@ export function EmailActivityList() {
     all:           total,
     delivered:     deliveredCount,
     not_delivered: total - deliveredCount,
-  }), [total, deliveredCount]);
+    failed:        emails.filter((e: EmailActivity) => deliveryStatus(e) === "failed").length,
+    bounced:       emails.filter((e: EmailActivity) => deliveryStatus(e) === "bounced").length,
+    pending:       emails.filter((e: EmailActivity) => deliveryStatus(e) === "pending").length,
+  }), [emails, total, deliveredCount]);
 
   const filtered = useMemo(() => {
     let list: EmailActivity[] = emails;
@@ -173,6 +241,9 @@ export function EmailActivityList() {
     // quick filter
     if (quickFilter === "delivered")     list = list.filter((e: EmailActivity) => e.deliveredAt !== null);
     if (quickFilter === "not_delivered") list = list.filter((e: EmailActivity) => e.deliveredAt === null);
+    if (quickFilter === "failed" || quickFilter === "bounced" || quickFilter === "pending") {
+      list = list.filter((e: EmailActivity) => deliveryStatus(e) === quickFilter);
+    }
 
     // column filter
     // Every filter with a value applies at once.
@@ -457,7 +528,7 @@ export function EmailActivityList() {
                 <TableHead>Description</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead>Sent To</TableHead>
-                <TableHead>Delivered</TableHead>
+                <TableHead>Delivery</TableHead>
                 <TableHead>Resource</TableHead>
               </TableRow>
             </TableHeader>
@@ -491,15 +562,7 @@ export function EmailActivityList() {
                   <TableCell className="text-sm text-slate-600 dark:text-neutral-400">{e.clientName}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{e.sentTo ?? "—"}</TableCell>
                   <TableCell className="text-sm">
-                    {e.deliveredAt ? (
-                      <span className="inline-flex items-center rounded-full bg-green-50 dark:bg-green-950/40 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-green-200 dark:ring-green-800">
-                        Yes
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                        —
-                      </span>
-                    )}
+                    <DeliveryBadge email={e} />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {e.createdByName ?? "—"}

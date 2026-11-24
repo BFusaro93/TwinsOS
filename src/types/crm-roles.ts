@@ -50,14 +50,15 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           view_dashboard_driver_safety: "View Driver Safety Scores",
           view_dashboard_company_report: "View Company Report",
           view_dashboard_social_media: "View Social Media",
+          // Admins and Managers can always edit; this lets a lesser role
+          // (e.g. a social media manager) log weeks and edit goals/platforms.
+          // Enforced in the DB by can_edit_social_media(). Kept right after
+          // the view key so the two read as a pair.
+          social_media_edit: "Social Media: Enter & Edit Data",
           view_dashboard_custom: "View Custom Dashboards",
           view_dashboard_job_costing: "View Job Costing (Dashboards)",
           view_dashboard_estimate_builder: "View Estimate Builder (Dashboards)",
           view_dashboard_calculators: "View Calculators (Dashboards)",
-          // Admins and Managers can always edit; this lets a lesser role
-          // (e.g. a social media manager) log weeks and edit goals/platforms.
-          // Enforced in the DB by can_edit_social_media().
-          social_media_edit: "Social Media: Enter & Edit Data",
         },
       },
       other_access: {
