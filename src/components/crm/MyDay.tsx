@@ -80,7 +80,10 @@ export function MyDay() {
   const { currentUser } = useCurrentUserStore();
   const firstName = currentUser.name.split(" ")[0];
 
-  const { data: allOpenTickets, isLoading: ticketsLoading } = useTickets({ status: "open" });
+  // Open AND pending: a pending ticket is still waiting on you (or the client) and belongs on your
+  // day. Reading only "open" left anyone whose tickets were all pending with an empty list.
+  // On-hold tickets are deliberately parked, so they stay off.
+  const { data: allOpenTickets, isLoading: ticketsLoading } = useTickets({ statuses: ["open", "pending"] });
   const { data: employees, isLoading: employeesLoading } = useEmployees(true);
   // My Day is per-user, so default tickets and meetings to the ones assigned to
   // you; "Everyone" is one click away for managers who triage the whole queue.
@@ -221,7 +224,7 @@ export function MyDay() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Open Tickets */}
         {allow("tickets_view_modify") && (
-          <Link href="/crm/tickets?status=open" className={KPI_CARD_CLASS}>
+          <Link href="/crm/tickets" className={KPI_CARD_CLASS}>
             <div className="flex items-start justify-between mb-2">
               <span className="text-xs font-medium text-muted-foreground">{scope === "mine" ? "My Open Tickets" : "Open Tickets"}</span>
               <Ticket className="h-4 w-4 text-orange-400" />
@@ -367,7 +370,7 @@ export function MyDay() {
           {/* Open Tickets */}
           {allow("tickets_view_modify") && (
             <div className="rounded-lg border bg-card p-4 shadow-sm">
-              <SectionHeader title={scope === "mine" ? "My Open Tickets" : "Open Tickets"} href="/crm/tickets?status=open" />
+              <SectionHeader title={scope === "mine" ? "My Open Tickets" : "Open Tickets"} href="/crm/tickets" />
               <div className="mt-3">
                 {ticketsLoading ? (
                   Array.from({ length: 4 }).map((_, i) => (
@@ -377,7 +380,7 @@ export function MyDay() {
                   ))
                 ) : recentTickets.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">
-                    {scope === "mine" ? "No open tickets assigned to you or CC&apos;d on — you&apos;re all caught up!" : "No open tickets — you&apos;re all caught up!"}
+                    {scope === "mine" ? "No open tickets assigned to you or CC’d on — you’re all caught up!" : "No open tickets — you’re all caught up!"}
                   </p>
                 ) : (
                   recentTickets.map((t) => (
