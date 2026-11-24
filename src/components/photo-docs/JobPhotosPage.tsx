@@ -639,7 +639,9 @@ export function JobPhotosPage() {
             value={search}
             onChange={setSearch}
             placeholder="Search jobs…"
-            className="w-full max-w-xs"
+            // Top-aligned (not bottom-aligned with the pills) so the box sits at the same height as the
+            // search on every other page, e.g. Warranties — the Status/View labels made this row taller.
+            className="w-full max-w-xs self-start"
           />
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Status</span>
