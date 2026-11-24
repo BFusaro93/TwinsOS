@@ -186,6 +186,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
     lead: showLeads,
     invoice: showInvoices,
     estimate: showEstimates,
+    ticket: showTickets,
   };
   const visibleRecents =
     showFullSearch && query.trim() === "" ? recentItems.filter((i) => recentVisible[i.kind]).slice(0, 5) : [];
@@ -194,6 +195,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
     lead: UserPlus,
     invoice: Receipt,
     estimate: ClipboardList,
+    ticket: Ticket,
   };
 
   return (
@@ -383,7 +385,15 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 <CommandItem
                   key={tk.id}
                   value={`${label} ${tk.subject ?? ""} ${tk.clientName ?? ""} ticket ${query}`}
-                  onSelect={() => go(`/crm/tickets?open=${tk.id}`)}
+                  onSelect={() =>
+                    go(`/crm/tickets?open=${tk.id}`, undefined, {
+                      kind: "ticket",
+                      id: tk.id,
+                      label,
+                      sub: [tk.subject, tk.clientName].filter(Boolean).join(" · ") || undefined,
+                      href: `/crm/tickets?open=${tk.id}`,
+                    })
+                  }
                   className="flex items-center gap-3"
                 >
                   <Ticket className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
