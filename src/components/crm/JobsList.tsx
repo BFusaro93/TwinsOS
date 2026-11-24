@@ -56,11 +56,11 @@ const TERMINAL_VISIT_STATUSES = new Set(["completed", "cancelled", "skipped"]);
 // useful defaults for spotting jobs that cluster by area.
 const JOB_COLUMNS: (ColumnDef & { width?: string; px?: number })[] = [
   { key: "client",   label: "Client",   locked: true },
-  { key: "services", label: "Services" },
+  { key: "services", label: "Services", width: "w-56", px: 224 },
   { key: "type",     label: "Type",     width: "w-24", px: 96 },
-  { key: "crew",     label: "Crew",     width: "w-32", px: 128 },
+  { key: "crew",     label: "Crew",     width: "w-36", px: 144 },
   { key: "address",  label: "Address",  width: "w-56", px: 224, defaultHidden: true },
-  { key: "city",     label: "City",     width: "w-32", px: 128 },
+  { key: "city",     label: "City",     width: "w-36", px: 144 },
   { key: "state",    label: "State",    width: "w-16", px: 64,  defaultHidden: true },
   { key: "zip",      label: "Zip",      width: "w-20", px: 80 },
   { key: "revenue",  label: "Revenue",  width: "w-24", px: 96 },
@@ -408,10 +408,10 @@ export function JobsList() {
         <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
           <table
             className="w-full text-sm table-fixed"
-            style={{ minWidth: 32 + 300 + shownColumns.reduce((sum, c) => sum + (c.px ?? 0), 0) }}
+            style={{ minWidth: 32 + 220 + shownColumns.reduce((sum, c) => sum + (c.px ?? 0), 0) }}
           >
-            {/* Narrow columns are fixed; Client and Services split whatever is left, so there are
-                no wide empty gaps and the status pills have room to sit side by side. */}
+            {/* Every column but Client has a fixed width, so Client (the longest text: name + address)
+                takes whatever is left and the status pills have room to sit side by side. */}
             <colgroup>
               {shownColumns.map((c) => <col key={c.key} className={c.width} />)}
               <col className="w-8" />
