@@ -79,6 +79,7 @@ type Registration = {
   twilio_api_secret_vault_id: string | null;
   twilio_auth_token_vault_id: string | null;
   twilio_customer_profile_sid: string | null;
+  twilio_a2p_profile_sid: string | null;
   twilio_brand_sid: string | null;
   twilio_phone_number_sid: string | null;
   twilio_phone_number: string | null;
@@ -105,6 +106,20 @@ async function patch(supabase: AnyClient, orgId: string, fields: Record<string, 
 // any predictable substring), and there's no need to search at all since
 // this SID never varies by account/region.
 const SECONDARY_CUSTOMER_PROFILE_POLICY_SID = "RNdfbf3fae0e1107f8aded0e7cead80bf5";
+
+// The A2P Messaging Profile ("A2P Messaging: Local - Business") policy — the
+// Trust Product Brand Registration takes as A2PProfileBundleSid. Fixed
+// Twilio-wide like the one above and NOT interchangeable with it; both were
+// confirmed against GET /v1/Policies/{sid} on the live API (it requires a
+// us_a2p_messaging_profile_information EndUser plus the customer profile).
+const A2P_MESSAGING_POLICY_SID = "RNb0d4771c2c98518d916a3d4cd70a8f8b";
+
+// Twilio's company_type enum for that EndUser. "public" would also need a
+// stock exchange/ticker and a 2FA brand contact — not something a landscaping
+// company is, so only the two values this product can produce are mapped.
+function twilioCompanyType(businessType: string | null): string {
+  return businessType === "nonprofit" ? "non-profit" : "private";
+}
 
 // ---------------------------------------------------------------------------
 // Step 1 — Subaccount + subaccount-scoped API Key (stored: SID plaintext,
@@ -307,27 +322,74 @@ async function pollCustomerProfile(supabase: AnyClient, reg: Registration) {
 }
 
 // ---------------------------------------------------------------------------
-// Step 3 — A2P Brand Registration. NOTE: per Twilio's Brand Registration API,
-// this also requires an A2PProfileBundleSid (a separate Trust Hub "Trust
-// Product" resource for A2P messaging specifically, distinct from the
-// business-identity Customer Profile above). That bundle's exact EndUser
-// attribute schema is NOT yet verified against current Twilio docs — build
-// and test it via TWILIO_A2P_MOCK=true (real, cost-free Twilio mock mode)
-// before wiring a live org through this step.
+// Step 3 — A2P Messaging Profile (Trust Product) + Brand Registration.
+// Brand Registration takes TWO bundles: the approved business-identity
+// Customer Profile (step 2) and a separate A2P Messaging Profile built here
+// from a us_a2p_messaging_profile_information EndUser and the customer
+// profile as proof. Per Twilio's ISV guide the Trust Product doesn't have to
+// be approved before the brand request. Everything here is synchronous; the
+// brand itself then goes to carrier vetting (polled by pollBrand).
 // ---------------------------------------------------------------------------
+async function ensureA2pProfile(
+  supabase: AnyClient,
+  reg: Registration,
+  creds: { apiKeySid: string; apiKeySecret: string }
+): Promise<string> {
+  // Reuse only while no brand has been requested yet. After a brand attempt
+  // (rejected, say) start from a fresh bundle so a bad one can't be carried
+  // into the resubmission.
+  if (reg.twilio_a2p_profile_sid && !reg.twilio_brand_sid) return reg.twilio_a2p_profile_sid;
+
+  const product = await subaccountRequest(TRUSTHUB, "/TrustProducts", creds, {
+    body: {
+      PolicySid: A2P_MESSAGING_POLICY_SID,
+      FriendlyName: `${reg.legal_business_name ?? `org:${reg.org_id}`} A2P Messaging Profile`,
+      Email: reg.contact_email ?? "",
+    },
+  });
+  const productSid: string = product.sid;
+
+  const endUser = await subaccountRequest(TRUSTHUB, "/EndUsers", creds, {
+    body: {
+      Type: "us_a2p_messaging_profile_information",
+      FriendlyName: "A2P Messaging Profile Information",
+      Attributes: JSON.stringify({ company_type: twilioCompanyType(reg.business_type) }),
+    },
+  });
+  await subaccountRequest(TRUSTHUB, `/TrustProducts/${productSid}/EntityAssignments`, creds, {
+    body: { ObjectSid: endUser.sid },
+  });
+  await subaccountRequest(TRUSTHUB, `/TrustProducts/${productSid}/EntityAssignments`, creds, {
+    body: { ObjectSid: reg.twilio_customer_profile_sid! },
+  });
+
+  const evaluation = await subaccountRequest(TRUSTHUB, `/TrustProducts/${productSid}/Evaluations`, creds, {
+    body: { PolicySid: A2P_MESSAGING_POLICY_SID },
+  });
+  if (evaluation.status !== "compliant") {
+    throw new Error(`A2P Messaging Profile failed evaluation: ${JSON.stringify(evaluation.results ?? evaluation)}`);
+  }
+
+  await subaccountRequest(TRUSTHUB, `/TrustProducts/${productSid}`, creds, {
+    body: { Status: "pending-review" },
+  });
+
+  await patch(supabase, reg.org_id, { twilio_a2p_profile_sid: productSid });
+  return productSid;
+}
+
 async function submitBrand(supabase: AnyClient, reg: Registration) {
   const creds = await getOrgTwilioCreds(supabase, reg.org_id);
   if (!creds || !reg.twilio_customer_profile_sid) throw new Error("Missing subaccount credentials or approved profile");
 
-  if (!process.env.TWILIO_A2P_PROFILE_BUNDLE_SID_TEMPLATE_NOTE) {
-    // Placeholder guard — see the TODO above. Left as an explicit throw
-    // rather than silently submitting a malformed Brand Registration.
-  }
+  const a2pProfileSid = await ensureA2pProfile(supabase, reg, creds);
 
+  // Real (non-mock) brand requests incur Twilio fees on the account; Twilio
+  // asks for at most one Brand/Campaign registration request per second.
   const brand = await subaccountRequest(MESSAGING, "/a2p/BrandRegistrations", creds, {
     body: {
       CustomerProfileBundleSid: reg.twilio_customer_profile_sid,
-      A2PProfileBundleSid: reg.twilio_customer_profile_sid, // TODO: replace with the dedicated A2P Trust Product bundle SID once built
+      A2PProfileBundleSid: a2pProfileSid,
       ...(MOCK_MODE ? { Mock: "true" } : {}),
     },
   });
