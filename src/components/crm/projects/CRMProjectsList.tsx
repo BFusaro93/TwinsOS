@@ -53,6 +53,7 @@ import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import type { Project, ProjectStatus } from "@/types/project";
 import type { Client } from "@/types/crm";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -809,33 +810,28 @@ export function CRMProjectsList() {
   );
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b bg-card px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">Projects</h1>
-          <p className="text-sm text-muted-foreground">Manage all client projects, milestones, and billing</p>
-        </div>
-        {canModify && (
-          <Button size="sm" onClick={() => setNewOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" /> New Project
-          </Button>
-        )}
-      </div>
+    <div className="flex h-full flex-col gap-4">
+      <PageHeader
+        title="Projects"
+        description="Manage all client projects, milestones, and billing"
+        action={
+          canModify ? (
+            <Button size="sm" onClick={() => setNewOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" /> New Project
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {/* Search */}
-      <div className="border-b bg-card px-6 pb-7 pt-3">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search projects or clients…"
-          className="max-w-sm"
-          inputClassName="h-8 text-sm"
-        />
-      </div>
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Search projects or clients…"
+        className="w-full max-w-xs"
+      />
 
       {/* Table */}
-      <div className="-mt-4 flex-1 overflow-auto bg-card">
+      <div className="flex-1 overflow-auto rounded-lg border bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 border-b bg-slate-50 dark:bg-muted">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">

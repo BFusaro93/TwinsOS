@@ -875,7 +875,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       </div>
 
       {/* Dark actions bar */}
-      <div className="flex items-center justify-between flex-wrap gap-y-2 bg-[#4a4a4a] px-4 py-2">
+      <div className="flex items-center justify-between flex-wrap gap-y-2 bg-[#4a4a4a] px-4 py-2 min-h-[3.25rem]">
         <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-1">
           {/* Actions dropdown */}
           <DropdownMenu>

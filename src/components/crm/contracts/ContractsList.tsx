@@ -2051,7 +2051,7 @@ export function ContractsList({ clientId }: Props) {
       )}
 
       {/* Dark actions bar */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 bg-[#4a4a4a] px-4 py-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 bg-[#4a4a4a] px-4 py-2 min-h-[3.25rem]">
         {/* Actions dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
