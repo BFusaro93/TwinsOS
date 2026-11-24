@@ -51,8 +51,9 @@ import {
 } from "@/lib/hooks/use-report-center";
 import { panelFromGraphic } from "@/lib/reports/panel-from-graphic";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import type { Dashboard } from "@/types/crm-reports";
+import type { Dashboard, DashboardPanel } from "@/types/crm-reports";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { GraphicPreview } from "./GraphicPreview";
 
 /** GraphicLibraryItem.id is prefixed ("system:"/"saved:") to keep the two id
  *  spaces from colliding — strip it to get the underlying crm_saved_graphics
@@ -91,6 +92,7 @@ export function GraphicsLibraryList() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [addTarget, setAddTarget] = useState<GraphicLibraryItem | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<GraphicLibraryItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GraphicLibraryItem | null>(null);
 
   const categories = useMemo(
@@ -184,16 +186,43 @@ export function GraphicsLibraryList() {
                 {item.description && (
                   <p className="text-xs text-muted-foreground">{item.description}</p>
                 )}
-                {canManage && (
-                  <Button size="sm" variant="outline" onClick={() => setAddTarget(item)}>
-                    Add to Dashboard
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setPreviewTarget(item)}>
+                    Preview
                   </Button>
-                )}
+                  {canManage && (
+                    <Button size="sm" variant="outline" onClick={() => setAddTarget(item)}>
+                      Add to Dashboard
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog open={!!previewTarget} onOpenChange={(open) => !open && setPreviewTarget(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Preview: {previewTarget?.name}</DialogTitle>
+          </DialogHeader>
+          {previewTarget && <GraphicPreview name={previewTarget.name} visual={previewTarget.visual} size="half" />}
+          {previewTarget && canManage && (
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setAddTarget(previewTarget);
+                  setPreviewTarget(null);
+                }}
+              >
+                Add to Dashboard
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AddToDashboardDialog item={addTarget} onOpenChange={(open) => !open && setAddTarget(null)} />
 
@@ -239,6 +268,7 @@ function AddToDashboardDialog({
   const updateDashboard = useUpdateDashboard();
   const [dashboardId, setDashboardId] = useState<string>("");
   const [tabId, setTabId] = useState<string>("");
+  const [size, setSize] = useState<DashboardPanel["size"]>("half");
   const [error, setError] = useState<string | null>(null);
 
   const selected: Dashboard | undefined = dashboards.find((d) => d.id === dashboardId);
@@ -253,7 +283,7 @@ function AddToDashboardDialog({
   const handleAdd = async () => {
     if (!item || !selected || !tabId) return;
     setError(null);
-    const panel = panelFromGraphic(item.name, item.visual);
+    const panel = { ...panelFromGraphic(item.name, item.visual), size };
     const nextTabs = selected.config.tabs.map((t) =>
       t.id === tabId ? { ...t, panels: [...t.panels, panel] } : t
     );
@@ -273,10 +303,11 @@ function AddToDashboardDialog({
 
   return (
     <Dialog open={!!item} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Add &quot;{item?.name}&quot; to a Dashboard</DialogTitle>
         </DialogHeader>
+        {item && <GraphicPreview name={item.name} visual={item.visual} size={size} />}
         {isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : dashboards.length === 0 ? (
@@ -317,6 +348,19 @@ function AddToDashboardDialog({
                 </Select>
               </div>
             )}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Size on the dashboard</span>
+              <Select value={size} onValueChange={(v) => setSize(v as DashboardPanel["size"])}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="third">Third width</SelectItem>
+                  <SelectItem value="half">Half width</SelectItem>
+                  <SelectItem value="full">Full width</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
             <Button
               size="sm"
