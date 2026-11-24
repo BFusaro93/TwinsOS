@@ -1308,7 +1308,7 @@ export function PaymentsList({ clientId }: Props) {
                 className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                   activeTab === tab
                     ? "bg-card text-slate-800 dark:text-neutral-100"
-                    : "text-slate-300 hover:text-white"
+                    : "text-neutral-200 hover:text-white"
                 }`}
               >
                 {tab === "last30" ? "Last 30 Days" : tab === "all" ? "All" : "Deleted"}
@@ -1334,8 +1334,8 @@ export function PaymentsList({ clientId }: Props) {
       <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-3 py-2">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="w-10 px-3 py-2 [&>input]:block [&>button]:block">
                 <input
                   type="checkbox"
                   className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500"
@@ -1344,7 +1344,7 @@ export function PaymentsList({ clientId }: Props) {
                 />
               </th>
               <th
-                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-foreground", "")}
                 onClick={() => toggleSort("date")}
               >
                 Date
@@ -1352,7 +1352,7 @@ export function PaymentsList({ clientId }: Props) {
               </th>
               {!clientId && (
                 <th
-                  className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "min-w-[200px]")}
+                  className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-foreground", "min-w-[200px]")}
                   onClick={() => toggleSort("client")}
                 >
                   Client
@@ -1360,35 +1360,35 @@ export function PaymentsList({ clientId }: Props) {
                 </th>
               )}
               <th
-                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-foreground", "text-right")}
                 onClick={() => toggleSort("amount")}
               >
                 Amount
                 <SortIcon col="amount" />
               </th>
               <th
-                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-foreground", "text-right")}
                 onClick={() => toggleSort("unused")}
               >
                 Unused Amt
                 <SortIcon col="unused" />
               </th>
               <th
-                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-foreground", "text-right")}
                 onClick={() => toggleSort("refunded")}
               >
                 Refunded Amt
                 <SortIcon col="refunded" />
               </th>
               <th
-                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-foreground", "")}
                 onClick={() => toggleSort("reference")}
               >
                 Reference #
                 <SortIcon col="reference" />
               </th>
               <th
-                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-foreground", "")}
                 onClick={() => toggleSort("method")}
               >
                 Payment Method

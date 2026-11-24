@@ -456,7 +456,7 @@ export function ClientsTable({
       <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted z-10">
-            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="px-3 py-3">
                 <Checkbox
                   checked={allSelected}

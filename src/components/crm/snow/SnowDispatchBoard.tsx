@@ -690,7 +690,7 @@ function AddJobsDialog({
           ) : (
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="w-8 px-3 py-2">
                     <Checkbox
                       checked={visibleCandidates.every((c) => selectedIds.has(c.job.id)) ? true : visibleCandidates.some((c) => selectedIds.has(c.job.id)) ? "indeterminate" : false}
@@ -1321,7 +1321,7 @@ function ValueFilter({ label, options, selected, onChange }: {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+        <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
           {selected.length === 0 ? `All ${label}` : `${selected.length} ${label}`}
           <ChevronDown className="h-2.5 w-2.5 opacity-60" />
         </button>
@@ -2142,7 +2142,7 @@ export function SnowDispatchBoard() {
           <button
             onClick={() => { void refetchVisits(); }}
             title="Refresh"
-            className="h-7 w-7 max-lg:h-9 max-lg:w-9 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-slate-300 hover:text-white transition-colors shrink-0"
+            className="h-7 w-7 max-lg:h-9 max-lg:w-9 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-neutral-200 hover:text-white transition-colors shrink-0"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
@@ -2157,7 +2157,7 @@ export function SnowDispatchBoard() {
                   onClick={() => setStatusFilter(t.value)}
                   className={cn(
                     "px-2.5 py-1 max-lg:py-2.5 text-[10px] font-medium rounded transition-colors",
-                    statusFilter === t.value ? "bg-card text-slate-800 dark:text-neutral-100" : "text-slate-300 hover:text-white"
+                    statusFilter === t.value ? "bg-card text-slate-800 dark:text-neutral-100" : "text-neutral-200 hover:text-white"
                   )}
                 >
                   {t.label}
@@ -2176,7 +2176,7 @@ export function SnowDispatchBoard() {
 
           <Popover>
             <PopoverTrigger asChild>
-              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
                 <Users className="h-3 w-3" />
                 {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -2195,7 +2195,7 @@ export function SnowDispatchBoard() {
 
           <Popover>
             <PopoverTrigger asChild>
-              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
                 <Tag className="h-3 w-3" />
                 {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -2225,7 +2225,7 @@ export function SnowDispatchBoard() {
                   "h-7 max-lg:h-9 flex items-center gap-1.5 rounded border px-2.5 text-[10px] transition-colors",
                   selectedVisitIds.size > 0
                     ? "bg-brand-600 border-brand-500 text-white hover:bg-brand-700 font-medium"
-                    : "bg-[#5a5a5a] border-[#6a6a6a] text-slate-200 hover:text-white"
+                    : "bg-[#5a5a5a] border-[#6a6a6a] text-neutral-200 hover:text-white"
                 )}
               >
                 <ListChecks className="h-3 w-3" />
@@ -2319,7 +2319,7 @@ export function SnowDispatchBoard() {
             <button
               onClick={() => setLegendOpen(true)}
               title="Show Legend"
-              className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded border border-[#6a6a6a] bg-[#5a5a5a] px-2.5 text-[10px] text-slate-200 transition-colors hover:text-white"
+              className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded border border-[#6a6a6a] bg-[#5a5a5a] px-2.5 text-[10px] text-neutral-200 transition-colors hover:text-white"
             >
               <HelpCircle className="h-3 w-3" />Legend
             </button>
@@ -2465,7 +2465,7 @@ export function SnowDispatchBoard() {
           ) : (
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
-                <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                   <th className="w-8 px-2 py-2.5">
                     <Checkbox
                       checked={allShownSelected ? true : someShownSelected ? "indeterminate" : false}

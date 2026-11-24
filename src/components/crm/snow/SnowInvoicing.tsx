@@ -359,7 +359,7 @@ export function SnowInvoicing() {
           ) : (
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
-                <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                   <th className="min-w-[140px] px-2 py-2.5">Client</th>
                   <th className="px-2 py-2.5">Date</th>
                   <th className="px-2 py-2.5">Service</th>
@@ -408,7 +408,7 @@ export function SnowInvoicing() {
         ) : (
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted border-b">
-              <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+              <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                 <th className="w-8 px-2 py-2.5">
                   <Checkbox checked={rows.length > 0 && selectedCount === rows.length} onCheckedChange={toggleAll} className="h-3.5 w-3.5" />
                 </th>

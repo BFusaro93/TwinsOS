@@ -54,7 +54,7 @@ export function RepairCostDetailDialog({ kind, workOrders, rangeLabel, onClose }
             <p className="py-10 text-center text-sm text-slate-400 dark:text-neutral-500">No costs recorded in this range</p>
           ) : (
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-card text-left text-xs uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+              <thead className="sticky top-0 bg-card text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="py-2 pr-3 font-semibold">Date</th>
                   <th className="py-2 pr-3 font-semibold">Work order</th>

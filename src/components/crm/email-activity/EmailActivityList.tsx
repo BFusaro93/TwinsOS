@@ -404,7 +404,7 @@ export function EmailActivityList() {
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                   quickFilter === key
                     ? "bg-card text-slate-800 dark:text-neutral-100"
-                    : "text-slate-300 hover:text-white"
+                    : "text-neutral-200 hover:text-white"
                 )}
               >
                 {label}
@@ -444,7 +444,7 @@ export function EmailActivityList() {
         <div className="-mt-4 flex-1 overflow-auto bg-card">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 dark:bg-muted [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-slate-400 dark:[&>th]:text-neutral-500">
+              <TableRow className="bg-slate-50 dark:bg-muted [&>th]:h-auto [&>th]:py-2 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide [&>th]:text-muted-foreground">
                 <TableHead className="w-10">
                   <input
                     type="checkbox"

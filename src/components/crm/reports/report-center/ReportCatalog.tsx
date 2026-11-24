@@ -44,7 +44,7 @@ export function ReportCatalog() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+              <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <th className="w-[280px] px-4 py-2 text-left">Report</th>
                 <th className="px-4 py-2 text-left">Description</th>
               </tr>
@@ -86,7 +86,7 @@ function SectionRows({
   return (
     <>
       <tr className="border-b bg-muted">
-        <td colSpan={2} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-neutral-300">
+        <td colSpan={2} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </td>
       </tr>

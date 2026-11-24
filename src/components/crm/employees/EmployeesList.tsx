@@ -1106,7 +1106,7 @@ function EmployeeTable({
   return (
     <table className="w-full text-sm">
       <thead className="sticky top-0 bg-slate-50 dark:bg-muted z-10">
-        <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+        <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <th className="px-4 py-2">Name</th>
           <th className="px-4 py-2">Resource Code</th>
           <th className="px-4 py-2">Status</th>

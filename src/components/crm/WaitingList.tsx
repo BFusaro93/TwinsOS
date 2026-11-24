@@ -362,7 +362,7 @@ function WaitingSortLabel({
   return (
     <button
       type="button"
-      className={`inline-flex cursor-pointer select-none items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide hover:text-slate-600 dark:hover:text-neutral-400`}
+      className={`inline-flex cursor-pointer select-none items-center gap-1 whitespace-nowrap font-semibold uppercase tracking-wide hover:text-foreground`}
       aria-label={`Sort by ${children}`}
     >
       {children}
@@ -984,7 +984,7 @@ export function WaitingList() {
               )}
               <button
                 title="Clear this filter" onClick={clearActive}
-                className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
+                className="text-slate-400 dark:text-neutral-500 hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -1058,7 +1058,7 @@ export function WaitingList() {
               not the white "Select a Filter" text-search row). */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
                 <Users className="h-3 w-3" />
                 {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -1091,7 +1091,7 @@ export function WaitingList() {
           {/* Tag filter — client tags, "is any of" (OR) */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
                 <Tag className="h-3 w-3" />
                 {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -1121,7 +1121,7 @@ export function WaitingList() {
           {/* Priority filter — job high-priority flag + client priority level */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+              <button className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
                 <Flame className="h-3 w-3" />
                 {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
@@ -1171,7 +1171,7 @@ export function WaitingList() {
               "h-7 flex items-center gap-1.5 rounded border px-2.5 text-[10px] transition-colors",
               readyOnly
                 ? "bg-brand-500 border-brand-400 text-white"
-                : "bg-[#5a5a5a] border-[#6a6a6a] text-slate-200 hover:text-white"
+                : "bg-[#5a5a5a] border-[#6a6a6a] text-neutral-200 hover:text-white"
             )}
           >
             <Check className="h-3 w-3" />
@@ -1190,8 +1190,8 @@ export function WaitingList() {
       <div className="-mt-4 flex-1 overflow-auto bg-card">
         <table className="w-full min-w-[900px] text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted">
-            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-10 px-4 py-2">
+            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="w-10 px-4 py-2 [&>input]:block [&>button]:block">
                 <input
                   type="checkbox"
                   checked={allSelected}
