@@ -65,6 +65,7 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
 
   // Snapshot charge rate × qty; with no markup set, the charge is just the cost.
   const chargeCents = Math.round(row.qty * effectiveChargeCents(row.rateCents, row.chargeRateCents));
+  const chargeRateEach = effectiveChargeCents(row.rateCents, row.chargeRateCents);
   const unitWord = row.unit === "hour" ? "hrs" : row.unit === "day" ? "days" : "×";
 
   return (
@@ -87,8 +88,8 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
             />
             {unitWord}
           </label>
-          <label className="flex items-center gap-1 text-muted-foreground">
-            $
+          <label className="flex items-center gap-1 text-muted-foreground" title="Internal cost rate (what the machine costs us). The charge rate is what you bill.">
+            cost $
             <input
               type="number"
               min={0}
@@ -100,6 +101,14 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
             />
             {EQUIPMENT_UNIT_LABELS[row.unit]}
           </label>
+          {chargeRateEach !== row.rateCents && (
+            <span
+              className="tabular-nums font-semibold text-slate-800 dark:text-neutral-100"
+              title="The rate you bill for this equipment (charge rate), as opposed to the internal cost rate in the box"
+            >
+              charge {centsToDisplay(chargeRateEach)} {EQUIPMENT_UNIT_LABELS[row.unit]}
+            </span>
+          )}
           {chargeCents !== row.totalCostCents ? (
             <>
               <span
