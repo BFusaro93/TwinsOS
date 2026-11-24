@@ -819,7 +819,7 @@ export function EstimatesList({ clientId }: Props) {
                           );
                         case "client":
                           return (
-                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[220px] lg:max-w-[300px] xl:max-w-[380px] 2xl:max-w-[460px]">
+                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px] lg:max-w-[240px] xl:max-w-[270px] 2xl:max-w-[300px]">
                               <Link onClick={(e) => e.stopPropagation()} href={`/crm/clients/${e.clientId}`} className="block font-medium text-brand-600 dark:text-brand-400 hover:underline truncate">
                                 {e.clientName ?? "—"}
                               </Link>
@@ -835,7 +835,7 @@ export function EstimatesList({ clientId }: Props) {
                           );
                         case "description":
                           return (
-                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[200px]">
+                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[240px] lg:max-w-[300px] xl:max-w-[380px] 2xl:max-w-[460px]">
                               <Link href={`/crm/estimates/${e.id}`} className="block text-slate-700 dark:text-neutral-300 hover:text-brand-600 dark:hover:text-brand-400 hover:underline truncate text-xs">
                                 {e.description || "(no description)"}
                               </Link>
@@ -849,7 +849,7 @@ export function EstimatesList({ clientId }: Props) {
                           return <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 text-xs text-slate-600 dark:text-neutral-400">{e.salesRepName ?? "—"}</td>;
                         case "reason":
                           return (
-                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[180px] truncate text-xs text-slate-600 dark:text-neutral-400" title={e.reason ?? undefined}>
+                            <td key={col.key} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6 max-w-[110px] lg:max-w-[130px] 2xl:max-w-[160px] truncate text-xs text-slate-600 dark:text-neutral-400" title={e.reason ?? undefined}>
                               {e.stage === "accepted" || e.stage === "lost" ? (e.reason ?? "—") : "—"}
                             </td>
                           );
