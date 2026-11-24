@@ -1344,7 +1344,7 @@ export function PaymentsList({ clientId }: Props) {
                 />
               </th>
               <th
-                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
                 onClick={() => toggleSort("date")}
               >
                 Date
@@ -1352,7 +1352,7 @@ export function PaymentsList({ clientId }: Props) {
               </th>
               {!clientId && (
                 <th
-                  className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "min-w-[200px]")}
+                  className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "min-w-[200px]")}
                   onClick={() => toggleSort("client")}
                 >
                   Client
@@ -1360,47 +1360,49 @@ export function PaymentsList({ clientId }: Props) {
                 </th>
               )}
               <th
-                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
                 onClick={() => toggleSort("amount")}
               >
                 Amount
                 <SortIcon col="amount" />
               </th>
               <th
-                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
                 onClick={() => toggleSort("unused")}
               >
                 Unused Amt
                 <SortIcon col="unused" />
               </th>
               <th
-                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "text-right")}
                 onClick={() => toggleSort("refunded")}
               >
                 Refunded Amt
                 <SortIcon col="refunded" />
               </th>
               <th
-                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
                 onClick={() => toggleSort("reference")}
               >
                 Reference #
                 <SortIcon col="reference" />
               </th>
               <th
-                className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
+                className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6 cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400", "")}
                 onClick={() => toggleSort("method")}
               >
                 Payment Method
                 <SortIcon col="method" />
               </th>
+              {/* Covers the Edit / Refund hover column so the header bar runs the full table width. */}
+              <th className="px-3 py-2" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-b">
-                  {Array.from({ length: clientId ? 7 : 8 }).map((__, j) => (
+                  {Array.from({ length: clientId ? 8 : 9 }).map((__, j) => (
                     <td key={j} className="px-2 py-1.5 lg:px-3 xl:px-4 2xl:px-6">
                       <Skeleton className="h-4 w-full" />
                     </td>
@@ -1409,7 +1411,7 @@ export function PaymentsList({ clientId }: Props) {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={clientId ? 7 : 8} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
+                <td colSpan={clientId ? 8 : 9} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {activeTab === "deleted" ? "No deleted payments" : "No payments recorded yet"}
                 </td>
               </tr>

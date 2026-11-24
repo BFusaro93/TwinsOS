@@ -1106,7 +1106,7 @@ export function InvoicesList({ clientId }: Props) {
                 return (
                   <th
                     key={col.key}
-                    className={cn("px-2 py-2 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400" : "")}
+                    className={cn("whitespace-nowrap px-2 py-2 lg:px-3 xl:px-4 2xl:px-6", isRight ? "text-right" : "", sortable ? "cursor-pointer select-none hover:text-slate-600 dark:hover:text-neutral-400" : "")}
                     onClick={sortable ? () => toggleSort(col.key) : undefined}
                   >
                     {col.label}
