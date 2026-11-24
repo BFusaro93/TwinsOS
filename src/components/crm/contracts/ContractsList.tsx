@@ -149,7 +149,7 @@ function amountLabel(c: CRMContract): string {
 /** What the Amount column sorts on: the per-invoice figure it shows ("" when it shows —, so those sink). */
 function amountSortValue(c: CRMContract): number | "" {
   const amount = summarizeContractAmount(c);
-  return amount.isZero ? "" : amount.perInvoiceCents;
+  return amount.isZero || amount.perInvoiceCents == null ? "" : amount.perInvoiceCents;
 }
 
 function fmtDate(d: string | null) {
