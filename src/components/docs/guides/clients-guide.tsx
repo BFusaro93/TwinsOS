@@ -259,8 +259,8 @@ export function ClientsGuide() {
           <strong>Who can change status.</strong> Changing a lead&apos;s status needs the lead{" "}
           <strong>Convert/Close</strong> or <strong>Allow Close as Lost</strong> permission
           (converting it to Active needs Convert/Close). Changing a client&apos;s status — Cancel,
-          Activate, or Edit → Status — needs <strong>Activate/Deactivate</strong> or{" "}
-          <strong>Allow Cancel/Deactivate</strong>. The buttons are hidden without them, the
+          Activate, or Edit → Status — needs <strong>Cancel / Reactivate Clients</strong> or{" "}
+          <strong>Merge Clients (also Cancel / Reactivate)</strong>. The buttons are hidden without them, the
           Status field in Edit is locked, and the database refuses the change from anywhere else.
           Admins can always change status.
         </p>
@@ -671,7 +671,7 @@ export function ClientsGuide() {
           <strong>More &gt; Merge Clients</strong>. Search for the duplicate (name, account number,
           phone, email or address), pick which of the two records to <strong>keep</strong>, review the
           list of what will move, and type <strong>MERGE</strong> to confirm. Merging needs an admin
-          login or a role with the <strong>Allow Cancel/Deactivate</strong> client permission, because the
+          login or a role with the <strong>Merge Clients (also Cancel / Reactivate)</strong> client permission, because the
           duplicate is retired.
         </p>
         <ul className="list-disc space-y-2 pl-5">

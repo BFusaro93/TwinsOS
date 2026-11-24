@@ -81,10 +81,10 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         label: "Client Access",
         permissions: {
           client_list: "Client List",
-          client_activate_deactivate: "Activate/Deactivate",
+          client_activate_deactivate: "Cancel / Reactivate Clients",
           client_add: "Add Client",
           client_allow_edit: "Allow Edit",
-          client_allow_delete: "Allow Cancel/Deactivate",
+          client_allow_delete: "Merge Clients (also Cancel / Reactivate)",
           client_bulk_edit: "Bulk Edit",
           client_bulk_create: "Bulk Create",
           client_add_contract: "Add Contract",

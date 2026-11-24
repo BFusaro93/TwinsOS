@@ -141,7 +141,7 @@ export function MergeClientsDialog({ open, onOpenChange, clientId }: MergeClient
           <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
         ) : !allowed ? (
           <p className="py-4 text-sm text-muted-foreground">
-            Merging clients needs the &ldquo;Allow Cancel/Deactivate&rdquo; client permission. Ask an admin.
+            Merging clients needs the &ldquo;Merge Clients&rdquo; client permission. Ask an admin.
           </p>
         ) : !other ? (
           <div className="space-y-3">
