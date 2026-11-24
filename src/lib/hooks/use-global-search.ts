@@ -151,7 +151,7 @@ export function useEstimateSearch(term: string, enabled = true) {
 export interface TicketSearchHit {
   id: string;
   ticketNumber: number | null;
-  subject: string;
+  subject: string | null;
   status: string;
   clientName: string | null;
 }
@@ -190,7 +190,7 @@ export function useTicketSearch(term: string, enabled = true) {
       if (numRes?.error) throw numRes.error;
       if (subjRes.error) throw subjRes.error;
       if (clientRes.error) throw clientRes.error;
-      const map = (rows: { id: string; ticket_number: number | null; subject: string; status: string; clients: ClientEmbed }[]) =>
+      const map = (rows: { id: string; ticket_number: number | null; subject: string | null; status: string; clients: ClientEmbed }[]) =>
         rows.map((r) => ({
           id: r.id,
           ticketNumber: r.ticket_number,

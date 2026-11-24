@@ -382,13 +382,13 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               return (
                 <CommandItem
                   key={tk.id}
-                  value={`${label} ${tk.subject} ${tk.clientName ?? ""} ticket ${query}`}
+                  value={`${label} ${tk.subject ?? ""} ${tk.clientName ?? ""} ticket ${query}`}
                   onSelect={() => go(`/crm/tickets?open=${tk.id}`)}
                   className="flex items-center gap-3"
                 >
                   <Ticket className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
                   <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium">{label} — {tk.subject}</span>
+                    <span className="truncate text-sm font-medium">{label}{tk.subject ? ` — ${tk.subject}` : ""}</span>
                     {tk.clientName && (
                       <span className="truncate text-xs text-slate-400 dark:text-neutral-500">{tk.clientName}</span>
                     )}
