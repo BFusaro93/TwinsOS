@@ -145,6 +145,26 @@ export async function startCrewDay(
  */
 export const MAX_AUTO_CLOSE_SHIFT_MS = 16 * 3_600_000;
 
+
+/** A forgotten lunch left running is capped here instead of deducting hours (the office can correct it). */
+export const MAX_LUNCH_MINUTES = 240;
+
+/**
+ * Extra shift columns to write when a shift closes at `end` while a lunch is still running: the lunch
+ * ends with the day instead of being lost, capped like any lunch.
+ */
+function lunchCloseFields(
+  s: { lunch_started_at?: string | null; lunch_minutes?: number | null },
+  end: string
+): { lunch_minutes?: number; lunch_started_at?: null } {
+  if (!s.lunch_started_at) return {};
+  const minutes = Math.min(
+    MAX_LUNCH_MINUTES,
+    Math.max(0, Math.round((new Date(end).getTime() - new Date(s.lunch_started_at).getTime()) / 60_000))
+  );
+  return { lunch_minutes: Number(s.lunch_minutes ?? 0) + minutes, lunch_started_at: null };
+}
+
 /**
  * Closes one member's open shift (today's, or one that crossed midnight) at
  * `at`. Returns whether a shift was closed. Throws on a write failure.
@@ -154,17 +174,17 @@ export async function closeMemberOpenShift(
   p: { orgId: string; crewMemberId: string; workDate: string; at: string }
 ): Promise<boolean> {
   const atMs = new Date(p.at).getTime();
-  const { data: openRows } = await supabase.from("crm_crew_day_shifts").select("id, work_date, started_at")
+  const { data: openRows } = await supabase.from("crm_crew_day_shifts").select("id, work_date, started_at, lunch_started_at, lunch_minutes")
     .eq("crew_member_id", p.crewMemberId).eq("org_id", p.orgId)
     .gte("work_date", openShiftLookbackDate(p.workDate)).lte("work_date", p.workDate)
     .gt("started_at", new Date(atMs - MAX_AUTO_CLOSE_SHIFT_MS).toISOString())
     .is("deleted_at", null).is("ended_at", null)
     .order("started_at", { ascending: false });
-  const open = ((openRows ?? []) as { id: string; work_date: string; started_at: string }[])
+  const open = ((openRows ?? []) as { id: string; work_date: string; started_at: string; lunch_started_at: string | null; lunch_minutes: number | null }[])
     .find((s) => isCurrentOpenShift(s, p.workDate, atMs));
   if (!open) return false;
   const end = new Date(open.started_at).getTime() > atMs ? open.started_at : p.at;
-  const { error } = await supabase.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", open.id).is("ended_at", null);
+  const { error } = await supabase.from("crm_crew_day_shifts").update({ ended_at: end, ...lunchCloseFields(open, end) }).eq("id", open.id).is("ended_at", null);
   if (error) throw new Error(error.message);
   return true;
 }
@@ -197,7 +217,7 @@ export async function endCrewDay(
   if (memberIds.length === 0) return 0;
   const { data: open } = await supabase
     .from("crm_crew_day_shifts")
-    .select("id, work_date, started_at")
+    .select("id, work_date, started_at, lunch_started_at, lunch_minutes")
     .eq("org_id", p.orgId)
     .gte("work_date", openShiftLookbackDate(p.workDate))
     .lte("work_date", p.workDate)
@@ -207,10 +227,10 @@ export async function endCrewDay(
     .in("crew_member_id", memberIds);
   const atMs = new Date(p.at).getTime();
   let closed = 0;
-  for (const s of ((open ?? []) as { id: string; work_date: string; started_at: string }[]).filter((r) => isCurrentOpenShift(r, p.workDate, atMs))) {
+  for (const s of ((open ?? []) as { id: string; work_date: string; started_at: string; lunch_started_at: string | null; lunch_minutes: number | null }[]).filter((r) => isCurrentOpenShift(r, p.workDate, atMs))) {
     // Never end before the start (clock skew / an offline-queued tap).
     const end = new Date(s.started_at).getTime() > atMs ? s.started_at : p.at;
-    const { error } = await supabase.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", s.id).is("ended_at", null);
+    const { error } = await supabase.from("crm_crew_day_shifts").update({ ended_at: end, ...lunchCloseFields(s, end) }).eq("id", s.id).is("ended_at", null);
     // A shift dated inside the payroll lock can't be closed by anyone (see
     // payroll-lock.ts): leave it open for the office to see on the Payroll tab
     // rather than failing End Day for the rest of the crew.
@@ -219,4 +239,72 @@ export async function endCrewDay(
     closed += 1;
   }
   return closed;
+}
+
+/**
+ * Start Lunch: marks every working member's open shift as "on lunch" from `at`. Idempotent (a double
+ * tap or an offline replay changes nothing for a shift already on lunch). Returns how many started.
+ */
+export async function startCrewLunch(
+  supabase: AnySupabase,
+  p: { orgId: string; crewId: string; workDate: string; at: string }
+): Promise<number> {
+  const memberIds = await resolveWorkingMemberIds(supabase, p.orgId, p.crewId, p.workDate);
+  if (memberIds.length === 0) return 0;
+  const atMs = new Date(p.at).getTime();
+  const { data: open } = await supabase
+    .from("crm_crew_day_shifts")
+    .select("id, work_date, started_at, lunch_started_at")
+    .eq("org_id", p.orgId)
+    .gte("work_date", openShiftLookbackDate(p.workDate))
+    .lte("work_date", p.workDate)
+    .is("deleted_at", null)
+    .is("ended_at", null)
+    .in("crew_member_id", memberIds);
+  let started = 0;
+  for (const s of ((open ?? []) as { id: string; work_date: string; started_at: string; lunch_started_at: string | null }[])
+    .filter((r) => isCurrentOpenShift(r, p.workDate, atMs) && !r.lunch_started_at)) {
+    // Never before the shift began (clock skew / an offline-queued tap).
+    const at = new Date(s.started_at).getTime() > atMs ? s.started_at : p.at;
+    const { error } = await supabase.from("crm_crew_day_shifts").update({ lunch_started_at: at }).eq("id", s.id).is("lunch_started_at", null);
+    if (error && isPayrollLockedError(error.message)) continue;
+    if (error) throw new Error(error.message);
+    started += 1;
+  }
+  return started;
+}
+
+/**
+ * End Lunch: adds the minutes since Start Lunch to each shift's lunch total and clears the running
+ * lunch. Idempotent (nothing is running on a replay). Includes members marked absent so a lunch they
+ * were on is never left running. Returns how many ended.
+ */
+export async function endCrewLunch(
+  supabase: AnySupabase,
+  p: { orgId: string; crewId: string; workDate: string; at: string }
+): Promise<number> {
+  const memberIds = await resolveWorkingMemberIds(supabase, p.orgId, p.crewId, p.workDate, { includeAbsent: true });
+  if (memberIds.length === 0) return 0;
+  const { data: rows } = await supabase
+    .from("crm_crew_day_shifts")
+    .select("id, lunch_started_at, lunch_minutes")
+    .eq("org_id", p.orgId)
+    .gte("work_date", openShiftLookbackDate(p.workDate))
+    .lte("work_date", p.workDate)
+    .is("deleted_at", null)
+    .not("lunch_started_at", "is", null)
+    .in("crew_member_id", memberIds);
+  let ended = 0;
+  for (const s of (rows ?? []) as { id: string; lunch_started_at: string; lunch_minutes: number | null }[]) {
+    const end = new Date(s.lunch_started_at).getTime() > new Date(p.at).getTime() ? s.lunch_started_at : p.at;
+    const { error } = await supabase
+      .from("crm_crew_day_shifts")
+      .update(lunchCloseFields(s, end))
+      .eq("id", s.id)
+      .eq("lunch_started_at", s.lunch_started_at);
+    if (error && isPayrollLockedError(error.message)) continue;
+    if (error) throw new Error(error.message);
+    ended += 1;
+  }
+  return ended;
 }

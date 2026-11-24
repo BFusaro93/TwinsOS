@@ -4272,6 +4272,8 @@ export type Database = {
           deleted_at: string | null
           ended_at: string | null
           id: string
+          lunch_minutes: number
+          lunch_started_at: string | null
           org_id: string
           source: string
           started_at: string
@@ -4287,6 +4289,8 @@ export type Database = {
           deleted_at?: string | null
           ended_at?: string | null
           id?: string
+          lunch_minutes?: number
+          lunch_started_at?: string | null
           org_id?: string
           source?: string
           started_at: string
@@ -4302,6 +4306,8 @@ export type Database = {
           deleted_at?: string | null
           ended_at?: string | null
           id?: string
+          lunch_minutes?: number
+          lunch_started_at?: string | null
           org_id?: string
           source?: string
           started_at?: string
@@ -8796,6 +8802,7 @@ export type Database = {
       crm_payroll_adjustments: {
         Row: {
           break_override: number | null
+          lunch_override: number | null
           created_at: string
           created_by: string | null
           crew_member_id: string
@@ -8814,6 +8821,7 @@ export type Database = {
         }
         Insert: {
           break_override?: number | null
+          lunch_override?: number | null
           created_at?: string
           created_by?: string | null
           crew_member_id: string
@@ -8832,6 +8840,7 @@ export type Database = {
         }
         Update: {
           break_override?: number | null
+          lunch_override?: number | null
           created_at?: string
           created_by?: string | null
           crew_member_id?: string
