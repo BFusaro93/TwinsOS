@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { getRouteAuth, assertCallerOwnsVisit, resolveCallerCrewId } from "@/lib/supabase/route-auth";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("crew/notes");
@@ -39,6 +39,21 @@ export async function POST(
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
+  // Stamp WHICH crew wrote the note, as text, at write time. It is a record of
+  // who said what, so it must not follow the visit if it is reassigned later.
+  // Falls back to the generic "Crew" if the crew can't be resolved.
+  let authorName = "Crew";
+  const callerCrewId = await resolveCallerCrewId(supabase, user.id, visit.org_id);
+  if (callerCrewId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: crewRow } = await (supabase as any)
+      .from("crm_crews")
+      .select("name")
+      .eq("id", callerCrewId)
+      .maybeSingle();
+    if (crewRow?.name) authorName = `Crew - ${crewRow.name}`;
+  }
+
   const now = new Date().toISOString();
   // The offline queue item's id, when crew-app sent one. Using it as the
   // comment's own id makes this route idempotent: the RPC below skips the
@@ -58,7 +73,7 @@ export async function POST(
     {
       p_visit_id:    visitId,
       p_comment_id:  commentId,
-      p_author_name: "Crew",
+      p_author_name: authorName,
       p_author_id:   user.id,
       p_text:        parsed.data.note,
       p_created_at:  now,
