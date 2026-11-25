@@ -6513,6 +6513,7 @@ export function DispatchBoard() {
         </Popover>
 
         {/* Shared stops where one crew finished but another hasn't — across all crew columns */}
+        {(outOfSyncGroups.size > 0 || outOfSyncOnly) && (
         <button
           type="button"
           onClick={() => setOutOfSyncOnly((p) => !p)}
@@ -6523,8 +6524,9 @@ export function DispatchBoard() {
           )}
         >
           <Users className="h-3 w-3" />
-          Shared stops with incomplete crew{outOfSyncGroups.size > 0 ? ` (${outOfSyncGroups.size})` : ""}
+          Out of sync ({outOfSyncGroups.size})
         </button>
+        )}
 
         {/* Tag filter — client tags, "is any of" (OR) */}
         <Popover>
