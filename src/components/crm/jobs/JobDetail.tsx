@@ -65,6 +65,7 @@ import { areaKindLabel } from "@/lib/chemical-area";
 import { lineTotalCents } from "@/lib/invoices/auto-invoice-tax";
 import { snowServiceRule } from "@/lib/snow-billing";
 import { toast } from "sonner";
+import { useCurrentUserStore } from "@/stores/current-user-store";
 import {
   CalendarPlus,
   Receipt,
@@ -2702,6 +2703,40 @@ function VisitRow({
     visit.budgetedHours ?? (linkedService ? linkedService.budgetedHours * (linkedService.teamSize || 1) : null);
   const [editingNote, setEditingNote] = useState(false);
   const [noteVal, setNoteVal] = useState(notesToPlainText(visit.notesToCrew));
+  // Comments are an append-only log (office remarks and crew submissions),
+  // separate from the single editable crew note — this is the entry point.
+  const qc = useQueryClient();
+  const { currentUser } = useCurrentUserStore();
+  const [addingNewComment, setAddingNewComment] = useState(false);
+  const [commentVal, setCommentVal] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
+  async function addVisitComment() {
+    const text = commentVal.trim();
+    if (!text || savingComment) return;
+    setSavingComment(true);
+    try {
+      // Same append RPC the dispatch board uses, so a comment never overwrites
+      // one the crew submitted after this page loaded.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (createClient() as any).rpc("crm_append_visit_job_comment", {
+        p_visit_id: visit.id,
+        p_comment_id: crypto.randomUUID(),
+        p_author_name: currentUser.name,
+        p_author_id: currentUser.id,
+        p_text: text,
+        p_created_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      setCommentVal("");
+      setAddingNewComment(false);
+      toast.success("Comment added");
+    } catch {
+      toast.error("Failed to add comment");
+    } finally {
+      setSavingComment(false);
+    }
+  }
   const [editingInvoiceDesc, setEditingInvoiceDesc] = useState(false);
   const [invoiceDescVal, setInvoiceDescVal] = useState(visit.invoiceDescription ?? "");
   const [skipping, setSkipping] = useState(false);
@@ -2792,7 +2827,7 @@ function VisitRow({
           <div className="flex flex-col gap-0.5">
             {jobNotesToCrew && (
               <div className="truncate max-w-[200px] text-amber-700 dark:text-amber-400" title={notesToPlainText(jobNotesToCrew)}>
-                <span className="font-semibold">Job note:</span> {notesToPlainText(jobNotesToCrew)}
+                <span className="font-semibold">Job notes to crew:</span> {notesToPlainText(jobNotesToCrew)}
               </div>
             )}
             {/* generate-visits copies the job note onto each visit — don't show it twice */}
@@ -2802,7 +2837,7 @@ function VisitRow({
               </button>
             ) : (
               <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-brand-500 dark:hover:text-brand-400 italic">
-                + crew note
+                + visit note to crew
               </button>
             )}
             {visit.jobComments.length > 0 && (
@@ -2813,6 +2848,12 @@ function VisitRow({
                 </span>
               </div>
             )}
+            <button
+              onClick={() => { setAddingNewComment(true); setEditingNote(false); setEditingInvoiceDesc(false); }}
+              className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-blue-500 dark:hover:text-blue-400 italic text-left"
+            >
+              + comment
+            </button>
             {visit.invoiceDescription ? (
               <button onClick={() => { setEditingInvoiceDesc(true); setEditingNote(false); }} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-400 text-left truncate max-w-[200px] block text-[11px]">
                 📄 {visit.invoiceDescription}
@@ -2868,6 +2909,16 @@ function VisitRow({
           </div>
         </td>
       </tr>
+      {(visit.status === "skipped" || visit.status === "cancelled") && visit.skipReason?.trim() && (
+        <tr className="border-b bg-orange-50/70 dark:bg-orange-950/40">
+          <td colSpan={7} className="px-4 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-400 mb-0.5">
+              {visit.status === "cancelled" ? "Cancel reason" : "Skip reason"}
+            </p>
+            <p className="whitespace-pre-wrap text-xs text-slate-700 dark:text-neutral-300">{visit.skipReason.trim()}</p>
+          </td>
+        </tr>
+      )}
       {notesToPlainText(visit.completionNotes).trim() && (
         <tr className="border-b bg-slate-50/60 dark:bg-muted/30">
           <td colSpan={7} className="px-4 py-2">
@@ -2961,7 +3012,7 @@ function VisitRow({
       {editingNote && (
         <tr className="border-b bg-slate-50 dark:bg-muted/40">
           <td colSpan={7} className="px-4 py-2">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Note to Crew</p>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Visit Note to Crew</p>
             <div className="flex items-end gap-2">
               <Textarea
                 rows={2}
@@ -2977,6 +3028,33 @@ function VisitRow({
                   setEditingNote(false);
                 }}>Save</Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setNoteVal(notesToPlainText(visit.notesToCrew)); setEditingNote(false); }}>Cancel</Button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+      {addingNewComment && (
+        <tr className="border-b bg-blue-50/60 dark:bg-blue-950/30">
+          <td colSpan={7} className="px-4 py-2">
+            <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide mb-1">New Comment</p>
+            <div className="flex items-end gap-2">
+              <Textarea
+                rows={2}
+                value={commentVal}
+                onChange={(e) => setCommentVal(e.target.value)}
+                className="text-sm resize-none flex-1 bg-card"
+                placeholder="Add a comment to this visit… (Cmd/Ctrl+Enter to post)"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    void addVisitComment();
+                  }
+                }}
+              />
+              <div className="flex flex-col gap-1 shrink-0">
+                <Button size="sm" className="h-7 text-xs" disabled={savingComment || !commentVal.trim()} onClick={() => void addVisitComment()}>Add</Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setCommentVal(""); setAddingNewComment(false); }}>Cancel</Button>
               </div>
             </div>
           </td>

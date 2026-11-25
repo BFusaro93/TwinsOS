@@ -1,4 +1,4 @@
-import { notesToPlainText } from "@/lib/utils/rich-notes";
+import { visitCrewNoteBlocks } from "@/lib/utils/rich-notes";
 import { toast } from "sonner";
 import type { PurchaseOrder, Project } from "@/types";
 import type { WorkOrder } from "@/types";
@@ -963,7 +963,7 @@ const RS_VISIT_STATUS_LABELS: Record<string, string> = {
 };
 
 function rsCrewNotes(v: CRMJobVisit): string {
-  return notesToPlainText(v.notesToCrew ?? v.job?.notesToCrew ?? v.job?.propertyNotesToCrew);
+  return visitCrewNoteBlocks(v).join("\n");
 }
 
 function rsFormatEstHrsMins(hours: number | null | undefined): string {

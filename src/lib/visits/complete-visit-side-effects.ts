@@ -74,7 +74,7 @@ export interface VisitCompletionSideEffectsResult {
   jobId: string | null;
   clientId: string | null;
   invoiced: boolean;
-  /** Set when invoicing was skipped, e.g. "already_invoiced", "contract", "pending_contract", "snow", "zero_subtotal". */
+  /** Set when invoicing was skipped, e.g. "already_invoiced", "contract", "pending_contract", "snow", "zero_subtotal" (no lines at all — a $0 visit still invoices). */
   invoiceSkipReason: string | null;
   invoiceId: string | null;
   activityLogged: boolean;
@@ -660,7 +660,13 @@ export async function applyVisitCompletionSideEffects(
           );
         }
 
-        if (subtotal <= 0) {
+        // A visit with nothing left to bill under a contract is skipped (the contract
+        // price pays for it). Anywhere else a $0 visit STILL gets an invoice: customers
+        // are sent $0 invoices as their record of the service, and skipping silently left
+        // completed work with no invoice at all. Only a visit with no line to show
+        // (no services, no job rate, no materials) has nothing to put on one.
+        const nothingToInvoice = contractMode ? subtotal <= 0 : lineItems.length === 0 || subtotal < 0;
+        if (nothingToInvoice) {
           result.invoiceSkipReason = contractMode ? "contract" : "zero_subtotal";
         } else {
           // Clients billed daily/weekly/monthly get every visit of the same
