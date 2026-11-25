@@ -801,6 +801,10 @@ export function InvoicesList({ clientId }: Props) {
     ? INVOICE_COLUMNS.filter((c) => c.key !== "client" && visibleKeys.includes(c.key))
     : INVOICE_COLUMNS.filter((c) => visibleKeys.includes(c.key));
   const colSpan = visibleColumns.length + 2; // +checkbox +actions
+  // Open invoices whose client has no card/bank saved, for the To Charge empty state.
+  const noSavedMethodCount = allInvoices.filter(
+    (i) => i.status !== "draft" && i.status !== "void" && i.balanceCents > 0 && !i.clientSavedPaymentMethodType,
+  ).length;
 
   if (!permissionsLoading && !can("acct_view_invoice_list")) {
     return (
@@ -1129,7 +1133,33 @@ export function InvoicesList({ clientId }: Props) {
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={colSpan} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
-                  {search ? "No invoices match your search" : "No invoices"}
+                  {search ? (
+                    "No invoices match your search"
+                  ) : onChargeTab ? (
+                    <div className="mx-auto max-w-md space-y-2">
+                      <p className="font-medium text-slate-600 dark:text-neutral-300">
+                        {quickFilter === "to_charge_ach" ? "No invoices to debit" : "No invoices to charge"}
+                      </p>
+                      {/* The billing screen's payment type is only a preference — it never
+                          puts an invoice here, which is the most common reason this is empty. */}
+                      <p>
+                        This list shows open invoices for clients who have a{" "}
+                        {quickFilter === "to_charge_ach" ? "bank account" : "card"} saved on file
+                        with autopay on. Choosing a payment type on a client&apos;s billing screen
+                        doesn&apos;t count; the {quickFilter === "to_charge_ach" ? "bank account" : "card"} has
+                        to be saved, either from the client&apos;s Details tab or by the client on their portal.
+                      </p>
+                      {noSavedMethodCount > 0 && (
+                        <p>
+                          {noSavedMethodCount} open invoice{noSavedMethodCount === 1 ? "" : "s"} belong
+                          {noSavedMethodCount === 1 ? "s" : ""} to clients with nothing saved on file.
+                        </p>
+                      )}
+                      <p>Draft invoices appear once they&apos;ve been emailed or printed.</p>
+                    </div>
+                  ) : (
+                    "No invoices"
+                  )}
                 </td>
               </tr>
             ) : (
