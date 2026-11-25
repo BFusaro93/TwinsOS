@@ -109,7 +109,9 @@ export function WaitingListGuide() {
           others, and a row must match all of them (the &times; beside a filter clears just that
           one). Crew is the same checklist as the Dispatch Board (your active crews plus
           Unassigned), and City and Zip are checklists of the values on the list, so you tick them
-          rather than type. A separate free-text Search box matches client name, service name,
+          rather than type. Click a column header (Client, Service, Date Range, City, Zip, Crew,
+          Rate) to sort A→Z, again for Z→A, and a third time to return to the default order; sorting
+          by Client puts a client&apos;s jobs together, which makes duplicates easy to spot. A separate free-text Search box matches client name, service name,
           street address, city, zip, crew code, and notes to crew independent of that filter; it has an &times; button, and pressing Escape clears it.
         </p>
         <Table>
@@ -172,6 +174,11 @@ export function WaitingListGuide() {
           logins that have the Waiting List permission. <strong>View Upcoming</strong> in the same
           menu lists each waiting service and has a <strong>Schedule</strong> button per service if
           you want to send one service out and keep the others waiting.
+        </p>
+        <p>
+          On the Jobs card of the client&apos;s Home tab, a waiting-list job that already has a visit
+          scheduled is labelled <strong>Scheduled (from waiting list)</strong> with a green edge instead
+          of the yellow Waiting List one; the yellow label is kept for jobs still waiting.
         </p>
         <Callout>
           Dispatching multiple selected rows at once applies the <em>same</em> date and crew to all

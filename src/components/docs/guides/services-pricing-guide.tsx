@@ -148,7 +148,9 @@ export function ServicesPricingGuide() {
         </p>
         <p>
           On an estimate, expand a line and choose <strong>+ Add Equipment</strong>. Set the quantity
-          and rate on each row for <strong>one visit</strong>; quantity times rate, times the
+          and the <strong>charge</strong> rate on each row for <strong>one visit</strong> (the rate
+          box is the charge rate, what you bill; it starts at the catalog charge rate, or the cost rate
+          when none is set, and the catalog&apos;s cost rate is shown next to it, read-only); quantity times rate, times the
           line&apos;s visits, counts as internal cost and lowers that line&apos;s margin (an aerator at
           $40 a visit on a 6-visit line costs $240). The line&apos;s footer shows the equipment cost for
           the whole line, the charge (your line price should cover it) and the margin after equipment. Equipment is internal only: it never appears on the

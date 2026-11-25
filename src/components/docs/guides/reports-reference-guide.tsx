@@ -34,14 +34,14 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Visits Report",
         description: "Shows all visits in any defined time frame with hours, revenue, and location detail.",
-        filters: "Scheduled Between, Status, Crew, Service Zip",
-        notes: ["Budgeted Man-Hours and Actual Man-Hours are both duration × number of men."],
+        filters: "Scheduled Between, Status, Crew, Services (pick one or several), Job Type, Service Zip",
+        notes: ["Budgeted Man-Hours and Actual Man-Hours are both duration × number of men.", "Each row shows the job's Job Type. The Services filter keeps a visit if it includes any of the services you pick."],
       },
       {
         name: "Backlog Services",
         description: "Shows scheduled visits that have not been completed as of a cutoff date.",
         filters: "Scheduled On or Before",
-        notes: ["Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started."],
+        notes: ["Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started.", "Leftover visits of a job that is cancelled, completed, skipped or on hold are left out, since nobody owes that work."],
       },
       {
         name: "Client Count by Service",

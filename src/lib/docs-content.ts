@@ -2568,6 +2568,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "The invoice is still a draft. Drafts can't be viewed or paid online, so [viewinvoiceonline] and [paymentlink] stay blank until the invoice is sent or printed.",
       },
       {
+        q: "Where do I see the content of an email that was sent to a client?",
+        a: "Go to Communication > Email Activity (you need the Email Activity view permission). Click the email's subject to open a read-only view showing the recipients, subject and the message exactly as it was delivered. Very old entries may show only a one-line summary if the sent message wasn't kept. Invoice emails can also be resent from the list.",
+      },
+      {
+        q: "What do Delivered, Bounced, Failed and Pending mean on Email Activity?",
+        a: "The Delivery column shows Yes (confirmed delivered), Bounced (the mail server rejected it; hover the badge for the reason when one was reported), Failed (the email could not be sent and no further reason is recorded) or Pending (no delivery confirmation yet). The filter buttons above the list are All, Delivered, Not Delivered, Failed, Bounced and Pending; Not Delivered covers the last three.",
+      },
+      {
         q: "What can a crew login see about our clients?",
         a: "Only the clients on that crew's own stops: name, phone, address, gate code and property notes. Crews don't see client contacts, the client Files tab, or the client timeline — only the notes, skip reasons and upsell suggestions the crew itself sent. Invoices, payments, emails and office notes on the timeline stay with the office.",
       },
@@ -2578,6 +2586,34 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Why doesn't my draft invoice PDF have a \"View & Pay Online\" link?",
         a: "Drafts aren't issued yet, so previews have no online link. Printing or emailing the invoice issues it, and those copies include the link.",
+      },
+      {
+        q: "What's the difference between Preview and Download PDF on an invoice?",
+        a: "Preview opens the invoice as a PDF in a new tab without printing, locking or changing its status; save first to see your latest edits. Download PDF, in the actions menu, saves the file to your computer instead.",
+      },
+      {
+        q: "How does a consolidated invoice for a property manager print?",
+        a: "The parent's own lines print first, then the lines from each sub-account under a header with that sub-account's name. The '[Sub-account name]' prefix you see on the lines while editing is removed on the PDF, since the header says it. The stored lines and totals don't change.",
+      },
+      {
+        q: "Can I filter the Invoices list by client tag?",
+        a: "Yes. Once any of your clients has a tag, a Tags filter appears with the other filters above the Invoices list. Pick one or more tags to see only invoices whose client has at least one of them.",
+      },
+      {
+        q: "Does marking an invoice Sent or Printed lock it?",
+        a: "Yes. Setting an invoice to Sent or Printed by hand freezes its amounts the same way emailing or printing it does, so it can't be edited until you click Unlock. A locked invoice can't be deleted until it is unlocked, but it can still be voided.",
+      },
+      {
+        q: "Can my team leave comments on an invoice?",
+        a: "Yes. Open the invoice and click the Comments tab next to Photos and Audit Trail. Type a note and @mention a teammate to notify them; the notification opens the invoice. Comments are for your team.",
+      },
+      {
+        q: "How do I export only some invoices or payments to a spreadsheet?",
+        a: "On Accounting > Invoices or Accounting > Payments, tick the rows you want, then choose Actions > Export Selected (CSV) or Export Selected (Excel). The file has just those rows in the order the table shows them, with money columns as plain numbers so Excel can total them. Invoices export number, client, description, status, dates, terms, PO #, subtotal, discount, tax, total, paid and balance. Payments export date, client, amount, unused, refunded, method, reference, memo and invoice number.",
+      },
+      {
+        q: "Can I sort the Payments and Estimates lists, and what happens when I click a name?",
+        a: "Yes. Click any column header on the Payments or Estimates list to sort by it, and click again to reverse. Without a sort, both lists show newest first. On the Invoices, Estimates, Payments, Jobs, Waiting List, Tickets, Contracts and dispatch board tables, clicking the empty space in the name cell opens the record. Only clicking the client's name itself opens the client.",
       },
       {
         q: "A client opened an invoice link and saw \"not found\". Why?",
@@ -2626,6 +2662,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Does the payroll lock cover pause time and visit clock times?",
         a: "Yes. On a locked day, a visit's pause minutes, its paid/unpaid choice and its clock-in/out times can't change, and neither can punches, shifts or payroll corrections.",
+      },
+      {
+        q: "Can a crew go back and forth between two jobs without double-counting time?",
+        a: "Yes. Pause the first stop, start the second, and when you go back tap Resume on the first. Starting a new job stops any other running stop automatically, but a stop that was paused is left alone because the crew is coming back to it. Tapping Resume on it pauses whatever else is running at that moment and adds a comment on that visit. A paused stop's pause time already stays out of its hours.",
+      },
+      {
+        q: "Can I sort the Dispatch Board or the Waiting List by a column?",
+        a: "Yes. Click a column header to sort A to Z, click again for Z to A, and a third time to return to the default order. On the Dispatch Board the default is the route order. Sorting only changes the display: it never changes the saved route order, and it is turned off while you are hand-ordering a route. Blank cells always sort to the bottom. On the Waiting List, sorting by Client puts a client's jobs together so duplicates are easy to spot.",
       },
       {
         q: "A storm crew worked past midnight. Which day is the 1am punch locked and paid on?",
@@ -2686,6 +2730,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I stop asking a client for a deposit?",
         a: "Open the accepted estimate and click Waive deposit under Deposit Required; you can add a reason. The client is no longer asked for it. Undo makes it due again.",
+      },
+      {
+        q: "What if the client already paid the deposit when I want to waive it?",
+        a: "There is nothing to waive once it's paid; Waive deposit only applies to an unpaid deposit. The paid deposit is held as an unapplied prepayment reserved for that estimate. When an invoice for the estimate leaves Draft (you save it as sent, print it or email it), the deposit is applied to it automatically, oldest first, up to what the invoice owes, and any leftover stays reserved for the estimate's next invoice. If the estimate is marked Lost with the deposit unused, a red banner prompts you to refund it (Accounting > Payments) or release it to general credit.",
       },
       {
         q: "A client's bank transfer for a deposit bounced. Will I find out even if they accepted in the portal?",
@@ -2844,6 +2892,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "On the Snow Jobs board, tick stops and choose Actions > Cancel Dispatch to put dispatched stops back to Scheduled (stops the crew already started are left alone). Actions > Export Stops (CSV) downloads the stops currently shown after filters. To retire an old storm, open the status pill and choose Mark storm inactive; Show inactive next to the storm picker brings it back. Add Jobs also has a Service filter.",
       },
       {
+        q: "What does the blue Invoiced badge on a Snow Jobs board stop do?",
+        a: "A stop that is already on an invoice shows a blue Invoiced # badge beside the client name. Click it to open that invoice in a slide-over, the same view as the Invoices list, without leaving the board.",
+      },
+      {
         q: "Can one job have different invoice terms than its client, and can invoices show visit times?",
         a: "Yes. A job's Invoice Terms (Invoice Description tab) override the client's default terms for invoices made from that job, including Snow Invoicing; blank follows the client. An invoice bundling several snow jobs uses the override only if they all agree. Tick Show visit times on snow invoice lines on a service (Settings > Services) to append the visit's clocked start and end, like (7:05 AM - 8:40 AM), to its Snow Invoicing line.",
       },
@@ -2926,6 +2978,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "What does \"Needs Attention\" mean on the Jobs list?",
         a: "Every visit on that job was skipped or cancelled, so the work was never done. Reschedule it or cancel the job. It is not counted as Completed.",
+      },
+      {
+        q: "How do I show or hide columns like Address, City, State and Zip on the Jobs list?",
+        a: "Use the column chooser at the right of the Jobs toolbar. Client is always shown; State is off by default, and your choice is remembered. Address, City and Zip use the same fallback as the Dispatch Board: the job's own address, then the property's, then the client's service address, with billing only as a last resort. With Address switched off, the street address sits beside the client name.",
       },
       {
         q: "My bulk change said \"nothing was applied\". Why?",
@@ -3265,7 +3321,27 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What is Equipment on an estimate line, and does the client see it?",
-        a: "Equipment is an internal cost. Add machines under Administration > Services > Equipment (cost rate, optional charge rate, per hour, per day or flat), then expand an estimate line and choose + Add Equipment. Equipment is per visit: quantity (what one visit uses) times rate, times the line's visits, counts against that line's margin. The client never sees it on the proposal, PDF, portal or invoice, and it does not change the line price. A service's Equipment tab can pre-fill machines on every new line of that service.",
+        a: "Equipment is an internal cost. Add machines under Administration > Services > Equipment (cost rate, optional charge rate, per hour, per day or flat), then expand an estimate line and choose + Add Equipment. Equipment is per visit: quantity (what one visit uses) times the row's charge rate, times the line's visits, counts against that line's margin. On each row the editable box is the charge rate (starting at the catalog charge rate, or the cost rate if none is set) and the catalog cost rate is shown beside it, read-only. The client never sees it on the proposal, PDF, portal or invoice, and it does not change the line price. A service's Equipment tab can pre-fill machines on every new line of that service.",
+      },
+      {
+        q: "Can an automation follow up on waiting-list jobs that nobody has scheduled?",
+        a: "Yes. In an automation's triggers, choose Waiting list window is ending (set how many days before the window closes; 3 if left blank) or Waiting list window passed (fires after the window closed, for windows that closed in the last 7 days). They are checked once a day in the morning Eastern time and only for jobs that are still waiting: not cancelled and with no scheduled visit. Each runs once per job, and the run stops before its next step once the job is scheduled, cancelled or deleted. No default automation is created for either.",
+      },
+      {
+        q: "Who shows up when I type @ in a ticket comment?",
+        a: "Typing @ lists the people you can mention, best name matches first, in a scrollable list. Deactivated users and the shared crew logins are left out because they can't be notified.",
+      },
+      {
+        q: "What is on the ticket PDF, and can I search for a ticket from anywhere?",
+        a: "The PDF button on a ticket opens a print view with the ticket number, subject, status and priority pills, a Ticket card (type, category, assignee, due date, created, closed), a Client card (type, source, phone, email, address), then notes, contributors and internal comments. @-mentions print as plain names. The Cmd+K search also finds tickets by number, subject or client name if your role can view tickets.",
+      },
+      {
+        q: "How do I find a setting quickly?",
+        a: "On any Settings page, click Search settings at the top of the left sidebar and type a word such as 'invoice numbering', 'time zone' or 'QuickBooks'. Pick a result to jump straight to that tab. Results only include settings your login can open.",
+      },
+      {
+        q: "Where can I download the product overview PDFs?",
+        a: "Go to Settings > Docs and look under Downloadable overviews for short PDF guides (dispatch and scheduling, estimating and job costing, invoicing and payments, snow, chemical tracking, payroll and time tracking, maintenance and purchasing, and a switching checklist). The same PDFs are linked from the public help page.",
       },
       {
         q: "What are sub-items on a service bundle or estimate line?",
@@ -3453,7 +3529,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What does the Mine / Everyone toggle on My Day do?",
-        a: "My Day opens scoped to you. Mine shows tickets assigned to you or where you're a contributor, estimates where you're the sales rep, and meetings assigned to you; Everyone shows the whole company's. A My Upcoming Meetings card lists your next seven days of meetings. Breadcrumbs across the top of list pages are clickable to jump back to the section.",
+        a: "My Day opens scoped to you. Mine shows open and pending tickets assigned to you or where you're a contributor (on-hold tickets stay off), estimates where you're the sales rep, and meetings assigned to you; Everyone shows the whole company's. A My Upcoming Meetings card lists your next seven days of meetings. The Quick Actions (Add Ticket, New Client, Estimate, Ticket, Invoice) open the quick-add dialog instead of just jumping to a list. Breadcrumbs across the top of list pages are clickable to jump back to the section.",
       },
       {
         q: "Why does the Clients list only show 100 clients when the count says more?",
@@ -3478,6 +3554,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "I can't find a client in a client picker or in Link Parent Account. Where is it?",
         a: "Client pickers search as you type and show up to 50 matches. If the client isn't in the first 50, type part of the name, the account number, a phone number or part of the address. In Link Parent Account, clients that already have a parent are never offered, and a client that has sub-accounts of its own can't be linked under a parent at all, since the hierarchy is one level deep.",
+      },
+      {
+        q: "Why do parent accounts show before their sub-accounts when I search for a client?",
+        a: "When you type in a client picker, parent and stand-alone accounts are listed first, then sub-accounts. This keeps a parent from being pushed off the list by dozens of sub-accounts with similar names, such as 'Cannon - 12 Oak St'.",
+      },
+      {
+        q: "What is the Recent list in the global search?",
+        a: "When you open the global search (Cmd/Ctrl+K) with nothing typed, it shows the last few clients, leads, invoices, estimates and tickets you opened or picked from search. The list is kept in your browser only, one per login, only shows record types your role can view, and drops records that were deleted.",
+      },
+      {
+        q: "Why did saving a client's email show a \"looks like a typo\" warning?",
+        a: "When a client, lead or billing email looks like a common slip (.con or .om instead of .com, gmial.com, hotmial.com and similar), Landscapt shows the corrected address and doesn't save yet. Fix it, or save again to keep it exactly as typed; it warns once per address per session. An address that is structurally invalid is refused outright.",
       },
       {
         q: "Does exporting clients export everyone or just what I'm looking at?",
@@ -3684,6 +3772,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Visits already on the calendar stay as they are, and the new schedule only starts after the last of them, so no week gets two visits. Choose 'Update visits' to move the not-yet-started visits to the new days instead.",
       },
       {
+        q: "How do I see which customers are on a schedule?",
+        a: "Open the schedule in Settings > Schedules and click its Customers tab. It lists every client with an active job on that schedule (completed and cancelled jobs are left out), with job number, services, address, city and zip. Use the Filter box to narrow the list and Export CSV to download what is shown. A job with no address of its own shows its property's address, then the client's service address, then the billing address.",
+      },
+      {
         q: "What happens if I mark a recurring or package job Completed?",
         a: "You'll be asked to remove its upcoming visits, the same as cancelling. Visits that are started, completed or invoiced stay. Setting the job back to an active status regenerates its visits.",
       },
@@ -3698,6 +3790,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I limit a recurring service to a set number of visits?",
         a: "In Add Job, a recurring job shows a Visits box under each service: enter the total visits for that service, or leave it blank to repeat on the schedule until the End Date. To change it later, open the job and Edit the service line (Visits). It must be a whole number of 1 or more. Skipped and cancelled visits are made up, so the cap counts real visits only.",
+      },
+      {
+        q: "How do I enter (add, create) a new job?",
+        a: "Go to Jobs and click Add Job. Pick the Job Type (One Time, Recurring, Package, Project, Waiting List or Snow), choose the client (and the property if they have more than one), then fill in that type's fields: schedule and Start Recurring for a recurring job, a Job Date for a one-time job, a date range for a waiting-list job. Add the services (and products), assign a crew and crew size, add notes, and save. To start from a quote instead, open the accepted estimate and use Convert to Job. Snow jobs can only be created from Add Job.",
+      },
+      {
+        q: "Can I add my own payment method like Venmo, and who is allowed to?",
+        a: "Yes. Add Venmo, Zelle, gift cards or anything else under Settings > Accounting > Payment Methods. You need the Accounting settings permission, which the seeded Accounting role has and admins always have. Your methods then appear when recording a payment and on the Payments page under their own name, can be reported on by Custom Method Name, and count as Other wherever the built-in methods are grouped. They count as collected money like any other real payment; only AR write-offs and applied account credit are excluded.",
       },
       {
         q: "Why can't I set a client back to Lead?",
@@ -3851,6 +3951,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "What's the difference between Extra and PTO on the Payroll tab?",
         a: "Extra is worked time that isn't on the clock, such as shop time, and counts toward overtime. PTO is paid time off: it's paid as Regular hours and never counts toward overtime. Both appear in the CSV, Excel and PDF exports.",
+      },
+      {
+        q: "Someone forgot to clock in, or we use paper time sheets. How do I add their time to Payroll?",
+        a: "Go to Reports > Payroll and click Add time entry. Pick the employee and date, enter start and end times (plus any unpaid break minutes) or just the total hours, add a note and click Add entry. It counts for payroll only: no job punches are created, so Job Costing doesn't change. It can't be saved on a locked day, and if the person already has that day recorded it corrects that day instead.",
+      },
+      {
+        q: "The crew leader clocked in someone who never worked. Can I remove that day from Payroll?",
+        a: "Yes. In the Payroll detail, click the trash button on that person's day and confirm. It removes the day clock, the job punches and any correction for that date, so the hours and labor cost also come off the jobs and Job Costing. It can't be undone from the report and isn't available on a locked day.",
+      },
+      {
+        q: "How do crews record lunch between jobs, and how does payroll deduct it?",
+        a: "When no job is running, the crew taps Start Lunch under the day card and End Lunch when they're back; it starts and ends lunch for everyone on the clock. While a stop is in progress the button is off, so use Take a Break on the job instead. The lunch minutes become each person's Lunch deduction in Report Center > Payroll, which the office can change on the day row. Lunch is taken off in addition to min off, so don't enter the same time in both. A lunch left running ends with End Day or when someone is clocked out early, and counts as at most 4 hours. The daily Excel and CSV export has a Lunch Deducted (min) column.",
       },
       {
         q: "Who can create invoice pay links?",
@@ -4083,6 +4195,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Which reporting features need the Advanced Reporting add-on?",
         a: "Building your own reports (My Reports and New Analysis), Custom Dashboards (including dashboards shown to crews), the Graphics Library, and scheduled report emails. Advanced Reporting is included on Enterprise and during your free trial, and is an add-on on Starter and Growth: an admin adds it in Settings > Subscription. Without it, those tabs show what the add-on includes instead, and scheduled emails aren't sent. Every pre-built report in the Report Center, the built-in Sales Overview, A/R Overview and Operations Dashboard dashboards (as shipped; changing or copying them needs the add-on), the Dashboard tab, the KPI Scorecard, the Company Report and the job costing reports are on every plan. Nothing you built is deleted if you don't have the add-on; it all comes back, and schedules start sending again, once it's added.",
+      },
+      {
+        q: "What ready-made graphics are in the Graphics Library?",
+        a: "Besides the basic panels, the Graphics Library has monthly trends and breakdowns by topic. Job Costing covers revenue per field labor hour, labor % of revenue, revenue vs. labor cost, revenue and revenue per man-hour by service, biggest hour overruns and drive time by crew. Sales covers invoiced revenue by month, won vs. lost estimates, estimate win rate, sales by rep, rep goal vs. actual this month and field upsells by outcome. Accounts Receivable covers AR aging, average days to pay and cash collected by month. Contracts & Retention covers active contracts and their base monthly value, new contracts, contracts ending soonest, and clients added and lost by month. Operations has open tickets by category. Click Add to Dashboard on any of them. Average Days to Pay counts days from the invoice date to the date it was fully paid, and a prepayment counts as day 0.",
+      },
+      {
+        q: "Can I filter the Visits Report by job type or by several services?",
+        a: "Yes. In Report Center, the Visits Report has a Job Type filter (Recurring, One Time, Waiting List, Package, Snow, Project) and a Services filter where you can tick one or several services; a visit is kept if it includes any of them. Job Type also shows as a column.",
+      },
+      {
+        q: "Why doesn't Backlog Services show visits for a job I cancelled?",
+        a: "Backlog Services lists visits still in Scheduled or Dispatched status on or before the cutoff, but leaves out visits that belong to a job that is cancelled, completed, skipped or on hold. Cancelling a job only clears its future visits, so an older leftover visit would otherwise look like work you still owe.",
       },
       {
         q: "A scheduled report says 'creator deactivated'. How do I start it again?",

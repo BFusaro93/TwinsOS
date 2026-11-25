@@ -17,7 +17,7 @@ const PAYMENT_METHODS: [string, string][] = [
   ["Credit Card– Visa / MasterCard / AmEx / Discover", "One method per card network, so reporting can split card volume by network."],
   ["AR Write-off", "Zeroes out a balance you're not going to collect (bad debt) without pretending real money changed hands. Non-cash — excluded from every cash/collected report. Offered in the invoice's Enter Payment dialog as well as on the Payments page, and can never exceed the invoice's remaining balance."],
   ["Other", "Anything that doesn't fit the above — barter, a manual adjustment, etc."],
-  ["Your own methods", "Add Venmo, Zelle, gift cards or anything else under Settings → Accounting → Payment Methods. They appear when you record a payment, show by name on the Payments page, and can be reported on by name (Custom Method Name). Everywhere the built-in methods are grouped, they count as Other. The built-in methods themselves can't be changed."],
+  ["Your own methods", "Add Venmo, Zelle, gift cards or anything else under Settings → Accounting → Payment Methods (needs the Accounting settings permission). They appear when you record a payment, show by name on the Payments page, and can be reported on by name (Custom Method Name). Everywhere the built-in methods are grouped, they count as Other. The built-in methods themselves can't be changed."],
 ];
 
 const STATUS_ROWS: [string, string, string][] = [
@@ -274,7 +274,14 @@ export function InvoicingGuide() {
             Description is a multi-line box: press Enter for a new line, and start a line with{" "}
             <code>-</code> or <code>*</code> and a space to turn it into a <code>&bull;</code> bullet.
             Descriptions copied from an estimate keep their paragraphs and bullets too, on screen and
-            on the PDF.
+            on the PDF. For a long description, the small expand icon in the box&apos;s corner opens a
+            bigger editing window.
+          </li>
+          <li>
+            <strong>Preview vs. Download PDF.</strong> <strong>Preview</strong> opens the invoice as a
+            PDF in a new tab without printing, locking or changing its status (save first to see your
+            latest edits). <strong>Download PDF</strong> in the actions menu saves the file to your
+            computer instead.
           </li>
           <li>
             <strong>Read-only accounts can still collect.</strong> When the subscription is canceled or
@@ -369,6 +376,16 @@ export function InvoicingGuide() {
             refused delete leaves the invoice exactly as it was. A locked (sent or printed) invoice
             <em> can</em> be voided without unlocking it; voiding releases the visits it billed so they
             can be invoiced again.
+          </li>
+          <li>
+            <strong>Mark as Sent and Mark as Printed lock the invoice too.</strong> Setting the status
+            to Sent or Printed by hand (without actually emailing or printing it) freezes the amounts
+            the same way, so an invoice marked Sent can&apos;t be edited until you unlock it.
+          </li>
+          <li>
+            <strong>Comments.</strong> An invoice has a <strong>Comments</strong> tab beside Photos and
+            Audit Trail. Type a note and @mention a teammate to notify them; the notification opens the
+            invoice. Comments are for your team and are never shown to the client.
           </li>
           <li>
             <strong>Voiding or deleting an invoice releases its materials.</strong> Job materials
@@ -701,13 +718,24 @@ export function InvoicingGuide() {
             At least / At most / Exactly with a dollar amount, and{" "}
             <strong>Status</strong> and <strong>Payment type</strong> are pick-from-list. The
             Status filter matches what the Status column shows, so a past-due Sent invoice is
-            found under Overdue.
+            found under Overdue. A <strong>Tags</strong> filter (shown once any of your clients
+            has a tag) narrows the list to invoices whose client carries one of the tags you pick.
           </li>
           <li>
             <strong>Sorting and layout.</strong> The list opens sorted by invoice number, and
             Status, Account Balance, Prepay, Credits, Payment type, Sent / Printed, and Frequency
             can be sorted too. The table fills the page width, and row actions appear over the
             right edge of a row on hover instead of taking their own column.
+          </li>
+          <li>
+            <strong>Export Selected.</strong> Tick rows and choose <strong>Actions &gt; Export Selected
+            (CSV)</strong> or <strong>(Excel)</strong> to download just those invoices in the order the
+            table shows them: number, client, description, status, dates, terms, PO #, subtotal,
+            discount, tax, total, paid and balance. Money columns are real numbers, so Excel can add them up.
+          </li>
+          <li>
+            <strong>Click anywhere in the Client cell.</strong> Clicking the empty space in a row&apos;s
+            name cell opens the invoice; only the client&apos;s name link opens the client instead.
           </li>
         </ul>
         <p>
@@ -719,7 +747,11 @@ export function InvoicingGuide() {
           (on the Deleted tab it counts deleted ones). <strong>Export</strong> downloads live
           payments; on the Deleted tab it downloads the deleted payments with a{" "}
           <strong>deleted</strong> column (the date removed), and importing a file skips any row
-          with that column filled in, so a deleted payment is never recreated.
+          with that column filled in, so a deleted payment is never recreated. Click a column header
+          (Date, Client, Amount, Unused Amt, Refunded Amt, Reference # or Payment Method) to sort by
+          it, and click again to reverse. Tick payments and use <strong>Actions &gt; Export Selected
+          (CSV)</strong> or <strong>(Excel)</strong> to download only those rows, with Amount, Unused
+          and Refunded as numbers.
         </p>
         <p>
           <strong>Selections and tabs.</strong> On the Invoices, Estimates, Tickets and Contracts
@@ -798,8 +830,9 @@ export function InvoicingGuide() {
             <strong>Sub-accounts of one parent (consolidate).</strong> To bill a property manager for
             several properties together, select the invoices from the sub-accounts and choose
             the same action. It creates one <strong>new invoice on the parent account</strong>. Each line is
-            tagged with its sub-account name in brackets, so the customer can see which property it
-            belongs to. Every line keeps the tax it was already charged, so sub-accounts with different
+            tagged with its sub-account name in brackets while you edit it. On the customer&apos;s PDF
+            the lines are grouped under one header per sub-account (the parent&apos;s own lines
+            first), so the customer can see which property each belongs to. Every line keeps the tax it was already charged, so sub-accounts with different
             tax rates stay correct (the invoice&apos;s tax rate shows a blended figure when they differ).
             The original invoices are voided and linked to the new one. The new invoice starts as a
             draft: review it, then print or send it like any other.

@@ -179,6 +179,25 @@ export function UsersRolesGuide() {
           roles that should have it get it too; a box you unticked on a role stays unticked.
         </p>
         <p>
+          <strong>Starter-role dashboards.</strong> The starter roles don&apos;t all see every
+          dashboard. Owner and Operations Manager see all of them; Accounting gets My Day, Reports, KPI
+          Scorecard, Company Report, Job Costing, Custom and Calculators; Office Admin gets My Day,
+          Reports, Driver Safety, Custom and Calculators; Sales / Account Mgr gets My Day, Reports,
+          Custom, Estimate Builder and Calculators; Scheduler gets My Day, Driver Safety, Custom and
+          Calculators; Customer Support Rep gets My Day, Custom and Calculators. This applies to
+          companies created after this change; an existing company&apos;s roles are not touched, so edit
+          them in the role editor if you want the same trim.
+        </p>
+        <p>
+          <strong>Hover help and client permission names.</strong> In the role editor, hover over a
+          permission name that has a dotted underline for a one-line explanation of what it unlocks. The
+          client status permissions are named <strong>Cancel / Reactivate Clients</strong> (cancel and
+          reactivate only) and <strong>Merge Clients (also Cancel / Reactivate)</strong> (those plus
+          merging duplicates); there is no permanent client delete. The{" "}
+          <strong>Social Media: Enter &amp; Edit Data</strong> permission sits right under View Social
+          Media.
+        </p>
+        <p>
           To give someone CRM access, two things have to both be true:
         </p>
         <ol className="list-decimal space-y-2 pl-5">

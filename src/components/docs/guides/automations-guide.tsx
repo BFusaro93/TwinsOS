@@ -24,7 +24,7 @@ const TRIGGER_GROUPS: [string, string][] = [
   ["Invoice", "Invoice created, Invoice sent, Invoice past due, Invoice paid"],
   [
     "Job / Visit",
-    "Job created, Job cancelled, Package created, Package renewed, Visit completed, Visit completed for a specific service, Visit cancelled, Visit dispatched, Visit is coming up, Visit skipped, Visit date changed, Visit moved to waiting list",
+    "Job created, Job cancelled, Package created, Package renewed, Visit completed, Visit completed for a specific service, Visit cancelled, Visit dispatched, Visit is coming up, Visit skipped, Visit date changed, Visit moved to waiting list, Waiting list window is ending, Waiting list window passed",
   ],
   ["Tag", "Tag added, Tag removed"],
   [
@@ -189,6 +189,17 @@ export function AutomationsGuide() {
           the day before? Use two sequences, one per lead time.
         </p>
         <p>
+          <strong>Waiting list window is ending</strong> and <strong>Waiting list window passed</strong>{" "}
+          follow up on waiting-list jobs nobody has scheduled yet. They are checked once a day, in the
+          morning Eastern time, and only for jobs that are still waiting: not cancelled and with no
+          scheduled visit. The ending trigger fires a set number of days before the job&apos;s window
+          closes (3 days when the box is left blank); use two sequences for two lead times. The passed
+          trigger fires after the window closed, for windows that closed in the last 7 days, so
+          turning it on doesn&apos;t message every old job. Each runs once per job, and the run stops
+          before its next step once the job is scheduled, cancelled or deleted. No default automation
+          is set up for either.
+        </p>
+        <p>
           <strong>Re-subscribed to emails</strong> fires when a client&apos;s Do Not Market is turned
           off (on the client, or through the API) — ticking OK to Email doesn&apos;t fire it.{" "}
           <strong>Has opted in for texts</strong> fires when text consent is newly given: a client
@@ -260,7 +271,7 @@ export function AutomationsGuide() {
           </li>
           <li>
             <strong>Job and package triggers</strong> (Job created, Job cancelled, Package created, Package
-            renewed) run <strong>once per job</strong> for each trigger. Two new jobs for the same client each
+            renewed, Waiting list window is ending, Waiting list window passed) run <strong>once per job</strong> for each trigger. Two new jobs for the same client each
             get their own run, and a sequence started by both Job created and Job cancelled runs for the
             cancellation even if the creation run is still going.
           </li>

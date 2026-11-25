@@ -613,6 +613,13 @@ export function DispatchBoardGuide() {
       <Section id="filters-search" title="Filters, search, and routing">
         <ul className="list-disc space-y-2 pl-5">
           <li>
+            <strong>Sort by a column.</strong> Click a column header (Client, Service, Date, City,
+            Zip, Assigned, Start, End, B Hrs, Actual, Variance, Men, Qty, Rate, Amt) to sort the board A→Z,
+            click again for Z→A, and a third time to go back to route order. Empty cells always
+            sink to the bottom. It only changes how the list is displayed: it never changes the saved
+            stop order, and it is switched off while you are hand-ordering a route.
+          </li>
+          <li>
             <strong>Status tabs</strong> — All, Scheduled, Dispatched, Completed, Cancelled, Skipped —
             filter the board down to visits in that state. All leaves out cancelled visits (and its
             count does too); use the Cancelled tab to see them.
@@ -1022,7 +1029,7 @@ export function DispatchBoardGuide() {
           <li>
             <strong>Crew header.</strong> Headcount, jobs finished out of jobs scheduled, and{" "}
             <em>actual hours / budgeted hours</em> for the day. The bar is the share of the day&apos;s
-            budgeted work that&apos;s completed; it turns red if finished work ran over its budget.
+            budgeted work that&apos;s completed; it turns red if finished work ran over its budget. Each job card shows its own actual / budgeted hours once the crew has logged time on it.
           </li>
           <li>
             <strong>Change crews by dragging.</strong> Drag a person to another crew (that move is for

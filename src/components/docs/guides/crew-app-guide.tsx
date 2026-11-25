@@ -324,6 +324,18 @@ export function CrewAppGuide() {
             If the office changes the setting later, only days that end after the change follow it.
           </li>
           <li>
+            <strong>Lunch between jobs.</strong> When no job is running, a blue{" "}
+            <strong>Start Lunch</strong> button sits under the day card; tap it when the crew stops
+            for lunch and <strong>End Lunch</strong> when they&apos;re back (the card reads &ldquo;On
+            lunch since 12:05 PM&rdquo;). It starts and ends lunch for everyone on the clock. While a
+            stop is in progress the button is off &mdash; use <strong>Take a Break</strong> on the job
+            instead, whose time already stops for it. The lunch minutes become each person&apos;s
+            default <strong>Lunch</strong> deduction in Report Center &rarr; Payroll (the office can
+            still correct it there). A lunch left running ends with End Day or when someone is
+            clocked out early, and is counted as at most 4 hours. Like Start Day, a tap with no
+            signal is saved on the phone and keeps its real time.
+          </li>
+          <li>
             <strong>Started a job after End Day?</strong> Storm call-back, or End Day tapped by
             mistake: starting a job reopens that person&apos;s shift for the day, and the time between
             End Day and the new job start is taken off as an unpaid break, so the hours worked after
@@ -449,8 +461,12 @@ export function CrewAppGuide() {
         <p>
           <strong>One job at a time.</strong> If the crew taps Start Job while another of its stops is
           still running (Stop Job was never tapped), the other stop&apos;s time is stopped
-          automatically at the moment the new job starts (or when it was paused, if it was on a break),
-          so nobody is clocked in on two jobs at once. The crew sees a message, the office sees a
+          automatically at the moment the new job starts, so nobody is clocked in on two jobs at once.
+          A stop the crew <em>paused</em> is left alone, because they are coming back to it: its
+          pause time already stays out of its hours. When the crew later taps <strong>Resume</strong>{" "}
+          on that paused stop while another of its stops is running, the running one is paused at that
+          moment (the office sees a comment saying so) and stays open, so a crew can go back and forth
+          between two jobs without double-counting time. When a stop is stopped automatically, the crew sees a message, the office sees a
           comment on that visit saying it was stopped automatically when the crew started the new
           stop, and the stop stays in progress until someone finishes it: open it and tap Stop Job
           (the photo and chemical checks still apply) or the office marks it complete. Its hours are

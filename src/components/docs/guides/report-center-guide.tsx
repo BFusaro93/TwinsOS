@@ -464,7 +464,7 @@ export function ReportCenterGuide() {
           </li>
           <li>
             <strong>Paid time is the shift.</strong> Each person&apos;s day is clock-in at the shop to
-            clock-out at the shop, less lunch and unpaid pauses. Whether a job pause is paid follows
+            clock-out at the shop, less min off, lunch and unpaid pauses. Whether a job pause is paid follows
             the visit&apos;s own override when the office set one, otherwise the company&apos;s
             &ldquo;Crew pauses are unpaid&rdquo; setting <em>as it was when that person&apos;s day
             ended</em> &mdash; each day keeps the setting it ended under, so changing it later only
@@ -507,7 +507,10 @@ export function ReportCenterGuide() {
           <li>
             <strong>Correct any day.</strong> In the detail, change the <strong>clock-in and
             clock-out times</strong>, the <strong>unpaid break minutes</strong> (the number you enter is the
-            day&apos;s whole unpaid break, replacing the recorded breaks rather than adding to them), or type the hours
+            day&apos;s whole unpaid break, replacing the recorded breaks rather than adding to them), the
+            separate <strong>Lunch</strong> minutes (taken off in addition to min off, so don&apos;t
+            enter the same time in both; it starts at whatever the crew recorded with Start Lunch /
+            End Lunch on the crew app, and the office&apos;s figure replaces it), or type the hours
             directly to override them (up to 48 hours for a day); add <strong>Extra</strong> hours
             (worked time not on the clock, such as shop time, also up to 48; counts toward overtime) or{" "}
             <strong>PTO</strong> hours (paid time off, up to 48; paid as Regular, never overtime); write a <strong>note</strong> saying why; and click <strong>Save</strong>. An
@@ -516,9 +519,24 @@ export function ReportCenterGuide() {
             <em>adjusted</em> badge.
           </li>
           <li>
-            <strong>Nothing else changes.</strong> Corrections live only on the Payroll report. The
-            recorded shifts and punches stay as they were, and Job Costing, job hours and the
-            Timesheet report are not affected.
+            <strong>Add a day nobody clocked.</strong> <strong>Add time entry</strong> (top right of
+            the tab) is for a forgotten clock-in or clock-out, or a paper time sheet: pick the
+            employee and date, then enter start and end times (plus any unpaid break minutes) or just
+            the total hours, add a note, and click <strong>Add entry</strong>. It can&apos;t be saved
+            on a day that is locked. If that person already has the day recorded, it corrects that day
+            instead.
+          </li>
+          <li>
+            <strong>Delete a day that shouldn&apos;t exist.</strong> The trash button on a day removes
+            that person&apos;s day clock, job punches and any correction for the date (for example when
+            the crew leader clocked in someone who never worked). Because the job punches go too, the
+            hours and labor cost also come off the jobs and Job Costing. It asks you to confirm, can&apos;t
+            be undone from the report, and is unavailable on a locked day.
+          </li>
+          <li>
+            <strong>Otherwise nothing else changes.</strong> Corrections and added entries live only on
+            the Payroll report. The recorded shifts and punches stay as they were, and Job Costing, job
+            hours and the Timesheet report are not affected (deleting a day is the one exception).
           </li>
           <li>
             <strong>Check badges.</strong> An amber <em>check</em> badge means a day needs a look:
@@ -531,7 +549,7 @@ export function ReportCenterGuide() {
             <strong>Export.</strong> The <strong>Export</strong> menu has Excel (a Totals sheet plus a
             Daily sheet), CSV of totals by employee, CSV of daily detail, and PDF. Every export has{" "}
             <strong>Regular Hours</strong> and <strong>OT Hours</strong> columns, per person and per
-            day. Hours are numbers, so Excel and payroll uploads can add them up. The totals include a{" "}
+            day. The daily Excel and CSV detail also has a <strong>Lunch Deducted (min)</strong> column. Hours are numbers, so Excel and payroll uploads can add them up. The totals include a{" "}
             <strong>Days to Review</strong> count per person: days with a shift that was never ended
             (open) or with job time but no Start Day (no shift), where hours may be understated or
             missing. The PDF prints the totals by employee first, then a separate table for each
@@ -576,6 +594,12 @@ export function ReportCenterGuide() {
           <strong>pipeline</strong>.
         </p>
         <p>
+          Each graphic has a <strong>Preview</strong> button that shows it live with your own data before
+          you add it. In the <strong>Add to Dashboard</strong> dialog the same live preview appears at
+          the size you pick (<strong>Third</strong>, <strong>Half</strong> or <strong>Full width</strong>).
+          Adding needs permission to manage the Report Center; Preview does not.
+        </p>
+        <p>
           <strong>Pipeline</strong> lists stages top to bottom, each with its total and a bar sized to
           the largest stage. <strong>Sales Pipeline Insight</strong> uses it for estimate value by
           stage: Draft, Quoted, Proposed (sent), Won, Invoiced and Lost. Pick Pipeline as the visual
@@ -598,6 +622,19 @@ export function ReportCenterGuide() {
         <p>
           Both follow the dashboard tab&apos;s shared date range. They add up the days within each
           month, so they suit totals like hours and minutes.
+        </p>
+        <p>
+          <strong>More ready-made graphics.</strong> The library also carries monthly trends and
+          breakdowns grouped by topic: <strong>Job Costing</strong> (revenue per field labor hour, labor %
+          of revenue, revenue vs. labor cost, revenue and revenue per man-hour by service, biggest hour
+          overruns, drive time by crew), <strong>Sales</strong> (invoiced revenue by month, won vs. lost
+          estimates, estimate win rate, sales by rep, rep goal vs. actual this month, field upsells by
+          outcome), <strong>Accounts Receivable</strong> (AR aging, average days to pay, cash collected by
+          month), <strong>Contracts &amp; Retention</strong> (active contracts and their base monthly
+          value, new contracts, contracts ending soonest, clients added and lost by month) and{" "}
+          <strong>Operations</strong> (open tickets by category). Ratio graphics such as win rate and
+          labor % divide each month&apos;s totals rather than averaging daily figures. Average Days to Pay
+          counts days from the invoice date to the date it was fully paid, and a prepayment counts as day 0.
         </p>
       </Section>
 

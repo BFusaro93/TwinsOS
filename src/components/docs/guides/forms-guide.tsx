@@ -274,7 +274,9 @@ export function FormsGuide() {
             <strong>Ticket Settings</strong> — every submission creates a ticket by default so your
             team can follow up. Turn it off if you only want the response, the email notification
             or the client record, or set the ticket&apos;s priority and category (the category
-            defaults to the form&apos;s name).
+            is picked from your ticket categories in Settings &gt; Lists, and defaults to the
+            form&apos;s name; picking from the list is what lets a category-filtered &ldquo;Ticket was
+            created&rdquo; automation match the form&apos;s tickets).
           </li>
           <li>
             <strong>Tags on Submit</strong> — separate add/remove tag lists applied to the
