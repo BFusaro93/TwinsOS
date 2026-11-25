@@ -24,6 +24,10 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Typecheck
+        # tsc was hitting Node's default ~2 GB heap and dying with exit 134 (OOM)
+        # on unrelated PRs; the runner has ~7 GB.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm run typecheck
       - name: Lint
         run: npm run lint

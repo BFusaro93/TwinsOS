@@ -81,10 +81,10 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         label: "Client Access",
         permissions: {
           client_list: "Client List",
-          client_activate_deactivate: "Activate/Deactivate",
+          client_activate_deactivate: "Cancel / Reactivate Clients",
           client_add: "Add Client",
           client_allow_edit: "Allow Edit",
-          client_allow_delete: "Allow Cancel/Deactivate",
+          client_allow_delete: "Merge Clients (also Cancel / Reactivate)",
           client_bulk_edit: "Bulk Edit",
           client_bulk_create: "Bulk Create",
           client_add_contract: "Add Contract",
@@ -485,6 +485,78 @@ export function allKeysInTab(tabKey: string): string[] {
 }
 
 // Helper: all permission keys in a section
+/**
+ * Hover help for a permission's label in the role dialog, for the
+ * permissions whose name alone doesn't say what they unlock. Keyed by permission key;
+ * a key with no entry shows no help line.
+ */
+export const PERMISSION_HELP: Record<string, string> = {
+  account_settings:
+    "Master Account Settings: Organization, Branding, Subscription and Integrations. Users and API keys stay admin-only.",
+  company_settings: "Settings > General (company info).",
+  crm_settings:
+    "Settings > Clients, Chemical Tracking, Required Fields, Import / Export, Integrations and Client Portal.",
+  scheduling_settings: "Settings > Services (service prices and setup).",
+  accounting_settings: "Settings > Estimates and Accounting.",
+  client_activate_deactivate: "Cancel and reactivate clients. Does not include merging.",
+  client_allow_delete:
+    "Cancel and reactivate clients, and merge duplicate clients. There is no permanent delete.",
+  lead_allow_delete: "Close a lead as lost.",
+  client_view_credit_card: "Shows a client's saved card (type and last four digits) and its Autopay status.",
+  payroll_show_pay_rate: "Shows employees' hourly pay rates on payroll screens.",
+  payroll_show_wage_burden: "Shows the fully loaded labor cost (wage burden) on payroll screens.",
+  social_media_edit: "Log weekly social media numbers and edit goals and platforms. Admins and Managers always can.",
+  // Reports & dashboards
+  view_report_center: "Open the Report Center, run reports, and view saved custom reports and dashboards.",
+  manage_report_center: "Create and edit custom reports, schedule report emails, and edit the KPI Scorecard.",
+  payroll_report: "Open the Payroll report and edit crew punch times and paid breaks. Pay rates still need their own permission below.",
+  view_dashboard_equipt: "Equipt dashboard: work orders, purchasing and asset management.",
+  view_dashboard_myday: "Landscapt My Day: the user's daily schedule and tasks.",
+  view_dashboard_reports: "Landscapt's built-in reporting dashboard (a dashboard, separate from the Report Center).",
+  view_dashboard_kpis: "KPI Scorecard: customizable KPIs computed live from Landscapt data.",
+  view_dashboard_driver_safety: "Driver Safety Scores (Samsara driver scoring).",
+  view_dashboard_company_report: "Company Report: sales, operations and A/R computed live.",
+  view_dashboard_social_media: "Social Media dashboard: weekly reach, engagement, followers and leads by platform.",
+  view_dashboard_custom: "Custom dashboards built in the Report Center. Crew logins see only those flagged visible to crew.",
+  view_dashboard_job_costing: "The Job Costing page under Dashboards.",
+  view_dashboard_estimate_builder: "The Estimate Builder page under Dashboards.",
+  view_dashboard_calculators: "The Calculators page under Dashboards.",
+  // Other access
+  allow_roles_access: "Add and delete roles on the Roles page. Everyone can view roles, and only admins can change what a role allows.",
+  export_lists: "Export lists and tables to a file (Dispatch Board, Contracts and other import/export menus).",
+  imports: "Import records from a file, such as clients and leads.",
+  quickbooks_resync: "Re-send a client, invoice or payment to QuickBooks and use the QuickBooks resync tools in Settings.",
+  bulk_edit_products: "Edit many products at once in the products catalog.",
+  client_add_contract: "Shows the \"Add a Contract\" button on a client's page. It starts a service contract, not a contact person.",
+  client_allow_edit: "Edit a client's details (clients only; leads use the Lead Access \"Allow Edit\").",
+  lead_allow_edit: "Edit a lead's details (leads only; clients use the Client Access \"Allow Edit\").",
+  lead_convert_close: "Convert a lead into a client, or close it as lost.",
+  // Payments
+  acct_process_cc_refunds_voids: "Refund or void a payment. Any of the three refund and delete payment permissions lets a user refund.",
+  acct_delete_card_payments: "Refund a payment, and delete payment records. Deleting is blocked for payments taken through the card processor or already refunded.",
+  acct_delete_ach_payments: "Refund a payment, and delete payment records. Same as the card version; holding either lets a user delete any payment record.",
+  acct_add_modify_credits: "Add, edit and remove account credits, which are not money the client paid.",
+  // Pricing
+  sched_visit_price_qty: "Change the price and quantity on a scheduled visit from the Dispatch Board.",
+  service_bulk_price: "Update prices across the service catalog in one step (Bulk Prices).",
+  pricing_adjustment_run: "Run a price adjustment: preview, apply and undo price changes across services.",
+  // Scheduling & jobs
+  sched_teams: "Create and manage crews (teams) and their members.",
+  sched_waiting_list: "Open the Waiting List and schedule waiting-list jobs.",
+  sched_add_modify_projects: "Add and change projects, including the contract amount.",
+  job_add_remove_custom_package_line_items: "Add or remove services on a package job; without it package jobs can't be changed.",
+  // Tickets, automation, email
+  tickets_view_modify: "Opens Tickets and Calls, and lets the user change tickets.",
+  automation_stop: "Stop a running automation.",
+  tags_create_tag: "Create new tags while tagging a client (otherwise only existing tags can be picked).",
+  email_activity_send: "Send an email to a client from the Dispatch Board, a client page or a ticket.",
+  // Team, chemical
+  emp_manage: "Manage employees (the Manage actions on the Employees list), beyond Add and Edit.",
+  emp_view_user_settings: "Shows the User Settings tab when viewing an employee.",
+  chem_add_edit_usage: "Record and edit chemical applications on visits.",
+  chem_create_uom: "Create new units of measure (volume and area units) in Chemical Tracking settings.",
+};
+
 export function allKeysInSection(tabKey: string, sectionKey: string): string[] {
   return Object.keys(PERMISSION_TABS[tabKey]?.sections[sectionKey]?.permissions ?? {});
 }
