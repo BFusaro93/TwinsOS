@@ -280,7 +280,14 @@ export function useReportFilterOptions(source?: ReportFilterOptionsSource) {
         const names = ((data ?? []) as { name: string | null }[])
           .map((r) => r.name?.trim() ?? "")
           .filter((n) => !!n);
-        return [...new Set([...names, "System"])].map((n) => ({ value: n, label: n }));
+        // Background work is recorded as "system" by the current audit trigger and
+        // "System" by older rows, so both spellings are offered.
+        const people = [...new Set(names)].map((n) => ({ value: n, label: n }));
+        return [
+          ...people,
+          { value: "system", label: "System (automated)" },
+          { value: "System", label: "System (legacy)" },
+        ];
       }
       if (source === "salesReps") {
         // The rpt_* views' "sales_rep" text column is the rep's
