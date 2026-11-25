@@ -1394,7 +1394,7 @@ export function useRecordPayment() {
       // together. Allocation normalisation (drop empties, reject draft/void,
       // cap at open balance) happens there under row locks.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: rpcData, error: rpcErr } = await (supabase.rpc as any)("crm_record_payment", {
+      const { data: rpcData, error: rpcErr } = await (supabase.rpc as any)("crm_record_payment_labeled", {
         p_client_id: clientId,
         p_amount_cents: amountCents,
         p_payment_date: paymentDate,
@@ -1404,17 +1404,12 @@ export function useRecordPayment() {
         p_is_prepayment: isPrepayment ?? false,
         p_is_credit: isCredit ?? false,
         p_allocations: (allocations ?? []).map((a) => ({ invoice_id: a.invoiceId, amount_cents: a.amountCents })),
+        // Saved in the same transaction as the payment, so a failure can't leave it unnamed.
+        p_method_label: methodLabel ?? null,
       });
       if (rpcErr) throw rpcErr;
       const rec = rpcData as { payment_id: string; newly_paid_invoice_ids: string[]; has_allocations: boolean };
       const inserted = { id: rec.payment_id };
-      if (methodLabel) {
-        // Non-money column, so a direct write is allowed (the money guards only cover amounts/status).
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: labelErr } = await (supabase as any)
-          .from("crm_payments").update({ method_label: methodLabel }).eq("id", rec.payment_id);
-        if (labelErr) throw new Error(`Payment recorded, but its method name couldn't be saved: ${labelErr.message}`);
-      }
       const newlyPaidInvoiceIds: string[] = rec.newly_paid_invoice_ids ?? [];
       const hasAlloc = rec.has_allocations;
 
@@ -1517,20 +1512,11 @@ export function useUpdatePayment() {
       // never fired the invoice_paid automation. Compare statuses around the call.
       const touchedIds = [...new Set((allocations ?? []).map((a) => a.invoiceId))];
       const statusBefore = await invoiceStatusById(supabase, touchedIds);
-      // The DB CHECK only allows a method_label while method = 'Other', and crm_update_payment
-      // rewrites method without touching the label — so clear a stale label first when the
-      // payment is moving to a built-in method (custom -> Cash would otherwise violate the CHECK).
-      if (method !== "Other") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: clearErr } = await (supabase as any)
-          .from("crm_payments").update({ method_label: null }).eq("id", id);
-        if (clearErr) throw clearErr;
-      }
-      // One transaction in the DB (crm_update_payment): validates + caps the new
-      // split, reverses the original allocations, rewrites the payment and split,
-      // re-applies to invoices and syncs the client balance — all or nothing.
+      // One transaction in the DB (crm_update_payment_labeled): validates + caps the new
+      // split, reverses the original allocations, rewrites the payment, split and custom
+      // method name, re-applies to invoices and syncs the client balance — all or nothing.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: rpcErr } = await (supabase.rpc as any)("crm_update_payment", {
+      const { error: rpcErr } = await (supabase.rpc as any)("crm_update_payment_labeled", {
         p_payment_id: id,
         p_client_id: clientId,
         p_amount_cents: amountCents,
@@ -1539,13 +1525,9 @@ export function useUpdatePayment() {
         p_reference: reference ?? null,
         p_memo: memo ?? null,
         p_allocations: (allocations ?? []).map((a) => ({ invoice_id: a.invoiceId, amount_cents: a.amountCents })),
+        p_method_label: methodLabel ?? null,
       });
       if (rpcErr) throw rpcErr;
-      // Always written (null clears a label when a payment moves back to a built-in method).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: labelErr } = await (supabase as any)
-        .from("crm_payments").update({ method_label: methodLabel ?? null }).eq("id", id);
-      if (labelErr) throw new Error(`Payment updated, but its method name couldn't be saved: ${labelErr.message}`);
       const statusAfter = await invoiceStatusById(supabase, touchedIds);
       return {
         newlyPaid: touchedIds

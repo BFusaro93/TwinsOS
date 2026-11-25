@@ -16,6 +16,7 @@ import { MultiSelectDropdown } from "@/components/shared/MultiSelectDropdown";
 import { useReportFilterOptions } from "@/lib/hooks/use-report-center";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { ALL_TIME_RANGE_PARAM } from "@/lib/reports/helpers";
+import { decodeMultiParam, encodeMultiParam } from "@/lib/reports/multi-param";
 import { shiftYmd, todayInZone, ymd } from "@/lib/time/zone";
 import type { ReportFilterDef } from "@/types/crm-reports";
 
@@ -227,8 +228,8 @@ function MultiSelectControl({
     <Field label={def.label}>
       <MultiSelectDropdown
         options={options}
-        selected={value ? value.split(",").filter(Boolean) : []}
-        onChange={(vals) => onChange(def.key, vals.join(","))}
+        selected={decodeMultiParam(value)}
+        onChange={(vals) => onChange(def.key, encodeMultiParam(vals))}
         className="h-8 w-52 text-sm"
       />
     </Field>
