@@ -2066,6 +2066,7 @@ function JobDetailSheet({
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
+import { findOutOfSyncGroups } from "@/lib/visits/crew-group-sync";
 import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime, useSetVisitBreakPaid } from "@/lib/hooks/use-crew-app";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { applyRouteNumbers } from "@/lib/dispatch/apply-route-numbers";
@@ -3505,8 +3506,14 @@ function VisitRow({
   dailyOverrides,
   punchMismatch,
   photoCount,
+  outOfSyncRemainingCount,
+  onCompleteRemaining,
 }: {
   visit: CRMJobVisit;
+  /** Shared stop where a crew finished but this many sibling crew visits are still open (0 = in sync). */
+  outOfSyncRemainingCount: number;
+  /** Explicit action: completes the stop's remaining crew visits via bulk-complete. */
+  onCompleteRemaining: (visit: CRMJobVisit) => void;
   /** Crew-app photos on this visit (0 when none). */
   photoCount: number;
   /** Why this stop's crew punches disagree with its visit times/hours, or null when they agree (see stopPunchMismatch). */
@@ -3891,6 +3898,16 @@ function VisitRow({
             >
               {visit.crewGroupSecondary ? "Shared" : "Lead"}
             </span>
+          )}
+          {visit.crewGroupId && outOfSyncRemainingCount > 0 && (
+            <button
+              type="button"
+              title={`Out of sync — another crew on this shared stop is completed, but ${outOfSyncRemainingCount} crew visit${outOfSyncRemainingCount > 1 ? "s are" : " is"} still open. Click to complete ${outOfSyncRemainingCount > 1 ? "them" : "it"}.`}
+              onClick={(e) => { e.stopPropagation(); onCompleteRemaining(visit); }}
+              className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
+            >
+              Out of sync · Complete {outOfSyncRemainingCount}
+            </button>
           )}
         </div>
         {job?.serviceAddress && (
@@ -4458,6 +4475,8 @@ export function DispatchBoard() {
   // store this instead of absolute dates. Cleared on any manual date edit.
   const [dateMode,        setDateMode]        = useState<DispatchDateMode | null>(null);
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
+  // Quick toggle: only shared-crew stops where some crews are completed and others are not.
+  const [outOfSyncOnly,   setOutOfSyncOnly]   = useState(false);
   const [tagFilters,      setTagFilters]       = useState<string[]>([]);
   // Values are "job_high" (the new high-priority job/visit flag) plus the
   // existing client priority levels — one control covering both "priority"
@@ -5056,10 +5075,38 @@ export function DispatchBoard() {
   const cityFilterOptions = Array.from(new Set(allVisits.map((v) => (v.job?.serviceCity ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const zipFilterOptions = Array.from(new Set(allVisits.map((v) => (v.job?.serviceZip ?? "").trim()).filter(Boolean))).sort();
 
+  const outOfSyncGroups = useMemo(() => findOutOfSyncGroups(allVisits), [allVisits]);
+  async function completeRemainingCrewVisits(visit: CRMJobVisit) {
+    const group = visit.crewGroupId ? outOfSyncGroups.get(visit.crewGroupId) : undefined;
+    if (!group) return;
+    const ids = group.remainingIds;
+    try {
+      // Same path as the bulk "Mark Completed" action: completeVisit + applyVisitCompletionSideEffects
+      // per visit server-side (secondaries never bill; the lead bills once).
+      const res = await fetch("/api/crm/visits/bulk-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error("Could not complete the remaining crew visits");
+      const summary = await res.json() as { failed: { id: string; error: string }[]; billingErrors?: string[] };
+      if (summary.failed.length > 0) throw new Error(summary.failed[0].error || "One or more visits failed to complete");
+      if ((summary.billingErrors?.length ?? 0) > 0) {
+        toast.warning("Completed, but a visit could not be invoiced. Open it and use its Invoice button.");
+      }
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      toast.success(`Completed ${ids.length} remaining crew visit${ids.length > 1 ? "s" : ""}`);
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to complete the remaining crew visits");
+    }
+  }
+
   const filtered = allVisits.filter((v) => {
     // Effective crew, not the raw column — a visit that inherits its crew from
     // the job would otherwise never match its own crew's filter chip.
     if (crewFilters.length > 0 && !crewFilters.includes(effectiveCrewIdOf(v) ?? NO_CREW)) return false;
+    if (outOfSyncOnly && !(v.crewGroupId && outOfSyncGroups.has(v.crewGroupId))) return false;
     if (statusFilter !== "all" && v.status !== statusFilter) return false;
     // "All" hides cancelled jobs (they used to sit on the board forever); the Cancelled tab still lists them to restore.
     if (statusFilter === "all" && v.status === "cancelled") return false;
@@ -6465,6 +6512,22 @@ export function DispatchBoard() {
           </PopoverContent>
         </Popover>
 
+        {/* Shared stops where one crew finished but another hasn't — across all crew columns */}
+        {(outOfSyncGroups.size > 0 || outOfSyncOnly) && (
+        <button
+          type="button"
+          onClick={() => setOutOfSyncOnly((p) => !p)}
+          title="Show only shared-crew stops where some crews are completed and others are not"
+          className={cn(
+            "h-7 max-lg:h-9 flex items-center gap-1.5 rounded border px-2.5 text-[10px] transition-colors",
+            outOfSyncOnly ? "bg-amber-500 border-amber-400 text-white" : "bg-[#5a5a5a] border-[#6a6a6a] text-neutral-200 hover:text-white"
+          )}
+        >
+          <Users className="h-3 w-3" />
+          Out of sync ({outOfSyncGroups.size})
+        </button>
+        )}
+
         {/* Tag filter — client tags, "is any of" (OR) */}
         <Popover>
           <PopoverTrigger asChild>
@@ -6787,6 +6850,8 @@ export function DispatchBoard() {
                   memberTimes={memberTimesByVisitId.get(visit.id) ?? EMPTY_MEMBER_TIMES}
                   punchMismatch={punchMismatchByVisitId.get(visit.id) ?? null}
                   photoCount={photoCountByVisitId[visit.id] ?? 0}
+                  outOfSyncRemainingCount={visit.crewGroupId && visit.status !== "completed" ? (outOfSyncGroups.get(visit.crewGroupId)?.remainingIds.length ?? 0) : 0}
+                  onCompleteRemaining={completeRemainingCrewVisits}
                   anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
                   allVisits={allVisits}
                   drivingCrewIds={drivingCrewIds}
