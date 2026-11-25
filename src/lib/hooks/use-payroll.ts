@@ -47,6 +47,8 @@ export interface PayrollAdjustmentInput {
   /** Paid time off — paid, never overtime. */
   ptoHours: number;
   note: string | null;
+  /** Add-time-entry: keep the day's existing PTO / extra hours / lunch / note. */
+  keepExisting?: boolean;
 }
 
 export function useSavePayrollAdjustment() {
@@ -88,6 +90,10 @@ export function useDeletePayrollDay() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payroll-report"] });
+      // Deleting a day recomputes visit labor server-side; refresh the hour views too.
+      qc.invalidateQueries({ queryKey: ["job-visits"] });
+      qc.invalidateQueries({ queryKey: ["crew-visits"] });
+      qc.invalidateQueries({ queryKey: ["job-costing"] });
       toast.success("Time entry deleted");
     },
     onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to delete the time entry"),

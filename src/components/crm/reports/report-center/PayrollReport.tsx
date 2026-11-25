@@ -506,6 +506,7 @@ function AddTimeEntryDialog({
         breakMinutes: hasTimes && num(breakMins) != null ? Math.round(num(breakMins) as number) : null,
         extraHours: 0,
         ptoHours: 0,
+        keepExisting: true,
         note: note.trim() || "Manual entry",
       },
       {

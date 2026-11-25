@@ -1517,6 +1517,15 @@ export function useUpdatePayment() {
       // never fired the invoice_paid automation. Compare statuses around the call.
       const touchedIds = [...new Set((allocations ?? []).map((a) => a.invoiceId))];
       const statusBefore = await invoiceStatusById(supabase, touchedIds);
+      // The DB CHECK only allows a method_label while method = 'Other', and crm_update_payment
+      // rewrites method without touching the label — so clear a stale label first when the
+      // payment is moving to a built-in method (custom -> Cash would otherwise violate the CHECK).
+      if (method !== "Other") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: clearErr } = await (supabase as any)
+          .from("crm_payments").update({ method_label: null }).eq("id", id);
+        if (clearErr) throw clearErr;
+      }
       // One transaction in the DB (crm_update_payment): validates + caps the new
       // split, reverses the original allocations, rewrites the payment and split,
       // re-applies to invoices and syncs the client balance — all or nothing.

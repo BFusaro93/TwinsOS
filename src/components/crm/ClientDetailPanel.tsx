@@ -2340,7 +2340,7 @@ function LinkParentDialog({
 
 /** job_type stays 'waiting_list' after a visit is dispatched, so "still waiting" means no live visit yet. */
 function isStillWaiting(job: CRMJob): boolean {
-  return job.jobType === "waiting_list" && !(job.visits ?? []).some((v) => v.status !== "cancelled");
+  return job.jobType === "waiting_list" && !(job.visits ?? []).some((v) => v.status !== "cancelled" && v.status !== "skipped");
 }
 
 function jobBorderColor(job: CRMJob): string {
