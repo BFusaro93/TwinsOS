@@ -59,6 +59,11 @@ export async function autoStopOtherRunningStops(
     newStopLabel: string;
     timeZone: string;
     userId: string;
+    /**
+     * End Day mode: close ONLY the PAUSED stops (nobody is coming back to them once the crew
+     * ends its day), at their pause instant, with an End Day note instead of a Start Job one.
+     */
+    endDay?: boolean;
   }
 ): Promise<string[]> {
   const stopped: string[] = [];
@@ -86,7 +91,7 @@ export async function autoStopOtherRunningStops(
     // ping-pong between two jobs). Its pause already keeps the time away out of its hours
     // (the break is netted from the punch span at Stop Job), so nothing is double counted.
     const running = (data as unknown as RunningVisit[])
-      .filter((v) => !except.has(v.id) && !v.paused_at && Date.parse(v.clocked_in_at) < atMs);
+      .filter((v) => !except.has(v.id) && (p.endDay ? !!v.paused_at : !v.paused_at) && Date.parse(v.clocked_in_at) < atMs);
     if (running.length === 0) return stopped;
 
     // A stop clocks in together: same client, day and clock-in instant.
@@ -126,7 +131,10 @@ export async function autoStopOtherRunningStops(
       await closeStopPunches(punchWriter, punchVisitId, endAt);
       await recomputeStopLabor(supabase, punchVisitId, visitWriter);
 
-      const text = `Stopped automatically at ${formatInZone(endAt, p.timeZone, { hour: "numeric", minute: "2-digit" })} when the crew started ${p.newStopLabel} — Stop Job was never tapped here. Finish it with Stop Job in the crew app or Mark Complete.`;
+      const endWhen = formatInZone(endAt, p.timeZone, { hour: "numeric", minute: "2-digit" });
+      const text = p.endDay
+        ? `Stopped automatically at ${endWhen} when the crew ended their day — Stop Job was never tapped here. Finish it with Stop Job in the crew app or Mark Complete.`
+        : `Stopped automatically at ${endWhen} when the crew started ${p.newStopLabel} — Stop Job was never tapped here. Finish it with Stop Job in the crew app or Mark Complete.`;
       for (const id of landed) {
         const { error: commentErr } = await supabase.rpc("crm_append_visit_job_comment", {
           p_visit_id: id,
