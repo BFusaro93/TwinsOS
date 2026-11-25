@@ -540,7 +540,7 @@ export interface ReportFilterDef {
   type: ReportFilterInputType;
   options?: ReportFilterOption[];
   /** Load options dynamically instead of a static list. */
-  optionsSource?: "services" | "salesReps" | "crews" | "paymentMethods" | "products" | "crewMembers" | "serviceIds";
+  optionsSource?: "services" | "salesReps" | "crews" | "paymentMethods" | "products" | "crewMembers" | "serviceIds" | "clientSources" | "staffUsers";
   /**
    * For dateRange: a preset key — "this_month" | "last_month" | "last_30" |
    * "last_90" | "this_year" | "all_time". For other types: the literal

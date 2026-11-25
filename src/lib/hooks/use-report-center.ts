@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getDataset, getDatasetField } from "@/lib/reports/datasets";
 import { GRAPHIC_TEMPLATES } from "@/lib/reports/graphic-templates";
 import { shiftYmd } from "@/lib/time/zone";
+import { DEFAULT_CLIENT_SOURCES } from "@/lib/hooks/use-client-sources";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { todayInZone } from "@/lib/time/zone";
@@ -193,7 +194,9 @@ export type ReportFilterOptionsSource =
   | "paymentMethods"
   | "products"
   | "crewMembers"
-  | "serviceIds";
+  | "serviceIds"
+  | "clientSources"
+  | "staffUsers";
 
 const PAYMENT_METHODS = [
   "Cash",
@@ -247,6 +250,44 @@ export function useReportFilterOptions(source?: ReportFilterOptionsSource) {
         return ((data ?? []) as { id: string; name: string | null }[])
           .filter((r) => !!r.name)
           .map((r) => ({ value: r.id, label: r.name as string }));
+      }
+      if (source === "clientSources") {
+        // Same list the client Source dropdowns use (Settings → Lists), with the
+        // same built-in fallback when the org hasn't defined any.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("crm_list_options")
+          .select("value")
+          .eq("list_name", "client_sources")
+          .is("deleted_at", null)
+          .order("value");
+        if (error) throw new Error(error.message);
+        const values = ((data ?? []) as { value: string | null }[])
+          .map((r) => r.value?.trim() ?? "")
+          .filter((v) => !!v);
+        const list = values.length > 0 ? values : DEFAULT_CLIENT_SOURCES;
+        return [...new Set(list)].map((v) => ({ value: v, label: v }));
+      }
+      if (source === "staffUsers") {
+        // Logins that can make changes — rpt_audit_log.changed_by holds the
+        // profile name captured by the audit trigger ("System" for background work).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("profiles")
+          .select("name")
+          .order("name");
+        if (error) throw new Error(error.message);
+        const names = ((data ?? []) as { name: string | null }[])
+          .map((r) => r.name?.trim() ?? "")
+          .filter((n) => !!n);
+        // Background work is recorded as "system" by the current audit trigger and
+        // "System" by older rows, so both spellings are offered.
+        const people = [...new Set(names)].map((n) => ({ value: n, label: n }));
+        return [
+          ...people,
+          { value: "system", label: "System (automated)" },
+          { value: "System", label: "System (legacy)" },
+        ];
       }
       if (source === "salesReps") {
         // The rpt_* views' "sales_rep" text column is the rep's

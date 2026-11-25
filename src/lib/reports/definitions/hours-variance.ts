@@ -1,5 +1,5 @@
 import type { PrebuiltReportDef, ReportHeaderVisual } from "@/lib/reports/definition-types";
-import { dateRangeFilterDef, dateRangeFilters, eqFilter } from "@/lib/reports/helpers";
+import { dateRangeFilterDef, dateRangeFilters, inFilter } from "@/lib/reports/helpers";
 import { isoInZone, mondayOfYmd, shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import type { AnalysisFilter } from "@/types/crm-reports";
 
@@ -217,7 +217,7 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
       "Shows visits in any date range you pick — defaults to month to date — with budgeted vs actual hours and revenue, grouped by crew.",
     filters: [
       dateRangeFilterDef("Visit Date", "this_month"),
-      { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
     ],
     notes: [
       ...AVB_NOTES,
@@ -227,7 +227,7 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
     headerVisuals: (params, timeZone) =>
       avbHeaderVisuals([
         ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
-        ...eqFilter("crew_name", params.crew),
+        ...inFilter("crew_name", params.crew),
       ]),
     analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
@@ -235,7 +235,7 @@ export const HOURS_VARIANCE_REPORTS: PrebuiltReportDef[] = [
       filters: [
         AVB_STATUS_FILTER,
         ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
-        ...eqFilter("crew_name", params.crew),
+        ...inFilter("crew_name", params.crew),
       ],
       groupBy: ["crew_name"],
       aggregates: [],

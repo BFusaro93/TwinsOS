@@ -5,7 +5,7 @@ import {
   col,
   dateRangeFilterDef,
   dateRangeFilters,
-  eqFilter,
+  inFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
@@ -42,8 +42,9 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       "Shows all estimates in the pipeline with their stage, value, probability, and age.",
     filters: [
       dateRangeFilterDef("Estimate Date", "this_year"),
-      { key: "stage", label: "Stage", type: "select", options: STAGE_OPTIONS },
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "stage", label: "Stage", type: "multiselect", options: STAGE_OPTIONS },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+      { key: "source", label: "Client Source", type: "multiselect", optionsSource: "clientSources" },
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_estimates",
@@ -65,8 +66,9 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("estimate_date", params, timeZone, { preset: "this_year" }),
-        ...eqFilter("stage", params.stage),
-        ...eqFilter("sales_rep", params.sales_rep),
+        ...inFilter("stage", params.stage),
+        ...inFilter("sales_rep", params.sales_rep),
+        ...inFilter("source", params.source),
       ],
       groupBy: [],
       aggregates: [],
@@ -82,7 +84,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       "Shows every service line on accepted and invoiced estimates with hours, cost, and value.",
     filters: [
       dateRangeFilterDef("Estimate Date", "this_year"),
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
     ],
     notes: [EXCLUDE_LOST_LINES_NOTE],
     analysis: (params, timeZone) => ({
@@ -104,7 +106,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
         EXCLUDE_LOST_LINES,
         ...dateRangeFilters("estimate_date", params, timeZone, { preset: "this_year" }),
-        ...eqFilter("sales_rep", params.sales_rep),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],
@@ -120,7 +122,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       "Totals accepted and invoiced estimate lines by service — line count, value, hours, and cost.",
     filters: [
       dateRangeFilterDef("Estimate Date", "this_year"),
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
     ],
     notes: [EXCLUDE_LOST_LINES_NOTE],
     analysis: (params, timeZone) => ({
@@ -130,7 +132,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         { column: "estimate_stage", op: "in", value: ["accepted", "invoiced"] },
         EXCLUDE_LOST_LINES,
         ...dateRangeFilters("estimate_date", params, timeZone, { preset: "this_year" }),
-        ...eqFilter("sales_rep", params.sales_rep),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: ["service_name"],
       aggregates: [

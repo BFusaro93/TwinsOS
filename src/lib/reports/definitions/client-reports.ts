@@ -5,7 +5,7 @@ import {
   containsFilter,
   dateRangeFilterDef,
   dateRangeFilters,
-  eqFilter,
+  inFilter,
   MONTH_KEYS,
   MONTH_LABELS,
   resolveDateRange,
@@ -30,6 +30,17 @@ const CLIENT_STATUS_FILTER: AnalysisFilter = {
   value: [...CLIENT_STATUSES],
 };
 
+const CLIENT_STATUS_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: "residential", label: "Residential" },
+  { value: "commercial", label: "Commercial" },
+];
+
 export const CLIENT_REPORTS: PrebuiltReportDef[] = [
   {
     key: "client-balance",
@@ -43,6 +54,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         type: "number",
         defaultValue: "0",
       },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+      { key: "status", label: "Status", type: "multiselect", options: CLIENT_STATUS_OPTIONS },
     ],
     analysis: (params) => ({
       dataset: "rpt_clients",
@@ -62,6 +75,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
           op: "gt",
           value: Math.round(parseFloat(params.min_balance || "0") * 100),
         },
+        ...inFilter("sales_rep", params.sales_rep),
+        ...inFilter("status", params.status),
       ],
       groupBy: [],
       aggregates: [],
@@ -76,7 +91,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows a client contact list with the ability to sort by account balance and sales rep.",
     filters: [
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
       {
         key: "sort_by",
         label: "Sort By",
@@ -106,7 +121,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
           "sales_rep",
           "balance_outstanding_cents",
         ],
-        filters: [...eqFilter("sales_rep", params.sales_rep)],
+        filters: [...inFilter("sales_rep", params.sales_rep)],
         groupBy: [],
         aggregates: [],
         sortColumn,
@@ -121,7 +136,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     description: "Shows clients and their phone numbers, filterable by sales rep.",
     filters: [
       dateRangeFilterDef("Client Since", "all_time"),
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+      { key: "source", label: "Source", type: "multiselect", optionsSource: "clientSources" },
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_clients",
@@ -136,7 +152,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("client_since", params, timeZone, { preset: "all_time" }),
-        ...eqFilter("sales_rep", params.sales_rep),
+        ...inFilter("sales_rep", params.sales_rep),
+        ...inFilter("source", params.source),
         CLIENT_STATUS_FILTER,
       ],
       groupBy: [],
@@ -154,7 +171,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       {
         key: "status",
         label: "Client Type",
-        type: "select",
+        type: "multiselect",
         options: CLIENT_STATUSES.map((s) => ({
           value: s,
           label: s.charAt(0).toUpperCase() + s.slice(1),
@@ -163,7 +180,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       {
         key: "payment_method",
         label: "Payment Method",
-        type: "select",
+        type: "multiselect",
         optionsSource: "paymentMethods",
       },
     ],
@@ -178,8 +195,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         "balance_outstanding_cents",
       ],
       filters: [
-        ...eqFilter("status", params.status),
-        ...eqFilter("payment_method", params.payment_method),
+        ...inFilter("status", params.status),
+        ...inFilter("payment_method", params.payment_method),
         CLIENT_STATUS_FILTER,
       ],
       groupBy: [],
@@ -193,7 +210,10 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     section: "client",
     name: "Client Referral",
     description: "Shows word-of-mouth referrals — who referred each client.",
-    filters: [dateRangeFilterDef("Client Since", "this_year")],
+    filters: [
+      dateRangeFilterDef("Client Since", "this_year"),
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_clients",
       columns: [
@@ -207,6 +227,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...dateRangeFilters("client_since", params, timeZone, { preset: "this_year" }),
         { column: "referred_by", op: "not_null" },
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],
@@ -221,7 +242,9 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     description: "Shows new clients in any defined time frame.",
     filters: [
       dateRangeFilterDef("Client Since", "this_month"),
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+      { key: "source", label: "Source", type: "multiselect", optionsSource: "clientSources" },
+      { key: "account_type", label: "Account Type", type: "multiselect", options: ACCOUNT_TYPE_OPTIONS },
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_clients",
@@ -237,7 +260,9 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("client_since", params, timeZone),
-        ...eqFilter("sales_rep", params.sales_rep),
+        ...inFilter("sales_rep", params.sales_rep),
+        ...inFilter("source", params.source),
+        ...inFilter("account_type", params.account_type),
         CLIENT_STATUS_FILTER,
       ],
       groupBy: [],
@@ -254,6 +279,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     filters: [
       dateRangeFilterDef("Cancelled Between", "this_year"),
       { key: "reason", label: "Reason Contains", type: "text", placeholder: "Any reason" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+      { key: "source", label: "Source", type: "multiselect", optionsSource: "clientSources" },
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_clients",
@@ -270,6 +297,8 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         { column: "status", op: "eq", value: "cancelled" },
         ...dateRangeFilters("closed_at", params, timeZone, { preset: "this_year", datetime: true }),
         ...containsFilter("cancellation_reason", params.reason),
+        ...inFilter("sales_rep", params.sales_rep),
+        ...inFilter("source", params.source),
       ],
       groupBy: [],
       aggregates: [],
