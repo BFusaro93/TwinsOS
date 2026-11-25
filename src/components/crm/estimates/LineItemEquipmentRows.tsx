@@ -153,7 +153,7 @@ export function LineItemEquipmentRows({
   lineCostCents: number;
 }) {
   const { data: rows = [] } = useLineItemEquipment(lineItemId);
-  const { data: catalog = [] } = useEquipment();
+  const { data: catalog = [], isLoading: catalogLoading } = useEquipment();
   const { mutateAsync: upsert } = useUpsertLineEquipment();
   const [picking, setPicking] = useState("");
 
@@ -210,7 +210,7 @@ export function LineItemEquipmentRows({
               aria-label="Add equipment"
             >
               <option value="">
-                {active.length === 0 ? "No equipment in catalog (Settings → Services)" : "+ Add Equipment"}
+                {catalogLoading ? "Loading equipment…" : active.length === 0 ? "No equipment in catalog (Settings → Services)" : "+ Add Equipment"}
               </option>
               {active.map((e) => (
                 <option key={e.id} value={e.id}>

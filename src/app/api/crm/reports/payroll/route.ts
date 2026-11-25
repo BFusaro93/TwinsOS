@@ -48,6 +48,8 @@ const PutBody = z.object({
   /** Paid time off — paid, never overtime. Optional so older clients keep working. */
   ptoHours: z.number().min(0).max(MAX_DAY_HOURS).optional().default(0),
   note: z.string().max(500).nullable(),
+  /** Add-time-entry dialog: keep the day's existing PTO / extra hours / lunch / note instead of overwriting them. */
+  keepExisting: z.boolean().optional().default(false),
 });
 
 async function authorize(request: Request) {
@@ -107,7 +109,7 @@ export async function PUT(request: Request) {
 
   const { data: existing } = await auth.db
     .from("crm_payroll_adjustments")
-    .select("id")
+    .select("id, extra_hours, pto_hours, lunch_override, note")
     .eq("org_id", auth.orgId)
     .eq("crew_member_id", b.crewMemberId)
     .eq("work_date", b.workDate)
@@ -149,15 +151,16 @@ export async function PUT(request: Request) {
     endAt = zoneWallClockToInstant(shiftYmd(b.workDate, 1), b.endTime as string, tz);
   }
 
+  const keep = existing != null && b.keepExisting;
   const values = {
     start_override: startAt ? startAt.toISOString() : null,
     end_override: endAt ? endAt.toISOString() : null,
     break_override: b.breakMinutes,
-    lunch_override: b.lunchMinutes,
+    lunch_override: keep && b.lunchMinutes == null ? existing.lunch_override : b.lunchMinutes,
     hours_override: b.hoursOverride,
-    extra_hours: b.extraHours,
-    pto_hours: b.ptoHours,
-    note,
+    extra_hours: keep && b.extraHours === 0 ? Number(existing.extra_hours ?? 0) : b.extraHours,
+    pto_hours: keep && b.ptoHours === 0 ? Number(existing.pto_hours ?? 0) : b.ptoHours,
+    note: keep && existing.note && (!b.note || b.note === "Manual entry") ? existing.note : note,
     updated_by: auth.user.id,
   };
   const { error } = existing

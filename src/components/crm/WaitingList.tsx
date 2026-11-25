@@ -807,7 +807,8 @@ export function WaitingList() {
         case "city":      return text(r.job.serviceCity);
         case "zip":       return text(r.job.serviceZip);
         case "crew":      return text((r.job.crewId && crewCodeById.get(r.job.crewId)) || r.job.crewName);
-        case "rate":      return (r.service ? r.service.rateCents : r.job.rateCents) ?? 0;
+        // A job with no rate is blank (sinks to the bottom), not $0.
+        case "rate":      return (r.service ? r.service.rateCents : r.job.rateCents) ?? "";
       }
     };
     const cmp = (a: string | number, b: string | number) =>

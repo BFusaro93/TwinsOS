@@ -250,7 +250,15 @@ export function PayrollReport() {
                       </TableCell>
                     </TableRow>
                     {isOpen && m.days.map((d) => (
-                      <DayRow key={`${d.crewMemberId}|${d.workDate}`} row={d} tz={tz} locked={isPayrollDayLocked(d.workDate, lockedThrough)} />
+                      // The edit fields are seeded from `row` once, so the key carries the saved values: after
+                      // Add time entry / Save / Reset changes this day, the row remounts on the new data instead
+                      // of showing stale inputs whose Save would overwrite it.
+                      <DayRow
+                        key={`${d.crewMemberId}|${d.workDate}|${d.hoursOverride}|${d.extraHours}|${d.ptoHours}|${d.note ?? ""}|${d.startOverride}|${d.endOverride}|${d.breakOverride}|${d.lunchDeductionMinutes}`}
+                        row={d}
+                        tz={tz}
+                        locked={isPayrollDayLocked(d.workDate, lockedThrough)}
+                      />
                     ))}
                   </Fragment>
                 );
@@ -506,6 +514,7 @@ function AddTimeEntryDialog({
         breakMinutes: hasTimes && num(breakMins) != null ? Math.round(num(breakMins) as number) : null,
         extraHours: 0,
         ptoHours: 0,
+        keepExisting: true,
         note: note.trim() || "Manual entry",
       },
       {
@@ -538,7 +547,11 @@ function AddTimeEntryDialog({
               className="h-9 w-full rounded-md border bg-background px-2 text-sm"
             >
               <option value="">Select an employee…</option>
-              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {people.filter((o) => o.name === p.name).length > 1 && p.crewName ? `${p.name} — ${p.crewName}` : p.name}
+                </option>
+              ))}
             </select>
           </div>
           <div>

@@ -47,6 +47,8 @@ export interface PayrollAdjustmentInput {
   /** Paid time off — paid, never overtime. */
   ptoHours: number;
   note: string | null;
+  /** Add-time-entry: keep the day's existing PTO / extra hours / lunch / note. */
+  keepExisting?: boolean;
 }
 
 export function useSavePayrollAdjustment() {
@@ -88,13 +90,17 @@ export function useDeletePayrollDay() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payroll-report"] });
+      // Deleting a day recomputes visit labor server-side; refresh the hour views too.
+      qc.invalidateQueries({ queryKey: ["job-visits"] });
+      qc.invalidateQueries({ queryKey: ["crew-visits"] });
+      qc.invalidateQueries({ queryKey: ["job-costing"] });
       toast.success("Time entry deleted");
     },
     onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to delete the time entry"),
   });
 }
 
-export interface PayrollCrewMember { id: string; name: string }
+export interface PayrollCrewMember { id: string; name: string; crewName?: string | null }
 
 /** Everyone who can be given a manual entry: the active roster, by name. */
 export function usePayrollCrewMembers() {
@@ -102,13 +108,21 @@ export function usePayrollCrewMembers() {
     queryKey: ["payroll-crew-members"],
     queryFn: async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (createClient() as any)
+      const supabase = createClient() as any;
+      const { data, error } = await supabase
         .from("crm_crew_members")
-        .select("id, name")
+        .select("id, name, crew_id")
         .is("deleted_at", null)
         .order("name");
       if (error) throw error;
-      return (data ?? []) as PayrollCrewMember[];
+      // Crew names tell two people who share a name apart in the Add time entry picker.
+      const { data: crews } = await supabase.from("crm_crews").select("id, name").is("deleted_at", null);
+      const crewNameById = new Map<string, string>(((crews ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
+      return ((data ?? []) as { id: string; name: string; crew_id: string | null }[]).map((m) => ({
+        id: m.id,
+        name: m.name,
+        crewName: m.crew_id ? crewNameById.get(m.crew_id) ?? null : null,
+      }));
     },
   });
 }

@@ -44,7 +44,7 @@ async function stillWaitingJobs(
       .select("id, client_id, waiting_list_end")
       .eq("org_id", orgId)
       .eq("job_type", "waiting_list")
-      .neq("status", "cancelled")
+      .not("status", "in", "(cancelled,hold)")
       .gte("waiting_list_end", range.from)
       .lte("waiting_list_end", range.to)
       .is("deleted_at", null)
@@ -71,7 +71,7 @@ async function stillWaitingJobs(
       .select("job_id")
       .eq("org_id", orgId)
       .in("job_id", ids)
-      .neq("status", "cancelled")
+      .not("status", "in", "(cancelled,skipped)")
       .is("deleted_at", null);
     for (const v of (visits ?? []) as { job_id: string }[]) scheduled.add(v.job_id);
   }
