@@ -57,7 +57,7 @@ interface EmailActivity {
   bounceReason: string | null;
 }
 
-/** Where a sent email stands. Delivered wins; the rest partition "Not Delivered". */
+/** Where a sent email stands. Delivered wins; "Not Delivered" is bounced + failed (pending is still in flight). */
 type DeliveryStatus = "delivered" | "bounced" | "failed" | "pending";
 
 function deliveryStatus(e: Pick<EmailActivity, "deliveredAt" | "bouncedAt" | "failedAt">): DeliveryStatus {
@@ -65,6 +65,11 @@ function deliveryStatus(e: Pick<EmailActivity, "deliveredAt" | "bouncedAt" | "fa
   if (e.bouncedAt) return "bounced";
   if (e.failedAt) return "failed";
   return "pending";
+}
+
+function isNotDelivered(e: Pick<EmailActivity, "deliveredAt" | "bouncedAt" | "failedAt">): boolean {
+  const s = deliveryStatus(e);
+  return s === "bounced" || s === "failed";
 }
 
 // ── Data hook ─────────────────────────────────────────────────────────────────
@@ -102,16 +107,24 @@ function useEmailActivity() {
       // Resend message id. Cleared bounces are soft-deleted but keep their reason.
       // A failed read just means no reasons are shown.
       const reasonByMessage = new Map<string, string>();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- crm_email_bounces is newer than the generated types
-      const { data: bounces } = await (supabase as any)
-        .from("crm_email_bounces")
-        .select("source_message_id, bounce_message")
-        .not("bounce_message", "is", null)
-        .order("bounced_at", { ascending: false })
-        .limit(1000);
-      for (const b of (bounces ?? []) as { source_message_id: string | null; bounce_message: string }[]) {
-        if (b.source_message_id && !reasonByMessage.has(b.source_message_id)) {
-          reasonByMessage.set(b.source_message_id, b.bounce_message);
+      // Look up reasons for exactly the bounced messages on this list (in chunks to keep the
+      // request URL short). A blanket "newest 1000 bounces" read dropped the reason for any
+      // listed email whose bounce was older than that.
+      const bouncedMessageIds = ((data ?? []) as { resend_message_id: string | null; bounced_at: string | null }[])
+        .filter((r) => r.bounced_at && r.resend_message_id)
+        .map((r) => r.resend_message_id as string);
+      for (let i = 0; i < bouncedMessageIds.length; i += 100) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- crm_email_bounces is newer than the generated types
+        const { data: bounces } = await (supabase as any)
+          .from("crm_email_bounces")
+          .select("source_message_id, bounce_message")
+          .in("source_message_id", bouncedMessageIds.slice(i, i + 100))
+          .not("bounce_message", "is", null)
+          .order("bounced_at", { ascending: false });
+        for (const b of (bounces ?? []) as { source_message_id: string | null; bounce_message: string }[]) {
+          if (b.source_message_id && !reasonByMessage.has(b.source_message_id)) {
+            reasonByMessage.set(b.source_message_id, b.bounce_message);
+          }
         }
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -229,7 +242,8 @@ export function EmailActivityList() {
   const counts: Record<QuickFilter, number> = useMemo(() => ({
     all:           total,
     delivered:     deliveredCount,
-    not_delivered: total - deliveredCount,
+    // Failed + bounced only: a Pending email is still in flight, not a delivery failure.
+    not_delivered: emails.filter((e: EmailActivity) => isNotDelivered(e)).length,
     failed:        emails.filter((e: EmailActivity) => deliveryStatus(e) === "failed").length,
     bounced:       emails.filter((e: EmailActivity) => deliveryStatus(e) === "bounced").length,
     pending:       emails.filter((e: EmailActivity) => deliveryStatus(e) === "pending").length,
@@ -240,7 +254,7 @@ export function EmailActivityList() {
 
     // quick filter
     if (quickFilter === "delivered")     list = list.filter((e: EmailActivity) => e.deliveredAt !== null);
-    if (quickFilter === "not_delivered") list = list.filter((e: EmailActivity) => e.deliveredAt === null);
+    if (quickFilter === "not_delivered") list = list.filter((e: EmailActivity) => isNotDelivered(e));
     if (quickFilter === "failed" || quickFilter === "bounced" || quickFilter === "pending") {
       list = list.filter((e: EmailActivity) => deliveryStatus(e) === quickFilter);
     }

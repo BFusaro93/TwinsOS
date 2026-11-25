@@ -2573,7 +2573,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What do Delivered, Bounced, Failed and Pending mean on Email Activity?",
-        a: "The Delivery column shows Yes (confirmed delivered), Bounced (the mail server rejected it; hover the badge for the reason when one was reported), Failed (the email could not be sent and no further reason is recorded) or Pending (no delivery confirmation yet). The filter buttons above the list are All, Delivered, Not Delivered, Failed, Bounced and Pending; Not Delivered covers the last three.",
+        a: "The Delivery column shows Yes (confirmed delivered), Bounced (the mail server rejected it; hover the badge for the reason when one was reported), Failed (the email could not be sent and no further reason is recorded) or Pending (no delivery confirmation yet). The filter buttons above the list are All, Delivered, Not Delivered, Failed, Bounced and Pending; Not Delivered covers Bounced and Failed (a Pending email is still in flight, so it is not counted as not delivered).",
       },
       {
         q: "What can a crew login see about our clients?",

@@ -547,7 +547,11 @@ function AddTimeEntryDialog({
               className="h-9 w-full rounded-md border bg-background px-2 text-sm"
             >
               <option value="">Select an employee…</option>
-              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {people.filter((o) => o.name === p.name).length > 1 && p.crewName ? `${p.name} — ${p.crewName}` : p.name}
+                </option>
+              ))}
             </select>
           </div>
           <div>
