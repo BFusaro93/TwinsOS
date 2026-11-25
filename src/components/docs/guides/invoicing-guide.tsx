@@ -88,6 +88,12 @@ export function InvoicingGuide() {
             job-level override, then the service&apos;s own invoice description, then the plain service
             name.
             <br />
+            <strong>$0 visits still get an invoice.</strong> A visit on a service with no price set
+            (or a package with no monthly amount) still drafts an invoice, showing the service at
+            $0.00, so the customer has a record of the work. Only a visit covered by a contract skips
+            it. If a $0 invoice isn&apos;t what you want, set a Rate on the job&apos;s service or the
+            visit before completing it.
+            <br />
             <strong>Materials ride along too.</strong> Any Product on the job that a crew marked{" "}
             <strong>Used</strong> in the field (inventory decremented, but not yet billed) gets swept
             onto this same invoice as its own line and flipped to <strong>Invoiced</strong> so a later
