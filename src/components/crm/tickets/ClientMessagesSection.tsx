@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/utils";
+import { useRecordDraft } from "@/stores";
 import { useTicketMessages, useReplyToTicketClient } from "@/lib/hooks/use-ticket-messages";
 
 /**
@@ -15,14 +15,15 @@ import { useTicketMessages, useReplyToTicketClient } from "@/lib/hooks/use-ticke
 export function ClientMessagesSection({ ticketId, visibleToClient }: { ticketId: string; visibleToClient: boolean }) {
   const { data: messages = [], isLoading, error } = useTicketMessages(ticketId);
   const reply = useReplyToTicketClient(ticketId);
-  const [draft, setDraft] = useState("");
+  const { text: draft, setText: setDraft, clearSent, saved } = useRecordDraft("ticket_client_reply", ticketId);
 
   async function send() {
     const body = draft.trim();
     if (!body) return;
+    const sentDraft = draft;
     try {
       const res = await reply.mutateAsync(body);
-      setDraft("");
+      clearSent(sentDraft);
       toast.success(res.emailed ? "Reply sent — the client was emailed" : "Reply sent to the client's portal");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't send your reply");
@@ -82,6 +83,7 @@ export function ClientMessagesSection({ ticketId, visibleToClient }: { ticketId:
           placeholder="Reply to the client…"
           disabled={!visibleToClient}
         />
+        {saved && visibleToClient && <p className="text-[11px] text-muted-foreground" aria-live="polite">Draft saved</p>}
         <Button onClick={send} disabled={!visibleToClient || !draft.trim() || reply.isPending} className="self-end gap-2">
           {reply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           Send reply
