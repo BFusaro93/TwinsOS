@@ -1,6 +1,6 @@
 "use client";
 
-import { notesToPlainText } from "@/lib/utils/rich-notes";
+import { notesToPlainText, visitCrewNoteBlocks } from "@/lib/utils/rich-notes";
 import { stopPunchMismatch } from "@/lib/utils/punch-mismatch";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { LoadListDialog } from "@/components/crm/dispatch/LoadListDialog";
@@ -707,10 +707,17 @@ function formatSqft(n: number | null | undefined): string {
   return n != null ? n.toLocaleString() : "—";
 }
 
-function extraColCellText(key: ColKey, job: CRMJob | null | undefined): string {
+function extraColCellText(key: ColKey, job: CRMJob | null | undefined, visit?: CRMJobVisit): string {
   switch (key) {
     case "sales_rep":     return job?.salesRepName ?? "—";
-    case "notes_to_crew": return notesToPlainText(job?.propertyNotesToCrew ?? job?.notesToCrew) || "—";
+    // Same precedence as the note icon, the route sheet and the print view:
+    // this visit's note, then the job's, then the property's. It used to read
+    // only property ?? job, so a note typed on the visit (the icon showed it)
+    // left the column blank, and an empty property note masked a real job note.
+    case "notes_to_crew": {
+      const blocks = visitCrewNoteBlocks({ notesToCrew: visit?.notesToCrew, job });
+      return blocks.length ? blocks.join(" · ") : "—";
+    }
     case "gate_code":     return job?.propertyGateCode ?? "—";
     case "turf_sqft":     return formatSqft(job?.propertyTurfSqft);
     case "mulch_sqft":    return formatSqft(job?.propertyMulchBedSqft);
@@ -794,7 +801,7 @@ function exportCellValue(
         ? serviceIdsWithProducts.includes(visit.jobServiceId)
         : serviceIdsWithProducts.length > 0;
       const flags: string[] = [];
-      if (visit.notesToCrew ?? job?.notesToCrew) flags.push("Note");
+      if (visitCrewNoteBlocks(visit).length > 0) flags.push("Note");
       if (hasLinkedProduct) flags.push("Product");
       if (job?.callAhead && visit.clientPhone) flags.push("Call ahead");
       if (visit.jobComments.length > 0) {
@@ -808,7 +815,7 @@ function exportCellValue(
       // ones (sales rep, notes to crew, gate code) fall through as text.
       const numeric = extraColNumericValue(key, job);
       if (numeric != null) return numeric;
-      const text = extraColCellText(key, job);
+      const text = extraColCellText(key, job, visit);
       return text === "—" ? "" : text;
     }
   }
@@ -1753,7 +1760,7 @@ function JobDetailSheet({
                     const cnt = v === "job-notes" ? ((visit.notesToCrew ?? visit.job?.notesToCrew) ? 1 : 0)
                       : v === "job-comments" ? visit.jobComments.length
                       : 0;
-                    const labels = ["Job Notes","Job Comments","Notes to Client","Invoice Desc.","Audit"];
+                    const labels = ["Visit Notes to Crew","Job Comments","Notes to Client","Invoice Desc.","Audit"];
                     return (
                       <TabsTrigger
                         key={v}
@@ -1776,15 +1783,20 @@ function JobDetailSheet({
               <TabsContent value="job-notes" className="m-0 p-4 space-y-3">
                 {job?.notesToCrew && (
                   <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded px-2 py-1.5">
-                    <span className="font-semibold">Job note:</span> {notesToPlainText(job.notesToCrew)}
+                    <span className="font-semibold">Job notes to crew:</span> {notesToPlainText(job.notesToCrew)}
                   </p>
                 )}
                 <Textarea
                   value={notesToCrewInput}
                   onChange={(e) => setNotesToCrewInput(e.target.value)}
-                  placeholder="Instructions for the crew…"
+                  placeholder="Instructions for the crew on this visit…"
                   className="h-24 resize-none text-xs"
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Shown to the crew for this visit only, and in the Notes to Crew column. A standing note for every
+                  visit of the job is the amber &ldquo;Job notes to crew&rdquo; above (edit it on the job). Comments are the
+                  running log on the next tab.
+                </p>
                 <Button size="sm" className="h-7 text-xs" onClick={saveNotesToCrew} disabled={savingNotesToCrew}>
                   {savingNotesToCrew ? "Saving…" : "Save Notes"}
                 </Button>
@@ -2071,7 +2083,7 @@ function WriteInBlank({ className = "" }: { className?: string }) {
 }
 
 function crewNotesFor(v: CRMJobVisit): string {
-  return notesToPlainText(v.notesToCrew ?? v.job?.notesToCrew ?? v.job?.propertyNotesToCrew);
+  return visitCrewNoteBlocks(v).join("\n");
 }
 
 /** "1.5" -> "1 hrs / 30 mins", matching the SA route-sheet Est. format. */
@@ -3764,7 +3776,7 @@ function VisitRow({
     + COL_DEFS.filter((c) => isVisible(c.key)).length
     + EXTRA_COL_DEFS.filter((c) => isVisible(c.key)).length
     + customFieldDefs.filter((d) => isVisible(customColKey(d.id))).length;
-  const crewNoteBanner = notesToPlainText(visit.notesToCrew ?? visit.job?.notesToCrew) || null;
+  const crewNoteBanner = visitCrewNoteBlocks(visit).join("\n") || null;
 
   return (
     <>
@@ -3797,7 +3809,7 @@ function VisitRow({
           <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 dark:text-neutral-500 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
           {onRouteDraftChange && manualRouteMode ? (
             // Typing only records a draft — nothing reorders until the toolbar's
-            // Apply Route button is pressed, so numbers can be entered on every
+            // Save Order button is pressed, so numbers can be entered on every
             // job first. Enter hops to the next stop's box instead of applying.
             <input
               type="text"
@@ -3806,7 +3818,7 @@ function VisitRow({
               data-route-input=""
               value={routeDraft ?? String(orderNum)}
               aria-label={`Route number for ${visit.clientName ?? "this stop"}`}
-              title="Type this stop's route number, then press Apply Route"
+              title="Type this stop's route number, then press Save Order"
               className={cn(
                 "h-7 w-11 rounded border bg-background px-1 text-center text-xs font-medium tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:border-brand-400",
                 routeDraft !== undefined ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : "border-border"
@@ -4187,8 +4199,8 @@ function VisitRow({
         </td>
       )}
       {EXTRA_COL_DEFS.filter((d) => d.key !== "priority").map((d) => isVisible(d.key) && (
-        <td key={d.key} className="px-2 py-2 text-muted-foreground max-w-[160px] truncate" title={extraColCellText(d.key, job)}>
-          {extraColCellText(d.key, job)}
+        <td key={d.key} className="px-2 py-2 text-muted-foreground max-w-[160px] truncate" title={extraColCellText(d.key, job, visit)}>
+          {extraColCellText(d.key, job, visit)}
         </td>
       ))}
       {customFieldDefs.map((def) => {
@@ -4207,6 +4219,16 @@ function VisitRow({
         (see the Job Notes tab) and would clog up the board; the sticky-note
         icon above with its tooltip is the only on-board indicator. Job
         Comments (short scheduling remarks) still get the full banner below. */}
+    {/* Skip / cancel reason — same orange sub-bar as a comment, so why a stop
+        was skipped is visible on the board without opening the slideover. */}
+    {(visit.status === "skipped" || visit.status === "cancelled") && visit.skipReason?.trim() && (
+      <tr className="border-b border-slate-100 dark:border-neutral-800 bg-orange-50/70 dark:bg-orange-950/40">
+        <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-600 dark:text-neutral-400">
+          <span className="font-semibold text-orange-700 dark:text-orange-400 capitalize">{visit.status}:</span>{" "}
+          <span className="font-medium text-muted-foreground">{visit.skipReason.trim()}</span>
+        </td>
+      </tr>
+    )}
     {visit.jobComments.map((c) => (
       <tr key={c.id} className="border-b border-slate-100 dark:border-neutral-800 bg-orange-50/70 dark:bg-orange-950/40">
         <td colSpan={totalCols} className="px-3 py-1.5 text-[11px] text-slate-600 dark:text-neutral-400">
@@ -5356,23 +5378,25 @@ export function DispatchBoard() {
     if (Number.isFinite(n) && n >= 1 && visitById.has(id)) draftNumbers.set(id, n);
   }
 
-  /** Reorder every crew's stops by the numbers typed so far, in one go. */
-  function handleApplyRouteNumbers() {
+  /** Reorder every crew's stops by the numbers typed so far and save it in one step. */
+  async function handleApplyRouteNumbers() {
     if (draftNumbers.size === 0) return;
     if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
     const cur = manualOrder ?? routeVisits.map((v) => v.id);
     const { order, crewsWithDuplicates } = applyRouteNumbers(cur, crewKeyOf, draftNumbers);
-    setManualOrder(order);
-    setRouteDrafts({});
-    if (optimizedOrder) { setOptimizedOrder(null); setDriveTimeMap(new Map()); setTotalDriveMins(null); }
     if (crewsWithDuplicates.length > 0) {
-      toast.warning("Route applied. Two stops on a crew shared a number, so they kept their previous order — check the numbering, then Save Order.");
-    } else {
-      toast.success("Route applied — press Save Order to keep it.");
+      // Ambiguous numbering: show the result as an unsaved draft so it can be
+      // checked and fixed, rather than persisting a guess.
+      setManualOrder(order);
+      setRouteDrafts({});
+      if (optimizedOrder) { setOptimizedOrder(null); setDriveTimeMap(new Map()); setTotalDriveMins(null); }
+      toast.warning("Two stops on a crew shared a number, so they kept their previous order. Check the numbering, then press Save Order.");
+      return;
     }
+    await handleSaveOrder(order);
   }
 
-  async function handleSaveOrder() {
+  async function handleSaveOrder(orderOverride?: string[]) {
     if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
     // Only ever save ids that belong to the visit set currently loaded for
     // this date/range. clearPendingOrder() should already have dropped a
@@ -5382,7 +5406,7 @@ export function DispatchBoard() {
     // against that date's weekday, and push a real visit off the end of the
     // list so it kept a now-colliding priority.
     const loadedIds = new Set(allVisits.map((v) => v.id));
-    const changedOrder = (manualOrder ?? routeVisits.map((v) => v.id)).filter((id) => loadedIds.has(id));
+    const changedOrder = (orderOverride ?? manualOrder ?? routeVisits.map((v) => v.id)).filter((id) => loadedIds.has(id));
     if (changedOrder.length === 0) {
       toast.error("Nothing to save — the visits this order applied to are no longer on the board.");
       setManualOrder(null);
@@ -5577,7 +5601,7 @@ export function DispatchBoard() {
 
     const rows: unknown[][] = displayVisits.map((v, i) => {
       const job = v.job;
-      const jobNotes = notesToPlainText(v.notesToCrew ?? job?.notesToCrew);
+      const jobNotes = visitCrewNoteBlocks(v).join("\n");
       const comments = v.jobComments
         .map((c) => `${c.text} — ${c.authorName}, ${new Date(c.createdAt).toLocaleDateString()}`)
         .join("\n");
@@ -5806,17 +5830,17 @@ export function DispatchBoard() {
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-y border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-4 py-2 shrink-0">
           <p className="text-xs font-medium text-brand-700 dark:text-brand-400">
             {draftNumbers.size > 0
-              ? `${draftNumbers.size} route ${draftNumbers.size === 1 ? "number" : "numbers"} entered — press Apply Route to reorder the stops.`
+              ? `${draftNumbers.size} route ${draftNumbers.size === 1 ? "number" : "numbers"} entered — press Save Order to reorder and save them.`
               : manualOrder ? "Order changed — not yet saved." : "Route optimized — not yet saved."}
           </p>
           <div className="flex items-center gap-2">
             {draftNumbers.size > 0 ? (
-              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleApplyRouteNumbers} disabled={multiDay} title={multiDay ? MULTI_DAY_ROUTE_TIP : undefined}>
+              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={() => void handleApplyRouteNumbers()} disabled={multiDay} title={multiDay ? MULTI_DAY_ROUTE_TIP : undefined}>
                 <Route className="h-3.5 w-3.5" />
-                Apply Route
+                Save Order
               </Button>
             ) : (
-              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder} disabled={multiDay} title={multiDay ? MULTI_DAY_ROUTE_TIP : undefined}>
+              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={() => void handleSaveOrder()} disabled={multiDay} title={multiDay ? MULTI_DAY_ROUTE_TIP : undefined}>
                 Save Order
               </Button>
             )}
@@ -6027,7 +6051,7 @@ export function DispatchBoard() {
             className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", manualRouteMode && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
             onClick={() => { setManualRouteMode((m) => !m); setRouteDrafts({}); }}
             disabled={multiDay}
-            title={multiDay ? MULTI_DAY_ROUTE_TIP : "Enable drag-and-drop and manual # entry — type a number on each stop, then press Apply Route"}
+            title={multiDay ? MULTI_DAY_ROUTE_TIP : "Enable drag-and-drop and manual # entry — type a number on each stop, then press Save Order"}
           >
             <GripVertical className="h-3.5 w-3.5" />
             Manual Route
@@ -6058,238 +6082,24 @@ export function DispatchBoard() {
           search box shrink, so keep it on one line there rather than wrapping
           Columns onto a second row. */}
       <div className="bg-[#4a4a4a] px-4 py-2 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 shrink-0">
-        {/* Refresh — far left */}
-        <button
-          onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
-          disabled={isLoading}
-          title="Refresh"
-          className="h-7 w-7 max-lg:h-9 max-lg:w-9 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-neutral-200 hover:text-white transition-colors shrink-0"
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
-        </button>
-
-        {/* Saved screen views — named snapshots of the filters below */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors max-w-[160px]">
-              <Bookmark className="h-3 w-3 shrink-0" />
-              <span className="truncate">{activeView ? activeView.name : "Saved views"}</span>
-              <ChevronDown className="h-2.5 w-2.5 opacity-60 shrink-0" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-1" align="start">
-            {savedViews.length === 0 && (
-              <p className="px-2 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">No saved views yet</p>
-            )}
-            {savedViews.map((v) => (
-              <div
-                key={v.id}
-                className={cn(
-                  "group flex items-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60",
-                  v.id === activeViewId && "font-semibold bg-slate-50 dark:bg-muted/40"
-                )}
-              >
-                <button type="button" className="flex-1 truncate text-left" onClick={() => applySavedView(v)}>{v.name}</button>
-                <button
-                  type="button"
-                  title="Delete view"
-                  className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
-                  onClick={() => void handleDeleteView(v)}
-                >
-                  <XIcon className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-            <div className="my-1 border-t" />
-            {activeView && (
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
-                disabled={updateSavedView.isPending}
-                onClick={() => void handleUpdateView()}
-              >
-                <RefreshCw className="h-3 w-3 text-slate-400" />
-                Update &ldquo;{activeView.name}&rdquo; with current filters
-              </button>
-            )}
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
-              onClick={() => { setSaveViewName(""); setSaveViewOpen(true); }}
-            >
-              <Plus className="h-3 w-3 text-slate-400" />
-              Save current as view…
-            </button>
-            {activeView && (
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
-                onClick={() => setActiveViewId(null)}
-              >
-                <XIcon className="h-3 w-3 text-slate-400" />
-                Deselect view
-              </button>
-            )}
-          </PopoverContent>
-        </Popover>
-
-        {/* Status filter tabs */}
-        <div className="flex items-center max-lg:max-w-full max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:[&>*]:shrink-0 max-lg:[&>*]:whitespace-nowrap">
-          {FILTER_TABS.map((t) => {
-            const cnt = t.value === "all"
-              ? allVisits.filter((v) => v.status !== "cancelled").length
-              : allVisits.filter((v) => v.status === t.value).length;
-            return (
-              <button
-                key={t.value}
-                onClick={() => setStatusFilter(t.value)}
-                className={cn(
-                  "px-2.5 py-1 max-lg:py-2.5 text-[10px] font-medium rounded transition-colors",
-                  statusFilter === t.value
-                    ? "bg-card text-slate-800 dark:text-neutral-100"
-                    : "text-neutral-200 hover:text-white"
-                )}
-              >
-                {t.label}
-                {cnt > 0 && (
-                  <span className={cn(
-                    "ml-1 rounded-full px-1 text-[9px]",
-                    statusFilter === t.value ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-slate-600 text-slate-300 dm-fixed-dark"
-                  )}>
-                    {cnt}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Multi-crew filter */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
-              <Users className="h-3 w-3" />
-              {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
-              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-48 p-1" align="start">
-            <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>
-              All Crews
-            </FilterOptionRow>
-            <FilterOptionRow
-              checked={crewFilters.includes(NO_CREW)}
-              onToggle={() => setCrewFilters((prev) => prev.includes(NO_CREW) ? prev.filter((x) => x !== NO_CREW) : [...prev, NO_CREW])}
-            >
-              Unassigned
-            </FilterOptionRow>
-            {(crews ?? []).map((c) => (
-              <FilterOptionRow
-                key={c.id}
-                checked={crewFilters.includes(c.id)}
-                onToggle={() => setCrewFilters((prev) =>
-                  prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
-                )}
-              >
-                {c.name}
-              </FilterOptionRow>
-            ))}
-          </PopoverContent>
-        </Popover>
-
-        {/* Tag filter — client tags, "is any of" (OR) */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
-              <Tag className="h-3 w-3" />
-              {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
-              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-48 p-1 max-h-72 overflow-y-auto" align="start">
-            <FilterOptionRow checked={tagFilters.length === 0} onToggle={() => setTagFilters([])}>
-              All Tags
-            </FilterOptionRow>
-            {orgTags.length === 0 && (
-              <p className="px-2 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">No client tags yet</p>
-            )}
-            {orgTags.map((tag) => (
-              <FilterOptionRow
-                key={tag}
-                checked={tagFilters.includes(tag)}
-                onToggle={() => setTagFilters((prev) =>
-                  prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]
-                )}
-              >
-                <span className="truncate">{tag}</span>
-              </FilterOptionRow>
-            ))}
-          </PopoverContent>
-        </Popover>
-
-        {/* Priority filter — covers both the new high-priority job/visit flag
-            and the existing client priority (Low/Normal/High); any match shows. */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
-              <Flame className="h-3 w-3" />
-              {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
-              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-52 p-1" align="start">
-            <FilterOptionRow checked={priorityFilters.length === 0} onToggle={() => setPriorityFilters([])}>
-              All Priorities
-            </FilterOptionRow>
-            <div className="my-1 border-t" />
-            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Job</p>
-            {PRIORITY_FILTER_JOB_OPTIONS.map((o) => (
-              <FilterOptionRow
-                key={o.value}
-                checked={priorityFilters.includes(o.value)}
-                onToggle={() => setPriorityFilters((prev) =>
-                  prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
-                )}
-              >
-                {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500 dark:text-red-400" />}
-                {o.label}
-              </FilterOptionRow>
-            ))}
-            <div className="my-1 border-t" />
-            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Client</p>
-            {PRIORITY_FILTER_CLIENT_OPTIONS.map((o) => (
-              <FilterOptionRow
-                key={o.value}
-                checked={priorityFilters.includes(o.value)}
-                onToggle={() => setPriorityFilters((prev) =>
-                  prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
-                )}
-              >
-                {o.label}
-              </FilterOptionRow>
-            ))}
-          </PopoverContent>
-        </Popover>
-
-        {/* Chemical Tracking — day close-out wizard, only shown when relevant */}
-        {hasChemicalVisits && can("chem_add_edit_usage") && (
-          <button
-            onClick={() => setChemicalWizardOpen(true)}
-            title="Chemical Tracking"
-            className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-teal-300 hover:text-teal-100 transition-colors"
-          >
-            <FlaskConical className="h-3 w-3" />
-            Chemical Tracking
-          </button>
-        )}
-
-        {/* Actions — visible when rows selected */}
-        {selectedIds.size > 0 && (
+        {/* Actions — first button in the bar, so it sits next to the row
+            checkboxes it acts on. Always rendered; disabled grey until rows are
+            selected, then green. */}
+        {(
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-brand-600 border border-brand-500 px-2.5 text-[10px] text-white hover:bg-brand-700 transition-colors font-medium">
+              <button
+                disabled={selectedIds.size === 0}
+                title={selectedIds.size === 0 ? "Select rows to act on them" : undefined}
+                className={cn(
+                  "h-7 max-lg:h-9 flex items-center gap-1.5 rounded border px-2.5 text-[10px] font-medium transition-colors shrink-0",
+                  selectedIds.size === 0
+                    ? "bg-[#5a5a5a] border-[#6a6a6a] text-neutral-400 cursor-not-allowed"
+                    : "bg-brand-600 border-brand-500 text-white hover:bg-brand-700"
+                )}
+              >
                 <ListChecks className="h-3 w-3" />
-                Actions ({selectedIds.size})
+                {selectedIds.size === 0 ? "Actions" : `Actions (${selectedIds.size})`}
                 <ChevronDown className="h-2.5 w-2.5 opacity-80" />
               </button>
             </DropdownMenuTrigger>
@@ -6515,6 +6325,232 @@ export function DispatchBoard() {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+
+        {/* Refresh */}
+        <button
+          onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
+          disabled={isLoading}
+          title="Refresh"
+          className="h-7 w-7 max-lg:h-9 max-lg:w-9 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-neutral-200 hover:text-white transition-colors shrink-0"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
+        </button>
+
+        {/* Saved screen views — named snapshots of the filters below */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors max-w-[160px]">
+              <Bookmark className="h-3 w-3 shrink-0" />
+              <span className="truncate">{activeView ? activeView.name : "Saved views"}</span>
+              <ChevronDown className="h-2.5 w-2.5 opacity-60 shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-1" align="start">
+            {savedViews.length === 0 && (
+              <p className="px-2 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">No saved views yet</p>
+            )}
+            {savedViews.map((v) => (
+              <div
+                key={v.id}
+                className={cn(
+                  "group flex items-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60",
+                  v.id === activeViewId && "font-semibold bg-slate-50 dark:bg-muted/40"
+                )}
+              >
+                <button type="button" className="flex-1 truncate text-left" onClick={() => applySavedView(v)}>{v.name}</button>
+                <button
+                  type="button"
+                  title="Delete view"
+                  className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                  onClick={() => void handleDeleteView(v)}
+                >
+                  <XIcon className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            <div className="my-1 border-t" />
+            {activeView && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
+                disabled={updateSavedView.isPending}
+                onClick={() => void handleUpdateView()}
+              >
+                <RefreshCw className="h-3 w-3 text-slate-400" />
+                Update &ldquo;{activeView.name}&rdquo; with current filters
+              </button>
+            )}
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
+              onClick={() => { setSaveViewName(""); setSaveViewOpen(true); }}
+            >
+              <Plus className="h-3 w-3 text-slate-400" />
+              Save current as view…
+            </button>
+            {activeView && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
+                onClick={() => setActiveViewId(null)}
+              >
+                <XIcon className="h-3 w-3 text-slate-400" />
+                Deselect view
+              </button>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        {/* Status filter tabs */}
+        <div className="flex items-center max-lg:max-w-full max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:[&>*]:shrink-0 max-lg:[&>*]:whitespace-nowrap">
+          {FILTER_TABS.map((t) => {
+            const cnt = t.value === "all"
+              ? allVisits.filter((v) => v.status !== "cancelled").length
+              : allVisits.filter((v) => v.status === t.value).length;
+            return (
+              <button
+                key={t.value}
+                onClick={() => setStatusFilter(t.value)}
+                className={cn(
+                  "px-2.5 py-1 max-lg:py-2.5 text-[10px] font-medium rounded transition-colors",
+                  statusFilter === t.value
+                    ? "bg-card text-slate-800 dark:text-neutral-100"
+                    : "text-neutral-200 hover:text-white"
+                )}
+              >
+                {t.label}
+                {cnt > 0 && (
+                  <span className={cn(
+                    "ml-1 rounded-full px-1 text-[9px]",
+                    statusFilter === t.value ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-slate-600 text-slate-300 dm-fixed-dark"
+                  )}>
+                    {cnt}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Multi-crew filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
+              <Users className="h-3 w-3" />
+              {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
+              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-1" align="start">
+            <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>
+              All Crews
+            </FilterOptionRow>
+            <FilterOptionRow
+              checked={crewFilters.includes(NO_CREW)}
+              onToggle={() => setCrewFilters((prev) => prev.includes(NO_CREW) ? prev.filter((x) => x !== NO_CREW) : [...prev, NO_CREW])}
+            >
+              Unassigned
+            </FilterOptionRow>
+            {(crews ?? []).map((c) => (
+              <FilterOptionRow
+                key={c.id}
+                checked={crewFilters.includes(c.id)}
+                onToggle={() => setCrewFilters((prev) =>
+                  prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                )}
+              >
+                {c.name}
+              </FilterOptionRow>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* Tag filter — client tags, "is any of" (OR) */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
+              <Tag className="h-3 w-3" />
+              {tagFilters.length === 0 ? "All Tags" : `${tagFilters.length} Tag${tagFilters.length > 1 ? "s" : ""}`}
+              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-1 max-h-72 overflow-y-auto" align="start">
+            <FilterOptionRow checked={tagFilters.length === 0} onToggle={() => setTagFilters([])}>
+              All Tags
+            </FilterOptionRow>
+            {orgTags.length === 0 && (
+              <p className="px-2 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">No client tags yet</p>
+            )}
+            {orgTags.map((tag) => (
+              <FilterOptionRow
+                key={tag}
+                checked={tagFilters.includes(tag)}
+                onToggle={() => setTagFilters((prev) =>
+                  prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]
+                )}
+              >
+                <span className="truncate">{tag}</span>
+              </FilterOptionRow>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* Priority filter — covers both the new high-priority job/visit flag
+            and the existing client priority (Low/Normal/High); any match shows. */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-neutral-200 hover:text-white transition-colors">
+              <Flame className="h-3 w-3" />
+              {priorityFilters.length === 0 ? "All Priorities" : `${priorityFilters.length} Priority${priorityFilters.length > 1 ? "s" : ""}`}
+              <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-52 p-1" align="start">
+            <FilterOptionRow checked={priorityFilters.length === 0} onToggle={() => setPriorityFilters([])}>
+              All Priorities
+            </FilterOptionRow>
+            <div className="my-1 border-t" />
+            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Job</p>
+            {PRIORITY_FILTER_JOB_OPTIONS.map((o) => (
+              <FilterOptionRow
+                key={o.value}
+                checked={priorityFilters.includes(o.value)}
+                onToggle={() => setPriorityFilters((prev) =>
+                  prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
+                )}
+              >
+                {o.value === "job_high" && <Flame className="h-3 w-3 text-red-500 dark:text-red-400" />}
+                {o.label}
+              </FilterOptionRow>
+            ))}
+            <div className="my-1 border-t" />
+            <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Client</p>
+            {PRIORITY_FILTER_CLIENT_OPTIONS.map((o) => (
+              <FilterOptionRow
+                key={o.value}
+                checked={priorityFilters.includes(o.value)}
+                onToggle={() => setPriorityFilters((prev) =>
+                  prev.includes(o.value) ? prev.filter((x) => x !== o.value) : [...prev, o.value]
+                )}
+              >
+                {o.label}
+              </FilterOptionRow>
+            ))}
+          </PopoverContent>
+        </Popover>
+
+        {/* Chemical Tracking — day close-out wizard, only shown when relevant */}
+        {hasChemicalVisits && can("chem_add_edit_usage") && (
+          <button
+            onClick={() => setChemicalWizardOpen(true)}
+            title="Chemical Tracking"
+            className="h-7 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-teal-300 hover:text-teal-100 transition-colors"
+          >
+            <FlaskConical className="h-3 w-3" />
+            Chemical Tracking
+          </button>
+        )}
+
 
         {/* Search */}
         <SearchInput

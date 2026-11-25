@@ -31,3 +31,23 @@ export function notesToPlainText(value: string | null | undefined): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/**
+ * Every distinct crew note that applies to a visit, as plain text: the visit's
+ * own note, the job's, and the property's standing note. Visit notes are often
+ * a composed copy of the job note plus a service note, so a note already
+ * contained in another is dropped rather than shown twice. This matches what
+ * the crew app shows for a stop, so the board and the printed route sheet no
+ * longer hide the property note ("dog loose") whenever a visit or job has one.
+ */
+export function visitCrewNoteBlocks(v: {
+  notesToCrew?: string | null;
+  job?: { notesToCrew?: string | null; propertyNotesToCrew?: string | null } | null;
+}): string[] {
+  const texts: string[] = [];
+  for (const raw of [v.notesToCrew, v.job?.notesToCrew, v.job?.propertyNotesToCrew]) {
+    const t = notesToPlainText(raw).trim();
+    if (t && !texts.includes(t)) texts.push(t);
+  }
+  return texts.filter((t) => !texts.some((u) => u !== t && u.includes(t)));
+}
