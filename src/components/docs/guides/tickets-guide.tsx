@@ -279,6 +279,11 @@ export function TicketsGuide() {
           company&apos;s calendar day, so a ticket logged in the evening lands on the day your staff
           saw it. The Calls list has the same Created and Due Date range filters.
         </p>
+        <p>
+          <strong>Sorting.</strong> Click a column header (number, Status, Priority, Client, Subject,
+          Category, Assignment, Due Date, Last Updated) to sort A to Z, and again for Z to A. Priority
+          sorts by urgency, not alphabetically, and blank cells always sink to the bottom.
+        </p>
       </Section>
 
       <Section id="detail-sheet" title="The ticket detail sheet">
@@ -287,7 +292,7 @@ export function TicketsGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li><strong>Details</strong> — status flow buttons, the client/category/assignee/dates meta grid, body text, and a Linked Records picker that can attach the ticket to an Estimate, Invoice, Job, Project or Damage Case (estimates, invoices and jobs must belong to the same client).</li>
-          <li><strong>Comments &amp; Messages</strong> — two sections. <em>Internal comments</em> (staff only) use the shared <code>CommentsSection</code> (<code>recordType=&quot;ticket&quot;</code>). <em>Messages with the client</em> is the conversation the client sees in their portal: their replies (with photos) and yours. A staff reply emails the client; a client reply reopens a closed ticket and notifies the assignee. The ticket must have <em>Show in client portal</em> on.</li>
+          <li><strong>Comments &amp; Messages</strong> — two sections. <em>Internal comments</em> (staff only) use the shared <code>CommentsSection</code> (<code>recordType=&quot;ticket&quot;</code>). <em>Messages with the client</em> is the conversation the client sees in their portal: their replies (with photos) and yours. A staff reply emails the client; a client reply reopens a closed ticket and notifies the assignee. The ticket must have <em>Show in client portal</em> on. Typing <strong>@</strong> in an internal comment lists the people you can mention (a scrollable list, best name matches first); deactivated users and the shared crew logins are left out.</li>
           <li><strong>Files</strong> — attachments via the shared <code>AttachmentsSection</code>.</li>
           <li><strong>Contributors</strong> — additional staff CC&apos;d on the ticket as participants, distinct from the single assignee. They get a notification when added and on every new comment (never for their own actions). Managed by <code>use-ticket-contributors.ts</code>.</li>
           <li><strong>Audit Trail</strong> — the shared <code>AuditTrailTab</code> change history: edits to the ticket itself (status, assignee, priority, client link, portal visibility, delete/restore) plus one-line events for the conversation — an internal comment added, edited or deleted, a client message received or sent, and an email sent (with the recipient). The message text itself is never copied here; read it on the Comments &amp; Messages and Emails tabs.</li>
@@ -305,7 +310,9 @@ export function TicketsGuide() {
           (trash) buttons sit together on the right edge. The tab bar (Details, Comments &amp;
           Messages, Emails, Files, Contributors, Audit Trail) is sized to fit the panel without
           scrolling sideways on a normal desktop screen. <strong>PDF</strong> opens a print-formatted view in a new
-          window — all ticket fields are HTML-escaped before being written into that window, since
+          window (status and priority pills at the top, a Ticket card and a Client card with the client&apos;s
+          type, source, phone, email and address, then the notes, contributors and internal comments;
+          @-mentions print as plain names, and the browser&apos;s own date and page footer are left off) — all ticket fields are HTML-escaped before being written into that window, since
           subject/body/names can originate from an unsanitized public form submission.
         </p>
       </Section>

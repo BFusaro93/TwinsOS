@@ -158,6 +158,14 @@ export function ProductCatalogGuide() {
           product can have only one <strong>Default rate</strong>.
         </p>
         <p>
+          <strong>Chemical Tracking lists.</strong> <strong>Settings &gt; Chemical Tracking</strong> holds
+          the lists the rates and application records pick from: Application Methods, Targets, Volume
+          Units, Area Units and Areas Treated. Each header shows how many items it holds. The switch turns
+          an item off without removing it, the pencil renames it, and the X deletes it. An item already
+          used by a rate, an application or a setting can&apos;t be deleted (turn it off instead). Area
+          units can&apos;t be renamed, because the name carries the scale (1,000 Sq Ft, 100 Linear Ft).
+        </p>
+        <p>
           <strong>Estimated amounts.</strong> With <strong>Settings &gt; Chemical Tracking &gt;
           Default Chemical Quantity</strong> on and a <strong>Default Area Measurement</strong> chosen
           (for example Turf Sq. Ft.), the planned amount is the product&apos;s default Application

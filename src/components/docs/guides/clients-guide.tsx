@@ -101,6 +101,19 @@ export function ClientsGuide() {
             cleared afterwards.
           </li>
           <li>
+            <strong>Email typo check.</strong> When you save a client, lead or billing email that looks
+            like a common slip (<em>.con</em> or <em>.om</em> for .com, <em>gmial.com</em>,{" "}
+            <em>hotmial.com</em> and the like), a warning offers the corrected address instead of
+            saving. Fix it, or save again to keep the address exactly as typed; it warns once per
+            address per session. An address that is structurally invalid is still refused outright.
+          </li>
+          <li>
+            <strong>From anywhere.</strong> The round <strong>+</strong> (Quick Add) menu at the top has{" "}
+            <strong>Client / Lead</strong>, which opens the same New Client dialog from any page and,
+            once created, takes you to the new client&apos;s record. My Day&apos;s Quick Actions open the
+            same quick-add dialogs rather than just jumping to a list.
+          </li>
+          <li>
             <strong>Duplicate warning.</strong> If the email or phone you entered is already on
             another client or lead (email ignoring case and spaces, phone by its digits), New Client
             and New Lead list the matching accounts, with links, instead of creating. Open a match
@@ -192,11 +205,18 @@ export function ClientsGuide() {
         <Callout>
           <strong>Picking a client elsewhere.</strong> Client pickers on invoices, estimates, jobs,
           contracts, payments, tickets, projects and the global search (⌘K) search as you type and
-          show up to 50 matches. If the client you want isn&apos;t listed, keep typing: a few
+          show up to 50 matches, with parent and stand-alone accounts listed before sub-accounts so a
+          parent isn&apos;t pushed out by dozens of its own sub-accounts. If the client you want isn&apos;t listed, keep typing: a few
           letters of the name, an account number or part of the address narrows it down. The
           global search also looks up invoices (by number or client name) and estimates (by number,
           client name or description) as you type, up to 20 of each; a draft invoice with no number
-          yet shows as &quot;Draft invoice&quot;. Groups your role can&apos;t view aren&apos;t searched.
+          yet shows as &quot;Draft invoice&quot;. It also finds tickets (by number, subject or client name) for
+          logins that can view tickets. The search&apos;s <strong>Recent</strong> list is kept in your browser
+          and drops anything that has since been deleted, so it never opens a dead record. Groups your
+          role can&apos;t view aren&apos;t searched. Opened with nothing typed,
+          the global search shows a <strong>Recent</strong> list of the last few clients, leads,
+          invoices and estimates you opened or picked from search (kept in this browser only, per login, and
+          limited to the record types your role can view).
         </Callout>
       </Section>
 
@@ -240,6 +260,14 @@ export function ClientsGuide() {
           Lists, or <strong>Other</strong> (which reveals a free-text field) — and that reason is
           kept on the record permanently for churn reporting. To bring a cancelled client back, use{" "}
           <strong>More → Activate Client</strong>.
+        </p>
+        <p>
+          <strong>Editing your lists.</strong> Cancellation reasons, client sources, ticket categories,
+          contact types, estimate won and lost reasons, service categories and tags always show A to Z,
+          in Settings and in every dropdown that uses them. The pencil beside an item renames it, and
+          existing records follow the new name. The built-in Uncategorized and Upsell ticket categories
+          can&apos;t be renamed. Automations and forms that quote the old name as text aren&apos;t
+          rewritten, so update those by hand.
         </p>
         <p>
           <strong>Leads are closed as Lost, not cancelled.</strong> On a lead the More menu says{" "}
@@ -342,8 +370,9 @@ export function ClientsGuide() {
           of listing choices, since that would make the hierarchy two levels deep.
         </p>
         <p>
-          The parent&apos;s detail page shows a <strong>Sub-Accounts</strong> banner listing every
-          child and a combined balance figure. That balance is the parent&apos;s own outstanding
+          The parent&apos;s detail page shows a <strong>Sub-Accounts</strong> banner listing the first
+          six children (click <strong>Show all</strong> to expand the full list, with a name or city
+          filter once there are more than six) and a combined balance figure. That balance is the parent&apos;s own outstanding
           balance <em>plus</em> the sum of every child&apos;s outstanding balance — not just the
           children&apos;s total — so the number on the banner always reflects everything owed across
           the whole account family, including the parent record itself if it carries its own charges.

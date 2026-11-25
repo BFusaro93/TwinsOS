@@ -263,7 +263,8 @@ export function SnowGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Status tabs and filters.</strong> Tabs for All, Scheduled, Dispatched, In
-            Progress, Completed, Skipped and Cancelled (each with a count), a multi-select{" "}
+            Progress, Completed, Skipped and Cancelled (each with a count; All leaves out cancelled
+            stops, so use the Cancelled tab to see them), a multi-select{" "}
             <strong>crew filter</strong> that includes <strong>Unassigned</strong>, and a{" "}
             <strong>search</strong> box that matches client, service, address, city, state, zip,
             notes and crew, plus a <strong>Priority</strong> filter. Above the dark bar, like the

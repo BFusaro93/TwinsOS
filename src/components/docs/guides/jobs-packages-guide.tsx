@@ -159,6 +159,9 @@ export function JobsPackagesGuide() {
             text box that only accepts wording the system can read (&ldquo;Weekly Monday&rdquo;,
             &ldquo;Bi-weekly Thursday even&rdquo;, &ldquo;Every 3 weeks Tuesday&rdquo;); anything else is
             refused with a pointer to Settings → Schedules, because it would save a job that never gets visits.
+            Open a saved schedule and its <strong>Customers</strong> tab lists every customer with a
+            live job on it (jobs not completed or cancelled), with their services and address, a
+            filter box and an <strong>Export CSV</strong> button.
           </li>
           <li>
             <strong>Package</strong> — pick the package program and a Start Date. Each step&apos;s date
@@ -355,6 +358,15 @@ export function JobsPackagesGuide() {
           <strong>Needs Attention</strong> on the Active tab instead: reschedule it, or cancel the
           job. A cancelled or on-hold job always shows <strong>Cancelled</strong> or{" "}
           <strong>On Hold</strong>, whatever its visits say.
+        </p>
+        <p>
+          <strong>Columns.</strong> The list shows Client, Address, City, Zip, Services, Type, Crew,
+          Revenue and Status. Use the column chooser at the right of the toolbar to switch columns on or
+          off (State is off by default, and Client is always shown); your choice is remembered. Switch
+          Address off and the street address sits beside the client name instead. Address, City and Zip
+          use the same fallback as the Dispatch Board: the job&apos;s own address, then the
+          property&apos;s, then the client&apos;s service address, and the billing address only as a last
+          resort, so they are not left blank for jobs that have no address of their own.
         </p>
         <Callout>
           To see overdue work, widen <strong>From</strong> back past the oldest date you care about.
@@ -766,6 +778,13 @@ export function JobsPackagesGuide() {
             nothing is renamed and you&apos;re told why. A schedule that active jobs still use can&apos;t be
             deleted: the Delete dialog shows how many jobs use it — move them to another schedule
             first, or switch the schedule off instead.
+          </li>
+          <li>
+            <strong>Who is on a schedule.</strong> Open an existing schedule and its{" "}
+            <strong>Customers</strong> tab lists every customer with an active job on it (completed and
+            cancelled jobs are left out): job number, services, address, city and zip, with a filter box
+            and an <strong>Export CSV</strong> button. A job with no address of its own shows its
+            property&apos;s address, then the client&apos;s service address, then the billing address.
           </li>
           <li>
             <strong>Removing one weekday&apos;s visits.</strong> On a job&apos;s Visits tab,{" "}

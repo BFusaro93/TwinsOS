@@ -71,7 +71,10 @@ export function EstimatingGuide() {
           header counts what is showing (&ldquo;X of N estimates&rdquo; while filtered). The{" "}
           <strong>Won / Lost Reason</strong> column shows the reason given when an estimate was
           closed, and the estimate&apos;s header carries a &ldquo;Won reason&rdquo; or &ldquo;Lost
-          reason&rdquo; badge.
+          reason&rdquo; badge. Click any column header to sort the list by it (number, stage, client,
+          description, dates, sales rep, reason, probability, income, gross profit or margin) and click
+          again to reverse; without a sort it shows newest first. Clicking the empty space in a row&apos;s
+          client cell opens the estimate, and only the client&apos;s name link opens the client.
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
@@ -491,7 +494,9 @@ export function EstimatingGuide() {
             quantity is what one visit uses, and the line&rsquo;s equipment cost is that times the
             line&rsquo;s visits (a $40 mower on a 6-visit line costs $240). On each equipment row the bold
             amount is the <strong>charge per visit</strong> (what the line price should cover); the cost and
-            margin sit beside it in lighter text. See <em>Equipment costs</em> in the Services &amp; Pricing
+            margin sit beside it in lighter text. The editable rate box on the row is the{" "}
+            <strong>charge $</strong> rate, with the catalog <strong>cost</strong> rate shown beside it
+            read-only, so change the charge there to change the price the line needs to cover. See <em>Equipment costs</em> in the Services &amp; Pricing
             guide.
           </li>
           <li>
