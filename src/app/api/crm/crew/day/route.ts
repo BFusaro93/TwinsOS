@@ -155,6 +155,19 @@ export async function POST(request: Request) {
     // Lunch between jobs (a job's own break is "Take a Break" on the stop). Recorded on each working
     // member's shift; payroll deducts it separately from min off.
     if (action === "start_lunch") {
+      // The crew tablet disables Start Lunch while a job runs; enforce it here too so a
+      // stale tab / direct call can't stack lunch time on top of a running job's clock.
+      // By EFFECTIVE crew: a visit with no crew of its own inherits its job's crew.
+      const [direct, inherited] = await Promise.all([
+        admin.from("crm_job_visits").select("id").eq("org_id", orgId).eq("crew_id", crewId)
+          .not("clocked_in_at", "is", null).is("clocked_out_at", null).is("paused_at", null).is("deleted_at", null).limit(1),
+        admin.from("crm_job_visits").select("id, crm_jobs!inner(crew_id)").eq("org_id", orgId).is("crew_id", null)
+          .eq("crm_jobs.crew_id", crewId)
+          .not("clocked_in_at", "is", null).is("clocked_out_at", null).is("paused_at", null).is("deleted_at", null).limit(1),
+      ]);
+      if ((direct.data?.length ?? 0) + (inherited.data?.length ?? 0) > 0) {
+        return NextResponse.json({ error: "A job is in progress — use Take a Break on the job instead." }, { status: 409 });
+      }
       const started = await startCrewLunch(admin, { orgId, crewId, workDate, at: now });
       return NextResponse.json({ ok: true, started });
     }

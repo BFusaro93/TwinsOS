@@ -250,7 +250,15 @@ export function PayrollReport() {
                       </TableCell>
                     </TableRow>
                     {isOpen && m.days.map((d) => (
-                      <DayRow key={`${d.crewMemberId}|${d.workDate}`} row={d} tz={tz} locked={isPayrollDayLocked(d.workDate, lockedThrough)} />
+                      // The edit fields are seeded from `row` once, so the key carries the saved values: after
+                      // Add time entry / Save / Reset changes this day, the row remounts on the new data instead
+                      // of showing stale inputs whose Save would overwrite it.
+                      <DayRow
+                        key={`${d.crewMemberId}|${d.workDate}|${d.hoursOverride}|${d.extraHours}|${d.ptoHours}|${d.note ?? ""}|${d.startOverride}|${d.endOverride}|${d.breakOverride}|${d.lunchDeductionMinutes}`}
+                        row={d}
+                        tz={tz}
+                        locked={isPayrollDayLocked(d.workDate, lockedThrough)}
+                      />
                     ))}
                   </Fragment>
                 );
