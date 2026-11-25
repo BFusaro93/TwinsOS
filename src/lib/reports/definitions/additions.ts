@@ -5,8 +5,9 @@ import {
   col,
   dateRangeFilterDef,
   dateRangeFilters,
-  eqFilter,
+  inFilter,
   resolveDateRange,
+  JOB_TYPE_OPTIONS,
 } from "@/lib/reports/helpers";
 import {
   BILLABLE_CONTRACT_STATUSES,
@@ -166,8 +167,12 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     section: "schedule_lists",
     name: "Paused Services",
     description: "Shows jobs that have been placed on hold.",
-    filters: [],
-    analysis: () => ({
+    filters: [
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+      { key: "job_type", label: "Job Type", type: "multiselect", options: JOB_TYPE_OPTIONS },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
+    analysis: (params) => ({
       dataset: "rpt_jobs",
       columns: [
         "client_name",
@@ -179,7 +184,12 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         "rate_cents",
         "budgeted_hours",
       ],
-      filters: [{ column: "status", op: "eq", value: "hold" }],
+      filters: [
+        { column: "status", op: "eq", value: "hold" },
+        ...inFilter("crew_name", params.crew),
+        ...inFilter("job_type", params.job_type),
+        ...inFilter("sales_rep", params.sales_rep),
+      ],
       groupBy: [],
       aggregates: [],
       sortColumn: "client_name",
@@ -194,7 +204,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       "Shows which sales rep sold what service and to whom, with per-visit revenue detail.",
     filters: [
       dateRangeFilterDef("Completed Between", "this_month"),
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
@@ -212,7 +222,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "status", op: "eq", value: "completed" },
         ...dateRangeFilters("completed_at", params, timeZone, { datetime: true }),
-        ...eqFilter("sales_rep", params.sales_rep),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],

@@ -10,6 +10,7 @@ import {
   issuedInvoiceFilter,
   resolveDateRange,
   orgDayRangeBounds,
+  inFilter,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { invoiceTaxableBaseCents, resolveDiscountTaxBasis } from "@/lib/invoices/totals";
@@ -97,7 +98,10 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     name: "Invoiced Income by Client",
     description:
       "Totals invoiced income per client — subtotal, tax, total, pre-tax revenue (after discounts), and amount paid.",
-    filters: [dateRangeFilterDef("Invoice Date", "this_year")],
+    filters: [
+      dateRangeFilterDef("Invoice Date", "this_year"),
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
     notes: ["Excludes draft and void invoices."],
     analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
@@ -105,6 +109,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...issuedInvoiceFilter(),
         ...dateRangeFilters("invoice_date", params, timeZone, { preset: "this_year" }),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: ["client_name"],
       aggregates: [
@@ -125,7 +130,10 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     name: "Invoices with Balances",
     description:
       "Shows every open invoice with a balance due and how many days overdue it is.",
-    filters: [dateRangeFilterDef("Invoice Date", "all_time")],
+    filters: [
+      dateRangeFilterDef("Invoice Date", "all_time"),
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
     notes: ["Excludes draft and void invoices — only issued invoices are receivables."],
     analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
@@ -144,6 +152,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         { column: "balance_cents", op: "gt", value: 0 },
         ...issuedInvoiceFilter(),
         ...dateRangeFilters("invoice_date", params, timeZone, { preset: "all_time" }),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],
@@ -156,7 +165,10 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     section: "financial",
     name: "Pre-Payments",
     description: "Shows prepayments received, how much has been applied, and what remains.",
-    filters: [dateRangeFilterDef("Payment Date", "this_year")],
+    filters: [
+      dateRangeFilterDef("Payment Date", "this_year"),
+      { key: "method", label: "Payment Method", type: "multiselect", optionsSource: "paymentMethods" },
+    ],
     notes: ["Cash only: excludes account credits and AR write-offs. Applied Amount is net of refunds."],
     analysis: (params, timeZone) => ({
       dataset: "rpt_payments",
@@ -173,6 +185,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         { column: "is_prepayment", op: "eq", value: true },
         ...cashPaymentFilter(),
         ...dateRangeFilters("payment_date", params, timeZone, { preset: "this_year" }),
+        ...inFilter("method", params.method),
       ],
       groupBy: [],
       aggregates: [],

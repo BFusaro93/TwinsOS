@@ -6,12 +6,13 @@ import {
   col,
   dateRangeFilterDef,
   dateRangeFilters,
-  eqFilter,
+  inFilter,
   issuedInvoiceFilter,
   MONTH_KEYS,
   MONTH_LABELS,
   netPaymentCents,
   resolveDateRange,
+  JOB_TYPE_OPTIONS,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { zoneDateParts } from "@/lib/time/zone";
@@ -66,7 +67,10 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     name: "Invoice Audit Summary",
     description:
       "Shows every invoice line item in the period — what was billed, to whom, and for how much.",
-    filters: [dateRangeFilterDef("Invoice Date", "this_month")],
+    filters: [
+      dateRangeFilterDef("Invoice Date", "this_month"),
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
     notes: [
       "Excludes line items on draft and void invoices.",
       "Total is qty × rate; Net is after the line's own discount; Revenue (pre-tax) also takes the invoice-level discount off, spread across the invoice's lines in proportion to their net amounts.",
@@ -90,6 +94,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...issuedInvoiceFilter(),
         ...dateRangeFilters("invoice_date", params, timeZone),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],
@@ -282,7 +287,10 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     section: "revenue",
     name: "Revenue by Postal Code",
     description: "Totals invoiced revenue (pre-tax, after discounts) by billing postal code.",
-    filters: [dateRangeFilterDef("Invoice Date", "this_year")],
+    filters: [
+      dateRangeFilterDef("Invoice Date", "this_year"),
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
     notes: ["Excludes draft and void invoices. Revenue is pre-tax and after discounts (invoice total − sales tax)."],
     analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
@@ -290,6 +298,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...issuedInvoiceFilter(),
         ...dateRangeFilters("invoice_date", params, timeZone, { preset: "this_year" }),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: ["billing_zip"],
       aggregates: [
@@ -378,7 +387,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       "Shows completed visits with budgeted vs actual hours, man-hours, and revenue.",
     filters: [
       dateRangeFilterDef("Completed Between", "this_month"),
-      { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
@@ -399,7 +408,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...dateRangeFilters("completed_at", params, timeZone, { datetime: true }),
         { column: "status", op: "eq", value: "completed" },
-        ...eqFilter("crew_name", params.crew),
+        ...inFilter("crew_name", params.crew),
       ],
       groupBy: [],
       aggregates: [],
@@ -413,13 +422,19 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     name: "Sales Activity Summary",
     description:
       "Totals completed-visit revenue and man-hours by sales rep.",
-    filters: [dateRangeFilterDef("Completed Between", "this_month")],
+    filters: [
+      dateRangeFilterDef("Completed Between", "this_month"),
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [],
       filters: [
         { column: "status", op: "eq", value: "completed" },
         ...dateRangeFilters("completed_at", params, timeZone, { datetime: true }),
+        ...inFilter("crew_name", params.crew),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: ["sales_rep"],
       aggregates: [
@@ -437,13 +452,21 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     name: "Approved Sales by Sales Rep",
     description:
       "Totals sold jobs per sales rep — job count, service, product, and job totals.",
-    filters: [dateRangeFilterDef("Date Sold", "this_month")],
+    filters: [
+      dateRangeFilterDef("Date Sold", "this_month"),
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+      { key: "job_type", label: "Job Type", type: "multiselect", options: JOB_TYPE_OPTIONS },
+    ],
     notes: ["Based on the job's Date Sold."],
     analysis: (params, timeZone) => ({
       dataset: "rpt_jobs",
       columns: [],
       // A cancelled job isn't a sale — exclude it from the sold totals.
-      filters: [{ column: "status", op: "neq", value: "cancelled" }, ...dateRangeFilters("date_sold", params, timeZone)],
+      filters: [
+        { column: "status", op: "neq", value: "cancelled" }, ...dateRangeFilters("date_sold", params, timeZone),
+        ...inFilter("sales_rep", params.sales_rep),
+        ...inFilter("job_type", params.job_type),
+      ],
       groupBy: ["sales_rep"],
       aggregates: [
         { column: "*", fn: "count" },
@@ -463,7 +486,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       "Shows each job sold in the period with its services, sales rep, source, and total.",
     filters: [
       dateRangeFilterDef("Date Sold", "this_month"),
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_jobs",
@@ -480,7 +503,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "status", op: "neq", value: "cancelled" },
         ...dateRangeFilters("date_sold", params, timeZone),
-        ...eqFilter("sales_rep", params.sales_rep),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],

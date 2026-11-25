@@ -1,5 +1,5 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import { eqFilter } from "@/lib/reports/helpers";
+import { inFilter } from "@/lib/reports/helpers";
 
 // ============================================================
 // Contract Services section — pre-built reports.
@@ -20,7 +20,7 @@ export const CONTRACT_SERVICE_REPORTS: PrebuiltReportDef[] = [
       {
         key: "contract_status",
         label: "Contract Status",
-        type: "select",
+        type: "multiselect",
         options: [
           { value: "draft", label: "Draft" },
           { value: "sent", label: "Sent" },
@@ -53,7 +53,7 @@ export const CONTRACT_SERVICE_REPORTS: PrebuiltReportDef[] = [
         "is_over",
       ],
       filters: [
-        ...eqFilter("contract_status", params.contract_status),
+        ...inFilter("contract_status", params.contract_status),
         ...(params.over_only === "true" ? [{ column: "is_over", op: "eq" as const, value: true }] : []),
       ],
       groupBy: [],

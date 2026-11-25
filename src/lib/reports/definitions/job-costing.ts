@@ -1,5 +1,5 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import { dateRangeFilterDef, dateRangeFilters, eqFilter } from "@/lib/reports/helpers";
+import { dateRangeFilterDef, dateRangeFilters, inFilter , JOB_TYPE_OPTIONS } from "@/lib/reports/helpers";
 
 // ============================================================
 // Job Costing section — pre-built reports.
@@ -35,7 +35,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       "Shows completed visits with budgeted vs actual man-hours, revenue, and labor cost per visit.",
     filters: [
       dateRangeFilterDef("Completed Between", "this_month"),
-      { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
     ],
     notes: [
       "Budgeted and Actual Man-Hours are both duration × number of men.",
@@ -65,7 +65,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "status", op: "eq", value: "completed" },
         ...dateRangeFilters("completed_at", params, timeZone, { datetime: true, preset: "this_month" }),
-        ...eqFilter("crew_name", params.crew),
+        ...inFilter("crew_name", params.crew),
       ],
       groupBy: [],
       aggregates: [],
@@ -79,7 +79,11 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
     name: "Service Profitability Summary",
     description:
       "Shows visit count, revenue, labor cost, and man-hours grouped by service.",
-    filters: [dateRangeFilterDef("Completed Between", "this_month")],
+    filters: [
+      dateRangeFilterDef("Completed Between", "this_month"),
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+      { key: "job_type", label: "Job Type", type: "multiselect", options: JOB_TYPE_OPTIONS },
+    ],
     notes: [
       "Visits with multiple services are grouped by the combined service list.",
       LABOR_COST_NOTE,
@@ -90,6 +94,8 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "status", op: "eq", value: "completed" },
         ...dateRangeFilters("completed_at", params, timeZone, { datetime: true, preset: "this_month" }),
+        ...inFilter("crew_name", params.crew),
+        ...inFilter("job_type", params.job_type),
       ],
       groupBy: ["service_names"],
       aggregates: [
@@ -156,7 +162,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
       {
         key: "status",
         label: "Status",
-        type: "select",
+        type: "multiselect",
         options: [
           { value: "sold", label: "Sold" },
           { value: "scheduled", label: "Scheduled" },
@@ -191,7 +197,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
         "over_under_billed_cents",
         "remaining_to_bill_cents",
       ],
-      filters: [...eqFilter("status", params.status)],
+      filters: [...inFilter("status", params.status)],
       groupBy: [],
       aggregates: [],
       sortColumn: "over_under_billed_cents",

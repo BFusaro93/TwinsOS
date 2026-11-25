@@ -5,7 +5,7 @@ import {
   containsFilter,
   dateRangeFilterDef,
   dateRangeFilters,
-  eqFilter,
+  inFilter,
   ISSUED_INVOICE_STATUSES,
   resolveDateRange,
 } from "@/lib/reports/helpers";
@@ -52,7 +52,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       "Shows every activity on client accounts — notes, calls, emails, invoices, payments, and visits.",
     filters: [
       dateRangeFilterDef(),
-      { key: "type", label: "Activity Type", type: "select", options: ACTIVITY_TYPE_OPTIONS },
+      { key: "type", label: "Activity Type", type: "multiselect", options: ACTIVITY_TYPE_OPTIONS },
       { key: "client", label: "Client Name", type: "text", placeholder: "Any client" },
     ],
     analysis: (params, timeZone) => ({
@@ -67,7 +67,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true }),
-        ...eqFilter("activity_type", params.type),
+        ...inFilter("activity_type", params.type),
         ...containsFilter("client_name", params.client),
         { column: "client_status", op: "neq", value: "lead" },
       ],
@@ -85,7 +85,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       "Shows every activity on lead accounts — notes, calls, emails, and estimates.",
     filters: [
       dateRangeFilterDef(),
-      { key: "type", label: "Activity Type", type: "select", options: ACTIVITY_TYPE_OPTIONS },
+      { key: "type", label: "Activity Type", type: "multiselect", options: ACTIVITY_TYPE_OPTIONS },
       { key: "client", label: "Lead Name", type: "text", placeholder: "Any lead" },
     ],
     analysis: (params, timeZone) => ({
@@ -100,7 +100,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true }),
-        ...eqFilter("activity_type", params.type),
+        ...inFilter("activity_type", params.type),
         ...containsFilter("client_name", params.client),
         { column: "client_status", op: "eq", value: "lead" },
       ],
@@ -116,7 +116,10 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
     name: "Income Not Invoiced",
     description:
       "Shows draft invoices — revenue already entered on a job but not yet finalized and sent to the client.",
-    filters: [dateRangeFilterDef("Invoice Date", "this_month")],
+    filters: [
+      dateRangeFilterDef("Invoice Date", "this_month"),
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
     notes: [
       "Draft invoices only, by invoice date. A row drops off once the invoice is printed, sent, or voided. Completed visits that have not had an invoice created at all do not appear here.",
     ],
@@ -133,6 +136,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...dateRangeFilters("invoice_date", params, timeZone),
         { column: "status", op: "eq", value: "draft" },
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],
@@ -250,7 +254,10 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
     name: "Unapplied Payments",
     description:
       "Shows payments with money still unapplied to an invoice, including prepayments and credits.",
-    filters: [dateRangeFilterDef("Payment Date", "all_time")],
+    filters: [
+      dateRangeFilterDef("Payment Date", "all_time"),
+      { key: "method", label: "Payment Method", type: "multiselect", optionsSource: "paymentMethods" },
+    ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_payments",
       columns: [
@@ -264,6 +271,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       filters: [
         ...dateRangeFilters("payment_date", params, timeZone, { preset: "all_time" }),
         { column: "unused_amount_cents", op: "gt", value: 0 },
+        ...inFilter("method", params.method),
       ],
       groupBy: [],
       aggregates: [],
@@ -279,7 +287,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       "Shows finalized invoices by sales rep for commission calculations: revenue after discounts, excluding sales tax.",
     filters: [
       dateRangeFilterDef("Invoice Date", "this_month"),
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
     ],
     notes: [
       "Rows appear once an invoice is finalized (not draft or void), regardless of payment status. Revenue is after invoice discounts and excludes sales tax — the same figure the Commissions page pays on.",
@@ -298,7 +306,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("invoice_date", params, timeZone),
-        ...eqFilter("sales_rep", params.sales_rep),
+        ...inFilter("sales_rep", params.sales_rep),
         { column: "status", op: "in", value: [...ISSUED_INVOICE_STATUSES] },
       ],
       groupBy: [],
@@ -318,7 +326,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       {
         key: "category",
         label: "Category",
-        type: "select",
+        type: "multiselect",
         options: [
           { value: "Security & Access", label: "Security & Access" },
           { value: "Money", label: "Money" },
@@ -327,8 +335,8 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         ],
       },
       { key: "record_type", label: "Record Type", type: "text", placeholder: "Any record type" },
-      { key: "user", label: "Changed By", type: "text", placeholder: "Any user" },
-      { key: "action", label: "Action", type: "select", options: AUDIT_ACTION_OPTIONS },
+      { key: "user", label: "Changed By", type: "multiselect", optionsSource: "staffUsers" },
+      { key: "action", label: "Action", type: "multiselect", options: AUDIT_ACTION_OPTIONS },
     ],
     notes: [
       'Entries are written by database triggers, not by the app, so they cover every path a change can arrive through — the UI, the API, an automation or an import.',
@@ -347,10 +355,10 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true }),
-        ...eqFilter("category", params.category),
+        ...inFilter("category", params.category),
         ...containsFilter("record_label", params.record_type),
-        ...containsFilter("changed_by", params.user),
-        ...eqFilter("action", params.action),
+        ...inFilter("changed_by", params.user),
+        ...inFilter("action", params.action),
       ],
       groupBy: [],
       aggregates: [],
@@ -366,7 +374,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       "Permission, user, credential and approval-chain changes only — the review you want before an audit or after someone leaves.",
     filters: [
       dateRangeFilterDef("Date", "last_90"),
-      { key: "user", label: "Changed By", type: "text", placeholder: "Any user" },
+      { key: "user", label: "Changed By", type: "multiselect", optionsSource: "staffUsers" },
     ],
     notes: [
       "Covers user profiles and roles, permission sets, API keys, third-party integrations, OAuth tokens and approval flows.",
@@ -385,7 +393,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true, preset: "last_90" }),
-        ...containsFilter("changed_by", params.user),
+        ...inFilter("changed_by", params.user),
         { column: "category", op: "eq", value: "Security & Access" },
       ],
       groupBy: [],
@@ -402,10 +410,11 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
       "How many changes each person made, broken down by record type — useful for spotting an unexpected burst of edits.",
     filters: [
       dateRangeFilterDef("Date", "this_month"),
+      { key: "user", label: "Employee", type: "multiselect", optionsSource: "staffUsers" },
       {
         key: "category",
         label: "Category",
-        type: "select",
+        type: "multiselect",
         options: [
           { value: "Security & Access", label: "Security & Access" },
           { value: "Money", label: "Money" },
@@ -413,13 +422,16 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
           { value: "Setup & Config", label: "Setup & Config" },
         ],
       },
+      { key: "action", label: "Action", type: "multiselect", options: AUDIT_ACTION_OPTIONS },
     ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_audit_log",
       columns: [],
       filters: [
         ...dateRangeFilters("occurred_at", params, timeZone, { datetime: true }),
-        ...eqFilter("category", params.category),
+        ...inFilter("changed_by", params.user),
+        ...inFilter("action", params.action),
+        ...inFilter("category", params.category),
       ],
       groupBy: ["changed_by", "record_label"],
       aggregates: [{ fn: "count", column: "*" }],

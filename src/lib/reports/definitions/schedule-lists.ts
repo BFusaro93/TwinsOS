@@ -1,5 +1,5 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import { buildResult, col } from "@/lib/reports/helpers";
+import { buildResult, col , inFilter , JOB_TYPE_OPTIONS } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { AnalysisFilter } from "@/types/crm-reports";
 import { todayInZone } from "@/lib/time/zone";
@@ -179,8 +179,11 @@ export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
     section: "schedule_lists",
     name: "Call Ahead Required",
     description: "Scheduled jobs that require a call-ahead reminder before the crew arrives.",
-    filters: [],
-    analysis: () => ({
+    filters: [
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+      { key: "job_type", label: "Job Type", type: "multiselect", options: JOB_TYPE_OPTIONS },
+    ],
+    analysis: (params) => ({
       dataset: "rpt_jobs",
       columns: [
         "scheduled_date",
@@ -194,6 +197,8 @@ export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "call_ahead", op: "eq", value: true },
         { column: "status", op: "eq", value: "scheduled" },
+        ...inFilter("crew_name", params.crew),
+        ...inFilter("job_type", params.job_type),
       ],
       groupBy: [],
       aggregates: [],

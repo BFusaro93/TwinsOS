@@ -250,3 +250,13 @@ export function dateRangeFilterDef(
 ) {
   return { key: "dateRange", label, type: "dateRange" as const, defaultValue };
 }
+
+/** CRM job types, for report filter dropdowns. */
+export const JOB_TYPE_OPTIONS = [
+  { value: "recurring", label: "Recurring" },
+  { value: "one_time", label: "One Time" },
+  { value: "waiting_list", label: "Waiting List" },
+  { value: "package", label: "Package" },
+  { value: "snow", label: "Snow" },
+  { value: "project", label: "Project" },
+];

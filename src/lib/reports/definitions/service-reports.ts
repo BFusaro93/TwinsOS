@@ -5,8 +5,9 @@ import {
   containsFilter,
   dateRangeFilterDef,
   dateRangeFilters,
-  eqFilter,
   inFilter,
+  resolveDateRange,
+  JOB_TYPE_OPTIONS,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { todayInZone } from "@/lib/time/zone";
@@ -31,7 +32,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       {
         key: "status",
         label: "Status",
-        type: "select",
+        type: "multiselect",
         options: [
           { value: "scheduled", label: "Scheduled" },
           { value: "dispatched", label: "Dispatched" },
@@ -41,21 +42,15 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
           { value: "skipped", label: "Skipped" },
         ],
       },
-      { key: "crew", label: "Crew", type: "select", optionsSource: "crews" },
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
       { key: "services", label: "Services", type: "multiselect", optionsSource: "serviceIds" },
       {
         key: "job_type",
         label: "Job Type",
-        type: "select",
-        options: [
-          { value: "recurring", label: "Recurring" },
-          { value: "one_time", label: "One Time" },
-          { value: "waiting_list", label: "Waiting List" },
-          { value: "package", label: "Package" },
-          { value: "snow", label: "Snow" },
-          { value: "project", label: "Project" },
-        ],
+        type: "multiselect",
+        options: JOB_TYPE_OPTIONS,
       },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
       { key: "zip", label: "Service Zip", type: "text", placeholder: "Any zip" },
     ],
     notes: ["Budgeted Man-Hours and Actual Man-Hours are both duration × number of men."],
@@ -78,10 +73,11 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
-        ...eqFilter("status", params.status),
-        ...eqFilter("crew_name", params.crew),
-        ...eqFilter("job_type", params.job_type),
+        ...inFilter("status", params.status),
+        ...inFilter("crew_name", params.crew),
+        ...inFilter("job_type", params.job_type),
         ...inFilter("service_ids", params.services),
+        ...inFilter("sales_rep", params.sales_rep),
         ...containsFilter("service_zip", params.zip),
       ],
       groupBy: [],
@@ -96,18 +92,20 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
     name: "Backlog Services",
     description: "Shows scheduled visits that have not been completed as of a cutoff date.",
     filters: [
-      {
-        key: "to",
-        label: "Scheduled On or Before",
-        type: "text",
-        placeholder: "YYYY-MM-DD (default today)",
-      },
+      // Open-ended by default: no "from" bound, and the "to" cutoff falls back to today.
+      dateRangeFilterDef("Scheduled Between", "all_time"),
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+      { key: "services", label: "Services", type: "multiselect", optionsSource: "serviceIds" },
+      { key: "job_type", label: "Job Type", type: "multiselect", options: JOB_TYPE_OPTIONS },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
     ],
     notes: [
       "Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started.",
       "Excludes visits that belong to cancelled, completed, skipped or on-hold jobs.",
     ],
-    analysis: (params, timeZone) => ({
+    analysis: (params, timeZone) => {
+      const { from, to } = resolveDateRange(params, "all_time", timeZone);
+      return {
       dataset: "rpt_job_visits",
       columns: [
         "scheduled_date",
@@ -124,19 +122,25 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
         // Leftover visits of a cancelled, completed, skipped or on-hold job are
         // not work anyone owes — cancelling a job only clears its future visits.
         { column: "job_status", op: "in", value: ["scheduled", "in_progress"] },
+        // Visits dated after the cutoff are not backlog yet. The cutoff is "today" as the
+        // calendar date in the ORG's timezone (not UTC, which rolls over at 8pm/7pm Eastern).
         {
           column: "scheduled_date",
           op: "lte",
-          // "Today" as the calendar date in America/New_York, not UTC — the
-          // UTC date rolls over at 8pm/7pm Eastern.
-          value: params.to || todayInZone(timeZone),
+          value: to || todayInZone(timeZone),
         },
+        ...(from ? [{ column: "scheduled_date", op: "gte" as const, value: from }] : []),
+        ...inFilter("crew_name", params.crew),
+        ...inFilter("job_type", params.job_type),
+        ...inFilter("service_ids", params.services),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],
       sortColumn: "scheduled_date",
       sortDir: "asc",
-    }),
+    };
+    },
   },
   {
     key: "client-count-by-service",
@@ -211,7 +215,7 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       {
         key: "job_type",
         label: "Job Type",
-        type: "select",
+        type: "multiselect",
         options: [
           { value: "recurring", label: "Recurring" },
           { value: "one_time", label: "One Time" },
@@ -221,6 +225,8 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
           { value: "project", label: "Project" },
         ],
       },
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
     ],
     notes: [
       "Scheduled Date is blank for recurring and package jobs — only their individual visits carry dates (see the Visits Report).",
@@ -242,7 +248,9 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       ],
       filters: [
         { column: "status", op: "in", value: ["scheduled", "in_progress"] },
-        ...eqFilter("job_type", params.job_type),
+        ...inFilter("job_type", params.job_type),
+        ...inFilter("crew_name", params.crew),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],
@@ -425,7 +433,13 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
     section: "service",
     name: "Skipped Visits Report",
     description: "Shows visits that were skipped in any defined time frame, with the reason.",
-    filters: [dateRangeFilterDef("Scheduled Between", "this_month")],
+    filters: [
+      dateRangeFilterDef("Scheduled Between", "this_month"),
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+      { key: "services", label: "Services", type: "multiselect", optionsSource: "serviceIds" },
+      { key: "job_type", label: "Job Type", type: "multiselect", options: JOB_TYPE_OPTIONS },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+    ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_job_visits",
       columns: [
@@ -440,6 +454,10 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
       filters: [
         { column: "status", op: "eq", value: "skipped" },
         ...dateRangeFilters("scheduled_date", params, timeZone, { preset: "this_month" }),
+        ...inFilter("crew_name", params.crew),
+        ...inFilter("service_ids", params.services),
+        ...inFilter("job_type", params.job_type),
+        ...inFilter("sales_rep", params.sales_rep),
       ],
       groupBy: [],
       aggregates: [],

@@ -4,7 +4,7 @@ import {
   col,
   dateRangeFilterDef,
   dateRangeFilters,
-  eqFilter,
+  inFilter,
   issuedInvoiceFilter,
   resolveDateRange,
 } from "@/lib/reports/helpers";
@@ -211,8 +211,8 @@ export const SA_PARITY_REPORTS: PrebuiltReportDef[] = [
       "Shows invoices that billed one or more products to the client — invoice date and number, product, quantity, price per unit, total, and the invoice's sales rep.",
     filters: [
       dateRangeFilterDef("Invoice Date", "this_month"),
-      { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
-      { key: "product", label: "Product", type: "select", optionsSource: "products" },
+      { key: "sales_rep", label: "Sales Rep", type: "multiselect", optionsSource: "salesReps" },
+      { key: "product", label: "Product", type: "multiselect", optionsSource: "products" },
     ],
     notes: [
       "Product lines only — lines billed from a product on a job (the product's catalog entry). Service lines and Other Charges are not listed.",
@@ -235,8 +235,8 @@ export const SA_PARITY_REPORTS: PrebuiltReportDef[] = [
         { column: "is_product", op: "eq", value: true },
         ...issuedInvoiceFilter(),
         ...dateRangeFilters("invoice_date", params, timeZone),
-        ...eqFilter("sales_rep", params.sales_rep),
-        ...eqFilter("product_name", params.product),
+        ...inFilter("sales_rep", params.sales_rep),
+        ...inFilter("product_name", params.product),
       ],
       groupBy: [],
       aggregates: [],

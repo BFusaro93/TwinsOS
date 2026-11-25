@@ -1,5 +1,5 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import { eqFilter } from "@/lib/reports/helpers";
+import { inFilter } from "@/lib/reports/helpers";
 
 // ============================================================
 // Field Upsells section — pre-built reports.
@@ -14,7 +14,7 @@ import { eqFilter } from "@/lib/reports/helpers";
 const OUTCOME_FILTER = {
   key: "outcome",
   label: "Outcome",
-  type: "select" as const,
+  type: "multiselect" as const,
   options: [
     { value: "Not quoted", label: "Not quoted" },
     { value: "Quoted", label: "Quoted (awaiting decision)" },
@@ -30,7 +30,10 @@ export const UPSELL_REPORTS: PrebuiltReportDef[] = [
     name: "Field Upsells",
     description:
       "Every piece of work a crew flagged from the field, with the client, what they suggested, and whether it became a quote and a sale.",
-    filters: [OUTCOME_FILTER],
+    filters: [
+      OUTCOME_FILTER,
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+    ],
     notes: [
       "Outcome comes from the linked estimate's stage, not the ticket's status — a ticket can be closed without the work ever being quoted.",
       "'Not quoted' means no estimate has been linked to the ticket yet. Use Create estimate on the ticket to make that link in one step.",
@@ -49,7 +52,10 @@ export const UPSELL_REPORTS: PrebuiltReportDef[] = [
         "estimate_total_cents",
         "won_revenue_cents",
       ],
-      filters: [...eqFilter("outcome", params.outcome)],
+      filters: [
+        ...inFilter("outcome", params.outcome),
+        ...inFilter("crew_name", params.crew),
+      ],
       groupBy: [],
       aggregates: [],
       sortColumn: "submitted_at",
@@ -62,7 +68,10 @@ export const UPSELL_REPORTS: PrebuiltReportDef[] = [
     name: "Upsell Conversion by Crew Member",
     description:
       "Who is spotting work in the field, and how much of it turns into money — suggestions submitted against revenue won.",
-    filters: [OUTCOME_FILTER],
+    filters: [
+      OUTCOME_FILTER,
+      { key: "crew", label: "Crew", type: "multiselect", optionsSource: "crews" },
+    ],
     notes: [
       "Grouped by the person who submitted the suggestion, so it works whether crews share one login or each member has their own.",
       "Leave Outcome empty for the full picture: the row count is everything they submitted, Won Revenue is what came of it. Filter to Won to see only converted suggestions.",
@@ -71,7 +80,10 @@ export const UPSELL_REPORTS: PrebuiltReportDef[] = [
     analysis: (params) => ({
       dataset: "rpt_upsells",
       columns: [],
-      filters: [...eqFilter("outcome", params.outcome)],
+      filters: [
+        ...inFilter("outcome", params.outcome),
+        ...inFilter("crew_name", params.crew),
+      ],
       groupBy: ["submitted_by"],
       aggregates: [
         { column: "*", fn: "count" },
