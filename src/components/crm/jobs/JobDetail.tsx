@@ -2824,7 +2824,7 @@ function VisitRow({
           )}
         </td>
         <td className="px-4 py-3 text-xs max-w-xs">
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col items-start gap-0.5 text-left">
             {jobNotesToCrew && (
               <div className="truncate max-w-[200px] text-amber-700 dark:text-amber-400" title={notesToPlainText(jobNotesToCrew)}>
                 <span className="font-semibold">Job notes to crew:</span> {notesToPlainText(jobNotesToCrew)}
