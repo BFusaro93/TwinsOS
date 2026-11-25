@@ -801,6 +801,11 @@ export function InvoicesList({ clientId }: Props) {
     ? INVOICE_COLUMNS.filter((c) => c.key !== "client" && visibleKeys.includes(c.key))
     : INVOICE_COLUMNS.filter((c) => visibleKeys.includes(c.key));
   const colSpan = visibleColumns.length + 2; // +checkbox +actions
+  // True only when the charge queue itself is empty, not when search or column
+  // filters have hidden everything in a queue that has invoices — the
+  // explanation below would be wrong then.
+  const chargeQueueEmpty =
+    onChargeTab && !idsFilter && applyQuickFilter(allInvoices, quickFilter, todayYmd).length === 0;
   // Open invoices whose client has no card/bank saved, for the To Charge empty state.
   const noSavedMethodCount = allInvoices.filter(
     (i) => i.status !== "draft" && i.status !== "void" && i.balanceCents > 0 && !i.clientSavedPaymentMethodType,
@@ -1135,7 +1140,7 @@ export function InvoicesList({ clientId }: Props) {
                 <td colSpan={colSpan} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search ? (
                     "No invoices match your search"
-                  ) : onChargeTab ? (
+                  ) : chargeQueueEmpty ? (
                     <div className="mx-auto max-w-md space-y-2">
                       <p className="font-medium text-slate-600 dark:text-neutral-300">
                         {quickFilter === "to_charge_ach" ? "No invoices to debit" : "No invoices to charge"}
