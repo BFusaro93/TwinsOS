@@ -49,6 +49,8 @@ function mapLineItem(row: any): EstimateLineItem {
     unitType: row.unit_type ?? null,
     productionRateSqftPerHr: row.production_rate_sqft_per_hr ? Number(row.production_rate_sqft_per_hr) : null,
     budgetMethod: row.budget_method ?? "manual",
+    minChargeCents: row.min_charge_cents ?? 0,
+    minChargeMessage: row.min_charge_message ?? null,
     complexityBps: row.complexity_bps ?? 10000,
     sortOrder: row.sort_order,
     estimateDesc: row.estimate_desc ?? null,

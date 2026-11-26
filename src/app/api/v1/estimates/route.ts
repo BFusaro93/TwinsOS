@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 
     const { data: service } = await db
       .from("crm_services")
-      .select("org_id, name, unit, default_rate_cents, production_rate_sqft_per_hr, budget_method, is_active")
+      .select("org_id, name, unit, default_rate_cents, production_rate_sqft_per_hr, budget_method, is_active, minimum_charge_cents, minimum_charge_message")
       .eq("id", body.serviceId)
       .is("deleted_at", null)
       .maybeSingle();
@@ -123,6 +123,7 @@ export async function POST(request: Request) {
         calcType: 1,
         qty: body.qty,
         rateCents: service.default_rate_cents ?? 0,
+        minChargeCents: service.minimum_charge_cents ?? 0,
         visits,
         budgetedHours: 0,
         costCents: 0,
@@ -146,6 +147,8 @@ export async function POST(request: Request) {
       production_rate_sqft_per_hr: service.production_rate_sqft_per_hr,
       budget_method: service.budget_method,
       rate_cents: service.default_rate_cents ?? 0,
+      min_charge_cents: service.minimum_charge_cents ?? 0,
+      min_charge_message: (service.minimum_charge_cents ?? 0) > 0 ? (service.minimum_charge_message ?? null) : null,
       visits,
       cost_cents: computed.costCents,
       adj_rate_cents: null,

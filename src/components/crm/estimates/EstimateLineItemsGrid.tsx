@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import { bpsToPercent, centsToDisplay, clampComplexityBps, clampLineDiscount, computeLineItem, getBreakevenRateCents, lineEquipmentCostCents, lineVisits } from "@/lib/estimate-calc";
+import { bpsToPercent, centsToDisplay, clampComplexityBps, clampLineDiscount, computeLineItem, getBreakevenRateCents, lineEquipmentCostCents, lineVisits, minimumChargeApplies } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem, useEstimateSubitemTotals } from "@/lib/hooks/use-estimates";
 import { packageGroupLineIds } from "@/lib/estimates/package-group";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -793,6 +793,8 @@ function LineItemRow({
   const unitWarning = needsProductionRateUnitWarning(row.budgetMethod, row.unitType);
   // No rate: the line totals $0 and would be sent to the client as free.
   const noRateWarning = row.rowType !== "section" && row.rateCents === 0 && (row.adjRateCents ?? 0) === 0;
+  // The service minimum is what this line bills (qty × rate falls below it).
+  const minimumApplied = row.rowType !== "section" && minimumChargeApplies(row);
   // Client takeoff the sq ft qty could be defaulted from (offered, never forced).
   const takeoffSqft = isAreaUnit(row.unitType) ? resolveTakeoffSqft(row.serviceName, takeoff) : null;
   const offerTakeoff = !converted && takeoffSqft !== null && row.qty !== takeoffSqft;
@@ -1224,6 +1226,16 @@ function LineItemRow({
         </tr>
       )}
 
+      {minimumApplied && (
+        <tr className="border-b border-slate-50 dark:border-neutral-800 bg-blue-50/40 dark:bg-blue-950/40 text-[10px] text-blue-500 dark:text-blue-400">
+          <td colSpan={3} />
+          <td colSpan={15} className="px-2 py-0.5 italic">
+            Minimum charge applied: {formatCurrency(row.minChargeCents ?? 0)}{(row.visits ?? 1) > 1 ? " per visit" : ""}
+            {row.minChargeMessage ? ` — ${row.minChargeMessage}` : ""}
+          </td>
+        </tr>
+      )}
+
       {/* ── sub-row: warnings / takeoff shortcut ───────────────────────────── */}
       {(unitWarning || noRateWarning || offerTakeoff) && (
         <tr className="border-b border-slate-50 dark:border-neutral-800 bg-amber-50/60 dark:bg-amber-950/40 text-[10px] text-amber-800 dark:text-amber-300">
@@ -1550,7 +1562,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     [items, upsert, estimateId]
   );
 
-  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null; visits?: number; packageId?: string | null; sortOrder?: number; budgetedHours?: number | null; lockRate?: boolean }) {
+  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null; visits?: number; packageId?: string | null; sortOrder?: number; budgetedHours?: number | null; lockRate?: boolean; minChargeCents?: number | null; minChargeMessage?: string | null }) {
     const unit = svc.unit ?? null;
     const prodRate = svc.productionRate ?? null;
     let budgetMethod = svc.budgetMethod ?? "manual";
@@ -1687,10 +1699,14 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       }
     }
 
+    // A package step's rate is its own per-visit price, so the service minimum
+    // doesn't apply to it. Fixed matrix rows (calcType 0) ignore it inside computeLineItem.
+    const minChargeCents = svc.lockRate ? 0 : (svc.minChargeCents ?? 0);
     const computed = computeLineItem({
       calcType,
       qty,
       rateCents: effectiveRateCents,
+      minChargeCents,
       visits: lineVisits,
       budgetedHours: matrixBudgetedHours ?? 0, // derived from qty ÷ production rate (production_rate), a Rate Matrix match, or set manually
       costCents: matrixCostCents ?? 0,
@@ -1722,6 +1738,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           production_rate_sqft_per_hr: matrixProductionRate ?? prodRate,
           budget_method: budgetMethod,
           rate_cents: effectiveRateCents,
+          min_charge_cents: minChargeCents,
+          min_charge_message: minChargeCents > 0 ? (svc.minChargeMessage ?? null) : null,
           visits: lineVisits,
           package_id: svc.packageId ?? null,
           cost_cents: computed.costCents,
@@ -1909,7 +1927,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                   key={s.id}
                   className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => {
-                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, budgetMethod: s.budgetMethod, rateCents: s.defaultRateCents, estimateDesc: s.descriptionOnEstimate, invoiceDesc: s.invoiceDescription });
+                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, budgetMethod: s.budgetMethod, rateCents: s.defaultRateCents, estimateDesc: s.descriptionOnEstimate, invoiceDesc: s.invoiceDescription, minChargeCents: s.minimumChargeCents, minChargeMessage: s.minimumChargeMessage });
                     setAddOpen(false); setSearch("");
                   }}
                 >

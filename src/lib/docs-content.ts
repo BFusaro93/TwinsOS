@@ -825,6 +825,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "A service's default rate is a starting value — it fills in a price when that service is added to a NEW estimate, invoice or package. It is not what existing clients are billed. Each job keeps the rate it was sold at on its own Services tab, and that per-client rate is what an invoice is built from when a visit completes. Raising the catalog rate alone moves no money.",
           },
           {
+            step: "Minimum charge",
+            detail:
+              "On a service, set Minimum Charge ($) and an optional Minimum Message (for example '4-hour minimum'). On an estimate, a per-unit line (qty x rate) is billed at least the minimum for each visit, so 2 hours at $165 with a $660 minimum bills $660, while 5 hours bills $825. The line shows 'Minimum charge applied' whenever the minimum is what is billed. Fixed-price lines, package steps and bundle items are never changed by it, and a quantity of 0 bills nothing. The minimum is copied onto the line when the service is added, so changing it later does not reprice estimates already built. It applies to estimates (and jobs and invoices created from them); services added straight to a job are not raised to the minimum.",
+          },
+          {
             step: "Bulk Prices (catalog)",
             detail:
               "On the Service Catalog tab, 'Bulk Prices' opens an editable grid with a Quick Adjust: percent or flat dollars, with rounding to the exact cent, nearest $0.25, $1 or $5. It acts on whatever matches the search box, so you can raise just mowing. Rate-matrix tiers and the overflow rate are included by default — for a matrix-priced service the tiers ARE the real price, so leave that on for a general increase. A percentage leaves a $0.00 row at $0.00; use a flat adjustment to price something that has none.",

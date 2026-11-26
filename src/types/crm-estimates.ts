@@ -51,6 +51,10 @@ export interface EstimateLineItem {
   unitType: string | null;               // sqft, lf, cuyd, hr, each, acres
   productionRateSqftPerHr: number | null; // from service record — drives budgetedHours auto-calc when budgetMethod is 'production_rate'
   budgetMethod: BudgetMethod;             // snapshotted from the service when the line item is added
+  /** Per-visit minimum charge copied from the service when the line was added (0 = none). Per-unit lines only. */
+  minChargeCents?: number;
+  /** Message shown beside the line when the minimum is what is billed (e.g. "4-hour minimum"). */
+  minChargeMessage?: string | null;
   complexityBps: number;                  // 10000 = 100% (no adjustment) — scales totalCents and totalCostCents/budgetedHours together
   sortOrder: number;
   // per-line-item notes (Sprint 3a)

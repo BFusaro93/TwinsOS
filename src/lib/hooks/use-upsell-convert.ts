@@ -143,7 +143,7 @@ export function useCreateEstimateFromUpsell() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: svc } = await (supabase as any)
           .from("crm_services")
-          .select("id, name, unit, default_rate_cents, production_rate_sqft_per_hr, budget_method, description_on_estimate, invoice_description")
+          .select("id, name, unit, default_rate_cents, production_rate_sqft_per_hr, budget_method, description_on_estimate, invoice_description, minimum_charge_cents, minimum_charge_message")
           .eq("id", ticket.upsellServiceId)
           .is("deleted_at", null)
           .maybeSingle();
@@ -155,6 +155,7 @@ export function useCreateEstimateFromUpsell() {
               calcType: 1,
               qty: 1,
               rateCents: svc.default_rate_cents ?? 0,
+              minChargeCents: svc.minimum_charge_cents ?? 0,
               visits: 1,
               budgetedHours: 0,
               costCents: 0,
@@ -178,6 +179,8 @@ export function useCreateEstimateFromUpsell() {
             production_rate_sqft_per_hr: svc.production_rate_sqft_per_hr ?? null,
             budget_method: budgetMethod,
             rate_cents: svc.default_rate_cents ?? 0,
+            min_charge_cents: svc.minimum_charge_cents ?? 0,
+            min_charge_message: (svc.minimum_charge_cents ?? 0) > 0 ? (svc.minimum_charge_message ?? null) : null,
             visits: 1,
             cost_cents: computed.costCents,
             adj_rate_cents: null,
