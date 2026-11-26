@@ -22,7 +22,9 @@ import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
 import { fetchFieldValueWithClientFallback } from "@/lib/chemical-area";
-import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
+import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, mapRateMatrixRow, useRateMatrix, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
+import { isBlankRich } from "@/lib/utils/visit-note";
+import { isQtyKeyedMatrix, qtyMatrixLinePatch } from "@/lib/estimates/qty-matrix";
 import { createClient } from "@/lib/supabase/client";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { usePackages } from "@/lib/hooks/use-packages";
@@ -550,6 +552,23 @@ function LineItemRow({
   const baseRef = useRef<RowState>(item);
   const { data: catalogServices } = useCRMServices();
   const isChemicalLine = !!row.serviceId && !!catalogServices?.find((s) => s.id === row.serviceId)?.trackChemicals;
+  // Quantity-keyed rate matrix (rows with no property field): editing the Qty
+  // re-prices the line from the band that holds it. Package steps keep their locked price.
+  const { data: matrixRows = [] } = useRateMatrix(row.packageId ? "" : (row.serviceId ?? ""));
+  const qtyMatrixService = row.serviceId ? catalogServices?.find((s) => s.id === row.serviceId) : undefined;
+  function updateQty(qty: number) {
+    const tail = qtyMatrixService && (qtyMatrixService.matrixTailEveryQty ?? 0) > 0 && (qtyMatrixService.matrixTailOverQty ?? 0) > 0
+      ? {
+          everyQty: qtyMatrixService.matrixTailEveryQty ?? 0,
+          overQty: qtyMatrixService.matrixTailOverQty ?? 0,
+          rateCents: qtyMatrixService.matrixTailRateCents ?? 0,
+          hours: qtyMatrixService.matrixTailHours ?? 0,
+          costCents: qtyMatrixService.matrixTailCostCents ?? 0,
+        }
+      : null;
+    const patch = qtyMatrixLinePatch(matrixRows, tail, qty, row.unitType);
+    updateFields(patch ? { qty, ...patch } : { qty });
+  }
   const [dirty, setDirty] = useState(false);
   // While the Cost box has focus, always show what's actually in row.costCents
   // (even 0) rather than the auto-computed blue display — otherwise the
@@ -984,7 +1003,7 @@ function LineItemRow({
         <td className="w-20 px-2 py-1.5">
           <InlineNum
             value={row.qty}
-            onChange={(v) => update("qty", v)}
+            onChange={(v) => updateQty(v)}
             onBlur={save}
             disabled={converted}
             title={converted ? CONVERTED_LINE_MESSAGE : undefined}
@@ -1594,6 +1613,41 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     // has Rate Matrix rows keyed off a property field (e.g. Turf Sq. Ft.) that the
     // estimate's property has a value for, the matched band prices the visit, so a
     // package honors custom fields the same as the service added on its own.
+    // A matrix with no property field is keyed off the line's own quantity: price
+    // the starting qty here, and the row re-prices as the qty is edited.
+    if (svc.id && !svc.lockRate) {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: qtyRows } = await (supabase as any)
+        .from("crm_service_rate_matrix")
+        .select("*")
+        .eq("service_id", svc.id)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true });
+      const mappedQtyRows = ((qtyRows ?? []) as Record<string, unknown>[]).map(mapRateMatrixRow);
+      if (isQtyKeyedMatrix(mappedQtyRows)) {
+        const { data: tailSvc } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+          .from("crm_services")
+          .select("matrix_tail_every_qty, matrix_tail_over_qty, matrix_tail_rate_cents, matrix_tail_hours, matrix_tail_cost_cents")
+          .eq("id", svc.id)
+          .maybeSingle();
+        const patch = qtyMatrixLinePatch(mappedQtyRows, tailSvc ? {
+          everyQty: Number(tailSvc.matrix_tail_every_qty ?? 0),
+          overQty: Number(tailSvc.matrix_tail_over_qty ?? 0),
+          rateCents: tailSvc.matrix_tail_rate_cents ?? 0,
+          hours: Number(tailSvc.matrix_tail_hours ?? 0),
+          costCents: tailSvc.matrix_tail_cost_cents ?? 0,
+        } : null, qty, unit);
+        if (patch) {
+          calcType = patch.calcType;
+          effectiveRateCents = patch.rateCents;
+          matrixCostCents = patch.costCents;
+          matrixBudgetedHours = patch.budgetedHours;
+          matrixProductionRate = patch.productionRateSqftPerHr;
+          budgetMethod = patch.budgetMethod;
+        }
+      }
+    }
     if (svc.id && (propertyId || clientId)) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1727,13 +1781,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           qty,
           unit_type: unit,
           // Both are authored via a rich-text editor on the Service (Descriptions
-          // tab), but are only ever displayed/edited as plain text once copied
-          // onto a line item (see EstimateDetail.tsx's stripHtml(li.estimateDesc),
-          // the Invoice Description popover's plain textarea, and the actual
-          // invoice line item description on a generated invoice) — strip HTML
-          // here at copy time instead of showing raw "<p>...</p>" everywhere
-          // downstream.
-          estimate_desc: svc.estimateDesc ? stripHtml(svc.estimateDesc) || null : null,
+          // tab). The estimate wording keeps its HTML (bullets, bold) — the
+          // proposal, PDF, portal and the line's rich-text popover all render it.
+          // The invoice wording is shown/edited as plain text (the Invoice
+          // Description popover's textarea and the generated invoice line), so
+          // strip HTML for that one at copy time.
+          estimate_desc: svc.estimateDesc && !isBlankRich(svc.estimateDesc) ? svc.estimateDesc : null,
           invoice_desc: svc.invoiceDesc ? stripHtml(svc.invoiceDesc) || null : null,
           production_rate_sqft_per_hr: matrixProductionRate ?? prodRate,
           budget_method: budgetMethod,
@@ -1815,7 +1868,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         // (older packages) — same fallback NewJobDialog.pickPackage uses.
         const match = activeServices.find((s) => s.id === step.serviceId)
           ?? activeServices.find((s) => s.name.trim().toLowerCase() === step.serviceName.trim().toLowerCase());
-        const serviceDesc = match?.descriptionOnEstimate ? stripHtml(match.descriptionOnEstimate) : "";
+        const serviceDesc = match?.descriptionOnEstimate ?? "";
         const rate = step.defaultRateCents || match?.defaultRateCents || 0;
         const ok = await addService({
           id: match?.id,
