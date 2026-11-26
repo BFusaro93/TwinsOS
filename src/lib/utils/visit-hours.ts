@@ -100,20 +100,32 @@ export function allocateStopHours({
   durationHours,
   menCount,
   visits,
+  currentHours,
 }: {
   durationHours: number;
   menCount: number;
   visits: AllocateStopHoursVisit[];
+  /**
+   * Each visit's hours as they stand now. When EVERY visit has a positive
+   * figure they are the weights instead of the budget, so re-measuring a stop
+   * (a corrected Start/End) keeps a split the office already set by hand —
+   * "pruning took two hours, clean-up one" — rather than resetting it to the
+   * budgeted proportions. Missing/zero entries fall back to the budget.
+   */
+  currentHours?: Map<string, number | null | undefined>;
 }): Map<string, number> | null {
   if (durationHours <= 0 || visits.length === 0) return null;
 
   const totalStopHours = durationHours * (menCount || 1);
 
-  const weights = visits.map((v) => {
-    const services = v.job?.services ?? [];
-    const linked = v.jobServiceId ? services.find((s) => s.id === v.jobServiceId) : services[0];
-    return linked ? linked.budgetedHours * linked.teamSize : 0;
-  });
+  const keep = currentHours ? visits.map((v) => Number(currentHours.get(v.id) ?? 0)) : null;
+  const weights = keep && keep.every((h) => h > 0)
+    ? keep
+    : visits.map((v) => {
+        const services = v.job?.services ?? [];
+        const linked = v.jobServiceId ? services.find((s) => s.id === v.jobServiceId) : services[0];
+        return linked ? linked.budgetedHours * linked.teamSize : 0;
+      });
   const sumWeights = weights.reduce((s, w) => s + w, 0);
   const effectiveWeights = sumWeights > 0 ? weights : visits.map(() => 1);
   const effectiveSum = effectiveWeights.reduce((s, w) => s + w, 0);

@@ -25,6 +25,7 @@ import {
   useStopClockIn,
   useStopClockOut,
   useStopPause,
+  useStopServiceTime,
   useStopResume,
   useSkipVisit,
   useAddCrewPush,
@@ -287,6 +288,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const stopClockOut = useStopClockOut();
   const stopPause    = useStopPause();
   const stopResume   = useStopResume();
+  const stopServiceTime = useStopServiceTime();
   const skipVisit     = useSkipVisit();
   const addCrewPush   = useAddCrewPush();
   const requestHelp   = useRequestHelp();
@@ -395,6 +397,18 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     .sort((a, b) => (b.pushNumber ?? 1) - (a.pushNumber ?? 1))[0];
   const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped" || stop?.derivedStatus === "cancelled";
   const isPaused = isActive && !!stop?.pausedAt;
+  // "Track time per service": with several live services in a running stop, the
+  // crew starts/finishes each one (one at a time) so hours split by real time.
+  const serviceTimingOn = orgSettings?.customizations?.crewServiceTiming === true;
+  const liveServiceCount = (stop?.visits ?? []).filter((v) => !["completed", "cancelled", "skipped"].includes(v.status)).length;
+  const showServiceTimers = serviceTimingOn && isActive && liveServiceCount > 1;
+  async function handleServiceTime(serviceVisitId: string, action: "start" | "finish") {
+    try {
+      await stopServiceTime.mutateAsync({ anchorVisitId, serviceVisitId, action, tap: tap() });
+    } catch {
+      /* surfaced by the mutation's onError */
+    }
+  }
 
   function openMaps() {
     if (!stop?.address) return;
@@ -787,6 +801,33 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   <div className="flex items-center gap-2 shrink-0">
                     {!hidePricing && svc?.rateCents != null && (
                       <p className="text-sm text-slate-400 dark:text-neutral-500">{formatCurrency(svc.rateCents)}</p>
+                    )}
+                    {showServiceTimers && !rowTerminal && (
+                      v.serviceStartedAt && !v.serviceEndedAt ? (
+                        <button
+                          className="min-h-11 rounded-md bg-amber-500 px-3 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                          disabled={stopServiceTime.isPending}
+                          onClick={() => handleServiceTime(v.id, "finish")}
+                        >
+                          {t("Finish")}
+                        </button>
+                      ) : v.serviceStartedAt && v.serviceEndedAt ? (
+                        <button
+                          className="min-h-11 px-2 text-sm text-slate-500 dark:text-neutral-400 underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={stopServiceTime.isPending}
+                          onClick={() => handleServiceTime(v.id, "start")}
+                        >
+                          {t("Resume")}
+                        </button>
+                      ) : (
+                        <button
+                          className="min-h-11 rounded-md bg-green-600 px-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                          disabled={stopServiceTime.isPending}
+                          onClick={() => handleServiceTime(v.id, "start")}
+                        >
+                          {t("Start")}
+                        </button>
+                      )
                     )}
                     {v.status === "skipped" ? (
                       <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">{t("Skipped")}</span>

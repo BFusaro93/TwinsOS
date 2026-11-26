@@ -36,7 +36,7 @@ export const JOB_VISIT_READ_COLUMNS =
   "snow_depth_inches, temperature, asset_type, materials_used, job_service_id, paused_at, break_minutes, " +
   "is_high_priority, notes_to_crew_updated_at, occurrence_date, crew_unassigned, break_paid, " +
   "chemical_confirmation_waived_at, chemical_confirmation_waived_by, crew_group_id, crew_group_secondary, " +
-  "push_number, bill_push, handed_off_from_crew_id";
+  "push_number, bill_push, handed_off_from_crew_id, service_started_at, service_ended_at";
 
 /**
  * What a crew route sends back about a visit: JOB_VISIT_READ_COLUMNS without
