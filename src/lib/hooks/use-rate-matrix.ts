@@ -10,7 +10,8 @@ export interface RateMatrixRow {
   id: string;
   orgId: string;
   serviceId: string;
-  customFieldId: string;
+  /** Property field the bands read; null = the estimate line's own quantity. */
+  customFieldId: string | null;
   calcType: 0 | 1;
   fromVal: number;
   toVal: number | null;
@@ -47,7 +48,7 @@ export interface CRMCustomFieldDef {
 // ── Mappers ───────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: any): RateMatrixRow {
+export function mapRateMatrixRow(row: any): RateMatrixRow {
   return {
     id: row.id,
     orgId: row.org_id,
@@ -109,7 +110,7 @@ export function useRateMatrix(serviceId: string) {
         .is("deleted_at", null)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return ((data ?? []).map(mapRow)) as RateMatrixRow[];
+      return ((data ?? []).map(mapRateMatrixRow)) as RateMatrixRow[];
     },
     enabled: !!serviceId,
   });
@@ -140,7 +141,7 @@ export function useUpsertRateMatrixRow() {
         ? await query.from("crm_service_rate_matrix").update(patch).eq("id", id).select().single()
         : await query.from("crm_service_rate_matrix").insert({ service_id: serviceId, ...patch }).select().single();
       if (error) throw error;
-      return mapRow(data);
+      return mapRateMatrixRow(data);
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["rate-matrix", vars.serviceId] });

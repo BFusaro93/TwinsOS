@@ -10395,7 +10395,7 @@ export type Database = {
           budgeted_cost_cents: number
           budgeted_hours: number
           calc_type: number
-          custom_field_id: string
+          custom_field_id: string | null
           deleted_at: string | null
           from_val: number
           id: string
@@ -10412,7 +10412,7 @@ export type Database = {
           budgeted_cost_cents?: number
           budgeted_hours?: number
           calc_type?: number
-          custom_field_id: string
+          custom_field_id?: string | null
           deleted_at?: string | null
           from_val?: number
           id?: string
@@ -10429,7 +10429,7 @@ export type Database = {
           budgeted_cost_cents?: number
           budgeted_hours?: number
           calc_type?: number
-          custom_field_id?: string
+          custom_field_id?: string | null
           deleted_at?: string | null
           from_val?: number
           id?: string
