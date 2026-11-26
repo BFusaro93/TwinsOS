@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { SNOW_TAGS } from "@/types/crm-documents";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
@@ -51,11 +52,18 @@ const TO_OPTIONS = [
   { value: "all_contacts", label: "All contacts (ok to email)" },
 ];
 
+// Staff recipients. Sent to the employee's email on file; the client's opt-outs don't apply to them.
+const STAFF_TO_OPTIONS = [
+  { value: "client_sales_rep", label: "Client's sales rep" },
+  { value: "estimate_sales_rep", label: "Estimate's sales rep (estimate triggers)" },
+];
+
 const MERGE_TAGS = [
   { tag: "[clientfirstname]", label: "Client's first name" },
   { tag: "[clientfullname]", label: "Client's full name" },
   { tag: "[companyname]", label: "Your company name" },
   { tag: "[quotenumber]", label: "Linked estimate/quote number" },
+  { tag: "[estimatelink]", label: "Proposal link button (estimate triggers)" },
   { tag: "[invoicenumber]", label: "Invoice number (invoice triggers)" },
   { tag: "[invoicetotal]", label: "Invoice total" },
   { tag: "[invoicebalance]", label: "Invoice balance due" },
@@ -99,6 +107,7 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
   // body are used, so editing the document updates this email. The text below is
   // refreshed from it on every save as a fallback if the document is ever deleted.
   const [linkedDocId, setLinkedDocId] = useState<string>(c.document_template_id ?? "");
+  const { data: employees = [] } = useEmployees(true);
   const { data: allDocTemplates = [] } = useDocumentTemplates();
   // Text-message and estimate-layout documents don't make sense as an automation email.
   const docTemplates = allDocTemplates.filter(
@@ -217,6 +226,40 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
                     </Label>
                   </div>
                 ))}
+                <p className="pt-1 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">Staff</p>
+                {STAFF_TO_OPTIONS.map((opt) => (
+                  <div key={opt.value} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`to-${opt.value}`}
+                      checked={to.includes(opt.value)}
+                      onCheckedChange={() => toggleTo(opt.value)}
+                    />
+                    <Label htmlFor={`to-${opt.value}`} className="cursor-pointer font-normal">
+                      {opt.label}
+                    </Label>
+                  </div>
+                ))}
+                {employees.length > 0 && (
+                  <div className="max-h-32 overflow-y-auto rounded border p-2 flex flex-col gap-1.5">
+                    {employees.map((emp) => {
+                      const token = `employee:${emp.id}`;
+                      return (
+                        <div key={emp.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`to-${token}`}
+                            checked={to.includes(token)}
+                            disabled={!emp.email && !to.includes(token)}
+                            onCheckedChange={() => toggleTo(token)}
+                          />
+                          <Label htmlFor={`to-${token}`} className="cursor-pointer font-normal">
+                            {emp.firstName} {emp.lastName}
+                            {!emp.email && <span className="ml-1 text-[11px] text-slate-400">(no email on file)</span>}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
