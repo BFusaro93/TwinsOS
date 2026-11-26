@@ -63,7 +63,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {crewInfo.crewColor && (
@@ -89,11 +89,11 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
             return (
               <div
                 key={member.id}
-                className="flex items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-muted/40 rounded-lg"
+                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-3 bg-slate-50 dark:bg-muted/40 rounded-lg"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-800 dark:text-neutral-100 truncate">{member.name}</p>
+                <div className="flex-1 min-w-[8rem]">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="font-medium text-slate-800 dark:text-neutral-100 break-words">{member.name}</p>
                     {member.role && (
                       <Badge variant="outline" className="text-xs capitalize shrink-0">{member.role}</Badge>
                     )}
@@ -110,7 +110,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                   )}
                 </div>
 
-                <div className="shrink-0 flex items-center gap-1">
+                <div className="ml-auto flex items-center gap-1">
                   {onClock ? (
                     <Button
                       size="sm"
