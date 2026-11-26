@@ -2,7 +2,7 @@ import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import { buildResult, col , inFilter , JOB_TYPE_OPTIONS } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { AnalysisFilter } from "@/types/crm-reports";
-import { todayInZone } from "@/lib/time/zone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 // ============================================================
 // Schedule Lists section — pre-built reports.
@@ -97,6 +97,46 @@ export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
         groupBy: [],
         aggregates: [],
         sortColumn: "full_name",
+        sortDir: "asc",
+      };
+    },
+  },
+  {
+    key: "employee-credential-expirations",
+    section: "schedule_lists",
+    name: "Employee Credential Expirations",
+    description:
+      "Shows employees whose driver license, DOT physical, or hoisting license has expired or expires soon, soonest first.",
+    filters: [
+      { key: "within_days", label: "Expiring Within (days)", type: "number", defaultValue: "60" },
+      { key: "active_only", label: "Active Only", type: "checkbox", defaultValue: "true" },
+    ],
+    notes: [
+      "Expired credentials are included. Dates are only visible to people with View License Info (or Edit/Manage Employees); everyone else sees an empty report.",
+    ],
+    analysis: (params, timeZone) => {
+      const parsed = parseInt(params.within_days || "60", 10);
+      const days = Number.isFinite(parsed) && parsed >= 0 ? parsed : 60;
+      const cutoff = shiftYmd(todayInZone(timeZone), days);
+      const filters: AnalysisFilter[] = [{ column: "next_credential_expiry", op: "lte", value: cutoff }];
+      if (params.active_only !== "false") {
+        filters.push({ column: "is_active", op: "eq", value: true });
+      }
+      return {
+        dataset: "rpt_employees",
+        columns: [
+          "full_name",
+          "next_credential_expiry",
+          "license_expiration",
+          "dot_physical_expiration",
+          "hoisting_license_expiration",
+          "cell_phone",
+          "email",
+        ],
+        filters,
+        groupBy: [],
+        aggregates: [],
+        sortColumn: "next_credential_expiry",
         sortDir: "asc",
       };
     },

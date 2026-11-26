@@ -28,6 +28,8 @@ export interface CRMEmployee {
   driverLicense: string | null;
   isCertifiedDriver: boolean;
   licenseExpiration: string | null;
+  dotPhysicalExpiration: string | null;
+  hoistingLicenseExpiration: string | null;
   insuranceEligibility: string | null;
   coveredByInsurance: boolean;
   applicatorLicense: string | null;
