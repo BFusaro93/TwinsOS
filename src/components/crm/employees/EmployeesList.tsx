@@ -54,6 +54,7 @@ import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employ
 import type { OrgUser } from "@/types";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { ExpiringCredentialsPanel } from "@/components/crm/employees/ExpiringCredentialsPanel";
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -154,7 +155,13 @@ function PersonalTab({
               <Checkbox checked={!!form.is_certified_driver} onCheckedChange={(c) => onChange("is_certified_driver", !!c)} />
             </Field>
             <Field label="License Expiration">
-              <FieldInput type="date" value={form.license_expiration ?? ""} onChange={(e) => onChange("license_expiration", e.target.value)} />
+              <FieldInput type="date" value={form.license_expiration ?? ""} onChange={(e) => onChange("license_expiration", e.target.value || null)} />
+            </Field>
+            <Field label="DOT Physical Expiration">
+              <FieldInput type="date" value={form.dot_physical_expiration ?? ""} onChange={(e) => onChange("dot_physical_expiration", e.target.value || null)} />
+            </Field>
+            <Field label="Hoisting License Expiration">
+              <FieldInput type="date" value={form.hoisting_license_expiration ?? ""} onChange={(e) => onChange("hoisting_license_expiration", e.target.value || null)} />
             </Field>
             <Field label="Insurance Eligibility">
               <FieldInput type="date" value={form.insurance_eligibility ?? ""} onChange={(e) => onChange("insurance_eligibility", e.target.value)} />
@@ -756,7 +763,10 @@ function EmployeeDialog({
       print_on_check_as: e.printOnCheckAs, email: e.email, birth_date: e.birthDate,
       resource_code: e.resourceCode, address: e.address, city: e.city, state: e.state,
       zip: e.zip, driver_license: e.driverLicense, is_certified_driver: e.isCertifiedDriver,
-      license_expiration: e.licenseExpiration, insurance_eligibility: e.insuranceEligibility,
+      license_expiration: e.licenseExpiration,
+      dot_physical_expiration: e.dotPhysicalExpiration,
+      hoisting_license_expiration: e.hoistingLicenseExpiration,
+      insurance_eligibility: e.insuranceEligibility,
       covered_by_insurance: e.coveredByInsurance, applicator_license: e.applicatorLicense,
       resource_tags: e.resourceTags,
       date_hired: e.dateHired, phone: e.phone, cell_phone: e.cellPhone, pager: e.pager,
@@ -1026,11 +1036,13 @@ function EmployeeDetail({
           )}
         </PermissionGate>
 
-        {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance) && (
+        {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance || employee.licenseExpiration || employee.dotPhysicalExpiration || employee.hoistingLicenseExpiration) && (
           <PermissionGate permission="emp_view_license_info">
             <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Certifications &amp; Licensing</p>
             <DetailRow label="Driver License #" value={employee.driverLicense} />
             <DetailRow label="License Expiration" value={formatDetailDate(employee.licenseExpiration)} />
+            <DetailRow label="DOT Physical Expiration" value={formatDetailDate(employee.dotPhysicalExpiration)} />
+            <DetailRow label="Hoisting License Expiration" value={formatDetailDate(employee.hoistingLicenseExpiration)} />
             <DetailRow label="Certified Driver" value={employee.isCertifiedDriver ? "Yes" : null} />
             <DetailRow label="Applicator License" value={employee.applicatorLicense} />
             <DetailRow label="Insurance Eligibility" value={employee.insuranceEligibility} />
@@ -1379,6 +1391,8 @@ export function EmployeesTable({
           {filtered.length} employee{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
+
+      <ExpiringCredentialsPanel employees={employees ?? []} onSelect={onSelect} />
 
       <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <EmployeeTable

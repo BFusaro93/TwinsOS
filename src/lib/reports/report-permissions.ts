@@ -111,6 +111,7 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
   "sales-activity-summary": ["acct_rpt_sales_activity_summary"],
   "sales-by-date-sold": ["sched_rpt_sales_by_date_sold"],
   "employee-directory": ["sched_rpt_employee_directory"],
+  "employee-credential-expirations": ["sched_rpt_employee_directory"],
   "contractor-phone-list": ["sched_rpt_contractor_phone_list"],
   "vendor-contact-list": ["sched_rpt_vendor_contact_list"],
   "inventory-product-list": ["sched_rpt_inventory_product_list"],
