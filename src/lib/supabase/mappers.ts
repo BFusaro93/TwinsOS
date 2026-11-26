@@ -729,6 +729,7 @@ export function mapAttachment(row: AttachmentRow): Attachment {
     fileType: row.file_type,
     storagePath: row.storage_path,
     uploadedByName: row.uploaded_by_name,
+    documentType: row.document_type ?? null,
   };
 }
 

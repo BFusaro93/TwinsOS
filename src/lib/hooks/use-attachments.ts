@@ -52,12 +52,13 @@ export function useUploadAttachment(recordType: AttachmentRecordType, hookRecord
      * Returns an array of per-file results so callers can surface partial failures.
      * Always invalidates the cache even when some files fail.
      */
-    mutationFn: async (input: File | File[] | { files: File[]; recordId: string }): Promise<UploadResult[]> => {
+    mutationFn: async (input: File | File[] | { files: File[]; recordId: string; documentType?: string }): Promise<UploadResult[]> => {
       // `recordId` override lets a create form upload against a record whose
       // id only exists after the hook was called.
       const isOverride = !Array.isArray(input) && !(input instanceof File);
       const fileList = isOverride ? input.files : Array.isArray(input) ? input : [input];
       const recordId = isOverride ? input.recordId : hookRecordId;
+      const documentType = isOverride ? input.documentType : undefined;
       const supabase = createClient();
 
       // Fetch caller identity once for all files
@@ -123,6 +124,7 @@ export function useUploadAttachment(recordType: AttachmentRecordType, hookRecord
             file_type: file.type,
             storage_path: storagePath,
             uploaded_by_name: uploaderName,
+            ...(documentType ? { document_type: documentType } : {}),
           });
           if (insertError) {
             // Storage upload succeeded but DB insert failed — clean up the orphaned
