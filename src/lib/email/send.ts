@@ -217,6 +217,11 @@ export function buildClientMergeVars(
   const companyState = esc(org.addressState ?? "");
   const companyZip = esc(org.addressZip ?? "");
 
+  // One shared portal sign-in for every org (the login finds the customer's org from their
+  // account), so the link is the same for all clients. HTML sends get a clickable link.
+  const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com"}/portal/login`;
+  const portalLink = shouldEscape ? `<a href="${portalUrl}">${portalUrl}</a>` : portalUrl;
+
   const phoneOfType = (type: string) => esc(client.phones?.find((p) => p.type === type)?.phone ?? "");
   const referringClient = esc(client.referringClientName ?? "");
   const today = new Date().toLocaleDateString("en-US", {
@@ -270,6 +275,7 @@ export function buildClientMergeVars(
     "[companystate]": companyState,
     "[companyzip]": companyZip,
     "[today]": today,
+    "[clientportallink]": portalLink,
   };
 }
 

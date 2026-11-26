@@ -10,6 +10,7 @@ import { partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { findMarketingOptedOutAddresses } from "@/lib/email/marketing-opt-outs";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
+import { cardUpdateLinkVars } from "@/lib/card-update/links";
 import { safeHexColor } from "@/lib/utils/safe-color";
 import { todayInZone } from "@/lib/time/zone";
 import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
@@ -324,6 +325,12 @@ export async function resolveEmailStepContent(
     extras["[creditcardending]"] = params.cardExpiryContext.last4;
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
+  // [cardupdatelink]: a fresh one-time "update your card + AutoPay" link, minted only when a template uses it.
+  const cardLink = await cardUpdateLinkVars(supabase, {
+    orgId: params.orgId, clientId: params.clientId, brandColor: orgRow?.brand_color as string | null,
+    templates: [params.subjectTemplate, params.bodyTemplate],
+  });
+  Object.assign(extras, cardLink.html);
   // Invoice tags (invoice-triggered enrollments) and last/next service tags.
   Object.assign(extras, await buildSnowExtras(supabase, { orgId: params.orgId, clientId: params.clientId, visitId: params.visitId ?? null }));
   Object.assign(
