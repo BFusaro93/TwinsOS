@@ -16,7 +16,8 @@ export type AttachmentRecordType =
   | "injury_case"
   | "contract"
   | "job"
-  | "product";
+  | "product"
+  | "employee";
 
 export interface Attachment extends BaseRecord {
   recordType: AttachmentRecordType;
@@ -26,4 +27,6 @@ export interface Attachment extends BaseRecord {
   fileType: string; // MIME type
   storagePath: string;
   uploadedByName: string;
+  /** Employee files only: what kind of document this is (see EMPLOYEE_DOCUMENT_TYPES). */
+  documentType: string | null;
 }

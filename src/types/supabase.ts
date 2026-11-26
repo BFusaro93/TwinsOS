@@ -751,6 +751,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          document_type: string | null
           file_name: string
           file_size: number
           file_type: string
@@ -766,6 +767,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          document_type?: string | null
           file_name: string
           file_size?: number
           file_type?: string
@@ -781,6 +783,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          document_type?: string | null
           file_name?: string
           file_size?: number
           file_type?: string

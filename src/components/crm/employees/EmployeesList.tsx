@@ -54,6 +54,7 @@ import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employ
 import type { OrgUser } from "@/types";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { EmployeeFilesTab } from "@/components/crm/employees/EmployeeFilesTab";
 import { ExpiringCredentialsPanel } from "@/components/crm/employees/ExpiringCredentialsPanel";
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -443,16 +444,17 @@ function SalesGoalsTab({
   return (
     <div className="rounded border">
       <SectionBar title="Monthly Sales Goals" />
-      <div className="grid grid-cols-4 gap-4 p-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
         {MONTH_KEYS.map((month, i) => (
-          <Field key={month} label={MONTH_LABELS[i]}>
+          <div key={month} className="min-w-0">
+            <Label className="mb-1 block text-sm font-normal text-muted-foreground">{MONTH_LABELS[i]}</Label>
             <CurrencyInput
               cents={goals[month] ?? 0}
               blankWhenZero
               onChange={(cents) => setGoal(month, cents)}
-              className="h-8 w-28 text-sm"
+              className="h-8 w-full text-sm"
             />
-          </Field>
+          </div>
         ))}
       </div>
     </div>
@@ -741,6 +743,8 @@ function EmployeeDialog({
   const { mutateAsync: create, isPending: creating } = useCreateEmployee();
   const { mutateAsync: update, isPending: updating } = useUpdateEmployee();
   const { can } = usePermissions();
+  // Same gate the database enforces on employee files (admins pass `can` too).
+  const canSeeFiles = can("emp_view_info") || can("emp_edit") || can("emp_manage");
 
   const isNew = !employee;
 
@@ -870,6 +874,7 @@ function EmployeeDialog({
               ...(can("emp_view_user_settings") ? [{ value: "user_settings", label: "User Settings" }] : []),
               ...(can("emp_view_resource_notes") ? [{ value: "notes", label: "Notes" }] : []),
               ...(employee?.id && can("emp_view_resource_notes") ? [{ value: "injuries", label: "Injuries" }] : []),
+              ...(employee?.id && canSeeFiles ? [{ value: "files", label: "Files" }] : []),
               ...(employee?.id ? [{ value: "audit", label: "Audit Trail" }] : []),
             ].map((tab) => (
               <TabsTrigger
@@ -921,6 +926,11 @@ function EmployeeDialog({
             {employee?.id && can("emp_view_resource_notes") && (
               <TabsContent value="injuries" className="mt-0">
                 <InjuriesTab employeeId={employee.id} />
+              </TabsContent>
+            )}
+            {employee?.id && canSeeFiles && (
+              <TabsContent value="files" className="mt-0">
+                <EmployeeFilesTab employeeId={employee.id} />
               </TabsContent>
             )}
             {employee?.id && (
