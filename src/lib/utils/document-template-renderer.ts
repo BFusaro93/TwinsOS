@@ -242,6 +242,13 @@ function imageWidthPct(settings: RenderableBlock["settings"]): number {
   return Number.isFinite(w) && w >= 10 && w <= 100 ? Math.round(w) : 100;
 }
 
+function imageMargin(settings: RenderableBlock["settings"]): string {
+  const a = settings?.align;
+  if (a === "left") return "0 auto 0 0";
+  if (a === "right") return "0 0 0 auto";
+  return "0 auto";
+}
+
 function buttonHref(settings: RenderableBlock["settings"]): string {
   const raw = typeof settings?.href === "string" ? settings.href.trim() : "";
   if (/^\[\w+\]$/.test(raw) || /^(https?:\/\/|mailto:|tel:)/i.test(raw)) return raw;
@@ -435,7 +442,7 @@ function renderBlock(
       if (options?.sanitize && !(content && isSafeImageSrc(content.replace(/&amp;/g, "&").trim()))) return "";
       return block.content
         ? wrap(
-            `<img src="${escapeHtml(content)}" alt="" style="width:${imageWidthPct(block.settings)}%;max-width:100%;height:auto;display:block;margin:0 auto;" />`,
+            `<img src="${escapeHtml(content)}" alt="" style="width:${imageWidthPct(block.settings)}%;max-width:100%;height:auto;display:block;margin:${imageMargin(block.settings)};" />`,
             "margin-bottom:16px;"
           )
         : wrap(

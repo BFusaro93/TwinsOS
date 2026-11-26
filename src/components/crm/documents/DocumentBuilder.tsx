@@ -57,10 +57,13 @@ import {
   Trash2,
   Type,
   AlignCenter,
+  AlignRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import {
   BLOCK_TYPE_LABELS,
   DOC_TYPE_LABELS,
@@ -133,19 +136,98 @@ function imageWidthPct(settings: Record<string, unknown> | null | undefined): nu
   return Number.isFinite(w) && w >= 10 && w <= 100 ? Math.round(w) : 100;
 }
 
+type ImageAlign = "left" | "center" | "right";
+
+function imageAlign(settings: Record<string, unknown> | null | undefined): ImageAlign {
+  const a = settings?.align;
+  return a === "left" || a === "right" ? a : "center";
+}
+
+const ALIGN_OPTIONS: { value: ImageAlign; icon: React.ReactNode; label: string }[] = [
+  { value: "left", icon: <AlignLeft className="h-3.5 w-3.5" />, label: "Align left" },
+  { value: "center", icon: <AlignCenter className="h-3.5 w-3.5" />, label: "Align center" },
+  { value: "right", icon: <AlignRight className="h-3.5 w-3.5" />, label: "Align right" },
+];
+
+/** Previously uploaded images for this org — re-use instead of uploading again. */
+function ImageLibraryDialog({
+  open,
+  onOpenChange,
+  onPick,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onPick: (url: string) => void;
+}) {
+  const { data: images, isLoading } = useQuery({
+    queryKey: ["document-image-library"],
+    enabled: open,
+    queryFn: async () => {
+      const supabase = createClient();
+      const orgPrefix = await getStorageOrgPrefix(supabase);
+      const { data, error } = await supabase.storage
+        .from("document-images")
+        .list(orgPrefix, { limit: 200, sortBy: { column: "created_at", order: "desc" } });
+      if (error) throw error;
+      return (data ?? [])
+        .filter((f) => f.name && f.id)
+        .map((f) => ({
+          name: f.name,
+          url: supabase.storage.from("document-images").getPublicUrl(`${orgPrefix}/${f.name}`).data.publicUrl,
+        }));
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Image library</DialogTitle>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+        ) : !images || images.length === 0 ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            No images yet — upload one and it will show up here for every document.
+          </p>
+        ) : (
+          <div className="grid max-h-[60vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
+            {images.map((img) => (
+              <button
+                key={img.name}
+                type="button"
+                onClick={() => { onPick(img.url); onOpenChange(false); }}
+                className="flex aspect-[4/3] items-center justify-center rounded-md border border-border bg-white p-2 hover:border-brand-400 hover:ring-2 hover:ring-brand-300"
+              >
+                <img src={img.url} alt="" loading="lazy" className="max-h-full max-w-full object-contain" />
+              </button>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ImageBlockContent({
   url,
   onChange,
   widthPct,
   onWidthChange,
+  align,
+  onAlignChange,
 }: {
   url: string | null;
   onChange: (url: string) => void;
   widthPct: number;
   onWidthChange: (pct: number) => void;
+  align: ImageAlign;
+  onAlignChange: (a: ImageAlign) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -180,6 +262,7 @@ function ImageBlockContent({
 
       const { data } = supabase.storage.from("document-images").getPublicUrl(path);
       onChange(data.publicUrl);
+      queryClient.invalidateQueries({ queryKey: ["document-image-library"] });
     } catch (err) {
       console.error("[DocumentBuilder] image upload failed", err);
       toast.error(err instanceof Error ? `Failed to upload image: ${err.message}` : "Failed to upload image");
@@ -204,8 +287,31 @@ function ImageBlockContent({
             src={url}
             alt=""
             style={{ width: `${widthPct}%` }}
-            className="mx-auto h-auto rounded-md border border-border object-contain"
+            className={cn(
+              "h-auto rounded-md border border-border object-contain",
+              align === "left" ? "mr-auto" : align === "right" ? "ml-auto" : "mx-auto"
+            )}
           />
+          <div className="flex items-center justify-center gap-1">
+            {ALIGN_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                title={o.label}
+                aria-label={o.label}
+                aria-pressed={align === o.value}
+                onClick={() => onAlignChange(o.value)}
+                className={cn(
+                  "rounded border p-1.5",
+                  align === o.value
+                    ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {o.icon}
+              </button>
+            ))}
+          </div>
           <label className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             Size
             <input
@@ -221,7 +327,10 @@ function ImageBlockContent({
           </label>
           <div className="flex justify-center gap-2">
             <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Replace"}
+              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Upload new"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setLibraryOpen(true)} disabled={uploading}>
+              Library
             </Button>
             <Button size="sm" variant="outline" onClick={() => onChange("")} disabled={uploading}>
               Remove
@@ -229,6 +338,7 @@ function ImageBlockContent({
           </div>
         </div>
       ) : (
+        <div className="space-y-2">
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -238,7 +348,14 @@ function ImageBlockContent({
           {uploading ? <Loader2 className="h-6 w-6 animate-spin" /> : <ImageIcon className="h-6 w-6" />}
           {uploading ? "Uploading…" : "Click to upload an image"}
         </button>
+        <div className="flex justify-center">
+          <Button size="sm" variant="outline" onClick={() => setLibraryOpen(true)} disabled={uploading}>
+            Choose from library
+          </Button>
+        </div>
+        </div>
       )}
+      <ImageLibraryDialog open={libraryOpen} onOpenChange={setLibraryOpen} onPick={onChange} />
     </div>
   );
 }
@@ -402,6 +519,8 @@ function BlockCanvas({
             onChange={onChange}
             widthPct={imageWidthPct(block.settings)}
             onWidthChange={(pct) => onSettingsChange({ ...block.settings, width: pct })}
+            align={imageAlign(block.settings)}
+            onAlignChange={(a) => onSettingsChange({ ...block.settings, align: a })}
           />
         ) : block.blockType === "columns" ? (
           <ColumnsBlockContent content={block.content} onChange={onChange} editorRef={editorRef} />
@@ -846,14 +965,14 @@ export function DocumentBuilder({ template }: Props) {
             </div>
             <div
               className={cn(
-                "mx-auto rounded-xl border border-border bg-card p-6 shadow-sm transition-all",
+                "mx-auto rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm transition-all [color-scheme:light]",
                 previewWidth === "desktop" ? "max-w-2xl" : "max-w-sm"
               )}
             >
               {template.subject && (
-                <div className="mb-4 border-b border-slate-100 dark:border-neutral-800 pb-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Subject Line</p>
-                  <p className="text-sm text-slate-700 dark:text-neutral-300">
+                <div className="mb-4 border-b border-slate-100 pb-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Subject Line</p>
+                  <p className="text-sm text-slate-700">
                     {(() => {
                       // Lightweight inline resolve for the subject preview only
                       return template.subject!.replace(/\[(\w+)\]/g, (m) => SAMPLE_MERGE_VALUES[m.toLowerCase()] ?? m);
@@ -862,7 +981,7 @@ export function DocumentBuilder({ template }: Props) {
                 </div>
               )}
               {blocks.length === 0 ? (
-                <div className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
+                <div className="py-16 text-center text-sm text-slate-400">
                   Nothing to preview yet — add blocks in the editor first.
                 </div>
               ) : (
