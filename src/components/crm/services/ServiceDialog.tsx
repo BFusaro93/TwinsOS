@@ -70,6 +70,8 @@ interface FormState {
   defaultRateCents: string;
   defaultBHrs: string;
   defaultBCostCents: string;
+  minimumChargeCents: string;
+  minimumChargeMessage: string;
   budgetMethod: BudgetMethod;
   productionRateSqftPerHr: string;
   targetRateCents: string;
@@ -99,6 +101,7 @@ function emptyForm(): FormState {
     name: "", code: "", category: "lawn", unit: "visit",
     serviceMode: "flat_rate", parentServiceId: "",
     defaultRateCents: "", defaultBHrs: "", defaultBCostCents: "",
+    minimumChargeCents: "", minimumChargeMessage: "",
     budgetMethod: "manual",
     productionRateSqftPerHr: "",
     targetRateCents: "", targetRateWithDriveCents: "",
@@ -125,6 +128,8 @@ function serviceToForm(s: CRMService): FormState {
     defaultRateCents: s.defaultRateCents != null ? (s.defaultRateCents / 100).toFixed(2) : "",
     defaultBHrs: s.defaultBHrs > 0 ? String(s.defaultBHrs) : "",
     defaultBCostCents: s.defaultBCostCents > 0 ? (s.defaultBCostCents / 100).toFixed(2) : "",
+    minimumChargeCents: s.minimumChargeCents > 0 ? (s.minimumChargeCents / 100).toFixed(2) : "",
+    minimumChargeMessage: s.minimumChargeMessage ?? "",
     budgetMethod: s.budgetMethod,
     productionRateSqftPerHr: s.productionRateSqftPerHr != null ? String(s.productionRateSqftPerHr) : "",
     targetRateCents: s.targetRateCents > 0 ? (s.targetRateCents / 100).toFixed(2) : "",
@@ -819,6 +824,8 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
       default_rate_cents: form.defaultRateCents ? parseCents(form.defaultRateCents) : null,
       default_b_hrs: parseNum(form.defaultBHrs),
       default_b_cost_cents: parseCents(form.defaultBCostCents),
+      minimum_charge_cents: parseCents(form.minimumChargeCents),
+      minimum_charge_message: form.minimumChargeCents && parseCents(form.minimumChargeCents) > 0 ? (form.minimumChargeMessage.trim() || null) : null,
       budget_method: form.budgetMethod,
       production_rate_sqft_per_hr: form.productionRateSqftPerHr ? parseNum(form.productionRateSqftPerHr) : null,
       target_rate_cents: parseCents(form.targetRateCents),
@@ -1071,6 +1078,29 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
                     className="text-sm"
                   />
                 </Field>
+                <Field label="Minimum Charge ($)">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.minimumChargeCents}
+                    onChange={(e) => setForm({ ...form, minimumChargeCents: e.target.value })}
+                    placeholder="0.00 (none)"
+                    className="text-sm"
+                  />
+                </Field>
+                <Field label="Minimum Message">
+                  <Input
+                    value={form.minimumChargeMessage}
+                    onChange={(e) => setForm({ ...form, minimumChargeMessage: e.target.value })}
+                    placeholder="e.g. 4-hour minimum"
+                    className="text-sm"
+                    disabled={!(parseCents(form.minimumChargeCents) > 0)}
+                  />
+                </Field>
+                <p className="sm:col-span-3 -mt-1 text-xs text-slate-500">
+                  On estimates, a per-unit line (qty × rate) is billed at least this amount for each visit. Fixed-price lines are unaffected.
+                </p>
                 <Field label="Production Rate (sqft/hr)">
                   <Input
                     type="number"

@@ -31,6 +31,10 @@ export interface CRMService {
   /** Snow: append the visit's start–end clock times to this service's invoice line. */
   invoiceTimeOnLines?: boolean;
   invoiceDescription: string | null;
+  /** Minimum charge per visit (cents) for a per-unit estimate line; 0 = none. Copied onto the line when added. */
+  minimumChargeCents: number;
+  /** Shown beside the line when the minimum is what is billed, e.g. "4-hour minimum". */
+  minimumChargeMessage: string | null;
   descriptionOnEstimate: string | null;
   callScriptNotes: string | null;
   taskColor: string;

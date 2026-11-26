@@ -739,6 +739,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             costCents: li.costCents,
             laborCostRateCents: li.laborCostRateCents ?? null,
             adjRateCents: newAdjRate,
+            minChargeCents: li.minChargeCents ?? 0,
             unitType: li.unitType ?? undefined,
             productionRateSqftPerHr: li.productionRateSqftPerHr ?? undefined,
             budgetMethod: li.budgetMethod,
@@ -905,10 +906,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             unitType: item.unitType,
             productionRateSqftPerHr: productionRate,
             budgetMethod,
+            minChargeCents: matchedService?.minimumChargeCents ?? 0,
           }, breakevenRateCents);
           return upsertLineItem({
             estimateId: estimate.id,
             item: {
+              min_charge_cents: matchedService?.minimumChargeCents ?? 0,
+              min_charge_message: (matchedService?.minimumChargeCents ?? 0) > 0 ? (matchedService?.minimumChargeMessage ?? null) : null,
               service_id: item.serviceId ?? null,
               service_name: item.serviceName,
               estimate_desc: item.estimateDesc || null,

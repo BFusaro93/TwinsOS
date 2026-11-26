@@ -10481,6 +10481,8 @@ export type Database = {
           matrix_tail_hours: number | null
           matrix_tail_over_qty: number | null
           matrix_tail_rate_cents: number | null
+          minimum_charge_cents: number
+          minimum_charge_message: string | null
           name: string
           only_for_estimates: boolean
           org_id: string
@@ -10525,6 +10527,8 @@ export type Database = {
           matrix_tail_hours?: number | null
           matrix_tail_over_qty?: number | null
           matrix_tail_rate_cents?: number | null
+          minimum_charge_cents?: number
+          minimum_charge_message?: string | null
           name: string
           only_for_estimates?: boolean
           org_id?: string
@@ -10569,6 +10573,8 @@ export type Database = {
           matrix_tail_hours?: number | null
           matrix_tail_over_qty?: number | null
           matrix_tail_rate_cents?: number | null
+          minimum_charge_cents?: number
+          minimum_charge_message?: string | null
           name?: string
           only_for_estimates?: boolean
           org_id?: string
@@ -12310,6 +12316,8 @@ export type Database = {
           markup_bps: number
           org_id: string
           package_id: string | null
+          min_charge_cents: number
+          min_charge_message: string | null
           production_rate_sqft_per_hr: number | null
           qty: number
           rate_cents: number
@@ -12352,6 +12360,8 @@ export type Database = {
           markup_bps?: number
           org_id?: string
           package_id?: string | null
+          min_charge_cents?: number
+          min_charge_message?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -12394,6 +12404,8 @@ export type Database = {
           markup_bps?: number
           org_id?: string
           package_id?: string | null
+          min_charge_cents?: number
+          min_charge_message?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number

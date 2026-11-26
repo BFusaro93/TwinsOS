@@ -168,6 +168,35 @@ export function effectiveBudgetedHours(
 }
 
 /**
+ * Raises one visit's charge to the service minimum when it falls below it.
+ * No minimum (0 / null) or a zero-quantity line (nothing to charge for) leaves
+ * the amount alone, so an empty line never bills the minimum.
+ */
+export function applyMinimumPerVisit(perVisitCents: number, minChargeCents: number | null | undefined): number {
+  const min = typeof minChargeCents === "number" && Number.isFinite(minChargeCents) && minChargeCents > 0 ? Math.round(minChargeCents) : 0;
+  if (min === 0 || perVisitCents <= 0) return perVisitCents;
+  return Math.max(perVisitCents, min);
+}
+
+/**
+ * True when a per-unit line's visit charge (qty x rate x complexity) is below
+ * the line's minimum, i.e. the minimum is what the client is actually billed.
+ * Drives the "minimum applied" badge in the grid.
+ */
+export function minimumChargeApplies(item: {
+  calcType: number;
+  qty: number;
+  rateCents: number;
+  adjRateCents?: number | null;
+  complexityBps?: number | null;
+  minChargeCents?: number | null;
+}): boolean {
+  if (item.calcType !== 1 || !((item.minChargeCents ?? 0) > 0)) return false;
+  const perVisit = Math.round(item.qty * (item.adjRateCents ?? item.rateCents) * complexityFactor(item.complexityBps));
+  return applyMinimumPerVisit(perVisit, item.minChargeCents) > perVisit;
+}
+
+/**
  * Recompute all derived fields on a line item from its inputs.
  *
  * budgetMethod is the explicit, user-chosen toggle (set on the service, snapshotted
@@ -227,6 +256,8 @@ export function computeLineItem(
     productionRateSqftPerHr?: number | null;
     complexityBps?: number | null;
     laborCostRateCents?: number | null;
+    /** Service minimum charge per visit, copied onto the line (0 / absent = none). Per-unit lines only. */
+    minChargeCents?: number | null;
   },
   breakevenRateCents?: number
 ): Pick<
@@ -243,11 +274,18 @@ export function computeLineItem(
   // One visit rule for revenue, hours and cost alike (see lineVisits).
   const visits = lineVisits(item.visits);
 
-  const totalCents = Math.round(
+  // Fixed lines (calcType 0) are the price already, so a minimum can only
+  // matter for per-unit lines: each visit is billed at least the minimum.
+  // Without a minimum the original single-rounding formula is kept exactly, so
+  // existing estimates never move by a cent.
+  const baseTotalCents = Math.round(
     (item.calcType === 1
       ? item.qty * effectiveRate * visits
       : effectiveRate) * factor // fixed: total IS the rate
   );
+  const totalCents = minimumChargeApplies(item)
+    ? applyMinimumPerVisit(Math.round(item.qty * effectiveRate * factor), item.minChargeCents) * visits
+    : baseTotalCents;
 
   // Auto-calculate budgeted hours from production rate (Aspire engine) — only
   // when the line item is explicitly set to that budget method AND its qty is
