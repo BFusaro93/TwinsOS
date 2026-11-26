@@ -39,6 +39,7 @@ import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd } from "@/lib/time/zone";
 import type { Estimate } from "@/types/crm-estimates";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { stripHtml } from "@/lib/utils/strip-html";
 
 const schema = z.object({
   clientId:       z.string().min(1, "Client is required"),
@@ -210,6 +211,8 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 service_id:           item.serviceId,
                 service_name:         item.serviceName,
                 status:               "quote",
+                estimate_desc: matchedService?.descriptionOnEstimate ? stripHtml(matchedService.descriptionOnEstimate) || null : null,
+                invoice_desc: matchedService?.invoiceDescription ? stripHtml(matchedService.invoiceDescription) || null : null,
                 calc_type:            item.calcType,
                 qty:                  item.qty,
                 unit_type:            item.unitType,

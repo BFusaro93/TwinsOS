@@ -730,7 +730,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Reading the line-item grid",
             detail:
-              "The grid's GM% column color-codes gross margin per line — green at 30%+, gray at 10%+, red below 10% — calculated from Rate, Cost, and Adjusted Rate. Toggle a line between per-unit (×) and fixed total ($) pricing with the Calc Type control.",
+              "The grid's GM% column color-codes gross margin per line — green at 30%+, gray at 10%+, red below 10% — calculated from Rate, Cost, and Adjusted Rate. Toggle a line between per-unit (×) and fixed total ($) pricing with the Calc Type control. On a $ line Qty is grayed out (it doesn't change the price).",
           },
           {
             step: "Converting an estimate to a job",
@@ -3531,6 +3531,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Can I link a service bundle to an estimate document?",
         a: "Yes. Open the bundle (Settings > Estimates > Service Bundles) and pick an Estimate document on the Details tab. Estimates created from, or given, that bundle remember the document, and Send pre-selects it instead of the default. The client-view toggles for the bundle are on the Display Settings tab.",
+      },
+      {
+        q: "What is the difference between × and $ in the Calc Type on an estimate line?",
+        a: "× is per-unit pricing: the line total is qty × rate × visits (times complexity), and a service's minimum charge applies to each visit. $ is a fixed price: the rate you enter is the whole line total, so qty and visits don't change it and the minimum charge doesn't apply. On a $ line Qty is grayed out. Visits stays editable because it still controls how many visits the job is scheduled for.",
+      },
+      {
+        q: "A $ line has 2 visits and a $200 total. How is it billed?",
+        a: "On a recurring job the line total is split evenly across the visits, so $200 over 2 visits is $100 a visit. The per-visit price is rounded down to whole cents so the job never bills more than the client accepted (for example $100.00 over 3 visits bills 3 × $33.33 = $99.99, and the convert dialog shows the shortfall). A one-time job counts as one visit and bills the full amount once.",
+      },
+      {
+        q: "When I apply a bundle, does it bring the service descriptions?",
+        a: "Yes. A bundle stores no wording of its own. When it is applied (when creating an estimate, or Apply bundle on an existing one) each line copies the service's current Description on Estimate and Invoice Description from Settings, as plain text, just like adding the service by hand. Changing the service's description later does not change estimates already built from the bundle, because each line keeps its own copy. To refresh a line, edit its description on the estimate.",
+      },
+      {
+        q: "I edited a service's description in Settings. Does it update packages, bundles and existing estimates?",
+        a: "Packages and bundles store no service description, so there is nothing to refresh in them: the next estimate you build from them picks up the new wording. Estimate lines already created keep the text they were built with. On jobs and invoices, a line with a copied invoice description keeps it; a line with none falls back to the service's current invoice description, so it shows the new wording.",
       },
       {
         q: "I applied a bundle with sub-items to an estimate and they did not show. Why?",

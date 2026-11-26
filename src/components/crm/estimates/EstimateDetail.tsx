@@ -1836,6 +1836,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             item: {
                               service_id: item.serviceId,
                               service_name: item.serviceName,
+                              // The bundle stores no wording: copy the service's current descriptions (plain text, like addService).
+                              estimate_desc: matchedService?.descriptionOnEstimate ? stripHtml(matchedService.descriptionOnEstimate) || null : null,
+                              invoice_desc: matchedService?.invoiceDescription ? stripHtml(matchedService.invoiceDescription) || null : null,
                               status: "quote",
                               calc_type: item.calcType,
                               qty: item.qty,

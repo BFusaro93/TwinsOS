@@ -995,7 +995,7 @@ function LineItemRow({
             onBlur={() => void saveVisits()}
             step={1}
             disabled={converted}
-            title={converted ? CONVERTED_LINE_MESSAGE : "Whole number of visits, 1 or more"}
+            title={converted ? CONVERTED_LINE_MESSAGE : row.calcType === 0 ? "Doesn't change the price on a fixed ($) line. The line total is split across this many visits on the job." : "Whole number of visits, 1 or more"}
           />
         </td>
 
@@ -1005,8 +1005,8 @@ function LineItemRow({
             value={row.qty}
             onChange={(v) => updateQty(v)}
             onBlur={save}
-            disabled={converted}
-            title={converted ? CONVERTED_LINE_MESSAGE : undefined}
+            disabled={converted || row.calcType === 0}
+            title={converted ? CONVERTED_LINE_MESSAGE : row.calcType === 0 ? "Quantity doesn't apply to a fixed ($) line. Switch to × to price per unit." : undefined}
           />
         </td>
 
