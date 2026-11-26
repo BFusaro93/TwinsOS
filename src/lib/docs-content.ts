@@ -3721,6 +3721,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "The link shows the last version you sent. Edit as much as you like, then use Send or Copy link to publish the new version; until then the client sees the previous one and can't accept it. The estimate header shows an 'Edited since Version N was sent' banner when the two differ.",
       },
       {
+        q: "Can an automation email or ticket use one of my documents, and will it stay up to date?",
+        a: "Yes. In an Email step's Email Body tab, or a Ticket step's Description, pick a document under 'Use an existing document'. The step is linked to it, not copied: each time it runs it uses the document's current subject and text, so editing the document under Documents updates every automation that uses it. If the document is empty or deleted, the step sends the text saved on the step instead. Choose None (or Custom ticket) to unlink and keep an editable copy. Merge tags like [clientname] and [clientemail] are filled in per client; Ticket steps can also set category, type, status, due in days, and assign to the client's sales rep.",
+      },
+      {
         q: "Can an automation email send itself before anyone reviews it?",
         a: "Only if 'require approval' is off for that email event. Turn it on to hold the email for manual approval before it sends — useful when you're not fully confident in a new automation yet.",
       },
