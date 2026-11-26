@@ -1160,6 +1160,74 @@ export type Database = {
           },
         ]
       }
+      card_update_tokens: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          expires_at: string
+          id: string
+          org_id: string
+          token_hash: string
+          updated_at: string
+          used_at: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          expires_at: string
+          id?: string
+          org_id: string
+          token_hash: string
+          updated_at?: string
+          used_at?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          expires_at?: string
+          id?: string
+          org_id?: string
+          token_hash?: string
+          updated_at?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_update_tokens_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_update_tokens_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_update_tokens_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_update_tokens_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_activity: {
         Row: {
           activity_type: string
@@ -5460,6 +5528,7 @@ export type Database = {
           date_hired: string | null
           date_released: string | null
           deleted_at: string | null
+          dot_physical_expiration: string | null
           driver_license: string | null
           eligible_overtime: boolean
           email: string | null
@@ -5468,6 +5537,7 @@ export type Database = {
           employment_status: string
           field_time_clock: boolean
           first_name: string
+          hoisting_license_expiration: string | null
           hourly_rate_cents: number
           i9_expiration_date: string | null
           i9_number: string | null
@@ -5480,8 +5550,6 @@ export type Database = {
           last_pay_raise_cents: number
           last_pay_raise_date: string | null
           license_expiration: string | null
-          dot_physical_expiration: string | null
-          hoisting_license_expiration: string | null
           manager_id: string | null
           map_codes: string | null
           map_icon_color: string | null
@@ -5540,6 +5608,7 @@ export type Database = {
           date_hired?: string | null
           date_released?: string | null
           deleted_at?: string | null
+          dot_physical_expiration?: string | null
           driver_license?: string | null
           eligible_overtime?: boolean
           email?: string | null
@@ -5548,6 +5617,7 @@ export type Database = {
           employment_status?: string
           field_time_clock?: boolean
           first_name: string
+          hoisting_license_expiration?: string | null
           hourly_rate_cents?: number
           i9_expiration_date?: string | null
           i9_number?: string | null
@@ -5560,8 +5630,6 @@ export type Database = {
           last_pay_raise_cents?: number
           last_pay_raise_date?: string | null
           license_expiration?: string | null
-          dot_physical_expiration?: string | null
-          hoisting_license_expiration?: string | null
           manager_id?: string | null
           map_codes?: string | null
           map_icon_color?: string | null
@@ -5620,6 +5688,7 @@ export type Database = {
           date_hired?: string | null
           date_released?: string | null
           deleted_at?: string | null
+          dot_physical_expiration?: string | null
           driver_license?: string | null
           eligible_overtime?: boolean
           email?: string | null
@@ -5628,6 +5697,7 @@ export type Database = {
           employment_status?: string
           field_time_clock?: boolean
           first_name?: string
+          hoisting_license_expiration?: string | null
           hourly_rate_cents?: number
           i9_expiration_date?: string | null
           i9_number?: string | null
@@ -5640,8 +5710,6 @@ export type Database = {
           last_pay_raise_cents?: number
           last_pay_raise_date?: string | null
           license_expiration?: string | null
-          dot_physical_expiration?: string | null
-          hoisting_license_expiration?: string | null
           manager_id?: string | null
           map_codes?: string | null
           map_icon_color?: string | null
@@ -7449,6 +7517,9 @@ export type Database = {
           qty: number | null
           rate_cents: number | null
           scheduled_date: string
+          service_ended_at: string | null
+          service_gap_seconds: number
+          service_started_at: string | null
           skip_reason: string | null
           snow_depth_inches: number | null
           start_time: string | null
@@ -7505,6 +7576,9 @@ export type Database = {
           qty?: number | null
           rate_cents?: number | null
           scheduled_date: string
+          service_ended_at?: string | null
+          service_gap_seconds?: number
+          service_started_at?: string | null
           skip_reason?: string | null
           snow_depth_inches?: number | null
           start_time?: string | null
@@ -7561,6 +7635,9 @@ export type Database = {
           qty?: number | null
           rate_cents?: number | null
           scheduled_date?: string
+          service_ended_at?: string | null
+          service_gap_seconds?: number
+          service_started_at?: string | null
           skip_reason?: string | null
           snow_depth_inches?: number | null
           start_time?: string | null
@@ -8146,6 +8223,7 @@ export type Database = {
         Row: {
           created_at: string
           deleted_at: string | null
+          group_name: string | null
           id: string
           list_name: string
           org_id: string
@@ -8155,6 +8233,7 @@ export type Database = {
         Insert: {
           created_at?: string
           deleted_at?: string | null
+          group_name?: string | null
           id?: string
           list_name: string
           org_id?: string
@@ -8164,6 +8243,7 @@ export type Database = {
         Update: {
           created_at?: string
           deleted_at?: string | null
+          group_name?: string | null
           id?: string
           list_name?: string
           org_id?: string
@@ -8680,11 +8760,12 @@ export type Database = {
           is_credit: boolean
           is_prepayment: boolean
           memo: string | null
-          method_label: string | null
           method: string
+          method_label: string | null
           notes: string | null
           org_id: string
           payment_date: string
+          platform_fee_cents: number
           processing_fee_cents: number
           reference: string | null
           refunded_amount_cents: number
@@ -8708,11 +8789,12 @@ export type Database = {
           is_credit?: boolean
           is_prepayment?: boolean
           memo?: string | null
-          method_label?: string | null
           method?: string
+          method_label?: string | null
           notes?: string | null
           org_id?: string
           payment_date: string
+          platform_fee_cents?: number
           processing_fee_cents?: number
           reference?: string | null
           refunded_amount_cents?: number
@@ -8736,11 +8818,12 @@ export type Database = {
           is_credit?: boolean
           is_prepayment?: boolean
           memo?: string | null
-          method_label?: string | null
           method?: string
+          method_label?: string | null
           notes?: string | null
           org_id?: string
           payment_date?: string
+          platform_fee_cents?: number
           processing_fee_cents?: number
           reference?: string | null
           refunded_amount_cents?: number
@@ -8811,7 +8894,6 @@ export type Database = {
       crm_payroll_adjustments: {
         Row: {
           break_override: number | null
-          lunch_override: number | null
           created_at: string
           created_by: string | null
           crew_member_id: string
@@ -8820,6 +8902,7 @@ export type Database = {
           extra_hours: number
           hours_override: number | null
           id: string
+          lunch_override: number | null
           note: string | null
           org_id: string
           pto_hours: number
@@ -8830,7 +8913,6 @@ export type Database = {
         }
         Insert: {
           break_override?: number | null
-          lunch_override?: number | null
           created_at?: string
           created_by?: string | null
           crew_member_id: string
@@ -8839,6 +8921,7 @@ export type Database = {
           extra_hours?: number
           hours_override?: number | null
           id?: string
+          lunch_override?: number | null
           note?: string | null
           org_id?: string
           pto_hours?: number
@@ -8849,7 +8932,6 @@ export type Database = {
         }
         Update: {
           break_override?: number | null
-          lunch_override?: number | null
           created_at?: string
           created_by?: string | null
           crew_member_id?: string
@@ -8858,6 +8940,7 @@ export type Database = {
           extra_hours?: number
           hours_override?: number | null
           id?: string
+          lunch_override?: number | null
           note?: string | null
           org_id?: string
           pto_hours?: number
@@ -12323,10 +12406,10 @@ export type Database = {
           labor_cost_rate_cents: number | null
           margin_bps: number
           markup_bps: number
-          org_id: string
-          package_id: string | null
           min_charge_cents: number
           min_charge_message: string | null
+          org_id: string
+          package_id: string | null
           production_rate_sqft_per_hr: number | null
           qty: number
           rate_cents: number
@@ -12367,10 +12450,10 @@ export type Database = {
           labor_cost_rate_cents?: number | null
           margin_bps?: number
           markup_bps?: number
-          org_id?: string
-          package_id?: string | null
           min_charge_cents?: number
           min_charge_message?: string | null
+          org_id?: string
+          package_id?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -12411,10 +12494,10 @@ export type Database = {
           labor_cost_rate_cents?: number | null
           margin_bps?: number
           markup_bps?: number
-          org_id?: string
-          package_id?: string | null
           min_charge_cents?: number
           min_charge_message?: string | null
+          org_id?: string
+          package_id?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -15160,6 +15243,7 @@ export type Database = {
           pending_plan: string | null
           per_org_numbering: boolean
           plan: string
+          platform_fee_bps: number
           portal_enabled: boolean
           seat_overage_cents_override: number | null
           seats_included_override: number | null
@@ -15210,6 +15294,7 @@ export type Database = {
           pending_plan?: string | null
           per_org_numbering?: boolean
           plan?: string
+          platform_fee_bps?: number
           portal_enabled?: boolean
           seat_overage_cents_override?: number | null
           seats_included_override?: number | null
@@ -15260,6 +15345,7 @@ export type Database = {
           pending_plan?: string | null
           per_org_numbering?: boolean
           plan?: string
+          platform_fee_bps?: number
           portal_enabled?: boolean
           seat_overage_cents_override?: number | null
           seats_included_override?: number | null
@@ -15282,7 +15368,22 @@ export type Database = {
           twilio_messaging_service_sid?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "organizations_staff_client_id_fkey"
+            columns: ["staff_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organizations_staff_client_id_fkey"
+            columns: ["staff_client_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       parts: {
         Row: {
@@ -19046,6 +19147,9 @@ export type Database = {
           qty: number | null
           rate_cents: number | null
           scheduled_date: string | null
+          service_ended_at: string | null
+          service_gap_seconds: number | null
+          service_started_at: string | null
           skip_reason: string | null
           snow_depth_inches: number | null
           start_time: string | null
@@ -19154,6 +19258,9 @@ export type Database = {
           qty?: number | null
           rate_cents?: never
           scheduled_date?: string | null
+          service_ended_at?: string | null
+          service_gap_seconds?: number | null
+          service_started_at?: string | null
           skip_reason?: string | null
           snow_depth_inches?: number | null
           start_time?: string | null
@@ -19209,6 +19316,9 @@ export type Database = {
           qty?: number | null
           rate_cents?: never
           scheduled_date?: string | null
+          service_ended_at?: string | null
+          service_gap_seconds?: number | null
+          service_started_at?: string | null
           skip_reason?: string | null
           snow_depth_inches?: number | null
           start_time?: string | null
@@ -20174,9 +20284,12 @@ export type Database = {
           crew_group_secondary: boolean | null
           crew_name: string | null
           id: string | null
+          job_status: string | null
+          job_type: string | null
           labor_cost_source: string | null
           man_hours: number | null
           men_count: number | null
+          on_waiting_list: boolean | null
           org_id: string | null
           rate_cents: number | null
           rev_per_man_hr_cents: number | null
@@ -20185,6 +20298,7 @@ export type Database = {
           scheduled_date: string | null
           service_city: string | null
           service_code: string | null
+          service_ids: string[] | null
           service_names: string | null
           service_zip: string | null
           skip_reason: string | null
@@ -20267,8 +20381,8 @@ export type Database = {
           is_credit: boolean | null
           is_prepayment: boolean | null
           memo: string | null
-          method_label: string | null
           method: string | null
+          method_label: string | null
           net_amount_cents: number | null
           org_id: string | null
           payment_date: string | null
@@ -20849,6 +20963,7 @@ export type Database = {
         Args: { p_job_id: string; p_route_id: string }
         Returns: {
           created_at: string
+          crew_id: string | null
           id: string
           job_id: string
           org_id: string
@@ -20945,6 +21060,7 @@ export type Database = {
         Returns: boolean
       }
       caller_is_org_admin: { Args: never; Returns: boolean }
+      can_access_employee_files: { Args: never; Returns: boolean }
       can_edit_social_media: { Args: never; Returns: boolean }
       chem_amount_in_stock_unit: {
         Args: { p_amount: number; p_product_id: string; p_unit_id: string }
@@ -21379,6 +21495,15 @@ export type Database = {
           zip: string
         }[]
       }
+      crm_employee_credentials: {
+        Args: { p_employee_id?: string }
+        Returns: {
+          dot_physical_expiration: string
+          hoisting_license_expiration: string
+          id: string
+          license_expiration: string
+        }[]
+      }
       crm_employee_hourly_rate_cents: {
         Args: { p_employee_id: string }
         Returns: number
@@ -21496,6 +21621,7 @@ export type Database = {
           date_hired: string | null
           date_released: string | null
           deleted_at: string | null
+          dot_physical_expiration: string | null
           driver_license: string | null
           eligible_overtime: boolean
           email: string | null
@@ -21504,6 +21630,7 @@ export type Database = {
           employment_status: string
           field_time_clock: boolean
           first_name: string
+          hoisting_license_expiration: string | null
           hourly_rate_cents: number
           i9_expiration_date: string | null
           i9_number: string | null
@@ -21515,8 +21642,6 @@ export type Database = {
           last_name: string
           last_pay_raise_cents: number
           last_pay_raise_date: string | null
-          dot_physical_expiration: string | null
-          hoisting_license_expiration: string | null
           license_expiration: string | null
           manager_id: string | null
           map_codes: string | null
@@ -21663,6 +21788,21 @@ export type Database = {
           p_is_prepayment: boolean
           p_memo: string
           p_method: string
+          p_payment_date: string
+          p_reference: string
+        }
+        Returns: Json
+      }
+      crm_record_payment_labeled: {
+        Args: {
+          p_allocations: Json
+          p_amount_cents: number
+          p_client_id: string
+          p_is_credit: boolean
+          p_is_prepayment: boolean
+          p_memo: string
+          p_method: string
+          p_method_label: string
           p_payment_date: string
           p_reference: string
         }
@@ -21862,6 +22002,20 @@ export type Database = {
         }
         Returns: Json
       }
+      crm_update_payment_labeled: {
+        Args: {
+          p_allocations: Json
+          p_amount_cents: number
+          p_client_id: string
+          p_memo: string
+          p_method: string
+          p_method_label: string
+          p_payment_date: string
+          p_payment_id: string
+          p_reference: string
+        }
+        Returns: Json
+      }
       crm_visit_crew_partners: {
         Args: { p_visit_ids: string[] }
         Returns: {
@@ -21877,6 +22031,10 @@ export type Database = {
       decrement_cost_layers: {
         Args: { p_layers: Json; p_qty: number }
         Returns: Json
+      }
+      delete_chemical_lookup_item: {
+        Args: { p_id: string }
+        Returns: undefined
       }
       delete_job_product: {
         Args: { p_job_product_id: string }
@@ -22211,6 +22369,10 @@ export type Database = {
         Args: { p_payment_id: string; p_target_reversed_cents: number }
         Returns: number
       }
+      rename_org_list_option: {
+        Args: { p_id: string; p_new_value: string }
+        Returns: string
+      }
       reopen_canceled_project: {
         Args: { p_project_id: string; p_restore_milestones?: boolean }
         Returns: {
@@ -22299,6 +22461,15 @@ export type Database = {
         Args: { p_list_name: string }
         Returns: string
       }
+      snow_storm_route_targets: {
+        Args: { p_storm_event_id: string }
+        Returns: {
+          crew_id: string
+          job_id: string
+          ord: number
+          route_id: string
+        }[]
+      }
       staff_list_ask_ai_questions: {
         Args: never
         Returns: {
@@ -22366,6 +22537,10 @@ export type Database = {
         Returns: undefined
       }
       sync_client_balance: { Args: { p_client_id: string }; Returns: undefined }
+      sync_property_tags_for_client: {
+        Args: { p_client_id: string }
+        Returns: undefined
+      }
       try_increment_ai_chat_usage: {
         Args: { p_day: string; p_limit: number; p_org_id: string }
         Returns: boolean

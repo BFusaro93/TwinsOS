@@ -82,9 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   }
 
   // Spend the link only now that the card is saved; a failed save leaves it usable for a retry.
-  // card_update_tokens isn't in the generated Supabase types yet.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (db as any)
+  await db
     .from("card_update_tokens")
     .update({ used_at: new Date().toISOString() })
     .eq("id", resolved.id)
