@@ -55,6 +55,7 @@ import type { OrgUser } from "@/types";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { EmployeeFilesTab } from "@/components/crm/employees/EmployeeFilesTab";
+import { diffChangedFields } from "@/lib/employees/form-diff";
 import { ExpiringCredentialsPanel } from "@/components/crm/employees/ExpiringCredentialsPanel";
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -806,6 +807,13 @@ function EmployeeDialog({
     employee ? employeeToForm(employee) : defaultForm
   );
 
+  // What the form showed when it opened: an edit saves only what differs from
+  // this, so untouched fields are never rewritten.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [initialForm] = useState<Record<string, any> | null>(() =>
+    employee ? employeeToForm(employee) : null
+  );
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function onChange(key: string, value: any) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -832,11 +840,17 @@ function EmployeeDialog({
     // filters on is_active), so changing the Employment Status keeps is_active
     // in step — otherwise a terminated employee stayed active on crew rosters,
     // pickers and payroll until someone also found the Deactivate action.
-    const payload = { ...form };
+    // New employee: every field. Existing: only the fields the user changed.
+    const payload = initialForm ? diffChangedFields(initialForm, form) : { ...form };
     const statusChanged = !employee || employee.employmentStatus !== form.employment_status;
     if (statusChanged) {
       if (form.employment_status === "terminated") payload.is_active = false;
       else if (employee?.employmentStatus === "terminated") payload.is_active = true;
+    }
+    if (!isNew && Object.keys(payload).length === 0) {
+      toast.info("No changes to save");
+      onOpenChange(false);
+      return;
     }
     try {
       if (isNew) {
