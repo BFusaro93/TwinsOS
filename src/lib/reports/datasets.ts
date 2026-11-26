@@ -612,6 +612,10 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "date_hired", label: "Date Hired", type: "date" },
       { key: "emergency_contact", label: "Emergency Contact", type: "text" },
       { key: "emergency_phone", label: "Emergency Phone", type: "text" },
+      { key: "license_expiration", label: "Driver License Expiration", type: "date" },
+      { key: "dot_physical_expiration", label: "DOT Physical Expiration", type: "date" },
+      { key: "hoisting_license_expiration", label: "Hoisting License Expiration", type: "date" },
+      { key: "next_credential_expiry", label: "Next Credential Expiration", type: "date" },
     ],
   },
   {

@@ -5477,6 +5477,8 @@ export type Database = {
           last_pay_raise_cents: number
           last_pay_raise_date: string | null
           license_expiration: string | null
+          dot_physical_expiration: string | null
+          hoisting_license_expiration: string | null
           manager_id: string | null
           map_codes: string | null
           map_icon_color: string | null
@@ -5555,6 +5557,8 @@ export type Database = {
           last_pay_raise_cents?: number
           last_pay_raise_date?: string | null
           license_expiration?: string | null
+          dot_physical_expiration?: string | null
+          hoisting_license_expiration?: string | null
           manager_id?: string | null
           map_codes?: string | null
           map_icon_color?: string | null
@@ -5633,6 +5637,8 @@ export type Database = {
           last_pay_raise_cents?: number
           last_pay_raise_date?: string | null
           license_expiration?: string | null
+          dot_physical_expiration?: string | null
+          hoisting_license_expiration?: string | null
           manager_id?: string | null
           map_codes?: string | null
           map_icon_color?: string | null
@@ -19864,17 +19870,21 @@ export type Database = {
           city: string | null
           compensation_type: string | null
           date_hired: string | null
+          dot_physical_expiration: string | null
           email: string | null
           emergency_contact: string | null
           emergency_phone: string | null
           employment_status: string | null
           first_name: string | null
           full_name: string | null
+          hoisting_license_expiration: string | null
           hourly_rate_cents: number | null
           id: string | null
           is_active: boolean | null
           is_sales_rep: boolean | null
           last_name: string | null
+          license_expiration: string | null
+          next_credential_expiry: string | null
           org_id: string | null
           phone: string | null
           resource_code: string | null
@@ -21502,6 +21512,8 @@ export type Database = {
           last_name: string
           last_pay_raise_cents: number
           last_pay_raise_date: string | null
+          dot_physical_expiration: string | null
+          hoisting_license_expiration: string | null
           license_expiration: string | null
           manager_id: string | null
           map_codes: string | null
