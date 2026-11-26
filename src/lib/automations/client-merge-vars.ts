@@ -5,7 +5,7 @@ import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
-const PREBUILT_HTML_TAGS = new Set(["[paymentlink]", "[chemicalnotice]", "[estimatelink]"]);
+const PREBUILT_HTML_TAGS = new Set(["[paymentlink]", "[chemicalnotice]", "[estimatelink]", "[cardupdatelink]"]);
 
 export interface AutomationClientRow {
   id: string;

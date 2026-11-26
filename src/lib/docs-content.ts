@@ -3205,6 +3205,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. A client with a saved card has an Autopay switch on the portal Account page. Saving a card asks whether to use it for autopay (off by default), and removing the saved card turns autopay off. In Landscapt Settings > Client Portal, Allow Autopay stops clients turning it on (they can always turn it off, and autopay already running continues), and Allow Clients to Manage Payment Method stops them adding, updating or removing the saved card.",
       },
       {
+        q: "Can I email a client a link to update their card without signing in to the portal?",
+        a: "Yes. Put [cardupdatelink] (a button) or [cardupdatelinkurl] (the plain link) in any client email, document, automation email or text — for example a Credit Card Update document or a Credit card about to expire / charge failed automation. Each send creates a fresh private link, good for 14 days and one use, that opens a page with your logo where the client enters a new card through Stripe — no login. The page includes an AutoPay checkbox (on by default, and hidden if Allow Autopay is off in Settings > Client Portal); ticking it turns AutoPay on for the new card, the same as in the portal. Saving replaces the card on file, adds a note to the client's timeline, and fires the Credit card updated automation trigger. A used or expired link shows a friendly message and the client can ask you for another.",
+      },
+      {
         q: "Can I limit how much a client can pay online in one payment?",
         a: "Yes. In Landscapt Settings > Client Portal, set a Card Max Payment Amount and/or an ACH Max Payment Amount; blank means no limit. A client who tries to pay more by that method in one payment (or one prepayment) is told the limit and can pay a smaller amount or contact you. The limit is checked against the invoice balance before any card fee and before account credit is applied, and doesn't affect autopay or payments you record yourself.",
       },

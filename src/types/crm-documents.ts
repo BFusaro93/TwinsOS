@@ -90,6 +90,8 @@ const CLIENT_TAGS: MergeTag[] = [
   { tag: "[howwebillyou]",        label: "How We Bill You",          group: "Client" },
   { tag: "[salesperson]",         label: "Sales Person",             group: "Client" },
   { tag: "[referringclient]",     label: "Referring Client",         group: "Client" },
+  { tag: "[cardupdatelink]",      label: "Update Card Link (button)", group: "Client" },
+  { tag: "[cardupdatelinkurl]",   label: "Update Card Link (URL)",    group: "Client" },
 ];
 
 // ── Billing address tags ───────────────────────────────────────────────────────
