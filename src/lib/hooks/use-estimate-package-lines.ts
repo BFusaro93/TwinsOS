@@ -14,6 +14,7 @@ import { priceServiceLine } from "@/lib/estimates/service-line";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import type { CRMPackage } from "@/types/crm-packages";
+import type { BudgetMethod } from "@/types/crm-jobs";
 
 /**
  * The estimate's client measurements (turf sq ft, mulch bed sq ft, numeric custom
@@ -122,6 +123,10 @@ export function useAddPackageLines({ clientId, propertyId }: { clientId?: string
           sortOrder: startSortOrder + 1 + i,
           budgetedHours: step.defaultBHrs ?? null,
           lockRate: !!step.defaultRateCents,
+          // The service's minimum charge (e.g. $60 on a Tick + Mosquito visit) applies to a step
+          // priced from the Rate Matrix; a step with its own locked price ignores it.
+          minChargeCents: match?.minimumChargeCents ?? null,
+          minChargeMessage: match?.minimumChargeMessage ?? null,
         }, { clientId, propertyId, takeoff, breakevenRateCents, defaultSortOrder: startSortOrder + 1 + i });
         const added = await upsert({ estimateId, item });
         // Pre-fill the service's default equipment (internal cost) onto the new line.
@@ -137,4 +142,34 @@ export function useAddPackageLines({ clientId, propertyId }: { clientId?: string
       return false;
     }
   };
+}
+
+/**
+ * Prices one catalog service as an estimate line the way Add Item does (Rate Matrix, client
+ * takeoff, production rate, minimum charge), for lines a bundle adds. A bundle line carries
+ * the rate typed into the bundle; a service left at $0 there is priced from its matrix at
+ * apply time instead of landing as a $0 line. Returns the line payload for useUpsertLineItem.
+ */
+export function usePriceServiceLine({ clientId, propertyId }: { clientId?: string | null; propertyId?: string | null }) {
+  const { data: orgSettings } = useOrgSettings();
+  const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
+  const takeoff = useEstimateTakeoff(clientId, propertyId);
+  return (
+    svc: { id: string; name: string; unit: string | null; productionRateSqftPerHr: number | null; budgetMethod: BudgetMethod; defaultRateCents: number | null; descriptionOnEstimate: string | null; invoiceDescription: string | null; minimumChargeCents: number | null; minimumChargeMessage: string | null },
+    opts: { visits: number; sortOrder: number },
+  ) =>
+    priceServiceLine({
+      id: svc.id,
+      name: svc.name,
+      unit: svc.unit ?? undefined,
+      productionRate: svc.productionRateSqftPerHr,
+      budgetMethod: svc.budgetMethod,
+      rateCents: svc.defaultRateCents,
+      estimateDesc: svc.descriptionOnEstimate,
+      invoiceDesc: svc.invoiceDescription,
+      visits: opts.visits,
+      sortOrder: opts.sortOrder,
+      minChargeCents: svc.minimumChargeCents,
+      minChargeMessage: svc.minimumChargeMessage,
+    }, { clientId, propertyId, takeoff, breakevenRateCents, defaultSortOrder: opts.sortOrder });
 }

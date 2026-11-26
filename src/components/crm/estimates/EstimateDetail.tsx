@@ -35,7 +35,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
 import { usePackages } from "@/lib/hooks/use-packages";
-import { useAddPackageLines } from "@/lib/hooks/use-estimate-package-lines";
+import { useAddPackageLines, usePriceServiceLine } from "@/lib/hooks/use-estimate-package-lines";
 import { layoutTemplateItems, skippedPackagesMessage } from "@/lib/estimates/template-package-items";
 import { useClientProperties } from "@/lib/hooks/use-clients";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
@@ -422,6 +422,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // Packages inside a template are added like the grid's Add Package (Rate Matrix + client takeoff).
   const { data: allPackages = [] } = usePackages(false);
   const addPackageLines = useAddPackageLines({ clientId: estimate?.clientId, propertyId: estimate?.propertyId });
+  // A bundle service left at $0 is priced from its Rate Matrix / the client's takeoff when applied.
+  const priceServiceLineFor = usePriceServiceLine({ clientId: estimate?.clientId, propertyId: estimate?.propertyId });
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
@@ -1823,7 +1825,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         new Set((estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.rowType === "section" && li.packageId).map((li) => li.packageId as string)),
                       );
                       await Promise.all([
-                        ...layout.plain.map(({ item, sortOrder }) => {
+                        ...layout.plain.map(async ({ item, sortOrder }) => {
                           // Carry over the matched service's budget method / production
                           // rate so a production_rate service applied via template doesn't
                           // silently fall back to manual budgeting with 0 budgeted hours.
@@ -1844,9 +1846,18 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             productionRateSqftPerHr: productionRate,
                             budgetMethod,
                           }, breakevenRateCents);
+                          const priced = matchedService && item.rateCents === 0
+                            ? await priceServiceLineFor(matchedService, { visits: item.visits, sortOrder })
+                            : null;
                           return upsertLineItem({
                             estimateId: estimate.id,
-                            item: {
+                            item: priced ? {
+                              ...priced,
+                              discount_cents: item.discountCents,
+                              discount_type: item.discountType,
+                              discount_value: item.discountValue,
+                              applied_discount_id: item.appliedDiscountId,
+                            } : {
                               service_id: item.serviceId,
                               service_name: item.serviceName,
                               // The bundle stores no wording: copy the service's current descriptions (plain text, like addService).
