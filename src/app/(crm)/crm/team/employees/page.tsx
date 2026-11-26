@@ -152,12 +152,8 @@ export default function EmployeesPage() {
             }
           />
         ) : (
-          <EmployeesTable
-            onSelect={(e) => {
-              setSelected(e);
-              setViewMode("list");
-            }}
-          />
+          // Stay in table view: selecting a row just opens the slide-over below.
+          <EmployeesTable onSelect={setSelected} />
         )}
       </div>
 
@@ -168,7 +164,7 @@ export default function EmployeesPage() {
       >
         <SheetContent className="flex w-full flex-col overflow-hidden p-0 md:w-[560px] md:max-w-[560px]">
           {selected && (
-            <EmployeeDetail employee={selected} onEdit={() => openEdit(selected)} />
+            <EmployeeDetail employee={selected} onEdit={() => openEdit(selected)} inSheet />
           )}
         </SheetContent>
       </Sheet>

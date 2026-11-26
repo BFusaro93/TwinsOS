@@ -977,9 +977,12 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 function EmployeeDetail({
   employee,
   onEdit,
+  inSheet = false,
 }: {
   employee: CRMEmployee;
   onEdit: () => void;
+  /** Rendered inside a slide-over: leave room for the Sheet's X (top-right). */
+  inSheet?: boolean;
 }) {
   const name = `${employee.firstName} ${employee.lastName}`;
   // The assigned role is crm_role_id; user_role is a legacy free-text title.
@@ -988,7 +991,7 @@ function EmployeeDetail({
   return (
     <div className="flex h-full flex-col overflow-auto">
       {/* Top card */}
-      <div className="border-b bg-slate-50 dark:bg-muted/40 px-6 py-5">
+      <div className={`border-b bg-slate-50 dark:bg-muted/40 px-6 py-5 ${inSheet ? "pr-12" : ""}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white uppercase ${getAvatarColor(name)}`}>
