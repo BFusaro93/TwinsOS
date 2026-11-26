@@ -77,7 +77,9 @@ export async function automationActivationWarnings(supabase: AnyClient, automati
     if (steps.every((e) => e.event_type === "wait")) warnings.push(`${label} only contains Wait steps — it does nothing.`);
     for (const e of steps) {
       const c = e.config ?? {};
-      if (e.event_type === "email" && !text(c.subject) && !text(c.bodyHtml ?? c.body)) {
+      // A linked document supplies the text at send time (the processor falls back to the
+      // step's own text if that document is missing or empty), so a link is not "empty".
+      if (e.event_type === "email" && !text(c.document_template_id) && !text(c.subject) && !text(c.bodyHtml ?? c.body)) {
         warnings.push(`${label} has an Email step with no subject or message — it will be skipped.`);
       }
       if (e.event_type === "text_message" && !text(c.message)) {

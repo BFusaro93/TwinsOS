@@ -7,8 +7,9 @@ import { phoneLast10 } from "@/lib/sms/opt-outs";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
+import { instantToZoneWallClock, shiftYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 import { resolveClientPlainText } from "./client-merge-vars";
+import { emailContentFromDocument, loadLinkedDocument, plainTextFromDocument } from "./linked-document";
 import { fetchCardExpiryContext, type CardExpiryContext } from "./card-expiry-context";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
@@ -709,6 +710,12 @@ async function runClaimedStep(
       }
     }
 
+    // A linked document supplies the CURRENT subject and body (editing the
+    // document updates this step). A missing, deleted or empty document falls
+    // back to the text saved on the step itself.
+    const linkedEmail = emailContentFromDocument(
+      await loadLinkedDocument(adminClient, { orgId, templateId: eventConfig.document_template_id }),
+    );
     const built = await resolveEmailStepContent(adminClient, {
       orgId,
       clientId: client_id!,
@@ -718,8 +725,8 @@ async function runClaimedStep(
       visitId: visit_id ?? null,
       visitDate: visit_date ?? null,
       triggerType: trigger_type ?? null,
-      subjectTemplate: eventConfig.subject ?? "",
-      bodyTemplate: eventConfig.bodyHtml ?? eventConfig.body ?? "",
+      subjectTemplate: linkedEmail?.subject ?? eventConfig.subject ?? "",
+      bodyTemplate: linkedEmail?.bodyHtml ?? eventConfig.bodyHtml ?? eventConfig.body ?? "",
       toSelection: eventConfig.to,
       fromSelection: eventConfig.from,
       cardExpiryContext,
@@ -1081,10 +1088,26 @@ async function runClaimedStep(
     const title = await resolveClientPlainText(adminClient, {
       orgId, clientId: client_id ?? null, template: (eventConfig.title as string) || "Automation ticket",
     });
+    // A linked document supplies the CURRENT description text (merge tags are
+    // resolved below, like a typed description); a missing/empty one falls back
+    // to the description saved on the step.
+    const linkedText = plainTextFromDocument(
+      await loadLinkedDocument(adminClient, { orgId, templateId: eventConfig.document_template_id }),
+    );
     const ticketDescription = await resolveClientPlainText(adminClient, {
-      orgId, clientId: client_id ?? null, template: (eventConfig.description as string) || "",
+      orgId, clientId: client_id ?? null, template: linkedText ?? ((eventConfig.description as string) || ""),
     });
-    const configuredAssignee = (eventConfig.assign_to as string) || null;
+    let configuredAssignee = (eventConfig.assign_to as string) || null;
+    // "Assigned to Sales Person": the client's sales rep wins when they have one.
+    if (eventConfig.assign_to_sales_rep === true && client_id) {
+      const { data: repRow } = await adminClient
+        .from("clients")
+        .select("sales_rep_id")
+        .eq("id", client_id)
+        .eq("org_id", orgId)
+        .maybeSingle();
+      if (repRow?.sales_rep_id) configuredAssignee = repRow.sales_rep_id as string;
+    }
 
     // Only an employee of this org can be the assignee; anything else (another org's
     // employee id, a deleted employee) leaves the ticket unassigned, which notifies
@@ -1105,15 +1128,28 @@ async function runClaimedStep(
       }
     }
 
+    // Type / status are constrained in the DB; anything else (an old or hand-edited
+    // config) degrades to the original defaults instead of failing the insert.
+    const ticketType = ["note", "call", "event", "text"].includes(eventConfig.type as string) ? (eventConfig.type as string) : "note";
+    const ticketStatus = ["open", "pending"].includes(eventConfig.status as string) ? (eventConfig.status as string) : "open";
+    // Due date: the org's day plus N days (blank = no due date; 0 = today).
+    const dueInDays = typeof eventConfig.due_in_days === "number" && Number.isInteger(eventConfig.due_in_days) && eventConfig.due_in_days >= 0
+      ? eventConfig.due_in_days
+      : null;
+    const dueDate = dueInDays === null ? null : shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), dueInDays);
+
     const { data: ticket, error: ticketErr } = await adminClient
       .from("crm_tickets")
       .insert({
         org_id: orgId,
-        type: "note",
+        type: ticketType,
         client_id,
         subject: title,
         body: ticketDescription || null,
         priority: (eventConfig.priority as string) || "normal",
+        category: typeof eventConfig.category === "string" && eventConfig.category.trim() ? eventConfig.category.trim() : null,
+        status: ticketStatus,
+        due_date: dueDate,
         assigned_to_id: assignToId,
         assigned_to: assignedToName,
       })
