@@ -3725,6 +3725,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. In an Email step's Email Body tab, or a Ticket step's Description, pick a document under 'Use an existing document'. The step is linked to it, not copied: each time it runs it uses the document's current subject and text, so editing the document under Documents updates every automation that uses it. If the document is empty or deleted, the step sends the text saved on the step instead. Choose None (or Custom ticket) to unlink and keep an editable copy. Merge tags like [clientname] and [clientemail] are filled in per client; Ticket steps can also set category, type, status, due in days, and assign to the client's sales rep.",
       },
       {
+        q: "Can an automation email go to my staff instead of the client?",
+        a: "Yes. In an Email step's To list, tick the client's sales rep, the estimate's sales rep (for estimate triggers), and/or pick specific employees. Staff get the email at the address on their employee record (people marked terminated or without an email are skipped). A client's opt-out and bounce settings only affect the client's own addresses, so a notice to staff still goes out even if the client is marked not OK to email. Approval, send window and the other settings work the same.",
+      },
+      {
+        q: "Why do my parent and child clients get Master Property and Sub-property tags?",
+        a: "They're added for you. A client with at least one child client gets the Master Property tag, and a client with a parent gets Sub-property. They appear when you link or unlink clients, and the tag is removed when the link is removed or the client is deleted. The tags are created in your tag list the first time they're needed. Links made before this existed aren't re-tagged, but you can add the tags by hand.",
+      },
+      {
+        q: "Can an automation email include the estimate's proposal link?",
+        a: "Yes, for automations that start from an estimate (such as Estimate sent). Add the Proposal link button tag, [estimatelink], or [estimatelinkurl] for the plain address. It links to the estimate's current live proposal and is left blank if the link has expired.",
+      },
+      {
         q: "Can an automation email send itself before anyone reviews it?",
         a: "Only if 'require approval' is off for that email event. Turn it on to hold the email for manual approval before it sends — useful when you're not fully confident in a new automation yet.",
       },

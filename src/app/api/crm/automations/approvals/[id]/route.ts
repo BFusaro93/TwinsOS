@@ -285,6 +285,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     } else {
       const fresh = await resolveEmailRecipients(admin, {
         orgId: approval.org_id, clientId: enrollment.client_id, toSelection, category: eventConfig.category as string | undefined,
+        estimateId: enrollment.estimate_id ?? null,
       });
       if ("error" in fresh) reason = fresh.error;
       else {

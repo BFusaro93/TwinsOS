@@ -9,10 +9,13 @@ import { getOrgReplyTo, isUsableReplyTo } from "@/lib/email/reply-to";
 import { partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { findMarketingOptedOutAddresses } from "@/lib/email/marketing-opt-outs";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
+import { safeHexColor } from "@/lib/utils/safe-color";
 import { todayInZone } from "@/lib/time/zone";
 import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
 import { computeWaitFireAt } from "./sequence-enrollment";
-import { buildAutomationMergeVars, loadAutomationClient } from "./client-merge-vars";
+import { resolveStaffRecipientEmails, splitEmailToSelection } from "./email-recipients";
+import { buildAutomationMergeVars, loadAutomationClient, type AutomationClientRow } from "./client-merge-vars";
 import type { CardExpiryContext } from "./card-expiry-context";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,24 +54,13 @@ export function isMarketingEmailCategory(category: string | null | undefined): b
   return !SERVICE_EMAIL_CATEGORIES.has((category ?? "").toLowerCase());
 }
 
-/**
- * Who an email step may go to right now: the client's addresses for the step's
- * "To" selection, minus hard-bounced addresses and (for marketing-category
- * steps) addresses a Do Not Market client in the org uses — or the reason
- * nobody can be emailed. Shared by step resolution and by the approval route /
- * processor, which re-run it before sending a step that sat in the approval
- * queue (suppression can change while it waits).
- */
-export async function resolveEmailRecipients(
+/** The client's own addresses for the client-facing "To" choices, after the client's opt-outs, bounces and marketing suppression. */
+async function resolveClientRecipientEmails(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string; toSelection?: string[]; category?: string | null }
-): Promise<
-  | { toEmails: string[]; loaded: NonNullable<Awaited<ReturnType<typeof loadAutomationClient>>> }
-  | { error: string }
-> {
-  const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
-  if (!loaded) return { error: "client not found" };
-  const { client } = loaded;
+  params: { orgId: string; clientId: string; toSelection: string[]; category?: string | null; client: AutomationClientRow },
+): Promise<{ emails: string[] } | { error: string }> {
+  const { client } = params;
+  const toSelection = params.toSelection;
   // Same opt-out flag Sales Campaigns checks before sending — a client who
   // used the unsubscribe link should stop getting MARKETING automation emails
   // too, not just campaign blasts. Service-category steps (transactional,
@@ -82,7 +74,6 @@ export async function resolveEmailRecipients(
   // through their own routes and are unaffected.
   if (client.ok_to_email === false) return { error: "client is marked not OK to email (ok_to_email)" };
 
-  const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
   // Keyed by trimmed lowercase address: the same mailbox typed with different
   // case or stray spaces on the client, its billing email and a contact is one
   // recipient, not a To header listing the person two or three times.
@@ -127,7 +118,57 @@ export async function resolveEmailRecipients(
       return { error: "every recipient address has opted out of marketing emails (on this or another client account)" };
     }
   }
+  return { emails: [...toByKey.values()] };
+}
 
+/**
+ * Who an email step may go to right now: the client's addresses for the step's
+ * "To" selection, minus hard-bounced addresses and (for marketing-category
+ * steps) addresses a Do Not Market client in the org uses — or the reason
+ * nobody can be emailed. Shared by step resolution and by the approval route /
+ * processor, which re-run it before sending a step that sat in the approval
+ * queue (suppression can change while it waits).
+ */
+export async function resolveEmailRecipients(
+  supabase: AnyClient,
+  params: { orgId: string; clientId: string; toSelection?: string[]; category?: string | null; estimateId?: string | null }
+): Promise<
+  | { toEmails: string[]; loaded: NonNullable<Awaited<ReturnType<typeof loadAutomationClient>>> }
+  | { error: string }
+> {
+  const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
+  if (!loaded) return { error: "client not found" };
+  const { client } = loaded;
+  const sel = splitEmailToSelection(params.toSelection);
+
+  // Staff recipients (sales rep, named employees) are internal: the client's
+  // opt-outs, bounces and marketing suppression don't apply to them.
+  const staffEmails = await resolveStaffRecipientEmails(supabase, {
+    orgId: params.orgId,
+    clientSalesRepId: (client.sales_rep_id as string | null) ?? null,
+    estimateId: params.estimateId ?? null,
+    staffTokens: sel.staffTokens,
+    employeeIds: sel.employeeIds,
+  });
+  const wantsStaff = sel.staffTokens.length > 0 || sel.employeeIds.length > 0;
+
+  // The client-facing part. With no staff recipients, an opted-out client ends the step
+  // (the original behaviour); with staff recipients it only drops the client's own addresses.
+  let clientError: string | null = null;
+  const clientEmails: string[] = [];
+  if (sel.client.length > 0) {
+    const clientResult = await resolveClientRecipientEmails(supabase, { ...params, client, toSelection: sel.client });
+    if ("error" in clientResult) clientError = clientResult.error;
+    else clientEmails.push(...clientResult.emails);
+  }
+
+  const toByKey = new Map<string, string>();
+  for (const e of [...clientEmails, ...staffEmails]) if (!toByKey.has(e.toLowerCase())) toByKey.set(e.toLowerCase(), e);
+
+  if (toByKey.size === 0) {
+    if (clientError) return { error: clientError };
+    return { error: wantsStaff && sel.client.length === 0 ? "no resolvable recipient email for the selected staff (no sales rep or employee address on file)" : "no resolvable recipient email for the selected 'to' options" };
+  }
   return { toEmails: [...toByKey.values()], loaded };
 }
 
@@ -177,7 +218,7 @@ export async function resolveEmailStepContent(
 
   const { data: orgRow } = await supabase
     .from("organizations")
-    .select("name")
+    .select("name, brand_color")
     .eq("id", params.orgId)
     .single();
 
@@ -218,6 +259,14 @@ export async function resolveEmailStepContent(
     if (estRow?.estimate_number != null) {
       estimateNumber = String(estRow.estimate_number).padStart(5, "0");
     }
+  }
+
+  // The proposal link for estimate-linked runs (estimate follow-ups): the estimate's live
+  // share link, as the Send Estimate email builds it. Blank when it has none or has expired.
+  let estimateLinkUrl = "";
+  if (params.estimateId) {
+    const shareToken = await findLiveShareToken(supabase, params.estimateId);
+    if (shareToken) estimateLinkUrl = proposalUrlFor(shareToken.token);
   }
 
   let meetingDate = "";
@@ -261,6 +310,10 @@ export async function resolveEmailStepContent(
   // plainTextToHtml into its "already HTML" pass-through branch.
   const extras: Record<string, string> = {
     "[quotenumber]": estimateNumber ?? "",
+    "[estimatelinkurl]": estimateLinkUrl,
+    "[estimatelink]": estimateLinkUrl
+      ? `<a href="${estimateLinkUrl}" style="color:#fff;background:${safeHexColor(orgRow?.brand_color as string | null, "#60ab45")};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`
+      : "",
     "[meetingdate]": meetingDate,
     "[meetingtime]": meetingTime,
     "[meetinglocation]": meetingLocation,
