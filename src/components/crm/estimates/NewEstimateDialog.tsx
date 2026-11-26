@@ -26,6 +26,9 @@ import {
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { recalcEstimateTotals, useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
 import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
+import { usePackages } from "@/lib/hooks/use-packages";
+import { useAddPackageLines } from "@/lib/hooks/use-estimate-package-lines";
+import { layoutTemplateItems, skippedPackagesMessage } from "@/lib/estimates/template-package-items";
 import { useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -108,6 +111,14 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
 
   const selectedClientId = watch("clientId");
   const { data: clientProperties } = useClientProperties(selectedClientId);
+  const selectedPropertyId = watch("propertyId");
+  // Packages inside a template are added like Add Package does (priced from the Rate Matrix
+  // and the chosen client's takeoff), so they need the client/property being created for.
+  const { data: packages = [] } = usePackages(false);
+  const addPackageLines = useAddPackageLines({
+    clientId: selectedClientId,
+    propertyId: selectedPropertyId && selectedPropertyId !== "none" ? selectedPropertyId : null,
+  });
   const propertiesPrevClientId = useRef(selectedClientId);
   // A property belongs to one client — switching clients invalidates whatever
   // was picked, so it must reset rather than silently pointing at a property
@@ -182,8 +193,9 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
 
       // Apply template line items if one was selected
       if (tpl?.items?.length) {
+        const layout = layoutTemplateItems(tpl.items, packages, 0);
         await Promise.all(
-          tpl.items.map((item, idx) => {
+          layout.plain.map(({ item, sortOrder }) => {
             // Carry over the matched service's budget method / production rate
             // (same as EstimateLineItemsGrid's addService) so a production_rate
             // service applied via template doesn't silently fall back to manual
@@ -220,7 +232,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 visits:               item.visits,
                 cost_cents:           computed.costCents,
                 adj_rate_cents:       null,
-                sort_order:           idx,
+                sort_order:           sortOrder,
                 budget_method:        item.budgetMethod,
                 production_rate_sqft_per_hr: item.productionRateSqftPerHr,
                 total_cents:          computed.totalCents,
@@ -237,6 +249,12 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
             }).then((res) => copyTemplateSubitemsToLine(res?.id ?? "", item.subitems));
           })
         );
+        // Package lines go in one at a time after the service lines (each writes a header
+        // plus its steps and the sort positions were reserved above).
+        for (const { pkg, startSortOrder } of layout.packages) {
+          await addPackageLines(pkg, { estimateId: estimate.id, startSortOrder });
+        }
+        if (layout.skipped.length > 0) toast.warning(skippedPackagesMessage(layout.skipped));
         // The concurrent upserts above each recalculate the estimate's rollup
         // from their own read of the lines, so the write that lands last can
         // have seen only some of them — leaving the new estimate with a partial
@@ -389,12 +407,13 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
           {selectedTemplate?.items?.length ? (
             <div className="rounded-md bg-brand-50 dark:bg-brand-900/30 border border-brand-100 dark:border-brand-900 px-3 py-2">
               <p className="text-xs font-medium text-brand-700 dark:text-brand-400 mb-1">
-                {selectedTemplate.items.length} service{selectedTemplate.items.length !== 1 ? "s" : ""} will be added:
+                {selectedTemplate.items.length} item{selectedTemplate.items.length !== 1 ? "s" : ""} will be added:
               </p>
               <ul className="space-y-0.5">
                 {selectedTemplate.items.slice(0, 5).map((item) => (
                   <li key={item.id} className="text-[11px] text-brand-600 dark:text-brand-400">
                     · {item.serviceName}
+                    {item.packageId && " (package)"}
                     {item.rateCents > 0 && ` — $${(item.rateCents / 100).toFixed(2)}`}
                     {(item.subitems ?? []).map((sub) => (
                       <span key={sub.id} className="block pl-3 text-brand-500 dark:text-brand-500">

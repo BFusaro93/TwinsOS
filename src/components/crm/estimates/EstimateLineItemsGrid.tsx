@@ -19,15 +19,11 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
-import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
-import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
-import { fetchFieldValueWithClientFallback } from "@/lib/chemical-area";
-import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, mapRateMatrixRow, useRateMatrix, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
-import { isBlankRich } from "@/lib/utils/visit-note";
-import { isQtyKeyedMatrix, qtyMatrixLinePatch } from "@/lib/estimates/qty-matrix";
-import { createClient } from "@/lib/supabase/client";
-import { stripHtml } from "@/lib/utils/strip-html";
+import { useRateMatrix } from "@/lib/hooks/use-rate-matrix";
+import { qtyMatrixLinePatch } from "@/lib/estimates/qty-matrix";
 import { usePackages } from "@/lib/hooks/use-packages";
+import { useAddPackageLines, useEstimateTakeoff } from "@/lib/hooks/use-estimate-package-lines";
+import { priceServiceLine, type ServiceLineInput } from "@/lib/estimates/service-line";
 import type { CRMPackage } from "@/types/crm-packages";
 import { isAreaUnit, needsProductionRateUnitWarning, unitLabel } from "@/lib/estimates/units";
 import { resolveTakeoffSqft, type ClientTakeoff } from "@/lib/estimates/client-takeoff";
@@ -73,7 +69,6 @@ import {
 } from "@/lib/hooks/use-line-item-subitems";
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
 import type { CRMDiscount } from "@/types/crm-discounts";
-import type { BudgetMethod } from "@/types/crm-jobs";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
@@ -1366,43 +1361,14 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   // Client takeoff (measured areas) — from the client's fixed measurement
   // columns plus any numeric custom fields — so a production-rate sq ft
   // service can default its qty instead of starting at 1.
-  const { data: client } = useClient(clientId ?? "");
-  // Prefetch only — addService reads the property's field value straight from
-  // the DB so it can't race this query (see the comment there). Keeping the
-  // hook warms the cache and keeps the values a click away.
-  const { data: propertyFieldValues = [] } = usePropertyCustomFieldValues(propertyId ?? "");
-  const { data: customFieldDefs = [] } = useCustomFieldDefs();
-  const { data: customFieldValues = [] } = useClientCustomFieldValues(clientId ?? "");
-  // When the estimate is for one of the client's properties, its quantities come from
-  // that property: a satellite property's own measurements (blank stays blank rather
-  // than borrowing another address's numbers), while the client's own-address (master)
-  // property still falls back to the client's figures it mirrors. No property = the client's.
-  const { data: clientProperties = [] } = useClientProperties(clientId ?? "", { keepId: propertyId ?? null });
-  const estimateProperty = propertyId ? clientProperties.find((p) => p.id === propertyId) ?? null : null;
-  const useSatelliteTakeoff = !!estimateProperty && !estimateProperty.isMaster;
-  const takeoff: ClientTakeoff | null = client
-    ? {
-        turfSqft: useSatelliteTakeoff ? estimateProperty.turfSqft ?? null : (estimateProperty?.turfSqft ?? client.turfSqft ?? null),
-        mulchBedSqft: useSatelliteTakeoff ? estimateProperty.mulchBedSqft ?? null : (estimateProperty?.mulchBedSqft ?? client.mulchBedSqft ?? null),
-        grossSqft: useSatelliteTakeoff ? estimateProperty.grossSqft ?? null : (estimateProperty?.grossSqft ?? client.grossSqft ?? null),
-        // A satellite uses only its own property-level values; the client-level ones
-        // belong to the master address and must not leak in.
-        customNumeric: Object.fromEntries(
-          (useSatelliteTakeoff ? propertyFieldValues : customFieldValues).flatMap((v) => {
-            const def = customFieldDefs.find((d) => d.id === v.fieldDefId);
-            return def && def.fieldType === "number" && typeof v.valueNumber === "number"
-              ? [[def.name.toLowerCase(), v.valueNumber]]
-              : [];
-          }),
-        ),
-      }
-    : null;
+  const takeoff = useEstimateTakeoff(clientId, propertyId);
   const { data: productCatalog = [] } = useProducts();
   const materialProducts = productCatalog.filter(
     (p) => p.category === "stocked_material" || p.category === "project_material"
   );
   const { mutateAsync: upsert } = useUpsertLineItem();
   const { mutateAsync: applyEquipmentDefaults } = useApplyServiceEquipmentDefaults();
+  const addPackageLines = useAddPackageLines({ clientId, propertyId });
   const { mutateAsync: deleteItem } = useDeleteLineItem();
   const { data: packages = [] } = usePackages(false);
   const { data: discounts = [] } = useDiscounts();
@@ -1581,231 +1547,10 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     [items, upsert, estimateId]
   );
 
-  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null; visits?: number; packageId?: string | null; sortOrder?: number; budgetedHours?: number | null; lockRate?: boolean; minChargeCents?: number | null; minChargeMessage?: string | null }) {
-    const unit = svc.unit ?? null;
-    const prodRate = svc.productionRate ?? null;
-    let budgetMethod = svc.budgetMethod ?? "manual";
-
-    // A production-rate service measured in sq ft starts from the client's
-    // takeoff (e.g. Turf Sq. Ft.) so budgeted hours are real from the first
-    // render, instead of qty 1 ÷ rate ≈ 0 hrs. Nothing is written to the client.
-    const takeoffQty = budgetMethod === "production_rate" && isAreaUnit(unit)
-      ? resolveTakeoffSqft(svc.name, takeoff)
-      : null;
-    // A package step's rate is a per-visit price (lockRate), not a per-sq-ft rate:
-    // never multiply it by the client's takeoff.
-    let qty = svc.lockRate ? 1 : (takeoffQty ?? 1);
-
-    // Rate Matrix override: if this service has banded rows keyed off a
-    // property custom field, and the estimate has a property with a value
-    // for that field, the matched row's rate/hours/cost replace the flat
-    // production_rate lookup entirely — snapshotted once at add-time (same
-    // moment budgetMethod/productionRateSqftPerHr are normally snapshotted),
-    // not re-resolved on every render. No property, no matrix rows, or no
-    // value for the property → falls through to today's unchanged behavior.
-    let calcType: 0 | 1 = 1;
-    let effectiveRateCents = svc.rateCents ?? 0;
-    const lineVisits = Math.max(1, Math.round(svc.visits ?? 1));
-    let matrixBudgetedHours: number | null = svc.budgetedHours ?? null;
-    let matrixCostCents: number | null = null;
-    let matrixProductionRate: number | null = null;
-    // A package step's own price (lockRate) is only the fallback: when the service
-    // has Rate Matrix rows keyed off a property field (e.g. Turf Sq. Ft.) that the
-    // estimate's property has a value for, the matched band prices the visit, so a
-    // package honors custom fields the same as the service added on its own.
-    // A matrix with no property field is keyed off the line's own quantity: price
-    // the starting qty here, and the row re-prices as the qty is edited.
-    if (svc.id && !svc.lockRate) {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: qtyRows } = await (supabase as any)
-        .from("crm_service_rate_matrix")
-        .select("*")
-        .eq("service_id", svc.id)
-        .is("deleted_at", null)
-        .order("sort_order", { ascending: true });
-      const mappedQtyRows = ((qtyRows ?? []) as Record<string, unknown>[]).map(mapRateMatrixRow);
-      if (isQtyKeyedMatrix(mappedQtyRows)) {
-        const { data: tailSvc } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-          .from("crm_services")
-          .select("matrix_tail_every_qty, matrix_tail_over_qty, matrix_tail_rate_cents, matrix_tail_hours, matrix_tail_cost_cents")
-          .eq("id", svc.id)
-          .maybeSingle();
-        const patch = qtyMatrixLinePatch(mappedQtyRows, tailSvc ? {
-          everyQty: Number(tailSvc.matrix_tail_every_qty ?? 0),
-          overQty: Number(tailSvc.matrix_tail_over_qty ?? 0),
-          rateCents: tailSvc.matrix_tail_rate_cents ?? 0,
-          hours: Number(tailSvc.matrix_tail_hours ?? 0),
-          costCents: tailSvc.matrix_tail_cost_cents ?? 0,
-        } : null, qty, unit);
-        if (patch) {
-          calcType = patch.calcType;
-          effectiveRateCents = patch.rateCents;
-          matrixCostCents = patch.costCents;
-          matrixBudgetedHours = patch.budgetedHours;
-          matrixProductionRate = patch.productionRateSqftPerHr;
-          budgetMethod = patch.budgetMethod;
-        }
-      }
-    }
-    if (svc.id && (propertyId || clientId)) {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: matrixRows } = await (supabase as any)
-        .from("crm_service_rate_matrix")
-        .select("*")
-        .eq("service_id", svc.id)
-        .is("deleted_at", null)
-        .order("sort_order", { ascending: true });
-      const rows = (matrixRows ?? []) as Record<string, unknown>[];
-      const customFieldId = rows[0]?.custom_field_id as string | undefined;
-      // Read the property's value for the lookup field STRAIGHT FROM THE DB
-      // rather than from the usePropertyCustomFieldValues cache. That cache is
-      // a closure capture with no isLoading gate, so adding a service in the
-      // first few hundred ms after the estimate opened found an empty array,
-      // silently skipped the matrix and priced the line at the service's flat
-      // rate — indistinguishable, once saved, from a genuinely matrix-priced
-      // line. The matrix rows are already being fetched here on the same
-      // round trip; one more point lookup removes the race entirely instead of
-      // just narrowing it.
-      // Property value first (custom value, then the property's own takeoff
-      // column), then the client's value for the same field — so a number
-      // entered once on the client prices every estimate without a property,
-      // and a property can override it.
-      const propertyValue: number | null = customFieldId
-        ? await fetchFieldValueWithClientFallback(supabase, customFieldId, propertyId ?? null, clientId ?? null)
-        : null;
-      if (rows.length > 0 && propertyValue != null) {
-        const mapped: RateMatrixRow[] = rows.map((r) => ({
-          id: r.id as string,
-          orgId: r.org_id as string,
-          serviceId: r.service_id as string,
-          customFieldId: r.custom_field_id as string,
-          calcType: r.calc_type as 0 | 1,
-          fromVal: Number(r.from_val ?? 0),
-          toVal: r.to_val != null ? Number(r.to_val) : null,
-          rateCents: (r.rate_cents as number) ?? 0,
-          budgetedHours: Number(r.budgeted_hours ?? 0),
-          budgetedCostCents: (r.budgeted_cost_cents as number) ?? 0,
-          sortOrder: (r.sort_order as number) ?? 0,
-          isTailRow: (r.is_tail_row as boolean) ?? false,
-          tailEveryQty: r.tail_every_qty != null ? Number(r.tail_every_qty) : null,
-          tailOverQty: r.tail_over_qty != null ? Number(r.tail_over_qty) : null,
-        }));
-        let match = lookupRateMatrixMatch(mapped, propertyValue);
-        // Past the end of the bands: the service's overflow rule ("every Y over
-        // X adds $R") takes over from a tail row or the flat rate.
-        if (!match || match.isTailRow) {
-          const { data: tailSvc } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .from("crm_services")
-            .select("matrix_tail_every_qty, matrix_tail_over_qty, matrix_tail_rate_cents, matrix_tail_hours, matrix_tail_cost_cents")
-            .eq("id", svc.id)
-            .maybeSingle();
-          if (tailSvc) {
-            match = applyMatrixTail(mapped, propertyValue, {
-              everyQty: Number(tailSvc.matrix_tail_every_qty ?? 0),
-              overQty: Number(tailSvc.matrix_tail_over_qty ?? 0),
-              rateCents: tailSvc.matrix_tail_rate_cents ?? 0,
-              hours: Number(tailSvc.matrix_tail_hours ?? 0),
-              costCents: tailSvc.matrix_tail_cost_cents ?? 0,
-            }) ?? match;
-          }
-        }
-        // A package step with its own price under a per-unit band: the visit's quantity is the
-        // client's takeoff, else the very value the band was matched on. With no quantity at
-        // all, keep the step's locked price rather than one unit of a per-sq-ft rate.
-        let packageBandQty: number | null = null;
-        if (match && svc.lockRate && match.calcType === 1) {
-          packageBandQty = (isAreaUnit(unit) ? resolveTakeoffSqft(svc.name, takeoff) : null)
-            ?? (propertyValue > 0 ? propertyValue : null);
-          if (packageBandQty == null) match = null;
-        }
-        if (match) {
-          calcType = match.calcType;
-          effectiveRateCents = match.rateCents;
-          matrixCostCents = match.budgetedCostCents;
-          // A per-unit matrix row's rate and cost are both per-unit, so
-          // computeLineItem's calcType formula rescales them for free when the
-          // qty changes later. Its hours don't get that treatment under the
-          // 'manual' budget method, which used to leave hours frozen at
-          // `match.budgetedHours × the add-time qty` — change the qty
-          // afterwards and price moved while hours didn't, quietly breaking
-          // the line's $/man-hour.
-          //
-          // A per-unit matrix row on an area line is exactly a production rate
-          // expressed the other way up (hours per sq ft vs sq ft per hour), so
-          // express it that way and let the production_rate branch re-derive
-          // hours from qty on every recompute. Fixed ($) matrix rows genuinely
-          // shouldn't scale with qty, and a per-unit row on a non-area unit
-          // can't be stated as a sq ft/hr production rate at all — both keep
-          // the manual snapshot.
-          // A per-unit band on an area line prices per sq ft, so a package visit
-          // (qty forced to 1 above) needs the client's takeoff as its quantity.
-          if (packageBandQty != null) qty = packageBandQty;
-          if (match.calcType === 1 && match.budgetedHours > 0 && isAreaUnit(unit)) {
-            matrixProductionRate = 1 / match.budgetedHours;
-            budgetMethod = "production_rate";
-          } else {
-            matrixBudgetedHours = match.calcType === 1 ? match.budgetedHours * qty : match.budgetedHours;
-            budgetMethod = "manual";
-          }
-        }
-      }
-    }
-
-    // A package step's rate is its own per-visit price, so the service minimum
-    // doesn't apply to it. Fixed matrix rows (calcType 0) ignore it inside computeLineItem.
-    const minChargeCents = svc.lockRate ? 0 : (svc.minChargeCents ?? 0);
-    const computed = computeLineItem({
-      calcType,
-      qty,
-      rateCents: effectiveRateCents,
-      minChargeCents,
-      visits: lineVisits,
-      budgetedHours: matrixBudgetedHours ?? 0, // derived from qty ÷ production rate (production_rate), a Rate Matrix match, or set manually
-      costCents: matrixCostCents ?? 0,
-      adjRateCents: null,
-      unitType: unit,
-      productionRateSqftPerHr: matrixProductionRate ?? prodRate,
-      budgetMethod,
-    }, breakevenRateCents);
-
+  async function addService(svc: ServiceLineInput) {
+    const item = await priceServiceLine(svc, { clientId, propertyId, takeoff, breakevenRateCents, defaultSortOrder: items.length });
     try {
-      const added = await upsert({
-        estimateId,
-        item: {
-          service_id: svc.id ?? null,
-          service_name: svc.name,
-          status: "quote",
-          calc_type: calcType,
-          qty,
-          unit_type: unit,
-          // Both are authored via a rich-text editor on the Service (Descriptions
-          // tab). The estimate wording keeps its HTML (bullets, bold) — the
-          // proposal, PDF, portal and the line's rich-text popover all render it.
-          // The invoice wording is shown/edited as plain text (the Invoice
-          // Description popover's textarea and the generated invoice line), so
-          // strip HTML for that one at copy time.
-          estimate_desc: svc.estimateDesc && !isBlankRich(svc.estimateDesc) ? svc.estimateDesc : null,
-          invoice_desc: svc.invoiceDesc ? stripHtml(svc.invoiceDesc) || null : null,
-          production_rate_sqft_per_hr: matrixProductionRate ?? prodRate,
-          budget_method: budgetMethod,
-          rate_cents: effectiveRateCents,
-          min_charge_cents: minChargeCents,
-          min_charge_message: minChargeCents > 0 ? (svc.minChargeMessage ?? null) : null,
-          visits: lineVisits,
-          package_id: svc.packageId ?? null,
-          cost_cents: computed.costCents,
-          adj_rate_cents: null,
-          sort_order: svc.sortOrder ?? items.length,
-          total_cents: computed.totalCents,
-          budgeted_hours: computed.budgetedHours,
-          total_budgeted_hours: computed.totalBudgetedHours,
-          total_cost_cents: computed.totalCostCents,
-          margin_bps: computed.marginBps,
-          markup_bps: computed.markupBps,
-        },
-      });
+      const added = await upsert({ estimateId, item });
       // Pre-fill the service's default equipment (internal cost) onto the new line.
       if (svc.id && added?.id) {
         await applyEquipmentDefaults({ serviceId: svc.id, lineItemId: added.id, estimateId }).catch(() => {
@@ -1836,63 +1581,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       toast.error(`"${pkg.name}" is already on this estimate — change its visits instead of adding it again`);
       return;
     }
-    const steps = [...(pkg.services ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
-    if (steps.length === 0) {
-      toast.error(`"${pkg.name}" has no services — add them in CRM Settings → Packages`);
-      return;
-    }
-    try {
-      await upsert({
-        estimateId,
-        item: {
-          row_type: "section",
-          section_name: pkg.name,
-          // Marks the section as a package group; its estimate_desc is the
-          // package's client-facing wording.
-          package_id: pkg.id,
-          estimate_desc: pkg.descriptionOnEstimate ? stripHtml(pkg.descriptionOnEstimate) || null : null,
-          status: "quote",
-          sort_order: items.length,
-          service_name: "",
-          qty: 0,
-          rate_cents: 0,
-          visits: 1,
-          total_cents: 0,
-          cost_cents: 0,
-          calc_type: 1,
-        },
-      });
-      for (let i = 0; i < steps.length; i++) {
-        const step = steps[i];
-        // The package step may reference its service by id or only by name
-        // (older packages) — same fallback NewJobDialog.pickPackage uses.
-        const match = activeServices.find((s) => s.id === step.serviceId)
-          ?? activeServices.find((s) => s.name.trim().toLowerCase() === step.serviceName.trim().toLowerCase());
-        const serviceDesc = match?.descriptionOnEstimate ?? "";
-        const rate = step.defaultRateCents || match?.defaultRateCents || 0;
-        const ok = await addService({
-          id: match?.id,
-          name: step.serviceName,
-          unit: match?.unit ?? undefined,
-          productionRate: match?.productionRateSqftPerHr ?? null,
-          budgetMethod: match?.budgetMethod,
-          rateCents: rate,
-          estimateDesc: serviceDesc || null,
-          invoiceDesc: match?.invoiceDescription ?? null,
-          visits: step.visitsIncluded || 1,
-          packageId: pkg.id,
-          sortOrder: items.length + 1 + i,
-          budgetedHours: step.defaultBHrs ?? null,
-          lockRate: !!step.defaultRateCents,
-        });
-        if (!ok) {
-          toast.error(`Package added only up to "${step.serviceName}" — remove the partial package and try again`);
-          return;
-        }
-      }
-    } catch (err) {
-      toast.error(mutationErrorMessage(err, "Failed to add package"));
-    }
+    await addPackageLines(pkg, { estimateId, startSortOrder: items.length });
   }
 
   async function addSection() {

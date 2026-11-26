@@ -12950,6 +12950,7 @@ export type Database = {
           discount_value: number | null
           id: string
           org_id: string
+          package_id: string | null
           production_rate_sqft_per_hr: number | null
           qty: number
           rate_cents: number
@@ -12972,6 +12973,7 @@ export type Database = {
           discount_value?: number | null
           id?: string
           org_id?: string
+          package_id?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -12994,6 +12996,7 @@ export type Database = {
           discount_value?: number | null
           id?: string
           org_id?: string
+          package_id?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -13039,6 +13042,13 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "estimate_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_template_items_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "crm_packages"
             referencedColumns: ["id"]
           },
         ]

@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useEstimateTemplates, useCreateEstimateTemplate, useUpdateEstimateTemplate, useDeleteEstimateTemplate, useUpsertTemplateItem, useDeleteTemplateItem, useUpsertTemplateSubitem, useDeleteTemplateSubitem } from "@/lib/hooks/use-estimate-templates";
 import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { usePackages } from "@/lib/hooks/use-packages";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useDocumentTemplates } from "@/lib/hooks/use-crm-documents";
@@ -23,13 +24,14 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, ChevronDown, Printer } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, Printer, Package as PackageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { centsToDisplay } from "@/lib/estimate-calc";
 import { bundleTotalCents } from "@/lib/estimates/bundle-total";
 import type { CRMDiscount } from "@/types/crm-discounts";
 import type { EstimateTemplate, EstimateTemplateItem, EstimateTemplateItemSubitem } from "@/types/crm-estimates";
 import type { BudgetMethod } from "@/types/crm-jobs";
+import type { CRMPackage } from "@/types/crm-packages";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
@@ -207,6 +209,52 @@ function TemplateItemRow({
         </button>
       </td>
     </tr>
+  );
+}
+
+// ── package line (a whole package inside a bundle) ──────────────────────────
+
+/** A package in a bundle has no qty/rate of its own: when the bundle is applied, the package
+ *  is added exactly like Add Package does (a header plus one priced line per step). */
+function TemplatePackageRow({ item, pkg }: { item: EstimateTemplateItem; pkg: CRMPackage | undefined }) {
+  const { mutateAsync: remove } = useDeleteTemplateItem();
+  const steps = [...(pkg?.services ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+  return (
+    <>
+      <tr className="group border-b border-slate-100 dark:border-neutral-800 text-xs hover:bg-slate-50 dark:hover:bg-muted/40">
+        <td className="px-3 py-1.5 font-medium text-slate-800 dark:text-neutral-100" colSpan={8}>
+          <span className="inline-flex items-center gap-1.5">
+            <PackageIcon className="h-3.5 w-3.5 text-brand-500 dark:text-brand-400" />
+            {item.serviceName}
+            <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-900/30 dark:text-brand-400">
+              Package · {pkg ? `${steps.length} visit${steps.length === 1 ? "" : "s"}` : "unavailable"}
+            </span>
+          </span>
+          <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+            {pkg
+              ? "Added with its own visits and priced from the package, the Rate Matrix and the client's measurements when the bundle is applied."
+              : "This package was deleted or deactivated, so it will be skipped when the bundle is applied."}
+          </span>
+        </td>
+        <td className="px-3 py-1.5" />
+        <td className="px-3 py-1.5">
+          <button
+            onClick={() => remove(item.id)}
+            title="Remove package from bundle"
+            className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </td>
+      </tr>
+      {steps.map((st) => (
+        <tr key={st.id} className="border-b border-slate-100 dark:border-neutral-800 text-[11px] text-muted-foreground">
+          <td className="py-0.5 pl-9 pr-3" colSpan={10}>
+            {st.name ? `${st.name} — ` : ""}{st.serviceName}
+          </td>
+        </tr>
+      ))}
+    </>
   );
 }
 
@@ -473,6 +521,41 @@ function EditTemplateDialog({
   const { mutateAsync: updateTemplate } = useUpdateEstimateTemplate();
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // Inactive packages stay on templates that already hold them (shown as unavailable) but
+  // can't be newly added.
+  const { data: allPackages = [] } = usePackages(true);
+
+  async function addPackageItem(pkg: CRMPackage) {
+    if ((template.items ?? []).some((i) => i.packageId === pkg.id)) {
+      toast.error(`"${pkg.name}" is already in this bundle`);
+      return;
+    }
+    if ((pkg.services ?? []).length === 0) {
+      toast.error(`"${pkg.name}" has no services — add them in CRM Settings → Packages`);
+      return;
+    }
+    try {
+      await upsert({
+        templateId: template.id,
+        item: {
+          package_id: pkg.id,
+          service_id: null,
+          service_name: pkg.name,
+          calc_type: 1,
+          qty: 1,
+          rate_cents: 0,
+          visits: 1,
+          budgeted_hours: 0,
+          sort_order: (template.items ?? []).length,
+          budget_method: "manual",
+        },
+      });
+      setAddOpen(false);
+      setSearch("");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add package"));
+    }
+  }
 
   async function addItem(input: {
     name: string;
@@ -514,6 +597,9 @@ function EditTemplateDialog({
   const filteredProducts = lc
     ? materialProducts.filter((p) => p.name.toLowerCase().includes(lc))
     : materialProducts;
+  const filteredPackages = allPackages
+    .filter((p) => p.isActive && !(template.items ?? []).some((i) => i.packageId === p.id))
+    .filter((p) => !lc || p.name.toLowerCase().includes(lc));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -615,7 +701,9 @@ function EditTemplateDialog({
                 </tr>
               </thead>
               <tbody>
-                {(template.items ?? []).map((item) => (
+                {(template.items ?? []).map((item) => item.packageId ? (
+                  <TemplatePackageRow key={item.id} item={item} pkg={allPackages.find((p) => p.id === item.packageId)} />
+                ) : (
                   <Fragment key={item.id}>
                     <TemplateItemRow item={item} templateId={template.id} discounts={activeDiscounts} />
                     {(item.subitems ?? []).map((sub) => (
@@ -659,9 +747,29 @@ function EditTemplateDialog({
                 />
               </div>
               <div className="max-h-72 overflow-y-auto py-1">
+                {filteredPackages.length > 0 && (
+                  <>
+                    <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Packages</div>
+                    {filteredPackages.map((p) => (
+                      <button
+                        key={p.id}
+                        className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
+                        onClick={() => addPackageItem(p)}
+                      >
+                        <span className="flex items-center gap-1.5 font-medium text-slate-900 dark:text-neutral-100">
+                          <PackageIcon className="h-3 w-3 text-brand-500 dark:text-brand-400" />
+                          {p.name}
+                        </span>
+                        <span className="ml-2 shrink-0 text-[10px] text-slate-400 dark:text-neutral-500">
+                          {(p.services ?? []).length} visit{(p.services ?? []).length === 1 ? "" : "s"}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
                 {filteredServices.length > 0 && (
                   <>
-                    <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Services</div>
+                    <div className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500${filteredPackages.length > 0 ? " mt-1 border-t" : ""}`}>Services</div>
                     {filteredServices.map((s) => (
                       <button
                         key={s.id}

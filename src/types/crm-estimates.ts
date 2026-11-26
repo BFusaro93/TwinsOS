@@ -270,6 +270,8 @@ export interface EstimateTemplateItem {
   templateId: string;
   serviceId: string | null;
   serviceName: string;
+  /** Set on a package line: applying the template adds this whole package (serviceName is its name). */
+  packageId: string | null;
   calcType: 0 | 1;
   qty: number;
   unitType: string | null;
