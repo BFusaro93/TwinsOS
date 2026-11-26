@@ -176,6 +176,7 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[estimatelinkurl]": "https://example.com/proposal/sample",
   "[cardupdatelink]": '<a href="#" style="color:#fff;background:#60ab45;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Update Your Card on File &rarr;</a>',
   "[cardupdatelinkurl]": "https://example.com/card-update/sample",
+  "[clientportallink]": "https://example.com/portal/login",
   "[installmentcount]": "1",
   "[installmentamount]": "$1,325.00",
   "[estimategrid]": SAMPLE_GRID_HTML,
