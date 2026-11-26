@@ -1,4 +1,5 @@
 import { buildSnowExtras } from "@/lib/automations/snow-extras";
+import { cardUpdateLinkVars } from "@/lib/card-update/links";
 import { sendClientSms } from "@/lib/sms/send";
 import { findOptedOutNumbers, phoneLast10 } from "@/lib/sms/opt-outs";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
@@ -219,6 +220,8 @@ export async function resolveSmsStepContent(
     extras["[creditcardending]"] = params.cardExpiryContext.last4;
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
+  // A text can only carry the plain URL, so both card-update tags resolve to it.
+  Object.assign(extras, (await cardUpdateLinkVars(supabase, { orgId: params.orgId, clientId: params.clientId, templates: [params.bodyTemplate] })).text);
   Object.assign(extras, await buildSnowExtras(supabase, { orgId: params.orgId, clientId: params.clientId, visitId: params.visitId ?? null }));
   Object.assign(
     extras,

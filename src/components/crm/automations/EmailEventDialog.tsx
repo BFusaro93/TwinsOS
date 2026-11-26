@@ -64,6 +64,7 @@ const MERGE_TAGS = [
   { tag: "[companyname]", label: "Your company name" },
   { tag: "[quotenumber]", label: "Linked estimate/quote number" },
   { tag: "[estimatelink]", label: "Proposal link button (estimate triggers)" },
+  { tag: "[cardupdatelink]", label: "Update card on file button (AutoPay link)" },
   { tag: "[invoicenumber]", label: "Invoice number (invoice triggers)" },
   { tag: "[invoicetotal]", label: "Invoice total" },
   { tag: "[invoicebalance]", label: "Invoice balance due" },

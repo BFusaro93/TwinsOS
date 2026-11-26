@@ -14,6 +14,7 @@ import { resolveReplyTo, type ReplyToMode } from "@/lib/email/reply-to";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { allRecipientsBouncedMessage } from "@/lib/email/bounced-addresses";
 import { findMarketingOptedOutAddresses } from "@/lib/email/marketing-opt-outs";
+import { cardUpdateLinkVars } from "@/lib/card-update/links";
 
 export async function POST(
   req: Request,
@@ -158,7 +159,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (supabase as any)
     .from("organizations")
-    .select("name, address")
+    .select("name, address, brand_color")
     .eq("id", effOrgId)
     .single();
 
@@ -213,6 +214,13 @@ export async function POST(
   // line (e.g. "Smith & Sons"). Same split the campaign sender makes.
   const htmlMergeVars = buildClientMergeVars(clientForMerge, orgForMerge);
   const subjectMergeVars = buildClientMergeVars(clientForMerge, orgForMerge, { escape: false });
+
+  // [cardupdatelink]: a fresh one-time "update your card + AutoPay" link, minted only when the email uses it.
+  const cardLink = await cardUpdateLinkVars(createServiceClient(), {
+    orgId: effOrgId, clientId, createdBy: user.id, brandColor: org?.brand_color ?? null, templates: [body.subject, body.bodyHtml],
+  });
+  Object.assign(htmlMergeVars, cardLink.html);
+  Object.assign(subjectMergeVars, cardLink.text);
 
   const resolvedSubject = resolveMergeTags(body.subject, subjectMergeVars);
   let resolvedBody = resolveMergeTags(body.bodyHtml, htmlMergeVars);
