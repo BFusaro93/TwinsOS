@@ -451,6 +451,34 @@ export function DispatchBoardGuide() {
             leaves an hour early it is 11 on both.
           </li>
           <li>
+            <strong>Hours by service.</strong> A stop is clocked once, so its man-hours are divided
+            between its services by their budgeted hours (equally when none are budgeted) unless the
+            crew timed each service. When a stop has two or more services, Edit Job Times shows an{" "}
+            <strong>Hours by service</strong> box: type one service&apos;s man-hours and the others
+            rebalance so the stop&apos;s total never changes, or click <strong>Reset to
+            estimate</strong> to return to the budget split. Labor cost and Job Costing follow each
+            visit&apos;s hours. If the crew timed the services (see Track time per service in the
+            crew app guide), each service already has its own window and the box starts from those
+            hours.
+          </li>
+          <li>
+            <strong>Start and End when services weren&apos;t timed.</strong> Services at one stop
+            don&apos;t each show the stop&apos;s whole window. The board splits the span into
+            back-to-back slices sized by each service&apos;s hours (for example 9:24&ndash;10:51 then
+            10:51&ndash;12:18), ending at the stop&apos;s end. This is a display only: total
+            man-hours are unchanged and nothing extra is saved. Click a sliced time to open Edit Job
+            Times. A service the crew timed shows its own recorded start and end, and editing it
+            changes only that service.
+          </li>
+          <li>
+            <strong>Men column.</strong> Once the crew has punched in to a stop, Men shows how many
+            different people punched in, the number the hours are built from, and is read-only; click
+            it to open Edit Job Times to add or remove people. When fewer people punched in than the
+            the crew&apos;s roster, a small amber <em>(plan N)</em> shows beside it, so a short crew or a
+            missed punch is easy to spot (nothing shows when more people punched in than planned). Before anyone has punched in it shows the number of people on the assigned crew that day (the crew&apos;s roster, including that day&apos;s moves), as Service Autopilot does; with no crew assigned it shows the job&apos;s own team size, which you can edit. The
+            totals row has no Men total, because a headcount doesn&apos;t add up across stops.
+          </li>
+          <li>
             <strong>Who can change punches.</strong> Adding, correcting or removing crew punches in
             Edit Job Times &mdash; and choosing whether a stop&apos;s pause time is paid &mdash; needs
             the <strong>Dispatch Board</strong> or <strong>Payroll</strong> permission (admins always
@@ -466,7 +494,7 @@ export function DispatchBoardGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            Typing a number into <strong>Actual Hrs</strong>, or changing <strong>Men</strong>. Neither
+            Typing a number into <strong>Actual Hrs</strong>, or changing the planned <strong>Men</strong> on a stop nobody has punched in to. Neither
             can be turned into per-person times, so the crew punches are left alone. Job Costing
             follows your number and the Timesheet report keeps showing the punches. If you are
             correcting a clocking mistake, use <strong>Edit Job Times</strong> instead so both agree.

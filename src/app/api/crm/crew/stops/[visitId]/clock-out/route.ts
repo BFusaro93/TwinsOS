@@ -15,6 +15,7 @@ import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, isoInZone, todayInZone } from "@/lib/time/zone";
 import { stopClockOutCap } from "@/lib/crew/visit-pause";
+import { isServiceTimingOn, serviceWindowHours } from "@/lib/crew/service-timing";
 import { assertOrgWritable } from "@/lib/org-writable";
 import { PAYROLL_LOCKED_PREFIX, isPayrollLockedError } from "@/lib/crew/payroll-lock";
 import { createVisitWriter } from "@/lib/crew/visit-writer";
@@ -52,6 +53,9 @@ interface VisitRow {
   paused_at: string | null;
   break_minutes: number | null;
   start_time: string | null;
+  service_started_at: string | null;
+  service_ended_at: string | null;
+  service_gap_seconds: number | null;
   crm_jobs: {
     crew_id?: string | null;
     status?: string | null;
@@ -82,7 +86,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 
 const VISIT_SELECT = `
   id, org_id, job_id, client_id, scheduled_date, push_number, storm_event_id, crew_id, crew_unassigned, job_service_id, status,
-  men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
+  men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time, service_started_at, service_ended_at, service_gap_seconds,
   crm_jobs:crew_job(crew_id, status, property_id, service_address, service_city, crm_job_services:crew_job_services(id, budgeted_hours, team_size))
 `;
 
@@ -330,10 +334,19 @@ export async function POST(
     }
   }
 
+  // "Track time per service": when the crew timed each service, divide the stop's
+  // hours by those windows instead of by budget. All-or-nothing (a service the
+  // crew never started sends the whole stop back to the budget split).
+  const serviceWindows = (await isServiceTimingOn(createServiceClient(), anchor.org_id))
+    ? serviceWindowHours(openRows, now)
+    : null;
+  const orgTz = serviceWindows ? await getOrgTimeZone(supabase, anchor.org_id) : null;
+
   const allocation = durationHours != null && durationHours > 0
     ? allocateStopHours({
         durationHours,
         menCount,
+        currentHours: serviceWindows ?? undefined,
         visits: openRows.map((r) => ({
           id: r.id,
           jobServiceId: r.job_service_id,
@@ -366,7 +379,14 @@ export async function POST(
       .from("crm_job_visits")
       .update({
         clocked_out_at: now,
-        end_time: endLocalTime ? `${endLocalTime}:00` : undefined,
+        // Per-service timing: each service shows its own window, not the stop's.
+        ...(serviceWindows && orgTz
+          ? {
+              start_time: `${instantToZoneWallClock(new Date(row.service_started_at as string), orgTz).time}:00`,
+              end_time: `${instantToZoneWallClock(new Date(row.service_ended_at ?? now), orgTz).time}:00`,
+              service_ended_at: row.service_ended_at ?? now,
+            }
+          : { end_time: endLocalTime ? `${endLocalTime}:00` : undefined }),
         completed_at: now,
         status: "completed",
         actual_hours: allocation?.get(row.id) ?? undefined,

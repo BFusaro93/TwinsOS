@@ -2959,6 +2959,49 @@ function stopVisitsFor(visit: CRMJobVisit, allVisits: CRMJobVisit[]): CRMJobVisi
   return stop?.visits ?? [visit];
 }
 
+/**
+ * Each service's own Start/End for a finished stop the crew did NOT time
+ * service by service. The stop clocks in/out once, so every visit carries the
+ * whole span (9:24–12:18) even though the hours are divided between them — which
+ * reads as each job taking the full time. Here the span is cut into consecutive
+ * slices sized by each visit's share of the stop's hours (9:24–10:51, then
+ * 10:51–12:18). Display only: stored times stay the stop's span, because the
+ * punch roll-up and the stop's grouping depend on them. Null when there is
+ * nothing to cut (one service, not finished, times that already differ, or
+ * services the crew timed themselves — those have real windows).
+ */
+function stopServiceSlice(visit: CRMJobVisit, allVisits: CRMJobVisit[]): { start: string; end: string } | null {
+  if (!(visit.status === "completed" || visit.clockedOutAt)) return null;
+  const live = stopVisitsFor(visit, allVisits).filter(
+    (v) => v.status !== "cancelled" && v.status !== "skipped" && v.scheduledDate === visit.scheduledDate
+  );
+  const index = live.findIndex((v) => v.id === visit.id);
+  if (live.length < 2 || index < 0) return null;
+  if (live.some((v) => v.serviceStartedAt)) return null;
+  const start = live[0].startTime?.slice(0, 5) ?? null;
+  const end = live[0].endTime?.slice(0, 5) ?? null;
+  if (!start || !end || live.some((v) => v.startTime?.slice(0, 5) !== start || v.endTime?.slice(0, 5) !== end)) return null;
+  const spanMins = Math.round((durationHoursBetween(start, end) ?? 0) * 60);
+  if (spanMins <= 0) return null;
+  const hours = live.map((v) => Math.max(0, computeActualHours({
+    actualHours: v.actualHours, clockedInAt: v.clockedInAt, clockedOutAt: v.clockedOutAt,
+    startTime: v.startTime, endTime: v.endTime, menCount: v.menCount, breakMinutes: v.breakMinutes,
+  }) ?? 0));
+  const total = hours.reduce((a, b) => a + b, 0);
+  const weights = total > 0 ? hours : hours.map(() => 1);
+  const wSum = weights.reduce((a, b) => a + b, 0);
+  const [sh, sm] = start.split(":").map(Number);
+  const hhmm = (mins: number) => {
+    const m = ((mins % 1440) + 1440) % 1440;
+    return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  };
+  let cum = 0;
+  const cuts = weights.map((w) => { cum += w; return Math.round((cum / wSum) * spanMins); });
+  const from = index === 0 ? 0 : cuts[index - 1];
+  const to = index === live.length - 1 ? spanMins : cuts[index];
+  return { start: hhmm(sh * 60 + sm + from), end: hhmm(sh * 60 + sm + to) };
+}
+
 /** Whole-visit hours (already men-multiplied, net of break) for an HH:MM start/end pair; overnight-aware. */
 function durationHoursBetween(start: string | null, end: string | null): number | null {
   if (!start || !end) return null;
@@ -3004,15 +3047,21 @@ async function applyStopTimePatch({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateVisit: (args: { id: string; updates: Record<string, any> }) => Promise<unknown>;
 }): Promise<void> {
-  const siblings = stopVisits.filter(
+  // A service the crew timed on its own ("Track time per service") owns its
+  // Start/End: an edit moves THAT service only. Spreading it across the stop
+  // would stamp every sibling with this window, erase their own, and re-divide
+  // hours the crew's timing already settled. Hours stay (Hours by service edits them).
+  const ownWindow = !!visit.serviceStartedAt;
+  const siblings = ownWindow ? [] : stopVisits.filter(
     (v) => v.id !== visit.id && v.status !== "cancelled" && v.status !== "skipped" && v.scheduledDate === visit.scheduledDate
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fields: Record<string, any> = {};
   if ("startTime" in patch) fields.start_time = patch.startTime || null;
   if ("endTime" in patch) fields.end_time = patch.endTime || null;
-  if ("clockedInAt" in patch) fields.clocked_in_at = patch.clockedInAt ?? null;
-  if ("clockedOutAt" in patch) fields.clocked_out_at = patch.clockedOutAt ?? null;
+  // The stop's clock (clocked_in/out) is what groups its visits — never rewritten per service.
+  if (!ownWindow && "clockedInAt" in patch) fields.clocked_in_at = patch.clockedInAt ?? null;
+  if (!ownWindow && "clockedOutAt" in patch) fields.clocked_out_at = patch.clockedOutAt ?? null;
 
   const timesChanged =
     ("startTime" in patch && (patch.startTime || null) !== (visit.startTime || null)) ||
@@ -3022,7 +3071,7 @@ async function applyStopTimePatch({
   const ownUpdates: Record<string, any> = { ...fields, ...(extra ?? {}) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const siblingUpdates = new Map<string, Record<string, any>>();
-  if (timesChanged) {
+  if (timesChanged && !ownWindow) {
     const start = ("startTime" in patch ? patch.startTime : visit.startTime)?.slice(0, 5) ?? null;
     const end = ("endTime" in patch ? patch.endTime : visit.endTime)?.slice(0, 5) ?? null;
     const duration = durationHoursBetween(start, end);
@@ -3031,7 +3080,13 @@ async function applyStopTimePatch({
     // Several visits share the measured stop time → split it; a lone visit just
     // derives from its own times (null clears the stale override).
     const alloc = net != null && net > 0 && siblings.length > 0
-      ? allocateStopHours({ durationHours: net, menCount: men, visits: [visit, ...siblings] })
+      ? allocateStopHours({
+          durationHours: net,
+          menCount: men,
+          visits: [visit, ...siblings],
+          // Keep a split the office set in Edit Job Times (Hours by service).
+          currentHours: new Map([visit, ...siblings].map((v) => [v.id, v.actualHours])),
+        })
       : null;
     ownUpdates.actual_hours = alloc?.get(visit.id) ?? null;
     for (const s of siblings) {
@@ -3141,6 +3196,122 @@ function EditJobTimeRow({
   );
 }
 
+/**
+ * "Hours by service" for a stop that covers several jobs. The crew clocks in
+ * once per stop, so the measured man-hours are divided across its services (by
+ * budget by default — an even split when none has one). Here the office states
+ * what each service actually took: the stop's total stays fixed, so editing one
+ * service moves the difference onto the others (in proportion to their hours)
+ * and the total can't drift from the Timesheet.
+ */
+function StopHoursSplit({
+  visits,
+  onApply,
+  onReset,
+}: {
+  /** The stop's live visits (not cancelled/skipped), same day. */
+  visits: CRMJobVisit[];
+  onApply: (hoursById: Map<string, number>) => Promise<void>;
+  onReset: () => Promise<void>;
+}) {
+  const hoursOf = (v: CRMJobVisit) =>
+    computeActualHours({
+      actualHours: v.actualHours,
+      clockedInAt: v.clockedInAt,
+      clockedOutAt: v.clockedOutAt,
+      startTime: v.startTime,
+      endTime: v.endTime,
+      menCount: v.menCount,
+      breakMinutes: v.breakMinutes,
+    }) ?? 0;
+  const current = visits.map(hoursOf);
+  const total = Math.round(current.reduce((a, b) => a + b, 0) * 100) / 100;
+  const sig = current.join("|");
+  const [draft, setDraft] = useState<string[]>(current.map((h) => h.toFixed(2)));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setDraft(current.map((h) => h.toFixed(2))); }, [sig]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function commit(index: number) {
+    const typed = Number(draft[index]);
+    if (!Number.isFinite(typed) || typed < 0) {
+      setDraft(current.map((h) => h.toFixed(2)));
+      return;
+    }
+    const mine = Math.min(total, Math.round(typed * 100) / 100);
+    if (mine === Math.round(current[index] * 100) / 100) {
+      setDraft(current.map((h) => h.toFixed(2)));
+      return;
+    }
+    // Everyone else shares what's left, in proportion to what they hold now.
+    const others = visits.map((_, i) => i).filter((i) => i !== index);
+    const remaining = Math.round((total - mine) * 100) / 100;
+    const otherSum = others.reduce((s, i) => s + current[i], 0);
+    const next = current.slice();
+    next[index] = mine;
+    others.forEach((i) => {
+      next[i] = Math.round(remaining * (otherSum > 0 ? current[i] / otherSum : 1 / others.length) * 100) / 100;
+    });
+    const diff = Math.round((total - next.reduce((a, b) => a + b, 0)) * 100) / 100;
+    if (diff !== 0 && others.length > 0) {
+      const biggest = others.reduce((a, b) => (next[b] > next[a] ? b : a), others[0]);
+      next[biggest] = Math.round((next[biggest] + diff) * 100) / 100;
+    }
+    setBusy(true);
+    try {
+      await onApply(new Map(visits.map((v, i) => [v.id, next[i]])));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-slate-700 dark:text-neutral-300">
+          Hours by service <span className="font-normal text-muted-foreground">· {total.toFixed(2)} man-hours total</span>
+        </span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => { setBusy(true); try { await onReset(); } finally { setBusy(false); } }}
+          className="text-[11px] text-muted-foreground underline-offset-2 hover:underline disabled:opacity-40"
+          title="Divide the total by each service's budgeted hours again"
+        >
+          Reset to estimate
+        </button>
+      </div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        The crew clocks in once per stop, so its time is shared across these jobs. Enter what each one actually took
+        (man-hours, crew size included); the total stays the same.
+      </p>
+      <div className="mt-1.5 space-y-1">
+        {visits.map((v, i) => (
+          <div key={v.id} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs text-slate-700 dark:text-neutral-300">
+              {visitServiceNames(v) || "Service"}
+            </span>
+            <Input
+              type="number"
+              min={0}
+              step={0.25}
+              value={draft[i] ?? ""}
+              disabled={busy}
+              onChange={(e) => setDraft((d) => d.map((x, j) => (j === i ? e.target.value : x)))}
+              onBlur={() => void commit(i)}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              className="h-8 w-24 shrink-0 text-xs"
+              aria-label={`${visitServiceNames(v) || "Service"} man-hours`}
+            />
+            <span className="w-16 shrink-0 text-[10px] text-muted-foreground">
+              {total > 0 ? `${Math.round((current[i] / total) * 100)}%` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function EditJobTimesDialog({
   open,
   onOpenChange,
@@ -3244,6 +3415,9 @@ function EditJobTimesDialog({
   // on the dispatch board row, never feed Actual Hours, and never appear in
   // the job panel's Appointment Start/End (which read visit.start_time/end_time).
   useEffect(() => {
+    // A per-service window (crew-timed) is not the stop's span: rolling the
+    // punches up here would overwrite it on every sibling just by opening the dialog.
+    if (stopVisits.some((v) => v.serviceStartedAt)) return;
     const ins = memberTimes.map((t) => t.clockedInAt).filter((v): v is string => !!v);
     const outs = memberTimes.map((t) => t.clockedOutAt).filter((v): v is string => !!v);
     if (ins.length === 0 && outs.length === 0) return;
@@ -3284,6 +3458,46 @@ function EditJobTimesDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes, visitId, visitDate, tz]);
+
+  // The stop's live visits — more than one means several jobs share one clock-in.
+  const liveStopVisits = stopVisits.filter(
+    (v) => v.status !== "cancelled" && v.status !== "skipped" && v.scheduledDate === visit.scheduledDate
+  );
+
+  // Hours/labor are re-derived server-side after a split change: the DB clears a
+  // visit's stored labor when its hours change, and the recompute re-weights it
+  // by the new hours (member-times PATCH = recomputeStopLabor).
+  async function refreshStopLabor() {
+    await fetch(`/api/crm/crew/visits/${anchorVisitId}/member-times`, { method: "PATCH" });
+    void qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+  }
+
+  async function applyHoursSplit(hoursById: Map<string, number>) {
+    try {
+      await Promise.all(
+        [...hoursById].map(([id, hours]) => updateVisit.mutateAsync({ id, updates: { actual_hours: hours } }))
+      );
+      await refreshStopLabor();
+    } catch {
+      toast.error("Failed to save the hours split");
+    }
+  }
+
+  async function resetHoursSplit() {
+    try {
+      const total = liveStopVisits.reduce(
+        (s, v) => s + (computeActualHours({
+          actualHours: v.actualHours, clockedInAt: v.clockedInAt, clockedOutAt: v.clockedOutAt,
+          startTime: v.startTime, endTime: v.endTime, menCount: v.menCount, breakMinutes: v.breakMinutes,
+        }) ?? 0), 0);
+      // menCount 1: `total` is already man-hours. No currentHours → budget weights.
+      const alloc = allocateStopHours({ durationHours: total, menCount: 1, visits: liveStopVisits });
+      if (!alloc) return;
+      await applyHoursSplit(alloc);
+    } catch {
+      toast.error("Failed to reset the hours split");
+    }
+  }
 
   async function saveRow(memberId: string, date: string, start: string, end: string, breakMinutes?: number) {
     // End == Start is a zero-length punch. End BEFORE Start means the shift
@@ -3375,6 +3589,10 @@ function EditJobTimesDialog({
             </SelectContent>
           </Select>
         </div>
+
+        {liveStopVisits.length > 1 && (
+          <StopHoursSplit visits={liveStopVisits} onApply={applyHoursSplit} onReset={resetHoursSplit} />
+        )}
 
         <div className="divide-y">
           {memberTimes.map((t) => (
@@ -3637,6 +3855,8 @@ function VisitRow({
   const distinctOuts = new Set(memberTimes.map((t) => t.clockedOutAt).filter((v): v is string => !!v));
   const startHasMultipleTimes = distinctIns.size > 1;
   const endHasMultipleTimes   = distinctOuts.size > 1;
+  // This service's share of a stop the crew clocked once (see stopServiceSlice).
+  const serviceSlice = stopServiceSlice(visit, allVisits);
 
   // Start/End and Clocked In/Out are two different fields (see saveVisitTime)
   // that only ever get FORCED to match when a dispatcher edits Start/End here
@@ -3737,6 +3957,17 @@ function VisitRow({
   }
 
   const [menVal, setMenVal] = useState(String(visit.menCount ?? ""));
+  const punchedInCount = punchedHeadcount(memberTimes);
+  // Before anyone punches in, Men is the assigned crew's roster for that day
+  // (daily overrides included), as on SA's board; the visit's own planned size
+  // is only used when no crew/roster applies. Punches take over once they exist.
+  const rosterMen = visitCrewId
+    ? effectiveCrewSize(visitCrewId, richCrewsForSize ?? [], dailyOverridesForSize, visit.scheduledDate)
+    : 0;
+  const plannedMen = rosterMen > 0 ? rosterMen : (visit.menCount ?? 0);
+  // Only a SHORT crew is worth flagging. Orgs that never touch the planned size
+  // leave it at the default, so punched > planned would flag nearly every stop.
+  const crewSizeGap = punchedInCount > 0 && plannedMen > punchedInCount;
   useEffect(() => { setMenVal(String(visit.menCount ?? "")); }, [visit.menCount]);
 
   function saveMenCount(value: string) {
@@ -3940,7 +4171,15 @@ function VisitRow({
       {/* Start */}
       {isVisible("start") && (
         <td className="px-1 py-1 text-slate-400 dark:text-neutral-500 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-          {startHasMultipleTimes ? (
+          {serviceSlice ? (
+            <button
+              type="button"
+              onClick={() => onEditTimes(visit)}
+              title="This stop was clocked once, so its time is divided between its services by their share of the hours — open Edit Job Times to change the split"
+              className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 dark:text-neutral-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
+            >
+              {formatTimeShort(serviceSlice.start)}
+            </button>) : startHasMultipleTimes ? (
             <button
               type="button"
               onClick={() => onEditTimes(visit)}
@@ -4009,7 +4248,15 @@ function VisitRow({
         <td className="px-1 py-1 text-slate-400 dark:text-neutral-500 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-0.5">
-              {endHasMultipleTimes ? (
+              {serviceSlice ? (
+                <button
+              type="button"
+              onClick={() => onEditTimes(visit)}
+              title="This stop was clocked once, so its time is divided between its services by their share of the hours — open Edit Job Times to change the split"
+              className="w-[74px] rounded border border-transparent px-1 py-0.5 text-left text-xs text-slate-600 dark:text-neutral-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
+            >
+              {formatTimeShort(serviceSlice.end)}
+            </button>) : endHasMultipleTimes ? (
                 <button
                   type="button"
                   onClick={() => onEditTimes(visit)}
@@ -4111,14 +4358,42 @@ function VisitRow({
       {/* Men */}
       {isVisible("men") && (
         <td className="px-1 py-1 text-center text-slate-400 dark:text-neutral-500" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="number"
-            min={0}
-            value={menVal}
-            onChange={(e) => setMenVal(e.target.value)}
-            onBlur={() => saveMenCount(menVal)}
-            className="w-10 rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-xs text-slate-600 dark:text-neutral-400 hover:border-border focus:border-brand-400 focus:outline-none"
-          />
+          {punchedInCount > 0 ? (
+            // Once people have punched in to this stop, Men is who actually did
+            // the work (the time entries), not the planned crew size — the
+            // planned figure could say 1 beside two punches. Change it in Edit Job Times.
+            <button
+              type="button"
+              onClick={() => onEditTimes(visit)}
+              title={
+                crewSizeGap
+                  ? `Only ${punchedInCount} punched in, planned ${plannedMen}. Hours use the people who punched in — open Edit Job Times to add anyone missing`
+                  : "People who punched in to this job — open Edit Job Times to change"
+              }
+              className="rounded border border-transparent px-1 py-0.5 text-center text-xs text-slate-600 dark:text-neutral-400 hover:border-border hover:bg-slate-50 dark:hover:bg-muted/40"
+            >
+              {punchedInCount}
+              {crewSizeGap && (
+                <span className="ml-0.5 text-[9px] text-amber-600 dark:text-amber-400">(plan {plannedMen})</span>
+              )}
+            </button>
+          ) : rosterMen > 0 ? (
+            <span
+              title="People on the assigned crew today — changes with the crew's roster, and becomes the people who punched in once the crew clocks in"
+              className="inline-block w-10 px-1 py-0.5 text-center text-xs text-slate-600 dark:text-neutral-400"
+            >
+              {rosterMen}
+            </span>
+          ) : (
+            <input
+              type="number"
+              min={0}
+              value={menVal}
+              onChange={(e) => setMenVal(e.target.value)}
+              onBlur={() => saveMenCount(menVal)}
+              className="w-10 rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-xs text-slate-600 dark:text-neutral-400 hover:border-border focus:border-brand-400 focus:outline-none"
+            />
+          )}
         </td>
       )}
 
@@ -4291,6 +4566,12 @@ function countsTowardTotals(visit: CRMJobVisit): boolean {
 
 // ── totals row ─────────────────────────────────────────────────────────────────
 
+/** Distinct people who punched in to a stop (its crew punches), 0 when nobody has. */
+function punchedHeadcount(times: CrewMemberTime[] | undefined): number {
+  if (!times) return 0;
+  return new Set(times.filter((t) => t.clockedInAt).map((t) => t.crewMemberId)).size;
+}
+
 function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit[]; isVisible: (col: string) => boolean; customFieldDefs: PropertyCustomFieldDef[] }) {
   const counted   = visits.filter(countsTowardTotals);
   const totalBHrs = counted.reduce((s, v) => s + (computeBudgetedHours(v) ?? 0), 0);
@@ -4302,17 +4583,8 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
   const countedAct = counted.reduce((s, v) => s + (computeActualHours(v) ?? 0), 0);
   const variance   = countedAct - totalBHrs;
   const totalAmt  = counted.reduce((s, v) => s + visitAmountCents(v), 0);
-  // Men is a multiplier per stop, not a quantity to accumulate — summing it
-  // reported "Men 60" for one 3-man crew doing 20 stops. What the dispatcher
-  // actually wants here is headcount on the road, so take each crew's largest
-  // stop and add those up. Stops with no crew are counted individually, since
-  // there's nothing yet saying they'll be run by the same people.
-  const menByCrew = new Map<string, number>();
-  for (const v of counted) {
-    const key = effectiveCrewId(v) ?? `unassigned:${v.id}`;
-    menByCrew.set(key, Math.max(menByCrew.get(key) ?? 0, v.menCount ?? 0));
-  }
-  const totalMen  = [...menByCrew.values()].reduce((s, n) => s + n, 0);
+  // No Men total on purpose: Men is a per-stop multiplier, not a quantity, and any
+  // roll-up (largest stop per crew) is wrong across date ranges and unassigned stops.
   const totalQty  = counted.reduce((s, v) => s + (v.qty ?? 0), 0);
 
   // Takeoffs are properties of a PROPERTY, not of a visit: a package job with
@@ -4342,7 +4614,7 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
           {countedAct > 0 ? `${variance > 0 ? "+" : ""}${variance.toFixed(2)}` : "—"}
         </td>
       )}
-      {isVisible("men")     && <td className="px-2 py-1.5 text-center">{totalMen > 0 ? totalMen : "—"}</td>}
+      {isVisible("men")     && <td />}
       {isVisible("qty")     && <td className="px-2 py-1.5 text-right">{totalQty > 0 ? totalQty.toFixed(1) : "—"}</td>}
       {/* Rate is a per-unit price — summing it across jobs isn't meaningful, unlike Amount below. */}
       {isVisible("rate")    && <td />}

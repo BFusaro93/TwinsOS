@@ -920,6 +920,8 @@ export function mapVisit(row: any): CRMJobVisit {
     pausedAt:            row.paused_at ?? null,
     breakMinutes:        row.break_minutes ?? 0,
     breakPaid:           row.break_paid ?? null,
+    serviceStartedAt:    row.service_started_at ?? null,
+    serviceEndedAt:      row.service_ended_at ?? null,
     acknowledgedNotesAt: row.acknowledged_notes_at ?? null,
     skipReason:          row.skip_reason ?? null,
     createdAt:           row.created_at,

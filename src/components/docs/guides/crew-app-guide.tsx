@@ -545,6 +545,20 @@ export function CrewAppGuide() {
           open it. Documents the office marked office-only don&apos;t appear, and opening one needs a
           connection.
         </p>
+        <p>
+          <strong>Timing each service (optional).</strong> By default a stop is clocked once and its
+          hours are shared between its services by budget. If the company turns on{" "}
+          <strong>Track time per service</strong> (Settings &rarr; Organization), a running stop with
+          two or more services shows <strong>Start</strong> and <strong>Finish</strong> on each service
+          in the web crew app. Tap Start on the service you are beginning; starting another one ends
+          the one that was running, so only one service is timed at a time, and Finish ends it without
+          starting another. A finished service shows Resume, which picks it up again: the time between
+          Finish and Resume is left out and every run is added up, so a crew can go back to a service. Stop Job still stops the whole stop. At Stop
+          Job the stop&apos;s man-hours are divided by each service&apos;s own window, so the hours,
+          Job Costing and the board&apos;s Start and End for each service show what was actually
+          spent. If a service was never started, that stop falls back to the budget split rather than
+          giving the untimed service zero hours. Pause time still comes out of the stop&apos;s hours.
+        </p>
         <Callout>
           If the office left <strong>notes for the crew</strong> on the job, the stop asks the crew to{" "}
           <strong>Acknowledge</strong> them — and <strong>Start Job is disabled until they do</strong>.
@@ -612,7 +626,10 @@ export function CrewAppGuide() {
         <p>
           Those hours are then split across the services at the stop in proportion to their budgeted
           hours, so a stop with a two-hour cleanup and a half-hour mow doesn&apos;t credit them equally.
-          That&apos;s what the office compares against budget on the dispatch board.
+          That&apos;s what the office compares against budget on the dispatch board. With{" "}
+          <strong>Track time per service</strong> on and each service timed, the split follows the
+          time each service took instead; the office can also correct the split in Edit Job Times
+          &rarr; Hours by service.
         </p>
         <p>
           <strong>Time left on the running job.</strong> While a stop is running, its timer counts
