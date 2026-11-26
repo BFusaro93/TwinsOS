@@ -322,12 +322,12 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
       </Field>
 
       <div className="rounded-lg border overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full min-w-[560px] text-xs">
           <thead>
             <tr className="bg-slate-50 dark:bg-muted/40 border-b font-semibold text-muted-foreground uppercase tracking-wide">
               <th className="px-3 py-2 text-left">From</th>
               <th className="px-3 py-2 text-left">To</th>
-              <th className="px-3 py-2 text-left">Calc Type</th>
+              <th className="px-3 py-2 text-left min-w-[96px]">Calc Type</th>
               <th className="px-3 py-2 text-right">Rate ($)</th>
               <th className="px-3 py-2 text-right">Hours</th>
               <th className="px-3 py-2 text-right">Cost ($)</th>
@@ -356,7 +356,7 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
                 <td className="px-2 py-1.5">
                   <select defaultValue={String(row.calcType)}
                     onChange={(e) => saveField(row.id, "calc_type", e.target.value)}
-                    className="w-full rounded border border-border px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400 bg-card">
+                    className="w-full min-w-[88px] rounded border border-border px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400 bg-card">
                     <option value="1">Per Unit</option>
                     <option value="0">Fixed</option>
                   </select>
