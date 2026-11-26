@@ -768,6 +768,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Unless a crew clocks in and out manually, a visit's actual hours are calculated as (scheduled end time − scheduled start time) × number of crew members assigned — not a fixed estimate carried over from the job.",
           },
           {
+            step: "Hours by service, Men and consecutive times",
+            detail:
+              "When several services share one stop, the stop's man-hours are split between them by budgeted hours unless the crew timed each service (Settings > Organization > Track time per service). In Edit Job Times, Hours by service lets you retype one service's man-hours; the others rebalance and the total stays the same, and Reset to estimate restores the budget split. For stops that were not timed, the board shows each service's Start and End as back-to-back slices of the stop's span (display only, total hours unchanged). The Men column shows how many people punched in once the crew has clocked in (read-only, click to open Edit Job Times), otherwise the number of people on the assigned crew that day.",
+          },
+          {
             step: "Packages",
             detail:
               "Go to CRM > Settings > Packages to bundle recurring services (e.g. a 7-Step Fertilizer program) under one program. A package's Services tab defines each visit — its service, date window, minimum days between visits, and default budgeted hours/rate. The fixed monthly billing amount and discount live on the resulting job once a client is signed up, not on the package template itself. Next season, Renew for next season (on the job's More menu, or Renew Packages on the Jobs list) copies the job forward a year.",
@@ -2395,6 +2400,38 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Does Stop Job change each service's crew size?",
         a: "No. Each service keeps its own men count, so a three-man mow and a one-man bed edge on the same stop are costed as three and one. Stop Job only fills in a service that has no crew size.",
+      },
+      {
+        q: "Two services at one stop show the same hours and the same start and end. Is the time being split down the middle?",
+        a: "The stop is clocked once, so its total man-hours are divided between its services by their budgeted hours (equally when none are budgeted), not by what each took. That can look like a 50/50 split. Total hours are always the stop's real time: a 2-person crew on site 9:24 to 12:18 is 5.8 man-hours however it is divided. To record what each service really took, turn on Track time per service (Settings > Organization) and have the crew time each service, or correct the split in Edit Job Times > Hours by service.",
+      },
+      {
+        q: "How do I make job costing use the time each service really took?",
+        a: "Two ways. In the office, open Edit Job Times on the stop and use Hours by service: type a service's man-hours and the others rebalance so the total stays the same; Reset to estimate puts the budget split back. Or turn on Track time per service in Settings > Organization so the crew taps Start and Finish on each service in the crew app. Labor cost follows each visit's hours either way.",
+      },
+      {
+        q: "What does Track time per service do?",
+        a: "It is an org setting (Settings > Organization > Track time per service), off by default. When on and a stop has two or more services, the crew app shows Start and Finish buttons on each service while the stop is running, one service at a time: starting one ends whichever was running. A finished service shows Resume, which picks it up again; the time between Finish and Resume is left out and every run is added up. At Stop Job the stop's man-hours are divided by each service's own window and each service gets its own start and end on the board. If any service was never timed, that stop falls back to the budget split rather than giving the untimed service zero hours. It uses the crew app on the web first.",
+      },
+      {
+        q: "The board shows consecutive times for two services at one stop (9:24-10:51, then 10:51-12:18). Is that what the crew did?",
+        a: "Not necessarily. When the crew did not time the services, the board splits the stop's span into back-to-back slices sized by each service's hours so the rows no longer overlap. It is a display only: nothing is saved and total hours are unchanged. If the crew timed the services, the rows show the times they recorded. Click a sliced time to open Edit Job Times.",
+      },
+      {
+        q: "With Track time per service, does the stop's total change, and what happens to the time between services?",
+        a: "The stop's total man-hours and total labor cost do not change. The total is worked out first from the stop's clock (or the crew's punches), and each service then gets a share in proportion to its own timed window: a service that took 40% of the timed minutes gets 40% of the man-hours. Time outside any window (driving around the property, the gap before the first Start, or between a Finish and a Resume) is spread across the services in the same proportions, so the services always add up to the real total. Each service's labor cost follows its hours, so per-service cost and margin reflect how long each really took.",
+      },
+      {
+        q: "Does Track time per service or Hours by service change what a client is billed?",
+        a: "No. A visit is invoiced from its own price (rate x quantity), contracts and packages bill their fixed price, and these features only change how hours and labor cost are divided between services, not the price. One narrow exception: an hourly-billed snow visit with no clock stamps (an office Close Out or manual entry) bills from its actual hours divided by crew size, so correcting its hours changes that bill. Hourly snow visits the crew clocked bill from the clock stamps, which these features never change.",
+      },
+      {
+        q: "What does the Men column on the dispatch board show?",
+        a: "When the crew has punched in to the stop, it shows how many different people punched in, the same number the hours are built from, and it is read-only; click it to open Edit Job Times and add or remove people. If fewer people punched in than the crew's roster, a small amber (plan N) shows beside it, which helps spot a missed punch. The totals row has no Men total, since a headcount doesn't add up across stops. Before anyone punches in it shows the people on the assigned crew that day (the roster, including that day's moves); with no crew assigned it shows the job's own team size, which you can edit.",
+      },
+      {
+        q: "Why are a stop's actual hours lower than the time on site?",
+        a: "Pause time is taken out. Minutes between the crew app's Pause and Resume (and breaks recorded on each person's punch) are subtracted before the time is multiplied by the number of people, so a 34-minute pause on a 2-person crew removes about 1.1 man-hours. Whether pause counts as paid is a per-stop choice in Edit Job Times (needs the Dispatch Board or Payroll permission).",
       },
       {
         q: "A crew started yesterday's leftover stop after midnight. Which roster is clocked in?",

@@ -401,6 +401,9 @@ export interface CRMJobVisit {
   breakMinutes: number
   /** Office override: are breakMinutes paid labor? null = follow the org setting (default unpaid). Office-only. */
   breakPaid: boolean | null
+  /** Per-service window inside the stop (org setting "Track time per service"); null = not tracked. */
+  serviceStartedAt: string | null
+  serviceEndedAt: string | null
   acknowledgedNotesAt: string | null
   skipReason: string | null
   createdAt: string

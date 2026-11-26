@@ -163,7 +163,7 @@ function crewVisitSelect(hidePricing: boolean): string {
     "status", "sub_status", "completion_notes", "actual_hours", "budgeted_hours", "completed_at",
     "priority", "notes_to_crew", "notes_to_client", "invoice_description",
     "men_count", "job_comments", "assigned_employee_id", "dispatched_at",
-    "clocked_in_at", "clocked_out_at", "paused_at", "break_minutes",
+    "clocked_in_at", "clocked_out_at", "paused_at", "break_minutes", "service_started_at", "service_ended_at",
     "acknowledged_notes_at", "notes_to_crew_updated_at", "skip_reason",
     "created_at", "updated_at", "deleted_at", "crew_group_id", "crew_group_secondary",
   ].join(", ");
@@ -287,6 +287,8 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
     breakMinutes:         (row.break_minutes as number) ?? 0,
     // Office-only override; deliberately not selected into the crew app.
     breakPaid:            null,
+    serviceStartedAt:     (row.service_started_at as string | null) ?? null,
+    serviceEndedAt:       (row.service_ended_at as string | null) ?? null,
     acknowledgedNotesAt:  row.acknowledged_notes_at as string | null,
     notesToCrewUpdatedAt: (row.notes_to_crew_updated_at as string) ?? null,
     skipReason:           row.skip_reason as string | null,
@@ -1246,6 +1248,36 @@ export function useStopPause() {
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
     onError: (err) => crewActionFailed(qc, err, "Failed to pause — try again"),
+  });
+}
+
+/**
+ * Start or finish ONE service inside a running stop (org setting "Track time per
+ * service"). One at a time — starting a service ends the one running. The stop's
+ * own clock is untouched; its hours are split by these windows at Stop Job.
+ */
+export function useStopServiceTime() {
+  const qc = useQueryClient();
+  return useMutation({
+    scope: CREW_ACTIONS_SCOPE,
+    mutationFn: async ({
+      anchorVisitId, serviceVisitId, action, tap,
+    }: { anchorVisitId: string; serviceVisitId: string; action: "start" | "finish"; tap: CrewTap }) => {
+      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/service`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceVisitId, action, occurredAt: tap.occurredAt }),
+      });
+      if (!res.ok) throw await crewRequestError(res, "Failed to time this service");
+      return res.json();
+    },
+    onSuccess: (_data, { anchorVisitId }) => {
+      qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+    onError: (err) => crewActionFailed(qc, err, "Couldn't time that service — try again"),
   });
 }
 

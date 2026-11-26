@@ -421,6 +421,17 @@ export function OrganizationTab() {
             />
           </SettingRow>
           <SettingRow
+            label="Track time per service"
+            description="When a stop covers more than one service (for example pruning and clean-up at the same property), the crew taps Start and Finish on each service, one at a time. The stop's hours are then divided by how long each service actually took, and each service shows its own start and end on the dispatch board. Off: hours are divided by the services' budgeted hours. Payroll is unchanged either way — the crew still clocks in and out once per stop. If a service is never started, the stop falls back to the budget split."
+          >
+            <Switch
+              checked={remoteCustomizations.crewServiceTiming === true}
+              disabled={savingSettings}
+              onCheckedChange={(checked) => updateOrgSettings({ customizations: { crewServiceTiming: checked } }, saveFeedback("Per-service timing setting"))}
+              aria-label="Track time per service"
+            />
+          </SettingRow>
+          <SettingRow
             label="Overtime"
             description="How the Payroll tab and its exports split each person's paid hours into regular and overtime (OT). Weekly counts hours over the limit in a Monday–Sunday week; daily counts hours over the limit in one day. Extra hours added on the Payroll tab count toward it; PTO hours are paid but never count toward overtime."
           >
