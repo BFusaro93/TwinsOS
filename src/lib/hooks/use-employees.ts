@@ -33,6 +33,8 @@ function mapEmployee(row: any): CRMEmployee {
     driverLicense: row.driver_license,
     isCertifiedDriver: row.is_certified_driver ?? false,
     licenseExpiration: row.license_expiration,
+    dotPhysicalExpiration: row.dot_physical_expiration ?? null,
+    hoistingLicenseExpiration: row.hoisting_license_expiration ?? null,
     insuranceEligibility: row.insurance_eligibility,
     coveredByInsurance: row.covered_by_insurance ?? false,
     applicatorLicense: row.applicator_license,
@@ -618,6 +620,45 @@ export function useUpdateCrewMember() {
         .update(updates)
         .eq("id", id);
       if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crews"] }),
+  });
+}
+
+/**
+ * Make one member the crew's leader (or clear the leader with memberId null).
+ * A crew has at most one: every other member's is_foreman is cleared first, and
+ * crm_crews.foreman_id follows. The leader is the applicator of record on
+ * chemical applications and shows as "Crew Leader" on the dispatch board.
+ */
+export function useSetCrewLeader() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      crewId,
+      memberId,
+      employeeId,
+    }: {
+      crewId: string;
+      memberId: string | null;
+      employeeId: string | null;
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+      const { error: clearErr } = await db
+        .from("crm_crew_members")
+        .update({ is_foreman: false })
+        .eq("crew_id", crewId)
+        .eq("is_foreman", true)
+        .is("deleted_at", null);
+      if (clearErr) throw clearErr;
+      if (memberId) {
+        const { error } = await db.from("crm_crew_members").update({ is_foreman: true }).eq("id", memberId);
+        if (error) throw error;
+      }
+      const { error: crewErr } = await db.from("crm_crews").update({ foreman_id: employeeId }).eq("id", crewId);
+      if (crewErr) throw crewErr;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crews"] }),
   });

@@ -730,7 +730,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Reading the line-item grid",
             detail:
-              "The grid's GM% column color-codes gross margin per line — green at 30%+, gray at 10%+, red below 10% — calculated from Rate, Cost, and Adjusted Rate. Toggle a line between per-unit (×) and fixed total ($) pricing with the Calc Type control.",
+              "The grid's GM% column color-codes gross margin per line — green at 30%+, gray at 10%+, red below 10% — calculated from Rate, Cost, and Adjusted Rate. Toggle a line between per-unit (×) and fixed total ($) pricing with the Calc Type control. On a $ line Qty is grayed out (it doesn't change the price).",
           },
           {
             step: "Converting an estimate to a job",
@@ -828,6 +828,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Catalog rates vs. what actually bills",
             detail:
               "A service's default rate is a starting value — it fills in a price when that service is added to a NEW estimate, invoice or package. It is not what existing clients are billed. Each job keeps the rate it was sold at on its own Services tab, and that per-client rate is what an invoice is built from when a visit completes. Raising the catalog rate alone moves no money.",
+          },
+          {
+            step: "Minimum charge",
+            detail:
+              "On a service, set Minimum Charge ($) and an optional Minimum Message (for example '4-hour minimum'). On an estimate, a per-unit line (qty x rate) is billed at least the minimum for each visit, so 2 hours at $165 with a $660 minimum bills $660, while 5 hours bills $825. The line shows 'Minimum charge applied' whenever the minimum is what is billed. Fixed-price lines, package steps and bundle items are never changed by it, and a quantity of 0 bills nothing. The minimum is copied onto the line when the service is added, so changing it later does not reprice estimates already built. It applies to estimates (and jobs and invoices created from them); services added straight to a job are not raised to the minimum.",
           },
           {
             step: "Bulk Prices (catalog)",
@@ -2610,7 +2615,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What do Delivered, Bounced, Failed and Pending mean on Email Activity?",
-        a: "The Delivery column shows Yes (confirmed delivered), Bounced (the mail server rejected it; hover the badge for the reason when one was reported), Failed (the email could not be sent and no further reason is recorded) or Pending (no delivery confirmation yet). The filter buttons above the list are All, Delivered, Not Delivered, Failed, Bounced and Pending; Not Delivered covers the last three.",
+        a: "The Delivery column shows Yes (confirmed delivered), Bounced (the mail server rejected it; hover the badge for the reason when one was reported), Failed (the email could not be sent and no further reason is recorded) or Pending (no delivery confirmation yet). The filter buttons above the list are All, Delivered, Not Delivered, Failed, Bounced and Pending; Not Delivered covers Bounced and Failed (a Pending email is still in flight, so it is not counted as not delivered).",
       },
       {
         q: "What can a crew login see about our clients?",
@@ -3561,6 +3566,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. Open the bundle (Settings > Estimates > Service Bundles) and pick an Estimate document on the Details tab. Estimates created from, or given, that bundle remember the document, and Send pre-selects it instead of the default. The client-view toggles for the bundle are on the Display Settings tab.",
       },
       {
+        q: "What is the difference between × and $ in the Calc Type on an estimate line?",
+        a: "× is per-unit pricing: the line total is qty × rate × visits (times complexity), and a service's minimum charge applies to each visit. $ is a fixed price: the rate you enter is the whole line total, so qty and visits don't change it and the minimum charge doesn't apply. On a $ line Qty is grayed out. Visits stays editable because it still controls how many visits the job is scheduled for.",
+      },
+      {
+        q: "A $ line has 2 visits and a $200 total. How is it billed?",
+        a: "On a recurring job the line total is split evenly across the visits, so $200 over 2 visits is $100 a visit. The per-visit price is rounded down to whole cents so the job never bills more than the client accepted (for example $100.00 over 3 visits bills 3 × $33.33 = $99.99, and the convert dialog shows the shortfall). A one-time job counts as one visit and bills the full amount once.",
+      },
+      {
+        q: "When I apply a bundle, does it bring the service descriptions?",
+        a: "Yes. A bundle stores no wording of its own. When it is applied (when creating an estimate, or Apply bundle on an existing one) each line copies the service's current Description on Estimate and Invoice Description from Settings, as plain text, just like adding the service by hand. Changing the service's description later does not change estimates already built from the bundle, because each line keeps its own copy. To refresh a line, edit its description on the estimate.",
+      },
+      {
+        q: "I edited a service's description in Settings. Does it update packages, bundles and existing estimates?",
+        a: "Packages and bundles store no service description, so there is nothing to refresh in them: the next estimate you build from them picks up the new wording. Estimate lines already created keep the text they were built with. On jobs and invoices, a line with a copied invoice description keeps it; a line with none falls back to the service's current invoice description, so it shows the new wording.",
+      },
+      {
         q: "I applied a bundle with sub-items to an estimate and they did not show. Why?",
         a: "Sub-items from Apply bundle show under their lines straight away; expand a line to see them. If a bundle's items have no sub-items in the bundle editor, there is nothing to copy.",
       },
@@ -3751,6 +3772,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Why does a client's proposal link still show the old price after I edited the estimate?",
         a: "The link shows the last version you sent. Edit as much as you like, then use Send or Copy link to publish the new version; until then the client sees the previous one and can't accept it. The estimate header shows an 'Edited since Version N was sent' banner when the two differ.",
+      },
+      {
+        q: "Can an automation email or ticket use one of my documents, and will it stay up to date?",
+        a: "Yes. In an Email step's Email Body tab, or a Ticket step's Description, pick a document under 'Use an existing document'. The step is linked to it, not copied: each time it runs it uses the document's current subject and text, so editing the document under Documents updates every automation that uses it. If the document is empty or deleted, the step sends the text saved on the step instead. Choose None (or Custom ticket) to unlink and keep an editable copy. Merge tags like [clientname] and [clientemail] are filled in per client; Ticket steps can also set category, type, status, due in days, and assign to the client's sales rep.",
+      },
+      {
+        q: "Can an automation email go to my staff instead of the client?",
+        a: "Yes. In an Email step's To list, tick the client's sales rep, the estimate's sales rep (for estimate triggers), and/or pick specific employees. Staff get the email at the address on their employee record (people marked terminated or without an email are skipped). A client's opt-out and bounce settings only affect the client's own addresses, so a notice to staff still goes out even if the client is marked not OK to email. Approval, send window and the other settings work the same.",
+      },
+      {
+        q: "Why do my parent and child clients get Master Property and Sub-property tags?",
+        a: "They're added for you. A client with at least one child client gets the Master Property tag, and a client with a parent gets Sub-property. They appear when you link or unlink clients, and the tag is removed when the link is removed or the client is deleted. The tags are created in your tag list the first time they're needed. Links made before this existed aren't re-tagged, but you can add the tags by hand.",
+      },
+      {
+        q: "Can an automation email include the estimate's proposal link?",
+        a: "Yes, for automations that start from an estimate (such as Estimate sent). Add the Proposal link button tag, [estimatelink], or [estimatelinkurl] for the plain address. It links to the estimate's current live proposal and is left blank if the link has expired.",
       },
       {
         q: "Can an automation email send itself before anyone reviews it?",

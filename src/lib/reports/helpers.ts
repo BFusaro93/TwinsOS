@@ -5,6 +5,7 @@ import type {
   ReportResultRow,
 } from "@/types/crm-reports";
 import { computeTotals } from "@/lib/reports/engine";
+import { decodeMultiParam } from "@/lib/reports/multi-param";
 import type { ReportParams } from "@/lib/reports/definition-types";
 import { ymd } from "@/lib/time/zone";
 import { isoInZone, shiftYmd, zoneDateParts, zoneWallClockToInstant } from "@/lib/time/zone";
@@ -118,9 +119,9 @@ export function eqFilter(
   return [{ column, op: "eq", value }];
 }
 
-/** Comma-joined multi-select param -> the list of chosen values. */
+/** Multi-select param -> the list of chosen values (new separator format or legacy comma-joined). */
 export function splitMultiParam(value: string | undefined): string[] {
-  return (value ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  return decodeMultiParam(value);
 }
 
 /** "in" filter for a multi-select param; nothing chosen = no filter. On an array column

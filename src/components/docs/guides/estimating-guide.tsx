@@ -373,6 +373,15 @@ export function EstimatingGuide() {
           more; a value like 2.5 is rounded when you leave the cell, with a note.
         </p>
         <p>
+          On a <strong>$</strong> line, <strong>Qty</strong> is grayed out because it doesn&rsquo;t
+          change the price (switch the line to <strong>&times;</strong> to price per unit).{" "}
+          <strong>Visits</strong> stays editable: it doesn&rsquo;t change the line total either, but on
+          a recurring job the total is split evenly across the visits (a $200 line with 2 visits is
+          $100 a visit). The per-visit price is rounded down to whole cents, so $100.00 over 3 visits
+          bills 3 &times; $33.33 = $99.99; the convert dialog shows the shortfall. A one-time job
+          counts as one visit.
+        </p>
+        <p>
           A <strong>line&apos;s flat discount</strong> works the same way as the estimate-level one: it
           keeps the amount you entered. If the line&rsquo;s total drops below it, only the total&rsquo;s
           worth applies, and the rest comes back when the total goes up again.
@@ -435,6 +444,10 @@ export function EstimatingGuide() {
           beside the sub-item&apos;s name, and you can type its unit <strong>Cost</strong> in the row
           (internal, never shown to the client); both come along when the bundle is applied. To rename a
           bundle sub-item or swap its product, delete it and add it again.
+          A bundle doesn&rsquo;t store any wording of its own: when you apply it, each line copies the
+          service&rsquo;s <em>current</em> Description on Estimate and Invoice Description from Settings
+          (as plain text), the same as adding the service by hand. Editing the service afterwards
+          doesn&rsquo;t change estimates already built from the bundle.
           When you apply the bundle to an estimate, its sub-items come with it, including when you
           pick it from <strong>Apply bundle&hellip;</strong> on an estimate that already exists.
         </p>

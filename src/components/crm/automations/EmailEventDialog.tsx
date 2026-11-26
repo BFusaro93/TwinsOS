@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,10 +22,10 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { SNOW_TAGS } from "@/types/crm-documents";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
-import { blocksUseEstimateTags } from "@/lib/estimates/estimate-tags";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
@@ -52,11 +52,18 @@ const TO_OPTIONS = [
   { value: "all_contacts", label: "All contacts (ok to email)" },
 ];
 
+// Staff recipients. Sent to the employee's email on file; the client's opt-outs don't apply to them.
+const STAFF_TO_OPTIONS = [
+  { value: "client_sales_rep", label: "Client's sales rep" },
+  { value: "estimate_sales_rep", label: "Estimate's sales rep (estimate triggers)" },
+];
+
 const MERGE_TAGS = [
   { tag: "[clientfirstname]", label: "Client's first name" },
   { tag: "[clientfullname]", label: "Client's full name" },
   { tag: "[companyname]", label: "Your company name" },
   { tag: "[quotenumber]", label: "Linked estimate/quote number" },
+  { tag: "[estimatelink]", label: "Proposal link button (estimate triggers)" },
   { tag: "[invoicenumber]", label: "Invoice number (invoice triggers)" },
   { tag: "[invoicetotal]", label: "Invoice total" },
   { tag: "[invoicebalance]", label: "Invoice balance due" },
@@ -96,23 +103,34 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
   const [saving, setSaving] = useState(false);
   const bodyRef = useRef<RichTextEditorHandle>(null);
 
-  const [docTemplateId, setDocTemplateId] = useState<string>("");
-  const { data: docTemplates = [] } = useDocumentTemplates();
-  const { data: selectedDocTemplate } = useDocumentTemplate(docTemplateId);
+  // The linked document (kept on the step): at send time its CURRENT subject and
+  // body are used, so editing the document updates this email. The text below is
+  // refreshed from it on every save as a fallback if the document is ever deleted.
+  const [linkedDocId, setLinkedDocId] = useState<string>(c.document_template_id ?? "");
+  const { data: employees = [] } = useEmployees(true);
+  const { data: allDocTemplates = [] } = useDocumentTemplates();
+  // Text-message and estimate-layout documents don't make sense as an automation email.
+  const docTemplates = allDocTemplates.filter(
+    (t) => t.status === "active" && t.docType !== "text_message" && t.docType !== "snow_text" && t.docType !== "estimate",
+  );
+  const { data: linkedDoc } = useDocumentTemplate(linkedDocId);
+  const linkedHtml = linkedDoc
+    ? renderBlocksToHtml(linkedDoc.blocks, {}, { preserveUnresolvedKnownTags: true })
+    : "";
+  const linkedHasContent = !!linkedDoc && linkedDoc.blocks.some((b) => (b.content ?? "").replace(/<[^>]*>/g, "").trim().length > 0 || b.blockType === "image");
 
-  // Once the chosen document template's blocks load, use them to fill in the
-  // subject/body — merge tags are left unresolved ([clientfirstname], etc.)
-  // so the automation's own send-time resolver fills them in per-recipient.
-  useEffect(() => {
-    if (!selectedDocTemplate) return;
-    // Estimate-only tags resolve only when sent from an estimate; an automation step has none.
-    if (blocksUseEstimateTags(selectedDocTemplate.blocks)) {
-      toast.warning("This document is an estimate email — its estimate details will be blank in an automation email.");
+  function chooseDocument(id: string) {
+    setLinkedDocId(id);
+  }
+
+  /** Stop following the document: keep its current text as this email's own, editable text. */
+  function unlinkDocument() {
+    if (linkedDoc) {
+      if (linkedDoc.subject) setSubject(linkedDoc.subject);
+      if (linkedHasContent) setBody(linkedHtml);
     }
-    if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
-    setBody(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
-    setDocTemplateId("");
-  }, [selectedDocTemplate]);
+    setLinkedDocId("");
+  }
 
   function insertMergeTag(tag: string) {
     bodyRef.current?.insertContent(tag);
@@ -141,6 +159,11 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
           between_end: betweenEnd,
           send_weekdays_only: weekdaysOnly,
           require_approval: requireApproval,
+          document_template_id: linkedDocId || null,
+          // Fallback copy of the linked document, refreshed at every save (see above).
+          ...(linkedDocId && linkedDoc
+            ? { subject: linkedDoc.subject || subject, body: linkedHasContent ? linkedHtml : body }
+            : {}),
         },
       });
       onOpenChange(false);
@@ -203,6 +226,40 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
                     </Label>
                   </div>
                 ))}
+                <p className="pt-1 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">Staff</p>
+                {STAFF_TO_OPTIONS.map((opt) => (
+                  <div key={opt.value} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`to-${opt.value}`}
+                      checked={to.includes(opt.value)}
+                      onCheckedChange={() => toggleTo(opt.value)}
+                    />
+                    <Label htmlFor={`to-${opt.value}`} className="cursor-pointer font-normal">
+                      {opt.label}
+                    </Label>
+                  </div>
+                ))}
+                {employees.length > 0 && (
+                  <div className="max-h-32 overflow-y-auto rounded border p-2 flex flex-col gap-1.5">
+                    {employees.map((emp) => {
+                      const token = `employee:${emp.id}`;
+                      return (
+                        <div key={emp.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`to-${token}`}
+                            checked={to.includes(token)}
+                            disabled={!emp.email && !to.includes(token)}
+                            onCheckedChange={() => toggleTo(token)}
+                          />
+                          <Label htmlFor={`to-${token}`} className="cursor-pointer font-normal">
+                            {emp.firstName} {emp.lastName}
+                            {!emp.email && <span className="ml-1 text-[11px] text-slate-400">(no email on file)</span>}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -213,6 +270,11 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
               />
+              {linkedDocId && (
+                <p className="text-[11px] text-slate-500 dark:text-neutral-400">
+                  A linked document is set — its subject is used when it has one; this subject is the fallback.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -278,11 +340,15 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
               {docTemplates.length > 0 && (
                 <div className="flex flex-col gap-1.5 pb-2">
                   <Label>Use an existing document</Label>
-                  <Select value={docTemplateId} onValueChange={setDocTemplateId}>
+                  <Select value={linkedDocId || "none"} onValueChange={(v) => (v === "none" ? unlinkDocument() : chooseDocument(v))}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Choose a saved document to fill in the subject/body…" />
+                      <SelectValue placeholder="Choose a saved document…" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">None — write the email here</SelectItem>
+                      {linkedDocId && !docTemplates.some((t) => t.id === linkedDocId) && (
+                        <SelectItem value={linkedDocId}>{linkedDoc?.name ?? "Linked document"}</SelectItem>
+                      )}
                       {docTemplates.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
                           {t.name}
@@ -290,9 +356,32 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
                       ))}
                     </SelectContent>
                   </Select>
+                  {linkedDocId && (
+                    <p className="text-[11px] text-slate-500 dark:text-neutral-400">
+                      This email uses the document&apos;s current subject and text — edit the document under Documents and every automation using it updates. Choose &quot;None&quot; to keep a copy of the text here and edit it freely.
+                    </p>
+                  )}
                 </div>
               )}
-              <Label>Email Body</Label>
+              {linkedDocId && linkedDoc && !linkedHasContent && (
+                <p className="rounded bg-amber-50 dark:bg-amber-950/40 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+                  This document has no text yet, so this email will send the text saved below until it does.
+                </p>
+              )}
+              <Label>{linkedDocId ? "Preview (from the linked document)" : "Email Body"}</Label>
+              {linkedDocId ? (
+                linkedDoc ? (
+                  <iframe
+                    title="Linked document preview"
+                    sandbox=""
+                    srcDoc={linkedHtml}
+                    className="h-[300px] w-full rounded border bg-white"
+                  />
+                ) : (
+                  <p className="text-xs text-slate-500">Loading document…</p>
+                )
+              ) : (
+                <>
               {/* Rich text, matching the invoice and estimate send dialogs.
                   This was a monospace <textarea> holding the raw HTML, so
                   picking a saved document dumped a wall of markup at the
@@ -318,6 +407,8 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
                   </button>
                 ))}
               </div>
+                </>
+              )}
             </div>
           </TabsContent>
         </Tabs>

@@ -1913,6 +1913,8 @@ export function InvoiceDetail({
 
           {/* Line items */}
           <div className="mx-4 md:mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
+            {/* DndContext renders a hidden <div>, which is invalid inside a <table> — keep it outside. */}
+            <DndContext sensors={lineSensors} collisionDetection={closestCenter} onDragEnd={handleLineDragEnd}>
             <table className="w-full text-xs">
               <thead className="bg-brand-500 text-white">
                 <tr>
@@ -1929,7 +1931,6 @@ export function InvoiceDetail({
                   <th className="w-10 px-2 py-2.5" />
                 </tr>
               </thead>
-              <DndContext sensors={lineSensors} collisionDetection={closestCenter} onDragEnd={handleLineDragEnd}>
               <SortableContext items={lineItems.map((l) => l.id)} strategy={verticalListSortingStrategy}>
               <tbody>
                 {lineItems.map((li, i) => (
@@ -1948,8 +1949,8 @@ export function InvoiceDetail({
                 )}
               </tbody>
               </SortableContext>
-              </DndContext>
             </table>
+            </DndContext>
 
             {lineItems.some((l) => l.hideOnPrint) && (
               <p className="border-t px-4 py-2 text-[11px] text-slate-500 dark:text-neutral-400">

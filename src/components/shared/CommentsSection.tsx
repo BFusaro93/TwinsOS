@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { Send } from "lucide-react";
 import { formatDateTime, getInitials, getAvatarColor } from "@/lib/utils";
 import { useComments, useAddComment } from "@/lib/hooks/use-comments";
-import { useCurrentUserStore } from "@/stores";
+import { useCurrentUserStore, useRecordDraft } from "@/stores";
 import { useRoleCapabilities, isEquiptRecordType } from "@/lib/hooks/use-role-capabilities";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/shared/MentionTextarea";
@@ -49,11 +48,12 @@ export function CommentsSection({ recordType, recordId, dark = false, canWrite }
   const { data: comments, isLoading } = useComments(recordType, recordId);
   const { mutate: addComment, isPending: sending } = useAddComment();
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
-  const [draft, setDraft] = useState("");
+  const { text: draft, setText: setDraft, clearSent, saved } = useRecordDraft(recordType, recordId);
 
   function handleSend() {
     const body = draft.trim();
     if (!body || !currentUserLoaded) return;
+    const sentDraft = draft;
     addComment(
       {
         recordType,
@@ -61,7 +61,7 @@ export function CommentsSection({ recordType, recordId, dark = false, canWrite }
         authorName: currentUser.name || "Unknown",
         body,
       },
-      { onSuccess: () => setDraft("") },
+      { onSuccess: () => clearSent(sentDraft) },
     );
   }
 
@@ -128,6 +128,9 @@ export function CommentsSection({ recordType, recordId, dark = false, canWrite }
           <Send className="h-3.5 w-3.5" />
         </Button>
       </div>
+      )}
+      {showInput && saved && (
+        <p className="-mt-2 text-[11px] text-slate-400 dark:text-neutral-500" aria-live="polite">Draft saved</p>
       )}
     </div>
   );

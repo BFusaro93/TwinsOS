@@ -54,6 +54,9 @@ import type { CRMEmployee, EmploymentStatus, UserType } from "@/types/crm-employ
 import type { OrgUser } from "@/types";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { EmployeeFilesTab } from "@/components/crm/employees/EmployeeFilesTab";
+import { diffChangedFields } from "@/lib/employees/form-diff";
+import { ExpiringCredentialsPanel } from "@/components/crm/employees/ExpiringCredentialsPanel";
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -154,7 +157,13 @@ function PersonalTab({
               <Checkbox checked={!!form.is_certified_driver} onCheckedChange={(c) => onChange("is_certified_driver", !!c)} />
             </Field>
             <Field label="License Expiration">
-              <FieldInput type="date" value={form.license_expiration ?? ""} onChange={(e) => onChange("license_expiration", e.target.value)} />
+              <FieldInput type="date" value={form.license_expiration ?? ""} onChange={(e) => onChange("license_expiration", e.target.value || null)} />
+            </Field>
+            <Field label="DOT Physical Expiration">
+              <FieldInput type="date" value={form.dot_physical_expiration ?? ""} onChange={(e) => onChange("dot_physical_expiration", e.target.value || null)} />
+            </Field>
+            <Field label="Hoisting License Expiration">
+              <FieldInput type="date" value={form.hoisting_license_expiration ?? ""} onChange={(e) => onChange("hoisting_license_expiration", e.target.value || null)} />
             </Field>
             <Field label="Insurance Eligibility">
               <FieldInput type="date" value={form.insurance_eligibility ?? ""} onChange={(e) => onChange("insurance_eligibility", e.target.value)} />
@@ -436,16 +445,17 @@ function SalesGoalsTab({
   return (
     <div className="rounded border">
       <SectionBar title="Monthly Sales Goals" />
-      <div className="grid grid-cols-4 gap-4 p-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
         {MONTH_KEYS.map((month, i) => (
-          <Field key={month} label={MONTH_LABELS[i]}>
+          <div key={month} className="min-w-0">
+            <Label className="mb-1 block text-sm font-normal text-muted-foreground">{MONTH_LABELS[i]}</Label>
             <CurrencyInput
               cents={goals[month] ?? 0}
               blankWhenZero
               onChange={(cents) => setGoal(month, cents)}
-              className="h-8 w-28 text-sm"
+              className="h-8 w-full text-sm"
             />
-          </Field>
+          </div>
         ))}
       </div>
     </div>
@@ -734,6 +744,8 @@ function EmployeeDialog({
   const { mutateAsync: create, isPending: creating } = useCreateEmployee();
   const { mutateAsync: update, isPending: updating } = useUpdateEmployee();
   const { can } = usePermissions();
+  // Same gate the database enforces on employee files (admins pass `can` too).
+  const canSeeFiles = can("emp_view_info") || can("emp_edit") || can("emp_manage");
 
   const isNew = !employee;
 
@@ -756,7 +768,10 @@ function EmployeeDialog({
       print_on_check_as: e.printOnCheckAs, email: e.email, birth_date: e.birthDate,
       resource_code: e.resourceCode, address: e.address, city: e.city, state: e.state,
       zip: e.zip, driver_license: e.driverLicense, is_certified_driver: e.isCertifiedDriver,
-      license_expiration: e.licenseExpiration, insurance_eligibility: e.insuranceEligibility,
+      license_expiration: e.licenseExpiration,
+      dot_physical_expiration: e.dotPhysicalExpiration,
+      hoisting_license_expiration: e.hoistingLicenseExpiration,
+      insurance_eligibility: e.insuranceEligibility,
       covered_by_insurance: e.coveredByInsurance, applicator_license: e.applicatorLicense,
       resource_tags: e.resourceTags,
       date_hired: e.dateHired, phone: e.phone, cell_phone: e.cellPhone, pager: e.pager,
@@ -792,6 +807,13 @@ function EmployeeDialog({
     employee ? employeeToForm(employee) : defaultForm
   );
 
+  // What the form showed when it opened: an edit saves only what differs from
+  // this, so untouched fields are never rewritten.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [initialForm] = useState<Record<string, any> | null>(() =>
+    employee ? employeeToForm(employee) : null
+  );
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function onChange(key: string, value: any) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -818,11 +840,17 @@ function EmployeeDialog({
     // filters on is_active), so changing the Employment Status keeps is_active
     // in step — otherwise a terminated employee stayed active on crew rosters,
     // pickers and payroll until someone also found the Deactivate action.
-    const payload = { ...form };
+    // New employee: every field. Existing: only the fields the user changed.
+    const payload = initialForm ? diffChangedFields(initialForm, form) : { ...form };
     const statusChanged = !employee || employee.employmentStatus !== form.employment_status;
     if (statusChanged) {
       if (form.employment_status === "terminated") payload.is_active = false;
       else if (employee?.employmentStatus === "terminated") payload.is_active = true;
+    }
+    if (!isNew && Object.keys(payload).length === 0) {
+      toast.info("No changes to save");
+      onOpenChange(false);
+      return;
     }
     try {
       if (isNew) {
@@ -860,6 +888,7 @@ function EmployeeDialog({
               ...(can("emp_view_user_settings") ? [{ value: "user_settings", label: "User Settings" }] : []),
               ...(can("emp_view_resource_notes") ? [{ value: "notes", label: "Notes" }] : []),
               ...(employee?.id && can("emp_view_resource_notes") ? [{ value: "injuries", label: "Injuries" }] : []),
+              ...(employee?.id && canSeeFiles ? [{ value: "files", label: "Files" }] : []),
               ...(employee?.id ? [{ value: "audit", label: "Audit Trail" }] : []),
             ].map((tab) => (
               <TabsTrigger
@@ -913,6 +942,11 @@ function EmployeeDialog({
                 <InjuriesTab employeeId={employee.id} />
               </TabsContent>
             )}
+            {employee?.id && canSeeFiles && (
+              <TabsContent value="files" className="mt-0">
+                <EmployeeFilesTab employeeId={employee.id} />
+              </TabsContent>
+            )}
             {employee?.id && (
               <TabsContent value="audit" className="mt-0">
                 <AuditTrailTab recordType="employee" recordId={employee.id} />
@@ -957,9 +991,12 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 function EmployeeDetail({
   employee,
   onEdit,
+  inSheet = false,
 }: {
   employee: CRMEmployee;
   onEdit: () => void;
+  /** Rendered inside a slide-over: leave room for the Sheet's X (top-right). */
+  inSheet?: boolean;
 }) {
   const name = `${employee.firstName} ${employee.lastName}`;
   // The assigned role is crm_role_id; user_role is a legacy free-text title.
@@ -968,7 +1005,7 @@ function EmployeeDetail({
   return (
     <div className="flex h-full flex-col overflow-auto">
       {/* Top card */}
-      <div className="border-b bg-slate-50 dark:bg-muted/40 px-6 py-5">
+      <div className={`border-b bg-slate-50 dark:bg-muted/40 px-6 py-5 ${inSheet ? "pr-12" : ""}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white uppercase ${getAvatarColor(name)}`}>
@@ -1026,11 +1063,13 @@ function EmployeeDetail({
           )}
         </PermissionGate>
 
-        {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance) && (
+        {(employee.driverLicense || employee.applicatorLicense || employee.isCertifiedDriver || employee.coveredByInsurance || employee.licenseExpiration || employee.dotPhysicalExpiration || employee.hoistingLicenseExpiration) && (
           <PermissionGate permission="emp_view_license_info">
             <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Certifications &amp; Licensing</p>
             <DetailRow label="Driver License #" value={employee.driverLicense} />
             <DetailRow label="License Expiration" value={formatDetailDate(employee.licenseExpiration)} />
+            <DetailRow label="DOT Physical Expiration" value={formatDetailDate(employee.dotPhysicalExpiration)} />
+            <DetailRow label="Hoisting License Expiration" value={formatDetailDate(employee.hoistingLicenseExpiration)} />
             <DetailRow label="Certified Driver" value={employee.isCertifiedDriver ? "Yes" : null} />
             <DetailRow label="Applicator License" value={employee.applicatorLicense} />
             <DetailRow label="Insurance Eligibility" value={employee.insuranceEligibility} />
@@ -1379,6 +1418,8 @@ export function EmployeesTable({
           {filtered.length} employee{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
+
+      <ExpiringCredentialsPanel employees={employees ?? []} onSelect={onSelect} />
 
       <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <EmployeeTable

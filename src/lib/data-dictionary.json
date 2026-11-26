@@ -254,7 +254,7 @@
     "name": "Materials Needed for Upcoming Jobs",
     "description": "For every product (chemical or general material): quantity needed for outstanding scheduled and waiting-list jobs, amount on hand, amount on order, and the resulting shortfall — with the ability to create a Requisition or PO directly from a shortfall.",
     "notes": [
-      "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
+      "Chemical quantities require a Default Area Measurement under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
       "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product, less any quantity already received against those PO lines.",
       "Demand counts visits in Scheduled, Dispatched, or In Progress status, plus waiting-list jobs that have not been dispatched yet. Job products already marked Invoiced or Used are excluded — their quantity has already come out of on-hand."
     ]
@@ -265,7 +265,7 @@
     "name": "Daily Load List",
     "description": "What each crew needs to load on the truck for a given day — chemicals (concentrate amount and finished spray-mix volume) and general materials, grouped by crew.",
     "notes": [
-      "Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate x an Area Custom Field on the property (same estimate as Materials Needed).",
+      "Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate x the property's area measurement (same estimate as Materials Needed).",
       "Mix volume is the total finished spray solution (e.g. gallons of mix), computed from the product's default rate's dilution settings — it only appears when that rate has a Mixed with Water/Product ratio configured with convertible units.",
       "Crew is the visit's crew override if set, otherwise the job's default crew. Visits/jobs with no crew assigned appear under Unassigned."
     ]
@@ -1064,6 +1064,25 @@
     ]
   },
   {
+    "key": "employee-credential-expirations",
+    "section": "schedule_lists",
+    "name": "Employee Credential Expirations",
+    "description": "Shows employees whose driver license, DOT physical, or hoisting license has expired or expires soon, soonest first.",
+    "notes": [
+      "Expired credentials are included. Dates are only visible to people with View License Info (or Edit/Manage Employees); everyone else sees an empty report."
+    ],
+    "dataset": "rpt_employees",
+    "columns": [
+      "full_name",
+      "next_credential_expiry",
+      "license_expiration",
+      "dot_physical_expiration",
+      "hoisting_license_expiration",
+      "cell_phone",
+      "email"
+    ]
+  },
+  {
     "key": "contractor-phone-list",
     "section": "schedule_lists",
     "name": "Contractor Phone List",
@@ -1177,6 +1196,7 @@
       "client_name",
       "service_names",
       "crew_name",
+      "job_type",
       "status",
       "budgeted_hours",
       "actual_hours",
@@ -1192,7 +1212,8 @@
     "name": "Backlog Services",
     "description": "Shows scheduled visits that have not been completed as of a cutoff date.",
     "notes": [
-      "Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started."
+      "Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started.",
+      "Excludes visits that belong to cancelled, completed, skipped or on-hold jobs."
     ],
     "dataset": "rpt_job_visits",
     "columns": [

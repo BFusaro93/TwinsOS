@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import { bpsToPercent, centsToDisplay, clampComplexityBps, clampLineDiscount, computeLineItem, getBreakevenRateCents, lineEquipmentCostCents, lineVisits } from "@/lib/estimate-calc";
+import { bpsToPercent, centsToDisplay, clampComplexityBps, clampLineDiscount, computeLineItem, getBreakevenRateCents, lineEquipmentCostCents, lineVisits, minimumChargeApplies } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem, useEstimateSubitemTotals } from "@/lib/hooks/use-estimates";
 import { packageGroupLineIds } from "@/lib/estimates/package-group";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -22,7 +22,9 @@ import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
 import { fetchFieldValueWithClientFallback } from "@/lib/chemical-area";
-import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
+import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, mapRateMatrixRow, useRateMatrix, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
+import { isBlankRich } from "@/lib/utils/visit-note";
+import { isQtyKeyedMatrix, qtyMatrixLinePatch } from "@/lib/estimates/qty-matrix";
 import { createClient } from "@/lib/supabase/client";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { usePackages } from "@/lib/hooks/use-packages";
@@ -550,6 +552,23 @@ function LineItemRow({
   const baseRef = useRef<RowState>(item);
   const { data: catalogServices } = useCRMServices();
   const isChemicalLine = !!row.serviceId && !!catalogServices?.find((s) => s.id === row.serviceId)?.trackChemicals;
+  // Quantity-keyed rate matrix (rows with no property field): editing the Qty
+  // re-prices the line from the band that holds it. Package steps keep their locked price.
+  const { data: matrixRows = [] } = useRateMatrix(row.packageId ? "" : (row.serviceId ?? ""));
+  const qtyMatrixService = row.serviceId ? catalogServices?.find((s) => s.id === row.serviceId) : undefined;
+  function updateQty(qty: number) {
+    const tail = qtyMatrixService && (qtyMatrixService.matrixTailEveryQty ?? 0) > 0 && (qtyMatrixService.matrixTailOverQty ?? 0) > 0
+      ? {
+          everyQty: qtyMatrixService.matrixTailEveryQty ?? 0,
+          overQty: qtyMatrixService.matrixTailOverQty ?? 0,
+          rateCents: qtyMatrixService.matrixTailRateCents ?? 0,
+          hours: qtyMatrixService.matrixTailHours ?? 0,
+          costCents: qtyMatrixService.matrixTailCostCents ?? 0,
+        }
+      : null;
+    const patch = qtyMatrixLinePatch(matrixRows, tail, qty, row.unitType);
+    updateFields(patch ? { qty, ...patch } : { qty });
+  }
   const [dirty, setDirty] = useState(false);
   // While the Cost box has focus, always show what's actually in row.costCents
   // (even 0) rather than the auto-computed blue display — otherwise the
@@ -793,6 +812,8 @@ function LineItemRow({
   const unitWarning = needsProductionRateUnitWarning(row.budgetMethod, row.unitType);
   // No rate: the line totals $0 and would be sent to the client as free.
   const noRateWarning = row.rowType !== "section" && row.rateCents === 0 && (row.adjRateCents ?? 0) === 0;
+  // The service minimum is what this line bills (qty × rate falls below it).
+  const minimumApplied = row.rowType !== "section" && minimumChargeApplies(row);
   // Client takeoff the sq ft qty could be defaulted from (offered, never forced).
   const takeoffSqft = isAreaUnit(row.unitType) ? resolveTakeoffSqft(row.serviceName, takeoff) : null;
   const offerTakeoff = !converted && takeoffSqft !== null && row.qty !== takeoffSqft;
@@ -974,7 +995,7 @@ function LineItemRow({
             onBlur={() => void saveVisits()}
             step={1}
             disabled={converted}
-            title={converted ? CONVERTED_LINE_MESSAGE : "Whole number of visits, 1 or more"}
+            title={converted ? CONVERTED_LINE_MESSAGE : row.calcType === 0 ? "Doesn't change the price on a fixed ($) line. The line total is split across this many visits on the job." : "Whole number of visits, 1 or more"}
           />
         </td>
 
@@ -982,10 +1003,10 @@ function LineItemRow({
         <td className="w-20 px-2 py-1.5">
           <InlineNum
             value={row.qty}
-            onChange={(v) => update("qty", v)}
+            onChange={(v) => updateQty(v)}
             onBlur={save}
-            disabled={converted}
-            title={converted ? CONVERTED_LINE_MESSAGE : undefined}
+            disabled={converted || row.calcType === 0}
+            title={converted ? CONVERTED_LINE_MESSAGE : row.calcType === 0 ? "Quantity doesn't apply to a fixed ($) line. Switch to × to price per unit." : undefined}
           />
         </td>
 
@@ -1221,6 +1242,16 @@ function LineItemRow({
             = {row.budgetedHours.toFixed(2)} hrs/occ
           </td>
           <td colSpan={11} />
+        </tr>
+      )}
+
+      {minimumApplied && (
+        <tr className="border-b border-slate-50 dark:border-neutral-800 bg-blue-50/40 dark:bg-blue-950/40 text-[10px] text-blue-500 dark:text-blue-400">
+          <td colSpan={3} />
+          <td colSpan={15} className="px-2 py-0.5 italic">
+            Minimum charge applied: {formatCurrency(row.minChargeCents ?? 0)}{(row.visits ?? 1) > 1 ? " per visit" : ""}
+            {row.minChargeMessage ? ` — ${row.minChargeMessage}` : ""}
+          </td>
         </tr>
       )}
 
@@ -1550,7 +1581,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     [items, upsert, estimateId]
   );
 
-  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null; visits?: number; packageId?: string | null; sortOrder?: number; budgetedHours?: number | null; lockRate?: boolean }) {
+  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null; visits?: number; packageId?: string | null; sortOrder?: number; budgetedHours?: number | null; lockRate?: boolean; minChargeCents?: number | null; minChargeMessage?: string | null }) {
     const unit = svc.unit ?? null;
     const prodRate = svc.productionRate ?? null;
     let budgetMethod = svc.budgetMethod ?? "manual";
@@ -1582,6 +1613,41 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     // has Rate Matrix rows keyed off a property field (e.g. Turf Sq. Ft.) that the
     // estimate's property has a value for, the matched band prices the visit, so a
     // package honors custom fields the same as the service added on its own.
+    // A matrix with no property field is keyed off the line's own quantity: price
+    // the starting qty here, and the row re-prices as the qty is edited.
+    if (svc.id && !svc.lockRate) {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: qtyRows } = await (supabase as any)
+        .from("crm_service_rate_matrix")
+        .select("*")
+        .eq("service_id", svc.id)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true });
+      const mappedQtyRows = ((qtyRows ?? []) as Record<string, unknown>[]).map(mapRateMatrixRow);
+      if (isQtyKeyedMatrix(mappedQtyRows)) {
+        const { data: tailSvc } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+          .from("crm_services")
+          .select("matrix_tail_every_qty, matrix_tail_over_qty, matrix_tail_rate_cents, matrix_tail_hours, matrix_tail_cost_cents")
+          .eq("id", svc.id)
+          .maybeSingle();
+        const patch = qtyMatrixLinePatch(mappedQtyRows, tailSvc ? {
+          everyQty: Number(tailSvc.matrix_tail_every_qty ?? 0),
+          overQty: Number(tailSvc.matrix_tail_over_qty ?? 0),
+          rateCents: tailSvc.matrix_tail_rate_cents ?? 0,
+          hours: Number(tailSvc.matrix_tail_hours ?? 0),
+          costCents: tailSvc.matrix_tail_cost_cents ?? 0,
+        } : null, qty, unit);
+        if (patch) {
+          calcType = patch.calcType;
+          effectiveRateCents = patch.rateCents;
+          matrixCostCents = patch.costCents;
+          matrixBudgetedHours = patch.budgetedHours;
+          matrixProductionRate = patch.productionRateSqftPerHr;
+          budgetMethod = patch.budgetMethod;
+        }
+      }
+    }
     if (svc.id && (propertyId || clientId)) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1687,10 +1753,14 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       }
     }
 
+    // A package step's rate is its own per-visit price, so the service minimum
+    // doesn't apply to it. Fixed matrix rows (calcType 0) ignore it inside computeLineItem.
+    const minChargeCents = svc.lockRate ? 0 : (svc.minChargeCents ?? 0);
     const computed = computeLineItem({
       calcType,
       qty,
       rateCents: effectiveRateCents,
+      minChargeCents,
       visits: lineVisits,
       budgetedHours: matrixBudgetedHours ?? 0, // derived from qty ÷ production rate (production_rate), a Rate Matrix match, or set manually
       costCents: matrixCostCents ?? 0,
@@ -1711,17 +1781,18 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           qty,
           unit_type: unit,
           // Both are authored via a rich-text editor on the Service (Descriptions
-          // tab), but are only ever displayed/edited as plain text once copied
-          // onto a line item (see EstimateDetail.tsx's stripHtml(li.estimateDesc),
-          // the Invoice Description popover's plain textarea, and the actual
-          // invoice line item description on a generated invoice) — strip HTML
-          // here at copy time instead of showing raw "<p>...</p>" everywhere
-          // downstream.
-          estimate_desc: svc.estimateDesc ? stripHtml(svc.estimateDesc) || null : null,
+          // tab). The estimate wording keeps its HTML (bullets, bold) — the
+          // proposal, PDF, portal and the line's rich-text popover all render it.
+          // The invoice wording is shown/edited as plain text (the Invoice
+          // Description popover's textarea and the generated invoice line), so
+          // strip HTML for that one at copy time.
+          estimate_desc: svc.estimateDesc && !isBlankRich(svc.estimateDesc) ? svc.estimateDesc : null,
           invoice_desc: svc.invoiceDesc ? stripHtml(svc.invoiceDesc) || null : null,
           production_rate_sqft_per_hr: matrixProductionRate ?? prodRate,
           budget_method: budgetMethod,
           rate_cents: effectiveRateCents,
+          min_charge_cents: minChargeCents,
+          min_charge_message: minChargeCents > 0 ? (svc.minChargeMessage ?? null) : null,
           visits: lineVisits,
           package_id: svc.packageId ?? null,
           cost_cents: computed.costCents,
@@ -1797,7 +1868,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         // (older packages) — same fallback NewJobDialog.pickPackage uses.
         const match = activeServices.find((s) => s.id === step.serviceId)
           ?? activeServices.find((s) => s.name.trim().toLowerCase() === step.serviceName.trim().toLowerCase());
-        const serviceDesc = match?.descriptionOnEstimate ? stripHtml(match.descriptionOnEstimate) : "";
+        const serviceDesc = match?.descriptionOnEstimate ?? "";
         const rate = step.defaultRateCents || match?.defaultRateCents || 0;
         const ok = await addService({
           id: match?.id,
@@ -1909,7 +1980,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                   key={s.id}
                   className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => {
-                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, budgetMethod: s.budgetMethod, rateCents: s.defaultRateCents, estimateDesc: s.descriptionOnEstimate, invoiceDesc: s.invoiceDescription });
+                    addService({ id: s.id, name: s.name, unit: s.unit ?? undefined, productionRate: s.productionRateSqftPerHr, budgetMethod: s.budgetMethod, rateCents: s.defaultRateCents, estimateDesc: s.descriptionOnEstimate, invoiceDesc: s.invoiceDescription, minChargeCents: s.minimumChargeCents, minChargeMessage: s.minimumChargeMessage });
                     setAddOpen(false); setSearch("");
                   }}
                 >

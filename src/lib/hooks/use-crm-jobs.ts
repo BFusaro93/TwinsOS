@@ -225,6 +225,8 @@ function mapService(row: any): CRMService {
     trackChemicals: row.track_chemicals ?? false,
     invoiceTimeOnLines: row.invoice_time_on_lines ?? false,
     invoiceDescription: row.invoice_description ?? null,
+    minimumChargeCents: row.minimum_charge_cents ?? 0,
+    minimumChargeMessage: row.minimum_charge_message ?? null,
     descriptionOnEstimate: row.description_on_estimate ?? null,
     callScriptNotes: row.call_script_notes ?? null,
     taskColor: row.task_color ?? '#3B82F6',

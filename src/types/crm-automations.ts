@@ -179,6 +179,8 @@ export interface EmailConfig {
   between_end: string;
   send_weekdays_only: boolean;
   require_approval: boolean;
+  /** Linked document: its current subject/body are used at send time (falls back to subject/body above if the document is missing or empty). */
+  document_template_id?: string | null;
 }
 
 export interface AlertConfig {
@@ -192,6 +194,15 @@ export interface TicketConfig {
   description: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   assign_to: string;
+  /** Linked document: its current text is the ticket description (falls back to description above). */
+  document_template_id?: string | null;
+  /** Assign to the client's sales rep when they have one (else assign_to). */
+  assign_to_sales_rep?: boolean;
+  category?: string | null;
+  type?: 'note' | 'call' | 'event' | 'text';
+  status?: 'open' | 'pending';
+  /** Due date = today (company day) + this many days; blank / 0 = same day. */
+  due_in_days?: number | null;
 }
 
 export interface TextConfig {

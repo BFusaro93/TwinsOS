@@ -45,6 +45,9 @@ import type { CRMService, BudgetMethod } from "@/types/crm-jobs";
 import { toast } from "sonner";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 
+/** Matrix lookup-field picker value for "key the bands off the estimate line quantity" (stored as NULL). */
+const QTY_KEYED = "qty";
+
 const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 // Fallback shown only until the org has configured its own list under
 // Settings > Services > Service Categories.
@@ -70,6 +73,8 @@ interface FormState {
   defaultRateCents: string;
   defaultBHrs: string;
   defaultBCostCents: string;
+  minimumChargeCents: string;
+  minimumChargeMessage: string;
   budgetMethod: BudgetMethod;
   productionRateSqftPerHr: string;
   targetRateCents: string;
@@ -99,6 +104,7 @@ function emptyForm(): FormState {
     name: "", code: "", category: "lawn", unit: "visit",
     serviceMode: "flat_rate", parentServiceId: "",
     defaultRateCents: "", defaultBHrs: "", defaultBCostCents: "",
+    minimumChargeCents: "", minimumChargeMessage: "",
     budgetMethod: "manual",
     productionRateSqftPerHr: "",
     targetRateCents: "", targetRateWithDriveCents: "",
@@ -125,6 +131,8 @@ function serviceToForm(s: CRMService): FormState {
     defaultRateCents: s.defaultRateCents != null ? (s.defaultRateCents / 100).toFixed(2) : "",
     defaultBHrs: s.defaultBHrs > 0 ? String(s.defaultBHrs) : "",
     defaultBCostCents: s.defaultBCostCents > 0 ? (s.defaultBCostCents / 100).toFixed(2) : "",
+    minimumChargeCents: s.minimumChargeCents > 0 ? (s.minimumChargeCents / 100).toFixed(2) : "",
+    minimumChargeMessage: s.minimumChargeMessage ?? "",
     budgetMethod: s.budgetMethod,
     productionRateSqftPerHr: s.productionRateSqftPerHr != null ? String(s.productionRateSqftPerHr) : "",
     targetRateCents: s.targetRateCents > 0 ? (s.targetRateCents / 100).toFixed(2) : "",
@@ -210,7 +218,9 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
   const { data: fieldDefs = [] } = useCustomFieldDefs("property");
   const numericFieldDefs = fieldDefs.filter((d) => d.fieldType === "number");
 
-  const currentFieldId = rows[0]?.customFieldId ?? "";
+  // "qty" = rows keyed off the estimate line's own quantity (custom_field_id NULL):
+  // nothing on the property is read, the user types the number on the estimate.
+  const currentFieldId = rows.length > 0 ? (rows[0].customFieldId ?? QTY_KEYED) : "";
   const [selectedFieldId, setSelectedFieldId] = useState<string>(currentFieldId);
 
   useEffect(() => {
@@ -220,13 +230,9 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
   }, [currentFieldId, selectedFieldId]);
 
   function addRow() {
-    // crm_service_rate_matrix.custom_field_id is NOT NULL — a row can't exist
-    // without knowing what it measures against. Adding one before picking a
-    // lookup field used to send an explicit null and surface the constraint
-    // violation as a generic "Failed to add rate matrix row" toast, which the
-    // hint below actively invited by suggesting you could add rows first.
-    // Refuse up front and say why (the button is disabled too; this is the
-    // backstop).
+    // A row has to know what it measures against: a property field, or the
+    // estimate line's quantity. Adding one before picking either is refused up
+    // front (the button is disabled too; this is the backstop).
     if (!selectedFieldId) {
       toast.error("Pick a lookup field first — rate matrix rows need to know what value to measure against");
       return;
@@ -235,7 +241,7 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
     upsert.mutate({
       serviceId,
       row: {
-        custom_field_id: selectedFieldId,
+        custom_field_id: selectedFieldId === QTY_KEYED ? null : selectedFieldId,
         calc_type: 1,
         from_val: 0,
         to_val: null,
@@ -272,10 +278,10 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
 
   function handleFieldChange(newFieldId: string) {
     setSelectedFieldId(newFieldId);
-    // Same NOT NULL constraint as addRow: clearing the picker back to "None"
-    // can't null out the existing rows' field. Clear the local selection so
-    // the picker reads None, but leave the rows pointing at whatever they
-    // already measure — deleting them is the way to start over.
+    // Clearing the picker back to "None" can't un-key existing rows (null now
+    // means "line quantity"). Clear the local selection so the picker reads
+    // None, but leave the rows pointing at whatever they already measure —
+    // deleting them is the way to start over.
     if (!newFieldId) {
       if (rows.length > 0) {
         toast.error("Existing rows still need a lookup field — pick another field or delete the rows");
@@ -283,7 +289,7 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
       return;
     }
     for (const row of rows) {
-      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId } }, {
+      upsert.mutate({ serviceId, row: { id: row.id, custom_field_id: newFieldId === QTY_KEYED ? null : newFieldId } }, {
         onError: () => toast.error("Failed to update lookup field"),
       });
     }
@@ -307,6 +313,7 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">— None —</SelectItem>
+            <SelectItem value={QTY_KEYED}>Line quantity (typed on the estimate)</SelectItem>
             {numericFieldDefs.map((d) => (
               <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
             ))}
@@ -315,12 +322,12 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
       </Field>
 
       <div className="rounded-lg border overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full min-w-[560px] text-xs">
           <thead>
             <tr className="bg-slate-50 dark:bg-muted/40 border-b font-semibold text-muted-foreground uppercase tracking-wide">
               <th className="px-3 py-2 text-left">From</th>
               <th className="px-3 py-2 text-left">To</th>
-              <th className="px-3 py-2 text-left">Calc Type</th>
+              <th className="px-3 py-2 text-left min-w-[96px]">Calc Type</th>
               <th className="px-3 py-2 text-right">Rate ($)</th>
               <th className="px-3 py-2 text-right">Hours</th>
               <th className="px-3 py-2 text-right">Cost ($)</th>
@@ -349,7 +356,7 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
                 <td className="px-2 py-1.5">
                   <select defaultValue={String(row.calcType)}
                     onChange={(e) => saveField(row.id, "calc_type", e.target.value)}
-                    className="w-full rounded border border-border px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400 bg-card">
+                    className="w-full min-w-[88px] rounded border border-border px-1.5 py-0.5 text-xs focus:outline-none focus:border-brand-400 bg-card">
                     <option value="1">Per Unit</option>
                     <option value="0">Fixed</option>
                   </select>
@@ -387,7 +394,7 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
             <Plus className="mr-1 h-3.5 w-3.5" /> Add Row
           </Button>
           {!selectedFieldId && (
-            <span className="text-xs text-slate-400 dark:text-neutral-500">Pick a lookup field above so rows know what to measure against</span>
+            <span className="text-xs text-slate-400 dark:text-neutral-500">Pick a lookup field (or Line quantity) above so rows know what to measure against</span>
           )}
           {canCopyMatrix && (
             <Button variant="ghost" size="sm" className="ml-auto text-xs" disabled={rows.length === 0}
@@ -819,6 +826,8 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
       default_rate_cents: form.defaultRateCents ? parseCents(form.defaultRateCents) : null,
       default_b_hrs: parseNum(form.defaultBHrs),
       default_b_cost_cents: parseCents(form.defaultBCostCents),
+      minimum_charge_cents: parseCents(form.minimumChargeCents),
+      minimum_charge_message: form.minimumChargeCents && parseCents(form.minimumChargeCents) > 0 ? (form.minimumChargeMessage.trim() || null) : null,
       budget_method: form.budgetMethod,
       production_rate_sqft_per_hr: form.productionRateSqftPerHr ? parseNum(form.productionRateSqftPerHr) : null,
       target_rate_cents: parseCents(form.targetRateCents),
@@ -1071,6 +1080,29 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
                     className="text-sm"
                   />
                 </Field>
+                <Field label="Minimum Charge ($)">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.minimumChargeCents}
+                    onChange={(e) => setForm({ ...form, minimumChargeCents: e.target.value })}
+                    placeholder="0.00 (none)"
+                    className="text-sm"
+                  />
+                </Field>
+                <Field label="Minimum Message">
+                  <Input
+                    value={form.minimumChargeMessage}
+                    onChange={(e) => setForm({ ...form, minimumChargeMessage: e.target.value })}
+                    placeholder="e.g. 4-hour minimum"
+                    className="text-sm"
+                    disabled={!(parseCents(form.minimumChargeCents) > 0)}
+                  />
+                </Field>
+                <p className="sm:col-span-3 -mt-1 text-xs text-slate-500">
+                  On estimates, a per-unit line (qty × rate) is billed at least this amount for each visit. Fixed-price lines are unaffected.
+                </p>
                 <Field label="Production Rate (sqft/hr)">
                   <Input
                     type="number"

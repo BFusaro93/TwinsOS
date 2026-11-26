@@ -75,11 +75,23 @@ export async function GET(request: Request) {
 
   const service = createServiceClient();
   // Users per org, so the page can hide empty duplicate/abandoned orgs.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profileRows } = await (service.from("profiles") as any).select("org_id");
+  // Paged: a single select stops at the API's 1000-row cap and undercounts past it.
   const userCounts = new Map<string, number>();
-  for (const r of (profileRows ?? []) as { org_id: string | null }[]) {
-    if (r.org_id) userCounts.set(r.org_id, (userCounts.get(r.org_id) ?? 0) + 1);
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profileRows, error: profileErr } = await (service.from("profiles") as any)
+      .select("org_id")
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (profileErr) {
+      log.error("failed to count users per org", { error: profileErr });
+      break;
+    }
+    for (const r of (profileRows ?? []) as { org_id: string | null }[]) {
+      if (r.org_id) userCounts.set(r.org_id, (userCounts.get(r.org_id) ?? 0) + 1);
+    }
+    if ((profileRows ?? []).length < PAGE) break;
   }
   // Newest fee change per org, from the audit trail.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

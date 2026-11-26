@@ -110,6 +110,9 @@ export function AutomationBuilder({ automationId }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionValue, setDescriptionValue] = useState("");
+  const descriptionInputRef = useRef<HTMLInputElement>(null);
 
   const [focusedSequenceId, setFocusedSequenceId] = useState<string | null>(null);
   const [rulesSequenceId, setRulesSequenceId] = useState<string | null>(null);
@@ -132,6 +135,24 @@ export function AutomationBuilder({ automationId }: Props) {
       { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to rename automation")) }
     );
     setEditingName(false);
+  }
+
+  function startEditDescription() {
+    if (!canModify) return;
+    setDescriptionValue(automation?.description ?? "");
+    setEditingDescription(true);
+    setTimeout(() => descriptionInputRef.current?.focus(), 50);
+  }
+
+  function saveDescription() {
+    const next = descriptionValue.trim();
+    setEditingDescription(false);
+    if (next === (automation?.description ?? "")) return;
+    // Cleared box = no description (stored as null, shown as "No description" in the list).
+    updateAutomation.mutate(
+      { id: automationId, updates: { description: next || null } },
+      { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to update description")) }
+    );
   }
 
   async function handleAddSequence() {
@@ -213,6 +234,31 @@ export function AutomationBuilder({ automationId }: Props) {
         ) : (
           <span className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{automation.name}</span>
         )}
+
+        {editingDescription ? (
+          <Input
+            ref={descriptionInputRef}
+            className="h-8 w-96 max-w-[40vw] text-sm"
+            placeholder="Description"
+            value={descriptionValue}
+            onChange={(e) => setDescriptionValue(e.target.value)}
+            onBlur={saveDescription}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveDescription();
+              if (e.key === "Escape") setEditingDescription(false);
+            }}
+          />
+        ) : canModify ? (
+          <button
+            onClick={startEditDescription}
+            title="Edit description"
+            className="max-w-[40vw] truncate text-sm text-slate-500 dark:text-neutral-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+          >
+            {automation.description || <span className="italic text-slate-400 dark:text-neutral-500">Add a description</span>}
+          </button>
+        ) : automation.description ? (
+          <span className="max-w-[40vw] truncate text-sm text-slate-500 dark:text-neutral-400">{automation.description}</span>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-3">
           <div className="flex items-center gap-2">

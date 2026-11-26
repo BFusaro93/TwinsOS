@@ -751,6 +751,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          document_type: string | null
           file_name: string
           file_size: number
           file_type: string
@@ -766,6 +767,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          document_type?: string | null
           file_name: string
           file_size?: number
           file_type?: string
@@ -781,6 +783,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          document_type?: string | null
           file_name?: string
           file_size?: number
           file_type?: string
@@ -5477,6 +5480,8 @@ export type Database = {
           last_pay_raise_cents: number
           last_pay_raise_date: string | null
           license_expiration: string | null
+          dot_physical_expiration: string | null
+          hoisting_license_expiration: string | null
           manager_id: string | null
           map_codes: string | null
           map_icon_color: string | null
@@ -5555,6 +5560,8 @@ export type Database = {
           last_pay_raise_cents?: number
           last_pay_raise_date?: string | null
           license_expiration?: string | null
+          dot_physical_expiration?: string | null
+          hoisting_license_expiration?: string | null
           manager_id?: string | null
           map_codes?: string | null
           map_icon_color?: string | null
@@ -5633,6 +5640,8 @@ export type Database = {
           last_pay_raise_cents?: number
           last_pay_raise_date?: string | null
           license_expiration?: string | null
+          dot_physical_expiration?: string | null
+          hoisting_license_expiration?: string | null
           manager_id?: string | null
           map_codes?: string | null
           map_icon_color?: string | null
@@ -10386,7 +10395,7 @@ export type Database = {
           budgeted_cost_cents: number
           budgeted_hours: number
           calc_type: number
-          custom_field_id: string
+          custom_field_id: string | null
           deleted_at: string | null
           from_val: number
           id: string
@@ -10403,7 +10412,7 @@ export type Database = {
           budgeted_cost_cents?: number
           budgeted_hours?: number
           calc_type?: number
-          custom_field_id: string
+          custom_field_id?: string | null
           deleted_at?: string | null
           from_val?: number
           id?: string
@@ -10420,7 +10429,7 @@ export type Database = {
           budgeted_cost_cents?: number
           budgeted_hours?: number
           calc_type?: number
-          custom_field_id?: string
+          custom_field_id?: string | null
           deleted_at?: string | null
           from_val?: number
           id?: string
@@ -10481,6 +10490,8 @@ export type Database = {
           matrix_tail_hours: number | null
           matrix_tail_over_qty: number | null
           matrix_tail_rate_cents: number | null
+          minimum_charge_cents: number
+          minimum_charge_message: string | null
           name: string
           only_for_estimates: boolean
           org_id: string
@@ -10525,6 +10536,8 @@ export type Database = {
           matrix_tail_hours?: number | null
           matrix_tail_over_qty?: number | null
           matrix_tail_rate_cents?: number | null
+          minimum_charge_cents?: number
+          minimum_charge_message?: string | null
           name: string
           only_for_estimates?: boolean
           org_id?: string
@@ -10569,6 +10582,8 @@ export type Database = {
           matrix_tail_hours?: number | null
           matrix_tail_over_qty?: number | null
           matrix_tail_rate_cents?: number | null
+          minimum_charge_cents?: number
+          minimum_charge_message?: string | null
           name?: string
           only_for_estimates?: boolean
           org_id?: string
@@ -12310,6 +12325,8 @@ export type Database = {
           markup_bps: number
           org_id: string
           package_id: string | null
+          min_charge_cents: number
+          min_charge_message: string | null
           production_rate_sqft_per_hr: number | null
           qty: number
           rate_cents: number
@@ -12352,6 +12369,8 @@ export type Database = {
           markup_bps?: number
           org_id?: string
           package_id?: string | null
+          min_charge_cents?: number
+          min_charge_message?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -12394,6 +12413,8 @@ export type Database = {
           markup_bps?: number
           org_id?: string
           package_id?: string | null
+          min_charge_cents?: number
+          min_charge_message?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -19852,17 +19873,21 @@ export type Database = {
           city: string | null
           compensation_type: string | null
           date_hired: string | null
+          dot_physical_expiration: string | null
           email: string | null
           emergency_contact: string | null
           emergency_phone: string | null
           employment_status: string | null
           first_name: string | null
           full_name: string | null
+          hoisting_license_expiration: string | null
           hourly_rate_cents: number | null
           id: string | null
           is_active: boolean | null
           is_sales_rep: boolean | null
           last_name: string | null
+          license_expiration: string | null
+          next_credential_expiry: string | null
           org_id: string | null
           phone: string | null
           resource_code: string | null
@@ -21490,6 +21515,8 @@ export type Database = {
           last_name: string
           last_pay_raise_cents: number
           last_pay_raise_date: string | null
+          dot_physical_expiration: string | null
+          hoisting_license_expiration: string | null
           license_expiration: string | null
           manager_id: string | null
           map_codes: string | null

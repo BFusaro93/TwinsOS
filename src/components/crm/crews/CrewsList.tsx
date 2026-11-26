@@ -11,6 +11,7 @@ import {
   useAddCrewMember,
   useRemoveCrewMember,
   useUpdateCrewMember,
+  useSetCrewLeader,
 } from "@/lib/hooks/use-employees";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -143,6 +144,7 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
   const { mutateAsync: addMember, isPending: adding } = useAddCrewMember();
   const { mutateAsync: removeMember } = useRemoveCrewMember();
   const { mutateAsync: updateMember } = useUpdateCrewMember();
+  const { mutateAsync: setLeader } = useSetCrewLeader();
   const [pickingNew, setPickingNew] = useState(false);
 
   const existingIds = new Set((liveCrew.members ?? []).map((m) => m.employeeId));
@@ -181,6 +183,18 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
     }
   }
 
+  async function handleSetLeader(member: CRMCrewMember, isLeader: boolean) {
+    try {
+      await setLeader({
+        crewId: crew.id,
+        memberId: isLeader ? member.id : null,
+        employeeId: isLeader ? member.employeeId : null,
+      });
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to update crew leader"));
+    }
+  }
+
   async function handleChangeDays(member: CRMCrewMember, days: number[]) {
     try {
       await updateMember({ id: member.id, updates: { days_of_week: days } });
@@ -206,7 +220,8 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
     }
   }
 
-  const members = liveCrew.members ?? [];
+  // Oldest first, so a newly added assignment lands at the bottom of the list.
+  const members = [...(liveCrew.members ?? [])].sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
 
   return (
     <div className="rounded border">
@@ -220,28 +235,6 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
           </div>
         ) : (
           <div className="divide-y">
-            {pickingNew && (
-              <div className="flex items-center gap-3 px-4 py-2">
-                <Select value="" onValueChange={handlePickNewEmployee}>
-                  <SelectTrigger className="h-8 text-sm flex-1 min-w-0">
-                    <SelectValue placeholder="Select employee…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {available.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.firstName} {e.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <button
-                  className="shrink-0 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 transition-colors"
-                  onClick={() => setPickingNew(false)}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
             {members.map((m) => {
               const otherEmployees = (allEmployees ?? []).filter(
                 (e) => e.id === m.employeeId || !existingIds.has(e.id)
@@ -263,6 +256,16 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                       ))}
                     </SelectContent>
                   </Select>
+                  <label
+                    className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+                    title="The crew leader is the applicator of record on chemical applications and is labeled Crew Leader on the dispatch board"
+                  >
+                    <Checkbox
+                      checked={m.isForeman}
+                      onCheckedChange={(c) => handleSetLeader(m, !!c)}
+                    />
+                    Leader
+                  </label>
                   <DayOfWeekSelect
                     splitAcrossCrews={(allCrews ?? []).some(
                       (c) => c.id !== crew.id && (c.members ?? []).some((x) => x.employeeId === m.employeeId && x.daysOfWeek.length > 0)
@@ -295,6 +298,28 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                 </div>
               );
             })}
+            {pickingNew && (
+              <div className="flex items-center gap-3 px-4 py-2">
+                <Select value="" onValueChange={handlePickNewEmployee}>
+                  <SelectTrigger className="h-8 text-sm flex-1 min-w-0">
+                    <SelectValue placeholder="Select employee…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {available.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.firstName} {e.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  className="shrink-0 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 transition-colors"
+                  onClick={() => setPickingNew(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </div>
         )}
         <div className="p-3">
@@ -824,6 +849,7 @@ export function CrewsList() {
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-2">Description</th>
               <th className="px-4 py-2">Team Code</th>
+              <th className="px-4 py-2">Color</th>
               <th className="px-4 py-2">Members</th>
               <th className="px-4 py-2">Active</th>
             </tr>
@@ -832,7 +858,7 @@ export function CrewsList() {
             {isLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-b">
-                  {Array.from({ length: 5 }).map((__, j) => (
+                  {Array.from({ length: 6 }).map((__, j) => (
                     <td key={j} className="px-4 py-1.5">
                       <Skeleton className="h-4 w-full" />
                     </td>
@@ -841,7 +867,7 @@ export function CrewsList() {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} className="py-20 text-center">
+                <td colSpan={5} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Users className="h-8 w-8 text-slate-200" />
                     <p className="text-sm text-slate-400 dark:text-neutral-500">
@@ -864,6 +890,20 @@ export function CrewsList() {
                   </td>
                   <td className="px-4 py-1.5 font-mono text-slate-600 dark:text-neutral-400">
                     {crew.code ?? "—"}
+                  </td>
+                  <td className="px-4 py-1.5">
+                    {crew.color ? (
+                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span
+                          className="h-4 w-4 shrink-0 rounded-full border border-black/10 dark:border-white/20"
+                          style={{ backgroundColor: crew.color }}
+                          aria-hidden
+                        />
+                        <span className="font-mono">{crew.color}</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">Automatic</span>
+                    )}
                   </td>
                   <td className="px-4 py-1.5 text-muted-foreground text-xs">
                     {crew.members && crew.members.length > 0

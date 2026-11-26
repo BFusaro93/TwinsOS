@@ -540,9 +540,15 @@ export function ReceiveGoodsDialog({
                               >
                                 Maint. Part
                               </Badge>
-                            ) : (
-                              <span className="text-xs text-slate-400 dark:text-neutral-500">Material</span>
-                            )}
+                            ) : (() => {
+                              // A stock line with no catalog product can't be received (see submitReceipt),
+                              // so say so here instead of calling it a Material.
+                              const li = po.lineItems.find((x) => x.id === line.lineItemId);
+                              const noProduct = products.length > 0 && !!li && !li.projectId && !matchProductForLine(li);
+                              return noProduct
+                                ? <span className="text-xs font-medium text-red-600 dark:text-red-400" title="Link this line to a catalog product before receiving">No catalog product</span>
+                                : <span className="text-xs text-slate-400 dark:text-neutral-500">Material</span>;
+                            })()}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -600,7 +606,8 @@ export function ReceiveGoodsDialog({
                     <SelectContent>
                       {users.map((u) => (
                         <SelectItem key={u.id} value={u.id}>
-                          {u.name}
+                          {/* Two people can share a name (e.g. shared crew logins): tell them apart by email. */}
+                          {users.filter((o) => o.name === u.name).length > 1 && u.email ? `${u.name} (${u.email})` : u.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
