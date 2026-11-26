@@ -11,6 +11,7 @@ interface CardUpdateInfo {
   clientFirstName: string | null;
   org: { name: string; brandColor: string; logoUrl: string | null };
   cardPaymentsAvailable: boolean;
+  achAvailable: boolean;
   autopayAllowed: boolean;
   currentMethod: string | null;
   autopayOn: boolean;
@@ -22,13 +23,17 @@ interface SetupResult {
   livemode?: boolean;
 }
 
+type Method = "card" | "us_bank_account";
+
 function SaveForm({
   token,
+  method,
   autopayAllowed,
   brandColor,
   onDone,
 }: {
   token: string;
+  method: Method;
   autopayAllowed: boolean;
   brandColor: string;
   onDone: (result: { summary: string | null; autopayEnabled: boolean }) => void;
@@ -46,7 +51,7 @@ function SaveForm({
     const { error: confirmError, setupIntent } = await stripe.confirmSetup({ elements, redirect: "if_required" });
     if (confirmError || !setupIntent) {
       setSubmitting(false);
-      setError(confirmError?.message ?? "We couldn't verify your card. Please try again.");
+      setError(confirmError?.message ?? method === "card" ? "We couldn't verify your card. Please try again." : "We couldn't verify your bank account. Please try again.");
       return;
     }
     try {
@@ -56,10 +61,10 @@ function SaveForm({
         body: JSON.stringify({ setupIntentId: setupIntent.id, autopay: autopayAllowed && autopay }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "We couldn't save your card. Please try again.");
+      if (!res.ok) throw new Error(data.error ?? "We couldn't save your payment method. Please try again.");
       onDone({ summary: data.summary ?? null, autopayEnabled: data.autopayEnabled === true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "We couldn't save your card. Please try again.");
+      setError(err instanceof Error ? err.message : "We couldn't save your payment method. Please try again.");
       setSubmitting(false);
     }
   }
@@ -71,8 +76,11 @@ function SaveForm({
         <label className="flex cursor-pointer items-start gap-3 rounded-md border bg-slate-50 p-3 text-sm text-slate-700">
           <input type="checkbox" checked={autopay} onChange={(e) => setAutopay(e.target.checked)} className="mt-0.5 h-4 w-4" />
           <span>
-            <span className="font-medium text-slate-900">Turn on AutoPay.</span> Charge this card automatically when invoices are issued — the same as
-            AutoPay in the client portal. You can turn this off any time in the portal.
+            <span className="font-medium text-slate-900">Turn on AutoPay.</span>{" "}
+            {method === "card"
+              ? "Charge this card automatically when invoices are issued"
+              : "Debit this bank account automatically when invoices are issued"}{" "}
+            — the same as AutoPay in the client portal. You can turn this off any time in the portal.
           </span>
         </label>
       )}
@@ -84,7 +92,7 @@ function SaveForm({
         className="flex w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
       >
         {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-        Save card
+        {method === "card" ? "Save card" : "Save bank account"}
       </button>
     </div>
   );
@@ -97,6 +105,7 @@ export default function CardUpdatePage() {
   const [info, setInfo] = useState<CardUpdateInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [setup, setSetup] = useState<SetupResult | null>(null);
+  const [method, setMethod] = useState<Method>("card");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [done, setDone] = useState<{ summary: string | null; autopayEnabled: boolean } | null>(null);
@@ -111,11 +120,15 @@ export default function CardUpdatePage() {
       .catch((err) => setLoadError(err instanceof Error ? err.message : "This link isn't valid."));
   }, [token]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (chosen: Method) => {
     setStarting(true);
     setStartError(null);
     try {
-      const res = await fetch(`/api/public/card-update/${token}/setup-intent`, { method: "POST" });
+      const res = await fetch(`/api/public/card-update/${token}/setup-intent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentMethod: chosen }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "We couldn't start the card form. Please try again.");
       setSetup(data);
@@ -129,9 +142,16 @@ export default function CardUpdatePage() {
   // Open the card form straight away for a usable link — one tap fewer for the customer.
   useEffect(() => {
     if (info?.state === "valid" && info.cardPaymentsAvailable && hasPublishableKey() && !setup && !starting && !startError && !done) {
-      void start();
+      void start(method);
     }
-  }, [info, setup, starting, startError, done, start]);
+  }, [info, setup, starting, startError, done, start, method]);
+
+  function chooseMethod(next: Method) {
+    if (next === method || starting) return;
+    setMethod(next);
+    setSetup(null);
+    setStartError(null);
+  }
 
   if (loadError) {
     return (
@@ -156,10 +176,10 @@ export default function CardUpdatePage() {
     body = (
       <div className="flex flex-col items-center gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-8 text-center">
         <CheckCircle2 className="h-9 w-9 text-green-600" />
-        <p className="text-base font-semibold text-green-900">Your card has been updated</p>
+        <p className="text-base font-semibold text-green-900">Your payment method has been updated</p>
         {done.summary && <p className="text-sm text-green-800">{done.summary} is now on file.</p>}
         <p className="text-sm text-green-800">
-          {done.autopayEnabled ? "AutoPay is on — we'll charge this card when invoices are issued." : "AutoPay is off. You can turn it on any time in the client portal."}
+          {done.autopayEnabled ? "AutoPay is on — we'll charge this payment method when invoices are issued." : "AutoPay is off. You can turn it on any time in the client portal."}
         </p>
         <p className="mt-1 text-xs text-green-700">Thank you! You can close this page.</p>
       </div>
@@ -185,14 +205,14 @@ export default function CardUpdatePage() {
   } else if (setup && stripeJs) {
     body = (
       <Elements stripe={stripeJs} options={{ clientSecret: setup.clientSecret }}>
-        <SaveForm token={token} autopayAllowed={info.autopayAllowed} brandColor={info.org.brandColor} onDone={setDone} />
+        <SaveForm key={method} token={token} method={method} autopayAllowed={info.autopayAllowed} brandColor={info.org.brandColor} onDone={setDone} />
       </Elements>
     );
   } else if (startError) {
     body = (
       <div className="flex flex-col items-center gap-3 text-center">
         <p className="text-sm text-red-600">{startError}</p>
-        <button onClick={() => void start()} className="rounded-md border px-4 py-2 text-sm font-medium text-slate-700">
+        <button onClick={() => void start(method)} className="rounded-md border px-4 py-2 text-sm font-medium text-slate-700">
           Try again
         </button>
       </div>
@@ -218,12 +238,29 @@ export default function CardUpdatePage() {
         {!done && info.state === "valid" && (
           <div className="mb-5">
             <p className="text-base font-semibold text-slate-900">
-              {info.clientFirstName ? `Hi ${info.clientFirstName}, update` : "Update"} your card on file
+              {info.clientFirstName ? `Hi ${info.clientFirstName}, update` : "Update"} your {info.achAvailable ? "payment method" : "card"} on file
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Enter your new card below. Your card details go straight to our payment processor, Stripe — we never see or store the full number.
+              {info.achAvailable ? "Choose a card or a bank account below." : "Enter your new card below."} Your details go straight to our payment processor, Stripe — we never see or store the full card or account number.
             </p>
             {info.currentMethod && <p className="mt-2 text-xs text-slate-400">Currently on file: {info.currentMethod}. Saving replaces it.</p>}
+            {info.achAvailable && !unavailable && (
+              <div className="mt-4 grid grid-cols-2 gap-2" role="tablist" aria-label="Payment method">
+                {([["card", "Card"], ["us_bank_account", "Bank account"]] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={method === value}
+                    onClick={() => chooseMethod(value)}
+                    style={method === value ? { borderColor: info.org.brandColor, color: info.org.brandColor } : undefined}
+                    className={`rounded-md border px-3 py-2 text-sm font-medium ${method === value ? "bg-white" : "bg-slate-50 text-slate-500"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {body}

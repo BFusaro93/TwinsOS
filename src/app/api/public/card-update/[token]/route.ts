@@ -31,7 +31,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       .maybeSingle(),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (db.from("organizations") as any)
-      .select("name, brand_color, customizations, stripe_connect_account_id, stripe_connect_charges_enabled")
+      .select("name, brand_color, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled")
       .eq("id", resolved.orgId)
       .single(),
     loadPortalFeatureSettings(resolved.orgId),
@@ -51,6 +51,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       logoUrl: ((org.customizations as Record<string, unknown> | null)?.logoDataUrl as string | undefined) ?? null,
     },
     cardPaymentsAvailable: orgCardPaymentsAvailable(org),
+    // Org turned on bank transfer. The bank option is only offered when this is true; the
+    // setup-intent route re-checks Stripe's ACH capability before creating anything.
+    achAvailable: org.ach_payments_enabled === true,
     autopayAllowed: features.allowAutopay,
     currentMethod: client.saved_payment_method_id ? ((client.saved_payment_method_summary as string | null) ?? "A payment method") : null,
     autopayOn: client.autopay_enabled === true,
