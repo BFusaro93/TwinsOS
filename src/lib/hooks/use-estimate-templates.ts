@@ -35,6 +35,7 @@ function mapTemplateItem(row: any): EstimateTemplateItem {
     templateId: row.template_id,
     serviceId: row.service_id,
     serviceName: row.service_name,
+    packageId: row.package_id ?? null,
     calcType: row.calc_type,
     qty: Number(row.qty),
     unitType: row.unit_type ?? null,

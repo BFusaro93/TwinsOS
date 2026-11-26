@@ -312,9 +312,17 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   function pickBundle(id: string) {
     const bundle = bundles.find((b) => b.id === id);
     if (!bundle) return;
-    const items = [...(bundle.items ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+    // A package IS the job (pick it in the Package field), so a bundle's package lines have
+    // no place in the services grid; they are left out and the toast says so.
+    const allItems = [...(bundle.items ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+    const items = allItems.filter((i) => !i.packageId);
+    const skippedPackages = allItems.length - items.length;
     if (items.length === 0) {
-      toast.info(`"${bundle.name}" has no line items`);
+      toast.info(
+        skippedPackages > 0
+          ? `"${bundle.name}" only contains packages — pick the package in the Package field instead`
+          : `"${bundle.name}" has no line items`,
+      );
       return;
     }
 
@@ -356,6 +364,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       return [...kept, ...newRows];
     });
 
+    if (skippedPackages > 0) {
+      toast.info(`${skippedPackages} package${skippedPackages === 1 ? "" : "s"} in "${bundle.name}" not added — pick the package in the Package field`);
+    }
     const droppedVisits = items.filter((i) => (i.visits ?? 1) > 1).length;
     const droppedDiscounts = items.filter((i) => (i.discountCents ?? 0) > 0).length;
     const caveats = [

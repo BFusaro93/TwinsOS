@@ -34,6 +34,9 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
+import { usePackages } from "@/lib/hooks/use-packages";
+import { useAddPackageLines } from "@/lib/hooks/use-estimate-package-lines";
+import { layoutTemplateItems, skippedPackagesMessage } from "@/lib/estimates/template-package-items";
 import { useClientProperties } from "@/lib/hooks/use-clients";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -416,6 +419,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: allTemplates } = useEstimateTemplates();
   // Same show_when filter the New Estimate dialog applies.
   const templates = (allTemplates ?? []).filter((t) => t.showWhen !== "jobs");
+  // Packages inside a template are added like the grid's Add Package (Rate Matrix + client takeoff).
+  const { data: allPackages = [] } = usePackages(false);
+  const addPackageLines = useAddPackageLines({ clientId: estimate?.clientId, propertyId: estimate?.propertyId });
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
@@ -1809,8 +1815,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                     setSaving(true);
                     try {
                       const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
+                      // Packages already on the estimate are skipped (a package can be on one only once).
+                      const layout = layoutTemplateItems(
+                        tpl.items ?? [],
+                        allPackages,
+                        existingCount,
+                        new Set((estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.rowType === "section" && li.packageId).map((li) => li.packageId as string)),
+                      );
                       await Promise.all([
-                        ...(tpl.items ?? []).map((item, idx) => {
+                        ...layout.plain.map(({ item, sortOrder }) => {
                           // Carry over the matched service's budget method / production
                           // rate so a production_rate service applied via template doesn't
                           // silently fall back to manual budgeting with 0 budgeted hours.
@@ -1847,7 +1860,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               visits: item.visits,
                               cost_cents: computed.costCents,
                               adj_rate_cents: null,
-                              sort_order: existingCount + idx,
+                              sort_order: sortOrder,
                               production_rate_sqft_per_hr: productionRate,
                               budget_method: budgetMethod,
                               total_cents: computed.totalCents,
@@ -1875,6 +1888,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             })]
                           : []),
                       ]);
+                      // Package lines go in one at a time after the service lines (each writes a
+                      // header plus its steps; the sort positions were reserved in the layout).
+                      for (const { pkg, startSortOrder } of layout.packages) {
+                        await addPackageLines(pkg, { estimateId: estimate.id, startSortOrder });
+                      }
+                      if (layout.skipped.length > 0) toast.warning(skippedPackagesMessage(layout.skipped));
                       // The sub-items are copied after each line's insert, by which point
                       // the line's sub-item query may already have cached an empty list.
                       qc.invalidateQueries({ queryKey: ["subitems"] });
