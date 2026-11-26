@@ -391,12 +391,17 @@ export function lookupRateMatrixMatch(
 
   const tailRow = rows.find((r) => r.isTailRow) ?? null;
 
-  for (const row of nonTail) {
-    const aboveFrom = propertyValue >= row.fromVal;
-    // toVal === null means open-ended upper bound
-    const belowTo = row.toVal == null || propertyValue < row.toVal;
-    if (aboveFrom && belowTo) return row;
-  }
+  // The band holding the value is the LAST one that starts at or below it. SA
+  // stores "To" inclusively (0-7,000 then 7,001-…), so a value sitting exactly on
+  // a band's To (e.g. 5,000 sq ft) belongs to that band; with exclusive-style
+  // bands (0-1,000 then 1,000-…) the later band still wins on the shared edge.
+  // Only the final band's To is a real ceiling — past it the tail rule applies.
+  const byFrom = [...nonTail].sort((a, b) => a.fromVal - b.fromVal || a.sortOrder - b.sortOrder);
+  let holder: RateMatrixRow | null = null;
+  let holderIdx = -1;
+  byFrom.forEach((row, i) => { if (propertyValue >= row.fromVal) { holder = row; holderIdx = i; } });
+  const held = holder as RateMatrixRow | null;
+  if (held && (held.toVal == null || propertyValue <= held.toVal || holderIdx < byFrom.length - 1)) return held;
 
   // Below the bottom of the whole table (tail row included) — an underflow,
   // not an overflow. No row applies.
