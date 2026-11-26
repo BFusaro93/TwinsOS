@@ -3876,8 +3876,11 @@ function VisitRow({
   const orgTz = useOrgTimeZone();
   const startClockTime = isoToDateAndTime(visit.clockedInAt, visit.scheduledDate, orgTz).time;
   const endClockTime   = isoToDateAndTime(visit.clockedOutAt, visit.scheduledDate, orgTz).time;
-  const startPunchDiffers = startClockTime !== "" && startClockTime !== (startVal || "").slice(0, 5);
-  const endPunchDiffers   = endClockTime   !== "" && endClockTime   !== (endVal   || "").slice(0, 5);
+  // A service the crew timed on its own has a window that is SUPPOSED to differ
+  // from the stop's clock, so don't flag the stop's punches beside it.
+  const ownServiceWindow = !!visit.serviceStartedAt;
+  const startPunchDiffers = !ownServiceWindow && startClockTime !== "" && startClockTime !== (startVal || "").slice(0, 5);
+  const endPunchDiffers   = !ownServiceWindow && endClockTime   !== "" && endClockTime   !== (endVal   || "").slice(0, 5);
 
   async function saveVisitTime(field: "start_time" | "end_time", value: string) {
     // Same End-equals-Start guard as the job panel's saveAppointmentTime —
