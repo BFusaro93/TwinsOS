@@ -29,6 +29,7 @@ import {
   type ContractFutureDraft,
 } from "@/lib/hooks/use-contracts";
 import { useVoidInvoice } from "@/lib/hooks/use-invoices";
+import { LinkMatchingJobsDialog } from "@/components/crm/contracts/LinkMatchingJobsDialog";
 import { useCancelContractPrompt } from "@/components/crm/contracts/CancelContractPrompt";
 import { useClientProperties } from "@/lib/hooks/use-clients";
 import { useCRMServices, useJobsByContract } from "@/lib/hooks/use-crm-jobs";
@@ -978,8 +979,11 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   project: "Project",
 };
 
-function JobsUnderContractTab({ contractId }: { contractId?: string }) {
+function JobsUnderContractTab({ contract }: { contract?: CRMContract }) {
+  const contractId = contract?.id;
   const { data: jobs, isLoading } = useJobsByContract(contractId);
+  const { can } = usePermissions();
+  const [linkOpen, setLinkOpen] = useState(false);
 
   if (!contractId) {
     return (
@@ -993,6 +997,21 @@ function JobsUnderContractTab({ contractId }: { contractId?: string }) {
 
   return (
     <Section label="Scheduled Services">
+      {contract && can("contract_edit") && contract.status !== "cancelled" && contract.status !== "expired" && (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Jobs listed here are billed inside the contract price. Existing jobs that aren&apos;t linked yet can be added.
+          </p>
+          <Button size="sm" variant="outline" className="h-8 shrink-0 text-xs" onClick={() => setLinkOpen(true)}>
+            Link matching jobs
+          </Button>
+          <LinkMatchingJobsDialog
+            open={linkOpen}
+            onOpenChange={setLinkOpen}
+            contract={{ id: contract.id, clientId: contract.clientId, title: contract.title, status: contract.status }}
+          />
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -1761,7 +1780,7 @@ export function ContractDialog({
             />
           )}
           {activeTab === "jobs" && (
-            <JobsUnderContractTab contractId={contract?.id} />
+            <JobsUnderContractTab contract={contract} />
           )}
           {activeTab === "included" && (
             <IncludedServicesTab contractId={contract?.id} />

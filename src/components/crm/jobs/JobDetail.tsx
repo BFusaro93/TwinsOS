@@ -121,6 +121,9 @@ import { SnowRateTiersEditor, SnowRateTiersSummary } from "@/components/crm/jobs
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { ContractPicker } from "@/components/crm/contracts/ContractPicker";
+import { useContracts } from "@/lib/hooks/use-contracts";
+import { countCompletedUninvoicedVisits } from "@/lib/contract-job-linking";
 import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
@@ -199,6 +202,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   // Powers the More menu's Send Email / Send Text — the job row carries only
   // the client's name and phone, not their email address or SMS consent.
   const { data: jobClient } = useClient(job?.clientId ?? "");
+  const { data: clientContracts } = useContracts(job?.clientId || undefined);
+  // Linking a job to a contract changes how its visits bill, so it needs a contract or job-add key.
+  const canLinkContract = can("contract_edit") || can("job_add");
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const [sendSmsOpen, setSendSmsOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
@@ -386,6 +392,31 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         toast.error(mutationErrorMessage(e, e instanceof Error ? e.message : "Failed to check upcoming visits"));
         return;
       }
+    }
+
+    // Linking / unlinking / switching the contract changes how this job's FUTURE completed
+    // visits bill. Say so, and show how many already-completed visits are still uninvoiced
+    // (they are not touched by the change).
+    if ("contract_id" in edits && (edits.contract_id ?? null) !== (job.contractId ?? null)) {
+      const next = (edits.contract_id as string | null) ?? null;
+      const nextContract = next ? (clientContracts ?? []).find((c) => c.id === next) : null;
+      let uninvoiced = 0;
+      try {
+        uninvoiced = (await countCompletedUninvoicedVisits(createClient(), [job.id])).get(job.id) ?? 0;
+      } catch {
+        uninvoiced = 0;
+      }
+      const tail = uninvoiced > 0
+        ? ` ${uninvoiced} completed visit${uninvoiced !== 1 ? "s" : ""} on this job ${uninvoiced !== 1 ? "are" : "is"} not invoiced yet; this change does not bill or release ${uninvoiced !== 1 ? "them" : "it"} — handle ${uninvoiced !== 1 ? "them" : "it"} on the invoice or contract.`
+        : "";
+      const ok = await confirm({
+        title: next ? "Link this job to the contract?" : "Remove this job from its contract?",
+        description: next
+          ? `"${nextContract?.title ?? "The contract"}" will bill this job's services inside the contract price: its future completed visits get no separate invoice. Materials still follow each product's "In contract" flag.${nextContract && (nextContract.status === "draft" || nextContract.status === "sent") ? " The contract isn't signed yet, so completed visits are held until it is signed or cancelled." : ""}${tail}`
+          : `This job will bill per visit on the client's normal invoicing instead of inside a contract price, starting with its next completed visit.${tail}`,
+        confirmLabel: next ? "Link job" : "Remove from contract",
+      });
+      if (!ok) return;
     }
 
     setSaving(true);
@@ -1309,6 +1340,20 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         </SelectContent>
                       </Select>
                     </div>
+                    {canLinkContract && job.jobType !== "project" && (
+                      <div className="flex flex-col gap-1">
+                        <ContractPicker
+                          compact
+                          clientId={job.clientId}
+                          value={"contract_id" in edits ? ((edits.contract_id as string | null) ?? null) : (job.contractId ?? null)}
+                          onChange={(v) => patch("contract_id", v)}
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Linked jobs are billed inside the contract price — their future completed visits get no separate invoice
+                          (materials follow each product&apos;s &ldquo;In contract&rdquo; flag). Visits already completed are not changed.
+                        </p>
+                      </div>
+                    )}
                     {job.jobType === "waiting_list" && (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <div className="flex flex-col gap-1">
@@ -1617,6 +1662,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       <dt className="text-xs text-muted-foreground">Status</dt>
                       <dd><Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[job.status] ?? "bg-muted text-muted-foreground")}>{STATUS_LABEL[job.status] ?? job.status}</Badge></dd>
                     </div>
+                    {job.contractId && (
+                      <div className="flex justify-between">
+                        <dt className="text-xs text-muted-foreground">Contract</dt>
+                        <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
+                          {(clientContracts ?? []).find((c) => c.id === job.contractId)?.title ?? "Linked"}
+                        </dd>
+                      </div>
+                    )}
                     {job.jobType === "waiting_list" && (
                       <div className="flex justify-between">
                         <dt className="text-xs text-muted-foreground">Available Window</dt>

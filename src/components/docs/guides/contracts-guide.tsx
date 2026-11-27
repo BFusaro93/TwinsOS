@@ -45,6 +45,7 @@ export function ContractsGuide() {
           <TOCLink href="#status-lifecycle">Status lifecycle &amp; signing</TOCLink>
           <TOCLink href="#billing-mechanics">Billing mechanics</TOCLink>
           <TOCLink href="#billing-frequency">Billing frequency options</TOCLink>
+          <TOCLink href="#linking-existing-jobs">Linking existing jobs to a contract</TOCLink>
           <TOCLink href="#ending-contracts">Ending or cancelling a contract</TOCLink>
           <TOCLink href="#templates">Contract templates</TOCLink>
           <TOCLink href="#multi-property-example">Worked example: multi-property commercial contract</TOCLink>
@@ -370,6 +371,38 @@ export function ContractsGuide() {
           Total (blank for one-time contracts). Export needs the Export Lists permission. Make
           Active / Make Inactive on a selection applies to every contract it can and reports how
           many couldn&apos;t be changed, with the reason.
+        </p>
+      </Section>
+
+      <Section id="linking-existing-jobs" title="Linking existing jobs to a contract">
+        <p>
+          Coverage is decided by one thing: the job&apos;s <strong>Contract</strong> field. The
+          contract&apos;s Included Services list is only a tally of visits and links nothing. If a job
+          was created before its contract, link it afterwards in either of two ways.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>One job:</strong> open the job, click <strong>Edit Job</strong> and pick the
+            contract in Job Settings (choose &quot;No contract&quot; to unlink). The picker lists the
+            client&apos;s contracts with their status and warns about an unsigned one. It needs the Edit
+            Contracts or Add Jobs permission, and the change is recorded in the job&apos;s Audit Trail.
+          </li>
+          <li>
+            <strong>Many jobs:</strong> open the contract, go to <strong>Jobs Under Contract</strong>{" "}
+            and click <strong>Link matching jobs</strong>. It lists all of the client&apos;s open recurring,
+            package and one-time jobs that aren&apos;t on a contract, with the ones running a service
+            the contract covers marked (a link narrows the list to only those). Nothing is
+            ticked for you; tick the ones to link and apply them in one batch.
+          </li>
+        </ul>
+        <p>
+          <strong>What linking does.</strong> From then on the job&apos;s services are billed inside the
+          contract price, so its future completed visits get no separate invoice; materials still follow
+          each product&apos;s In contract checkbox. Visits that were <em>already completed but not
+          invoiced</em> are not billed retroactively and are not released automatically &mdash; the
+          dialog shows how many each job has so you can invoice them by hand if they should still bill.
+          (On a Draft or Sent contract, completed visits are held and handled when it is signed or
+          cancelled, as described below.)
         </p>
       </Section>
 

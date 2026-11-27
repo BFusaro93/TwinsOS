@@ -23,6 +23,7 @@ import {
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { getMyTimeZone, getOrgTimeZone } from "@/lib/time/org-timezone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { CONTRACT_LINKABLE_JOB_TYPES, countCompletedUninvoicedVisits, jobServiceIsCovered } from "@/lib/contract-job-linking";
 import { normalizeCsvDate, parseCsvMoneyCents } from "@/lib/hooks/use-invoices";
 import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 import type {
@@ -1684,6 +1685,100 @@ export function useDeleteContractNote() {
     },
     onSuccess: (_d, { contractId }) => {
       qc.invalidateQueries({ queryKey: ["crm-contract-notes", contractId] });
+    },
+  });
+}
+
+// ── linking existing jobs to a contract ───────────────────────────────────────
+
+export interface LinkableJob {
+  id: string;
+  jobNumber: number | null;
+  jobType: string;
+  status: string;
+  schedule: string | null;
+  serviceNames: string[];
+  /** Whether any of the job's services appears in the contract's covered services. */
+  matches: boolean;
+  /** Completed visits with no live invoice line — a link doesn't bill or release these. */
+  completedUninvoiced: number;
+}
+
+/**
+ * The contract's client's recurring / package / one-time jobs that aren't on any
+ * contract yet (open ones only), each flagged with whether its services match
+ * the contract's covered services and how many completed visits sit uninvoiced.
+ */
+export function useLinkableJobs(contract: { id: string; clientId: string } | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["crm-contracts", contract?.id, "linkable-jobs"],
+    enabled: enabled && !!contract,
+    queryFn: async (): Promise<LinkableJob[]> => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sb = supabase as any;
+      const { data: covered, error: cErr } = await sb
+        .from("crm_contract_services")
+        .select("service_id, service_name")
+        .eq("contract_id", contract!.id)
+        .is("deleted_at", null);
+      if (cErr) throw cErr;
+      const coveredList = ((covered ?? []) as { service_id: string | null; service_name: string }[])
+        .map((c) => ({ serviceId: c.service_id, serviceName: c.service_name }));
+
+      const { data, error } = await sb
+        .from("crm_jobs")
+        .select("id, job_number, job_type, status, schedule, crm_job_services(service_id, service_name, deleted_at)")
+        .eq("client_id", contract!.clientId)
+        .is("contract_id", null)
+        .is("deleted_at", null)
+        .in("job_type", [...CONTRACT_LINKABLE_JOB_TYPES])
+        .not("status", "in", "(completed,cancelled)")
+        .order("job_number", { ascending: true });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const jobs = (data ?? []) as any[];
+      const counts = await countCompletedUninvoicedVisits(supabase, jobs.map((j) => j.id));
+      return jobs.map((j) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const svcs = ((j.crm_job_services ?? []) as any[]).filter((s) => s.deleted_at == null);
+        return {
+          id: j.id,
+          jobNumber: j.job_number ?? null,
+          jobType: j.job_type,
+          status: j.status,
+          schedule: j.schedule ?? null,
+          serviceNames: svcs.map((s) => s.service_name).filter(Boolean),
+          matches: svcs.some((s) => jobServiceIsCovered(s, coveredList)),
+          completedUninvoiced: counts.get(j.id) ?? 0,
+        };
+      });
+    },
+  });
+}
+
+/** Points the chosen jobs at a contract in one batch (the audit trigger logs each job's change). */
+export function useLinkJobsToContract() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ contractId, jobIds }: { contractId: string; jobIds: string[] }) => {
+      if (jobIds.length === 0) return 0;
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_jobs")
+        .update({ contract_id: contractId })
+        .in("id", jobIds)
+        // Never steal a job another contract already covers: link only what is still unlinked.
+        .is("contract_id", null)
+        .select("id");
+      if (error) throw error;
+      return (data ?? []).length as number;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["crm-contracts"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
   });
 }
