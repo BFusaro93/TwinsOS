@@ -98,7 +98,9 @@ export function BulkEmailInvoicesDialog({ invoiceIds, open, onClose, onSent }: P
             continue;
           }
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error ?? "Failed to email invoice");
+          const err = new Error(data.error ?? "Failed to email invoice") as Error & { flagged?: boolean };
+          err.flagged = data.code === "flagged_for_review";
+          throw err;
         }
       };
       const results: PromiseSettledResult<void>[] = [];
@@ -111,7 +113,11 @@ export function BulkEmailInvoicesDialog({ invoiceIds, open, onClose, onSent }: P
         }
       }
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.length - succeeded;
+      const flagged = results.filter(
+        (r) => r.status === "rejected" && (r.reason as { flagged?: boolean })?.flagged,
+      ).length;
+      const failed = results.length - succeeded - flagged;
+      if (flagged > 0) toast.warning(`Skipped ${flagged} invoice${flagged !== 1 ? "s" : ""} flagged for review. Clear the flag to email ${flagged !== 1 ? "them" : "it"}.`);
       if (succeeded > 0) toast.success(`Emailed ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);
       if (failed > 0) toast.error(`Failed to email ${failed} invoice${failed !== 1 ? "s" : ""} — check they have a client email on file`);
       onSent();

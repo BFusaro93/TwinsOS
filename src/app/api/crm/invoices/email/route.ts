@@ -127,6 +127,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "This invoice has been voided and can't be emailed" }, { status: 409 });
   }
 
+  // Held for review: someone flagged it to be checked before it goes out.
+  if (inv.flagged_for_review) {
+    return NextResponse.json(
+      { error: "This invoice is flagged for review. Clear the flag before emailing it.", code: "flagged_for_review" },
+      { status: 409 },
+    );
+  }
+
   // Read-only org (canceled, or a trial that ended): collections only. An
   // invoice that was already issued (sent/printed, numbered) can still be
   // emailed; a draft can't — sending it would assign a number and issue it.

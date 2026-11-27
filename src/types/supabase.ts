@@ -6505,6 +6505,10 @@ export type Database = {
           invoice_number: number | null
           locked: boolean
           locked_at: string | null
+          flag_note: string | null
+          flagged_at: string | null
+          flagged_by: string | null
+          flagged_for_review: boolean
           notes: string | null
           open_dispute_payment_id: string | null
           org_id: string
@@ -6558,6 +6562,10 @@ export type Database = {
           invoice_number?: number | null
           locked?: boolean
           locked_at?: string | null
+          flag_note?: string | null
+          flagged_at?: string | null
+          flagged_by?: string | null
+          flagged_for_review?: boolean
           notes?: string | null
           open_dispute_payment_id?: string | null
           org_id?: string
@@ -6611,6 +6619,10 @@ export type Database = {
           invoice_number?: number | null
           locked?: boolean
           locked_at?: string | null
+          flag_note?: string | null
+          flagged_at?: string | null
+          flagged_by?: string | null
+          flagged_for_review?: boolean
           notes?: string | null
           open_dispute_payment_id?: string | null
           org_id?: string

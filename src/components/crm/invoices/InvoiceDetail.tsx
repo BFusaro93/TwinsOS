@@ -30,6 +30,7 @@ import {
   useUpdateInvoiceHeader,
   useRecordPayment,
   useSetInvoiceLock,
+  useSetInvoiceReviewFlag,
   useAssignInvoiceNumber,
   useDeleteInvoice,
   LINE_ITEM_MUTATION_KEY,
@@ -88,7 +89,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn, formatCurrency } from "@/lib/utils";
 import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
-import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, ChevronUp, GripVertical, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff, Link2Off, ArrowLeft, Maximize2 } from "lucide-react";
+import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, ChevronUp, GripVertical, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban, Copy, Eye, EyeOff, Link2Off, ArrowLeft, Maximize2, Flag } from "lucide-react";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -885,6 +886,7 @@ export function InvoiceDetail({
   const { mutateAsync: updateHeader } = useUpdateInvoiceHeader();
   const customPaymentMethods = useCustomPaymentMethods();
   const { mutateAsync: setLock } = useSetInvoiceLock();
+  const { mutateAsync: setReviewFlag } = useSetInvoiceReviewFlag();
   const { mutateAsync: assignNumber } = useAssignInvoiceNumber();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const { mutateAsync: voidInvoice } = useVoidInvoice();
@@ -1191,6 +1193,14 @@ export function InvoiceDetail({
     } catch (err) { toast.error(mutationErrorMessage(err, "Failed to update lock")); }
   }
 
+  async function handleToggleReviewFlag() {
+    try {
+      const next = !invoice!.flaggedForReview;
+      await setReviewFlag({ id: invoice!.id, flagged: next });
+      toast.success(next ? "Flagged for review. It can't be emailed until cleared." : "Review flag cleared");
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to update review flag")); }
+  }
+
   async function handleSave() {
     // Checked before anything is written: assigning the number first and then
     // having the totals refused burned an invoice number and logged "Invoice #N".
@@ -1381,6 +1391,14 @@ export function InvoiceDetail({
               }
             </Button>
           )}
+          {!isVoid && canModifyInvoice && (
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              onClick={handleToggleReviewFlag}
+              title={invoice.flaggedForReview ? "Clear the review flag so this invoice can be emailed" : "Hold this invoice back from emailing until it's reviewed"}>
+              <Flag className={cn("mr-1 h-3.5 w-3.5", invoice.flaggedForReview ? "fill-blue-500 text-blue-500 dark:fill-blue-400 dark:text-blue-400" : "text-slate-400 dark:text-neutral-500")} />
+              {invoice.flaggedForReview ? "Clear review flag" : "Flag for review"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => setPaymentOpen(true)}
             disabled={invoice.status === "void" || invoice.balanceCents <= 0}>
@@ -1411,7 +1429,8 @@ export function InvoiceDetail({
           {can("acct_send_invoices") && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               onClick={() => setEmailDialogOpen(true)}
-              disabled={invoice.status === "void"}>
+              disabled={invoice.status === "void" || invoice.flaggedForReview}
+              title={invoice.flaggedForReview ? "Flagged for review. Clear the flag to email this invoice." : undefined}>
               <Mail className="mr-1 h-3.5 w-3.5 text-blue-500 dark:text-blue-400" /> Email
             </Button>
           )}
@@ -1594,6 +1613,11 @@ export function InvoiceDetail({
           {invoice.invoiceNumber == null && (
             <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
               Unsaved — click Save to assign invoice #
+            </span>
+          )}
+          {invoice.flaggedForReview && (
+            <span className="flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-400">
+              <Flag className="h-3 w-3" /> Review
             </span>
           )}
           {invoice.locked && (
