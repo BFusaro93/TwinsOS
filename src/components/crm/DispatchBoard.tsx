@@ -1,6 +1,8 @@
 "use client";
 
-import { notesToPlainText, visitCrewNoteBlocks } from "@/lib/utils/rich-notes";
+import { notesToEditorHtml, notesToPlainText, visitCrewNoteBlocks } from "@/lib/utils/rich-notes";
+import { isBlankRich, visitNoteSections, visitOwnNote } from "@/lib/utils/visit-note";
+import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import { stopPunchMismatch } from "@/lib/utils/punch-mismatch";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { LoadListDialog } from "@/components/crm/dispatch/LoadListDialog";
@@ -715,7 +717,7 @@ function extraColCellText(key: ColKey, job: CRMJob | null | undefined, visit?: C
     // only property ?? job, so a note typed on the visit (the icon showed it)
     // left the column blank, and an empty property note masked a real job note.
     case "notes_to_crew": {
-      const blocks = visitCrewNoteBlocks({ notesToCrew: visit?.notesToCrew, job });
+      const blocks = visitCrewNoteBlocks({ notesToCrew: visit?.notesToCrew, jobServiceId: visit?.jobServiceId, job });
       return blocks.length ? blocks.join(" · ") : "—";
     }
     case "gate_code":     return job?.propertyGateCode ?? "—";
@@ -846,10 +848,6 @@ const STATUS_OPTIONS: { value: VisitStatus; label: string }[] = [
   { value: "skipped",     label: "Skipped" },
 ];
 
-const SUB_STATUS_OPTIONS = [
-  "At Property", "En Route", "On Hold", "Waiting for Parts", "Needs Follow-up",
-];
-
 function JobDetailSheet({
   visit,
   open,
@@ -957,14 +955,12 @@ function JobDetailSheet({
   // sheet's status is Skipped/Cancelled; prefilled from the stored value.
   const [skipReason,  setSkipReason]  = useState(visit.skipReason ?? "");
   useEffect(() => { setSkipReason(visit.skipReason ?? ""); }, [visit.id, visit.skipReason]);
-  const [subStatus,   setSubStatus]   = useState(visit.subStatus ?? "");
   // The sheet stays open while the crew works: without re-syncing, a visit the
   // crew COMPLETES (or whose men/qty changed) leaves these at their mount-time
   // values, and the next Save writes them back — a stale status="in_progress"
   // against a live "completed" took the reopening branch below and reopened the
   // visit (and its one-time job) just because a dispatcher edited a note.
   useEffect(() => { setStatus(visit.status); }, [visit.id, visit.status]);
-  useEffect(() => { setSubStatus(visit.subStatus ?? ""); }, [visit.id, visit.subStatus]);
   const [crewId,      setCrewId]      = useState(effectiveCrewId({ ...visit, job }) ?? "");
   const [startTime,   setStartTime]   = useState(visit.startTime ?? "");
   const [endTime,     setEndTime]     = useState(visit.endTime ?? "");
@@ -1127,19 +1123,23 @@ function JobDetailSheet({
   const [newComment,    setNewComment]    = useState("");
   const [addingComment, setAddingComment] = useState(false);
   const addingCommentRef = useRef(false);
-  const [notesToClient, setNotesToClient] = useState(visit.notesToClient ?? "");
   // Fall back to job-level master invoice description when visit has none
   const [invoiceDesc,   setInvoiceDesc]   = useState(visit.invoiceDescription ?? job?.invoiceDescription ?? "");
-  const [notesToCrewInput, setNotesToCrewInput] = useState(notesToPlainText(visit.notesToCrew ?? job?.notesToCrew));
+  // Only the note written on this visit is edited here; the job and service notes are
+  // shown above it and read live by the crew, never copied into the visit.
+  const ownNote = visitOwnNote(visit);
+  const noteSections = visitNoteSections(visit).filter((n) => n.kind === "job" || n.kind === "service");
+  const [notesToCrewInput, setNotesToCrewInput] = useState(notesToEditorHtml(ownNote));
   const [savingNotesToCrew, setSavingNotesToCrew] = useState(false);
   useEffect(() => {
-    setNotesToCrewInput(notesToPlainText(visit.notesToCrew ?? job?.notesToCrew));
+    setNotesToCrewInput(notesToEditorHtml(visitOwnNote(visit)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- visitOwnNote reads only these fields of visit
   }, [visit.id, visit.notesToCrew, job?.notesToCrew]);
 
   async function saveNotesToCrew() {
     setSavingNotesToCrew(true);
     try {
-      await updateVisit({ id: visit.id, updates: { notes_to_crew: notesToCrewInput || null } });
+      await updateVisit({ id: visit.id, updates: { notes_to_crew: isBlankRich(notesToCrewInput) ? null : notesToCrewInput } });
       toast.success("Notes saved");
     } catch {
       toast.error("Failed to save notes");
@@ -1182,7 +1182,6 @@ function JobDetailSheet({
     const crewChanged  = crewId !== seedCrewId;
     const updates: Parameters<typeof updateVisit>[0]["updates"] = {
       status,
-      sub_status: subStatus || null,
       ...(crewChanged ? { crew_id: crewId || null } : {}),
       // Emptying the crew picker on a visit that HAD an effective crew is a
       // deliberate per-visit unassign (crew_id NULL alone would inherit the
@@ -1195,7 +1194,6 @@ function JobDetailSheet({
       // invoice key (enforced in the database too), so only send them when edited.
       ...(qty !== String(visit.qty ?? "") ? { qty: qty ? parseFloat(qty) : null } : {}),
       ...(rateCents !== seedRate ? { rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null } : {}),
-      notes_to_client: notesToClient || null,
       // The textarea shows the job's description as a fallback; saving it unchanged used to
       // freeze that text onto the visit, so later edits to the job never reached its invoice.
       ...(invoiceDesc !== (visit.invoiceDescription ?? job?.invoiceDescription ?? "")
@@ -1390,7 +1388,7 @@ function JobDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full max-w-[100vw] sm:max-w-[min(800px,100vw)] md:w-[800px] p-0 flex flex-col gap-0"
+        className="w-full max-w-[100vw] sm:max-w-[min(900px,100vw)] md:w-[900px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
         <SheetHeader className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-4 pr-14">
@@ -1481,7 +1479,7 @@ function JobDetailSheet({
         <div className="flex flex-1 overflow-hidden max-md:flex-col max-md:overflow-y-auto">
 
           {/* Left: form + notes */}
-          <div className="flex-1 overflow-y-auto max-md:flex-none max-md:overflow-visible">
+          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden max-md:flex-none max-md:overflow-visible">
 
             {/* Schedule / assign section */}
             <div className="px-5 pt-4 pb-3 border-b space-y-2.5">
@@ -1587,27 +1585,6 @@ function JobDetailSheet({
 
                 {/* Multi-crew stop */}
                 <VisitCrewsSection visit={visit} groupVisits={allVisits} crews={crews} />
-
-                {/* Sub Status */}
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
-                    Sub Status
-                  </label>
-                  <Select
-                    value={subStatus || "none"}
-                    onValueChange={(v) => setSubStatus(v === "none" ? "" : v)}
-                  >
-                    <SelectTrigger className="h-7 text-xs">
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none" className="text-xs">None</SelectItem>
-                      {SUB_STATUS_OPTIONS.map((s) => (
-                        <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
                 {/* Priority — per-visit override of the job's High Priority
                     flag. "Job default" clears the override so the visit goes
@@ -1749,18 +1726,27 @@ function JobDetailSheet({
               </Button>
             </div>
 
+            {/* What the crew wrote when they finished the visit — read-only, so it
+                shouldn't take a trip to the job's Visits tab to find. */}
+            {notesToPlainText(visit.completionNotes).trim() && (
+              <div className="mx-4 mb-3 rounded border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-0.5">Completion notes (from the crew)</p>
+                <p className="whitespace-pre-wrap text-xs text-slate-700 dark:text-neutral-300">{notesToPlainText(visit.completionNotes).trim()}</p>
+              </div>
+            )}
+
             {/* Notes tabs */}
             <Tabs defaultValue="job-notes" className="flex flex-col flex-1">
               <div className="border-b bg-card">
                 <TabsList className="h-9 rounded-none bg-transparent justify-start px-4 gap-0">
-                  {(["job-notes","job-comments","client-notes","invoice-desc","audit"] as const).map((v, i) => {
+                  {(["job-notes","job-comments","invoice-desc","audit"] as const).map((v, i) => {
                     // Job Notes = instructions to the crew (notesToCrew). Job Comments =
                     // scheduling remarks / crew-tablet submissions (jobComments) — kept as
                     // two distinct counts so a new comment doesn't read as a new "note".
-                    const cnt = v === "job-notes" ? ((visit.notesToCrew ?? visit.job?.notesToCrew) ? 1 : 0)
+                    const cnt = v === "job-notes" ? (visitNoteSections(visit).some((n) => n.kind !== "property") ? 1 : 0)
                       : v === "job-comments" ? visit.jobComments.length
                       : 0;
-                    const labels = ["Visit Notes to Crew","Job Comments","Notes to Client","Invoice Desc.","Audit"];
+                    const labels = ["Visit Notes to Crew","Job Comments","Invoice Desc.","Audit"];
                     return (
                       <TabsTrigger
                         key={v}
@@ -1781,20 +1767,21 @@ function JobDetailSheet({
                   row on the dispatch board itself — these can run long and would
                   clog up the board, unlike short job comments. */}
               <TabsContent value="job-notes" className="m-0 p-4 space-y-3">
-                {job?.notesToCrew && (
-                  <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded px-2 py-1.5">
-                    <span className="font-semibold">Job notes to crew:</span> {notesToPlainText(job.notesToCrew)}
+                {noteSections.map((n) => (
+                  <p key={n.kind} className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded px-2 py-1.5">
+                    <span className="font-semibold">{n.label} to crew:</span> {notesToPlainText(n.html)}
                   </p>
-                )}
-                <Textarea
+                ))}
+                <RichTextEditor
                   value={notesToCrewInput}
-                  onChange={(e) => setNotesToCrewInput(e.target.value)}
-                  placeholder="Instructions for the crew on this visit…"
-                  className="h-24 resize-none text-xs"
+                  onChange={setNotesToCrewInput}
+                  placeholder="Extra instructions for the crew on this visit only…"
+                  minHeight={96}
+                  allowImages={false}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Shown to the crew for this visit only, and in the Notes to Crew column. A standing note for every
-                  visit of the job is the amber &ldquo;Job notes to crew&rdquo; above (edit it on the job). Comments are the
+                  Shown to the crew for this visit only, in addition to the job and service notes above (edit those on the
+                  job). Also in the Notes to Crew column. Comments are the
                   running log on the next tab.
                 </p>
                 <Button size="sm" className="h-7 text-xs" onClick={saveNotesToCrew} disabled={savingNotesToCrew}>
@@ -1830,17 +1817,6 @@ function JobDetailSheet({
                 <Button size="sm" className="h-7 text-xs" onClick={addComment} disabled={addingComment}>
                   Add Comment
                 </Button>
-              </TabsContent>
-
-              {/* Notes to Client */}
-              <TabsContent value="client-notes" className="m-0 p-4 space-y-3">
-                <Textarea
-                  value={notesToClient}
-                  onChange={(e) => setNotesToClient(e.target.value)}
-                  placeholder="Notes visible to client on invoice/portal…"
-                  className="h-32 resize-none text-xs"
-                />
-                <p className="text-[10px] text-slate-400 dark:text-neutral-500">Saved when you click Save below.</p>
               </TabsContent>
 
               {/* Invoice Desc */}

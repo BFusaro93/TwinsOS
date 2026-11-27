@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
@@ -11,10 +12,13 @@ const log = logger.child("invoice-photos");
 export type PhotoBucket = "attachments" | "job-photos-original" | "job-photos-annotated";
 
 // PDF budget: keep the rendered PDF (also emailed as an attachment) well under
-// ~10MB. sharp is not a direct dependency, so no server-side resize — instead
-// oversized files are skipped and the embedded total is capped.
-const MAX_PHOTO_BYTES = 2.5 * 1024 * 1024;
+// ~10MB. Phone photos are routinely 3-8MB, so each one is downscaled and
+// re-encoded before it is embedded (a 4-up photo page prints at well under
+// 1600px); a photo that can't be processed is embedded as-is only if it is small.
+const MAX_RAW_BYTES = 2.5 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+const PDF_PHOTO_MAX_EDGE = 1600;
+const PDF_PHOTO_JPEG_QUALITY = 78;
 const FETCH_TIMEOUT_MS = 10_000;
 // @react-pdf/renderer can only decode JPEG and PNG.
 const PDF_MIME = new Set(["image/jpeg", "image/jpg", "image/png"]);
@@ -94,11 +98,28 @@ export async function loadInvoicePhotosForPdf(
         const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (!res.ok) continue;
         const mime = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-        if (!PDF_MIME.has(mime)) continue;
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length > MAX_PHOTO_BYTES || total + buf.length > MAX_TOTAL_BYTES) continue;
+        // Storage may serve a generic type; sharp sniffs the real format below.
+        if (!PDF_MIME.has(mime) && !mime.startsWith("image/") && mime !== "application/octet-stream") continue;
+        const raw = Buffer.from(await res.arrayBuffer());
+        let buf: Buffer;
+        let outMime = mime;
+        try {
+          // rotate() applies the EXIF orientation, which phone photos rely on.
+          buf = await sharp(raw)
+            .rotate()
+            .resize({ width: PDF_PHOTO_MAX_EDGE, height: PDF_PHOTO_MAX_EDGE, fit: "inside", withoutEnlargement: true })
+            .flatten({ background: "#ffffff" })
+            .jpeg({ quality: PDF_PHOTO_JPEG_QUALITY, mozjpeg: true })
+            .toBuffer();
+          outMime = "image/jpeg";
+        } catch (err) {
+          log.warn("photo resize failed", { invoiceId, photoId: r.id, error: err instanceof Error ? err.message : String(err) });
+          if (!PDF_MIME.has(mime) || raw.length > MAX_RAW_BYTES) continue;
+          buf = raw;
+        }
+        if (total + buf.length > MAX_TOTAL_BYTES) continue;
         total += buf.length;
-        photos.push({ caption: r.caption, dataUri: `data:${mime};base64,${buf.toString("base64")}` });
+        photos.push({ caption: r.caption, dataUri: `data:${outMime};base64,${buf.toString("base64")}` });
       } catch (err) {
         log.warn("photo download failed; skipping", { invoiceId, photoId: r.id, error: err instanceof Error ? err.message : String(err) });
       }

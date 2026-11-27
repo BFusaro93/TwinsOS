@@ -1,6 +1,6 @@
 "use client";
 
-import { isBlankRich, composeVisitNote } from "@/lib/utils/visit-note";
+import { isBlankRich } from "@/lib/utils/visit-note";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
@@ -1058,31 +1058,9 @@ export function useCreateVisit() {
         ]);
         menCount = Number(svcRow?.team_size) || Number(jobRow?.man_count) || 1;
       }
-      // The crew note when the caller didn't give one: the job note plus the visit's
-      // service note (every service's note for a whole-job visit), the way Add Job,
-      // Convert and the visit generator compose it. Waiting List dispatch, Nearby and
-      // Add Visit passed nothing, so per-line crew notes from the estimate never
-      // reached the crew. Left null when there is no service note, so the visit keeps
-      // falling back to the (editable) job note.
-      let notesToCrew = values.notesToCrew;
-      if (notesToCrew === undefined) {
-        const [{ data: noteJob }, { data: noteSvcs }] = await Promise.all([
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase as any).from('crm_jobs').select('notes_to_crew').eq('id', values.jobId).maybeSingle(),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase as any)
-            .from('crm_job_services')
-            .select('id, job_note')
-            .eq('job_id', values.jobId)
-            .order('sort_order', { ascending: true }),
-        ]);
-        const svcNotes = ((noteSvcs ?? []) as { id: string; job_note: string | null }[])
-          .filter((s) => !values.jobServiceId || s.id === values.jobServiceId)
-          .map((s) => s.job_note);
-        notesToCrew = svcNotes.some((n) => !isBlankRich(n))
-          ? composeVisitNote(noteJob?.notes_to_crew ?? null, svcNotes)
-          : null;
-      }
+      // The crew note is only what the caller wrote for this visit. The job and service
+      // notes are read live from the job (see visitNoteSections), not copied here.
+      const notesToCrew = values.notesToCrew;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
@@ -1894,7 +1872,8 @@ export function useGenerateVisits() {
         crew_id: job.crewId ?? null,
         scheduled_date: d,
         priority: i + 1,
-        notes_to_crew: job.notesToCrew ?? null,
+        // The job note is read live by the crew; only a note written on the visit goes here.
+        notes_to_crew: null,
         men_count: job.manCount ?? 1,
       }));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2072,7 +2051,6 @@ export function useCreateClientJob() {
             status: 'scheduled',
             crew_id: values.crewId || null,
             men_count: s.teamSize || jobManCount,
-            ...(composeVisitNote(values.notesToCrew, s.jobNote) ? { notes_to_crew: composeVisitNote(values.notesToCrew, s.jobNote) } : {}),
           }));
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: insertedVisits, error: visitsErr } = await (supabase as any)
@@ -2099,10 +2077,6 @@ export function useCreateClientJob() {
               status: 'scheduled',
               crew_id: values.crewId || null,
               men_count: jobManCount,
-              // The one visit does the whole job: carry every service's crew note.
-              ...(values.services.every((s) => isBlankRich(s.jobNote))
-                ? {}
-                : { notes_to_crew: composeVisitNote(values.notesToCrew, values.services.map((s) => s.jobNote)) }),
             })
             .select('id')
             .single();
@@ -2130,7 +2104,6 @@ export function useCreateClientJob() {
             status: 'scheduled',
             crew_id: values.crewId || null,
             men_count: s.teamSize || jobManCount,
-            ...(composeVisitNote(values.notesToCrew, s.jobNote) ? { notes_to_crew: composeVisitNote(values.notesToCrew, s.jobNote) } : {}),
           }));
         if (visitRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3077,7 +3050,7 @@ export function useCreateJobsFromEstimate() {
         // One visit per dated step (the package's own windows), linked to its
         // service — mirrors useCreateClientJob's package branch.
         const stepRows = serviceRows
-          .map((row, i) => ({ sid: insertedServiceIds[i], date: row.dates?.startDate ?? null, svNote: row.sv.jobNote ?? null }))
+          .map((row, i) => ({ sid: insertedServiceIds[i], date: row.dates?.startDate ?? null }))
           .filter((x) => x.sid && x.date)
           .map((x) => ({
             job_id: jobId,
@@ -3090,7 +3063,6 @@ export function useCreateJobsFromEstimate() {
             status: "scheduled",
             crew_id: crewId,
             men_count: jobManCount,
-            notes_to_crew: composeVisitNote(notesToCrew, x.svNote),
           }));
         if (stepRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3111,8 +3083,6 @@ export function useCreateJobsFromEstimate() {
         // Recurring jobs get no hand-placed first visit: the date is only the earliest
         // the schedule may start, and generate-visits (below) creates every visit —
         // including the first — on the schedule's own days.
-        const noteBySid = new Map<string, string | null>();
-        insertedServiceIds.forEach((sid, i) => noteBySid.set(sid, serviceRows[i]?.sv.jobNote ?? null));
         const firstVisit = (jobServiceId: string | null) => ({
           job_id: jobId,
           client_id: clientId,
@@ -3120,8 +3090,6 @@ export function useCreateJobsFromEstimate() {
           status: "scheduled",
           crew_id: crewId,
           men_count: jobManCount,
-          // An unlinked visit does the whole job, so it carries every service's crew note.
-          notes_to_crew: composeVisitNote(notesToCrew, jobServiceId ? noteBySid.get(jobServiceId) : Array.from(noteBySid.values())),
           job_service_id: jobServiceId,
         });
         // One visit (linked when there's a single service): that visit does the whole job.
