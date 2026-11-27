@@ -79,6 +79,7 @@ export const CREW_ES: Record<string, string> = {
   Finished: "Terminó",
   "For which job?": "¿Para qué trabajo?",
   "From yesterday": "De ayer",
+  "Add a note for the office": "Agregar una nota para la oficina",
   "+{n} more comments": "+{n} comentarios más",
   "Open in maps": "Abrir en mapas",
   "Equipment today": "Equipo de hoy",

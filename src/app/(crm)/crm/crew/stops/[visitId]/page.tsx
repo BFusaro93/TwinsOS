@@ -1177,6 +1177,17 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 {clock(stop.clockedInAt)} – {clock(stop.clockedOutAt)}
               </p>
             )}
+            {/* The completion note is locked in once the job is done (it feeds the invoice and the
+                client's notice), so a late note goes to the office instead. */}
+            {stop.derivedStatus === "completed" && (
+              <button
+                type="button"
+                onClick={() => document.getElementById("office-notes")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className="mt-3 min-h-11 w-full rounded-lg border border-green-300 dark:border-green-700 bg-card px-3 text-sm font-medium text-green-800 dark:text-green-300"
+              >
+                {t("Add a note for the office")}
+              </button>
+            )}
             {stop.derivedStatus === "completed" && snowPushSource && (
               <button
                 type="button"
@@ -1349,7 +1360,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         )}
 
         {/* Notes / Comments */}
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div id="office-notes" className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
             <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
