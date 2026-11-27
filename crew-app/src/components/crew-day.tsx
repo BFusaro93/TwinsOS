@@ -193,10 +193,21 @@ export function CrewDayBanner({
         )
       ) : null}
 
-      <Pressable onPress={onEditCrew} hitSlop={8} style={styles.editCrewLink}>
-        <Text style={styles.editCrewLinkText}>{t('Edit crew')}</Text>
-      </Pressable>
+      <EditCrewButton onPress={onEditCrew} />
     </View>
+  );
+}
+
+/** "Edit crew" — who is working today (late arrivals, people out, someone borrowed from another crew). */
+export function EditCrewButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.editCrewButton, pressed && styles.pressed]}
+    >
+      <Text style={styles.editCrewButtonText}>{t('Edit crew')}</Text>
+    </Pressable>
   );
 }
 
@@ -375,8 +386,16 @@ const styles = StyleSheet.create({
   },
   startLunchText: { color: C.blueText, fontWeight: '700', fontSize: 14 },
   lunchHint: { textAlign: 'center', fontSize: 12, color: C.textFaint, marginTop: 4 },
-  editCrewLink: { alignSelf: 'flex-start' },
-  editCrewLinkText: { color: C.blueText, fontWeight: '600', fontSize: 13 },
+  editCrewButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: C.blueBorder,
+    backgroundColor: C.card,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  editCrewButtonText: { color: C.blueText, fontWeight: '700', fontSize: 14 },
 
   sheet: { flex: 1, backgroundColor: C.bg },
   sheetContent: { padding: 20, gap: 10 },

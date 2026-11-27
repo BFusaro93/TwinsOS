@@ -1430,6 +1430,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             {/* Notes */}
             <div className="flex flex-col gap-1.5">
               <Label>Notes to Crew / Job Notes</Label>
+              <p className="text-[11px] text-muted-foreground -mt-1">Shown to the crew on every service under this job.</p>
               <RichTextEditor value={notesToCrew} onChange={setNotesToCrew} placeholder="Optional notes visible to the crew…" minHeight={72} />
             </div>
             <div className="flex flex-col gap-1.5">

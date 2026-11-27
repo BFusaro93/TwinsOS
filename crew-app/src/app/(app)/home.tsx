@@ -21,7 +21,7 @@ import {
 import { applyDriveOverlay, applyStopQueueOverlay } from '@/lib/offline/overlay';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
 import { unregisterPushToken } from '@/lib/notifications';
-import { notesToPlainText } from '@/lib/rich-notes';
+import { stopJobComments } from '@/lib/job-comments';
 import { t } from '@/lib/i18n';
 import { LanguageToggle } from '@/components/language-toggle';
 
@@ -250,6 +250,9 @@ function DriveBanner({
 function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOverlay>; onPress: () => void }) {
   const progress = stopProgress(stop);
   const services = stopServiceNames(stop);
+  // Job comments (short, from the office or the crew) show here; the job's long notes
+  // are read inside the stop.
+  const comments = stopJobComments(stop);
 
   return (
     <Pressable
@@ -291,11 +294,14 @@ function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOve
         </View>
       </View>
 
-      {stop.notesToCrew ? (
+      {comments.length > 0 ? (
         <View style={styles.cardNote}>
           <Text style={styles.cardNoteText} numberOfLines={2}>
-            {notesToPlainText(stop.notesToCrew)}
+            {comments[0]}
           </Text>
+          {comments.length > 1 ? (
+            <Text style={styles.cardNoteMore}>{t('+{n} more comments', { n: comments.length - 1 })}</Text>
+          ) : null}
         </View>
       ) : null}
     </Pressable>
@@ -520,6 +526,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 6,
+  },
+  cardNoteMore: {
+    fontSize: 11,
+    color: C.textFaint,
+    marginTop: 4,
   },
 
   centered: {

@@ -896,6 +896,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
 
           <div className="flex flex-col gap-1 col-span-2">
             <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Notes to Crew / Job Notes</Label>
+            <p className="text-[11px] text-muted-foreground">Shown to the crew on every service under this job.</p>
             <RichTextEditor
               value={notesToCrew}
               onChange={setNotesToCrew}

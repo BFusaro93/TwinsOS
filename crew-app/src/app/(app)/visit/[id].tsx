@@ -46,6 +46,7 @@ import {
   setSubitemCheck,
 } from '@/lib/api';
 import { AddPushButton, isSnowStop, snowPushSource, SnowStopActions } from '@/components/snow-stop';
+import { EditCrewButton, EditCrewModal, useCrewDay } from '@/components/crew-day';
 import { notesToPlainText } from '@/lib/rich-notes';
 import { C } from '@/lib/colors';
 import { useCrewStops } from '@/lib/hooks/use-crew-stops';
@@ -183,6 +184,10 @@ export default function StopDetailScreen() {
   // ("visitId:subitemId" -> ticked). Online-only, so a failed tap reverts its override.
   const [checkOverrides, setCheckOverrides] = useState<Record<string, boolean>>({});
   const [serviceTimeBusy, setServiceTimeBusy] = useState(false);
+  // Who is working today — the same dialog as on the schedule, tied to this stop so its
+  // job punch stays in step with each person's shift.
+  const crewDay = useCrewDay();
+  const [editCrewOpen, setEditCrewOpen] = useState(false);
   const [, forceTick] = useState(0);
 
   const serverStop = useMemo(() => stops.find((s) => s.anchorVisitId === id), [stops, id]);
@@ -684,6 +689,9 @@ export default function StopDetailScreen() {
             />
           ) : null}
         </View>
+        <View style={{ marginTop: 12 }}>
+          <EditCrewButton onPress={() => setEditCrewOpen(true)} />
+        </View>
       </View>
 
       {hasNotes ? (
@@ -832,6 +840,15 @@ export default function StopDetailScreen() {
           ) : null}
         </View>
       ) : null}
+      <EditCrewModal
+        visible={editCrewOpen}
+        onClose={() => {
+          setEditCrewOpen(false);
+          void refetch();
+        }}
+        crewDay={crewDay}
+        visitId={stop.anchorVisitId}
+      />
       <TimeSummaryModal visible={timeSummaryOpen} visitId={stop.anchorVisitId} visitBreakMinutes={stop.breakMinutes ?? 0} visitClockedInAt={stop.clockedInAt} visitClockedOutAt={stop.clockedOutAt} onClose={() => setTimeSummaryOpen(false)} />
 
       {failedClockItem ? (

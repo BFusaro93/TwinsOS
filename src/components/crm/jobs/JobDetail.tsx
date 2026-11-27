@@ -1767,7 +1767,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               {/* Notes to Crew — always visible when set */}
               {(job.notesToCrew || editing) && (
                 <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 p-4 shadow-sm col-span-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 mb-1">Notes to Crew / Job Notes</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Notes to Crew / Job Notes</p>
+                  <p className="text-[11px] text-blue-700/80 dark:text-blue-400/80 mb-1">Shown to the crew on every service under this job.</p>
                   {editing ? (
                     <RichTextEditor
                       value={(edits.notes_to_crew as string | undefined) ?? job.notesToCrew ?? ""}
@@ -2513,6 +2514,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             <div className="rounded-lg border bg-card p-4 shadow-sm flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Notes to Crew / Job Notes</Label>
+                <p className="text-[11px] text-muted-foreground">Shown to the crew on every service under this job.</p>
                 <RichTextEditor
                   value={(edits.notes_to_crew as string | undefined) ?? job.notesToCrew ?? ""}
                   onChange={(html) => patch("notes_to_crew", html)}
