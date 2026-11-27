@@ -2,6 +2,7 @@
 // Keyed by the exact English text used in t('…'); a key missing here simply
 // shows in English. Placeholders like {time} must be kept as written.
 export const ES: Record<string, string> = {
+  '+{n} more comments': '+{n} comentarios más',
   'Day started yesterday {time}': 'Día iniciado ayer {time}',
   'On lunch since {time}': 'En almuerzo desde {time}',
   'Tap End Lunch when the crew is back to work.': 'Toca Terminar almuerzo cuando la cuadrilla vuelva al trabajo.',

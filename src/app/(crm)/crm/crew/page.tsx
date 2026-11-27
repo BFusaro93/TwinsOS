@@ -47,6 +47,18 @@ function StopCard({ stop, partners, onClick, today }: { stop: Stop; partners: st
   const startTime = stop.visits.find((v) => v.startTime)?.startTime;
   // Kept on the list after midnight (unfinished storm/late route, or still clocked in).
   const fromEarlierDay = stop.visits.some((v) => v.scheduledDate < today);
+  // Job comments (short, from the office or the crew), newest first. The job's own, often long,
+  // notes are read inside the stop, behind the acknowledge button.
+  const seenComments = new Set<string>();
+  const comments = stop.visits
+    .flatMap((v) => v.jobComments ?? [])
+    .filter((c) => {
+      const key = c.id ?? `${c.createdAt}|${c.text}`;
+      if (!notesToPlainText(c.text ?? "").trim() || seenComments.has(key)) return false;
+      seenComments.add(key);
+      return true;
+    })
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return (
     <div
@@ -122,11 +134,16 @@ function StopCard({ stop, partners, onClick, today }: { stop: Stop; partners: st
           <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
         </div>
       </div>
-      {stop.notesToCrew && (
+      {comments.length > 0 && (
         <div className="mt-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
           <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 rounded px-2 py-1 line-clamp-2">
-            📋 {notesToPlainText(stop.notesToCrew)}
+            💬 {notesToPlainText(comments[0].text)}
           </p>
+          {comments.length > 1 && (
+            <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
+              {t("+{n} more comments", { n: comments.length - 1 })}
+            </p>
+          )}
         </div>
       )}
     </div>
