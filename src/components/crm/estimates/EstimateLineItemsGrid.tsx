@@ -56,6 +56,7 @@ import { BudgetedHoursPopover, type BudgetedHoursPatch } from "./BudgetedHoursPo
 import { LineItemComplexityPopover } from "./LineItemComplexityPopover";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { AddSubitemDialog } from "./AddSubitemDialog";
+import { PackageDiscountPopover, type PackageDiscountInput } from "./PackageDiscountPopover";
 import { LineItemEquipmentRows } from "./LineItemEquipmentRows";
 import { computeLineWarnings } from "@/lib/estimate-warnings";
 import { effectiveChargeCents } from "@/lib/hooks/use-equipment";
@@ -382,12 +383,19 @@ function SectionRow({
   estimateId,
   onDelete,
   onFillDown,
+  onDiscount,
+  discounts,
+  visitCount,
   tiersEnabled,
 }: {
   item: EstimateLineItem;
   estimateId: string;
   onDelete: (id: string, estimateId: string) => void;
   onFillDown: (packageId: string, field: FillDownField, headerId?: string) => void;
+  /** Bulk discount for the package's visits. */
+  onDiscount: (headerId: string, input: PackageDiscountInput | null) => void;
+  discounts: CRMDiscount[];
+  visitCount: number;
   tiersEnabled?: boolean;
 }) {
   const upsert = useUpsertLineItem();
@@ -497,6 +505,12 @@ function SectionRow({
                 {b.label}
               </button>
             ))}
+            <span className="mx-1 text-slate-300 dark:text-neutral-600">|</span>
+            <PackageDiscountPopover
+              discounts={discounts}
+              visitCount={visitCount}
+              onApply={(input) => onDiscount(item.id, input)}
+            />
           </div>
         )}
       </td>
@@ -1477,6 +1491,43 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     }
   }
 
+  /** Puts the same discount on every visit of a package (a percent comes off each visit's own
+   *  total; a flat amount comes off each visit), replacing what was there. null clears them. */
+  async function discountPackage(headerId: string, input: PackageDiscountInput | null) {
+    const groupIds = new Set(packageGroupLineIds(headerId, everyItem));
+    const all = everyItem.filter((i) => !i.deletedAt && i.rowType !== "section" && groupIds.has(i.id));
+    // Visits already on a job keep the job's price.
+    const lines = all.filter((l) => !isConverted(l.id));
+    if (all.length > lines.length) toast.info(`${all.length - lines.length} visit${all.length - lines.length !== 1 ? "s" : ""} skipped — already on a job`);
+    if (lines.length === 0) return;
+    try {
+      for (const line of lines) {
+        const gross = Math.max(0, line.totalCents);
+        const cents = !input
+          ? 0
+          : input.type === "percent"
+            ? Math.round(gross * (input.value / 10000))
+            : input.value;
+        const clamped = Math.max(0, Math.min(cents, gross));
+        await upsert({
+          estimateId,
+          item: {
+            id: line.id,
+            discount_cents: clamped,
+            discount_type: input ? input.type : null,
+            discount_value: input ? (input.type === "percent" ? input.value : clamped) : null,
+            applied_discount_id: input?.appliedDiscountId ?? null,
+          },
+        });
+      }
+      toast.success(input
+        ? `Discount applied to ${lines.length} visit${lines.length !== 1 ? "s" : ""}`
+        : `Discounts cleared on ${lines.length} visit${lines.length !== 1 ? "s" : ""}`);
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to apply the discount"));
+    }
+  }
+
   const handleDuplicate = useCallback(
     async (item: EstimateLineItem) => {
       try {
@@ -1829,6 +1880,9 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                       estimateId={estimateId}
                       onDelete={handleDelete}
                       onFillDown={fillPackageDown}
+                      onDiscount={discountPackage}
+                      discounts={activeDiscounts}
+                      visitCount={item.packageId ? packageGroupLineIds(item.id, everyItem).length : 0}
                       tiersEnabled={tiersEnabled}
                     />
                   ) : (

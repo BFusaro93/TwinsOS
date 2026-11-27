@@ -27,7 +27,7 @@ import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { recalcEstimateTotals, useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
 import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
 import { usePackages } from "@/lib/hooks/use-packages";
-import { useAddPackageLines } from "@/lib/hooks/use-estimate-package-lines";
+import { useAddPackageLines, usePriceServiceLine } from "@/lib/hooks/use-estimate-package-lines";
 import { layoutTemplateItems, skippedPackagesMessage } from "@/lib/estimates/template-package-items";
 import { useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -115,10 +115,13 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   // Packages inside a template are added like Add Package does (priced from the Rate Matrix
   // and the chosen client's takeoff), so they need the client/property being created for.
   const { data: packages = [] } = usePackages(false);
-  const addPackageLines = useAddPackageLines({
+  const pricingTarget = {
     clientId: selectedClientId,
     propertyId: selectedPropertyId && selectedPropertyId !== "none" ? selectedPropertyId : null,
-  });
+  };
+  const addPackageLines = useAddPackageLines(pricingTarget);
+  // A bundle service left at $0 is priced from its Rate Matrix / the client's takeoff when applied.
+  const priceServiceLineFor = usePriceServiceLine(pricingTarget);
   const propertiesPrevClientId = useRef(selectedClientId);
   // A property belongs to one client — switching clients invalidates whatever
   // was picked, so it must reset rather than silently pointing at a property
@@ -195,7 +198,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
       if (tpl?.items?.length) {
         const layout = layoutTemplateItems(tpl.items, packages, 0);
         await Promise.all(
-          layout.plain.map(({ item, sortOrder }) => {
+          layout.plain.map(async ({ item, sortOrder }) => {
             // Carry over the matched service's budget method / production rate
             // (same as EstimateLineItemsGrid's addService) so a production_rate
             // service applied via template doesn't silently fall back to manual
@@ -217,9 +220,18 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
               budgetMethod:  item.budgetMethod,
               productionRateSqftPerHr: item.productionRateSqftPerHr,
             }, breakevenRateCents);
+            const priced = matchedService && item.rateCents === 0
+              ? await priceServiceLineFor(matchedService, { visits: item.visits, sortOrder })
+              : null;
             return upsertLineItem({
               estimateId: estimate.id,
-              item: {
+              item: priced ? {
+                ...priced,
+                discount_cents:       item.discountCents,
+                discount_type:        item.discountType,
+                discount_value:       item.discountValue,
+                applied_discount_id:  item.appliedDiscountId,
+              } : {
                 service_id:           item.serviceId,
                 service_name:         item.serviceName,
                 status:               "quote",

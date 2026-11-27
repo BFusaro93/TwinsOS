@@ -873,9 +873,15 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
 
   const isPending = createService.isPending || updateService.isPending;
 
-  // Services that can be a parent: top-level (no parent), not this service itself
+  // Services that can be a parent: top-level (no parent), not this service itself. The service's
+  // CURRENT parent is always offered too, even when that parent has a parent of its own (a
+  // three-level tree such as Tick Control > Organic Tick + Mosquito > Step 1 of 8), or the
+  // dropdown shows blank for a service that does have one.
   const parentCandidates = allServices.filter(
-    (s) => !s.deletedAt && !s.parentServiceId && s.id !== activeService?.id
+    (s) =>
+      !s.deletedAt &&
+      s.id !== activeService?.id &&
+      (!s.parentServiceId || s.id === activeService?.parentServiceId)
   );
 
   return (
