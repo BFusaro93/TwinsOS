@@ -830,8 +830,10 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
       minimum_charge_message: form.minimumChargeCents && parseCents(form.minimumChargeCents) > 0 ? (form.minimumChargeMessage.trim() || null) : null,
       budget_method: form.budgetMethod,
       production_rate_sqft_per_hr: form.productionRateSqftPerHr ? parseNum(form.productionRateSqftPerHr) : null,
-      target_rate_cents: parseCents(form.targetRateCents),
-      target_rate_with_drive_cents: parseCents(form.targetRateWithDriveCents),
+      // The per-hour columns are what the dialog loads and what job costing reads; the older
+      // target_rate_cents pair was written here instead, so a saved target never showed up again.
+      target_rate_cents_per_hr: parseCents(form.targetRateCents),
+      target_rate_with_drive_cents_per_hr: parseCents(form.targetRateWithDriveCents),
       task_color: form.taskColor,
       is_active: form.isActive,
       show_in_snow_dispatch: form.showInSnowDispatch,
