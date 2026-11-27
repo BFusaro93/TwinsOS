@@ -42,7 +42,10 @@ import {
   fetchUpsellServices,
   fetchVisitPhotos,
   fetchVisitRequisitions,
+  setServiceTime,
+  setSubitemCheck,
 } from '@/lib/api';
+import { AddPushButton, isSnowStop, snowPushSource, SnowStopActions } from '@/components/snow-stop';
 import { notesToPlainText } from '@/lib/rich-notes';
 import { C } from '@/lib/colors';
 import { useCrewStops } from '@/lib/hooks/use-crew-stops';
@@ -135,7 +138,7 @@ export default function StopDetailScreen() {
   // single-stop GET route yet, so this screen shares useCrewStops() with
   // home.tsx and looks its stop up by anchorVisitId.
   // No date: the org's today, decided by the server on every load.
-  const { stops, photoRules, timeZone, isLoading, error, refetch } = useCrewStops();
+  const { stops, photoRules, timeZone, crewServiceTiming, subitemChecks, isLoading, error, refetch } = useCrewStops();
   const {
     itemsForVisit,
     enqueueClockIn,
@@ -176,6 +179,10 @@ export default function StopDetailScreen() {
   const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
   const [skipReasonText, setSkipReasonText] = useState('');
   const [timeSummaryOpen, setTimeSummaryOpen] = useState(false);
+  // Sub-service ticks the crew just made, shown at once until the next reload confirms them
+  // ("visitId:subitemId" -> ticked). Online-only, so a failed tap reverts its override.
+  const [checkOverrides, setCheckOverrides] = useState<Record<string, boolean>>({});
+  const [serviceTimeBusy, setServiceTimeBusy] = useState(false);
   const [, forceTick] = useState(0);
 
   const serverStop = useMemo(() => stops.find((s) => s.anchorVisitId === id), [stops, id]);
@@ -556,6 +563,42 @@ export default function StopDetailScreen() {
     setSkipReasonText('');
   };
 
+  const showError = (err: unknown) =>
+    Alert.alert(
+      t("That didn't go through"),
+      err instanceof Error && err.message ? err.message : t('Check your connection and try again.')
+    );
+
+  // "Track time per service": start/finish ONE service inside the running stop. The server
+  // ends whichever other service was running, so reload to show the new windows.
+  const handleServiceTime = async (serviceVisitId: string, action: 'start' | 'finish') => {
+    if (!stop) return;
+    setServiceTimeBusy(true);
+    try {
+      await setServiceTime(stop.anchorVisitId, serviceVisitId, action);
+      await refetch();
+    } catch (err) {
+      showError(err);
+    } finally {
+      setServiceTimeBusy(false);
+    }
+  };
+
+  const handleToggleSubitem = async (visitId: string, subitemId: string, checked: boolean) => {
+    const key = `${visitId}:${subitemId}`;
+    setCheckOverrides((prev) => ({ ...prev, [key]: checked }));
+    try {
+      await setSubitemCheck(visitId, subitemId, checked);
+    } catch (err) {
+      setCheckOverrides((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      showError(err);
+    }
+  };
+
   const confirmDiscard = (queueItemId: string, description: string) => {
     Alert.alert(t('Discard this?'), description, [
       { text: t('Cancel'), style: 'cancel' },
@@ -677,6 +720,18 @@ export default function StopDetailScreen() {
 
       <ServicesSection
         visits={stop.visits}
+        showServiceTimers={
+          crewServiceTiming &&
+          (progress === 'clocked_in' || progress === 'on_break') &&
+          stop.visits.filter((v) => !['completed', 'cancelled', 'skipped'].includes(v.status)).length > 1
+        }
+        serviceTimeBusy={serviceTimeBusy}
+        onServiceTime={(visitId, action) => void handleServiceTime(visitId, action)}
+        isSubitemChecked={(visitId, subitemId) => {
+          const key = `${visitId}:${subitemId}`;
+          return key in checkOverrides ? checkOverrides[key] : subitemChecks.has(key);
+        }}
+        onToggleSubitem={(visitId, subitemId, checked) => void handleToggleSubitem(visitId, subitemId, checked)}
         skipQueueItemsByVisitId={skipQueueItemsByVisitId}
         skipTargetId={skipTargetId}
         skipReasonText={skipReasonText}
@@ -765,6 +820,16 @@ export default function StopDetailScreen() {
               <Text style={styles.secondaryButtonText}>{t('Review crew times')}</Text>
             </Pressable>
           )}
+          {/* Snow: the crew is going back to this stop — the next push is its own visit. */}
+          {snowPushSource(stop) ? (
+            <AddPushButton
+              source={snowPushSource(stop)!}
+              onAdded={() => {
+                void refetch();
+                router.back();
+              }}
+            />
+          ) : null}
         </View>
       ) : null}
       <TimeSummaryModal visible={timeSummaryOpen} visitId={stop.anchorVisitId} visitBreakMinutes={stop.breakMinutes ?? 0} visitClockedInAt={stop.clockedInAt} visitClockedOutAt={stop.clockedOutAt} onClose={() => setTimeSummaryOpen(false)} />
@@ -812,6 +877,7 @@ export default function StopDetailScreen() {
           placeholderTextColor="#94a3b8"
           value={notes}
           onChangeText={setNotes}
+          maxLength={4000}
           multiline
         />
       ) : null}
@@ -854,6 +920,18 @@ export default function StopDetailScreen() {
         <View style={styles.card}>
           <Text style={styles.doneText}>{t('This job was skipped or cancelled.')}</Text>
         </View>
+      ) : null}
+
+      {/* Snow only: call in another crew, or hand the stop off before starting it. */}
+      {progress !== 'completed' && progress !== 'skipped' && isSnowStop(stop) ? (
+        <SnowStopActions
+          stop={stop}
+          onCalledIn={() => void refetch()}
+          onHandedOff={() => {
+            void refetch();
+            router.back();
+          }}
+        />
       ) : null}
 
       <PhotosSection
@@ -1359,6 +1437,11 @@ function ConflictBox({
  */
 function ServicesSection({
   visits,
+  showServiceTimers,
+  serviceTimeBusy,
+  onServiceTime,
+  isSubitemChecked,
+  onToggleSubitem,
   skipQueueItemsByVisitId,
   skipTargetId,
   skipReasonText,
@@ -1370,6 +1453,12 @@ function ServicesSection({
   onDiscardSkip,
 }: {
   visits: CrewStopVisit[];
+  /** "Track time per service" is on and several services are still open on a running stop. */
+  showServiceTimers: boolean;
+  serviceTimeBusy: boolean;
+  onServiceTime: (visitId: string, action: 'start' | 'finish') => void;
+  isSubitemChecked: (visitId: string, subitemId: string) => boolean;
+  onToggleSubitem: (visitId: string, subitemId: string, checked: boolean) => void;
   skipQueueItemsByVisitId: Map<string, ReturnType<typeof useOfflineQueue>['items']>;
   skipTargetId: string | null;
   skipReasonText: string;
@@ -1407,7 +1496,56 @@ function ServicesSection({
                   {v.budgetedHours != null ? (
                     <Text style={styles.serviceRowSubtitle}>{t('Budgeted: {h}h', { h: v.budgetedHours })}</Text>
                   ) : null}
+                  {/* Products to bring and sub-services to do under this service, copied from the
+                      estimate (names and quantities only). Sub-services are tickable; products are
+                      recorded under Materials called for below. */}
+                  {(v.subitems ?? []).map((si) => {
+                    const isTask = si.type === 'subservice';
+                    const done = isTask && isSubitemChecked(v.id, si.id);
+                    return (
+                      <Pressable
+                        key={si.id}
+                        style={styles.subitemRow}
+                        disabled={!isTask || rowTerminal}
+                        hitSlop={6}
+                        onPress={() => onToggleSubitem(v.id, si.id, !done)}
+                        accessibilityRole={isTask ? 'checkbox' : undefined}
+                        accessibilityState={isTask ? { checked: done } : undefined}
+                      >
+                        <Text style={[styles.subitemMark, done && styles.subitemMarkDone]}>
+                          {isTask ? (done ? '☑' : '☐') : '•'}
+                        </Text>
+                        <Text style={[styles.subitemName, done && styles.subitemNameDone]} numberOfLines={2}>
+                          {si.name}
+                          {si.qty !== 1 ? `  × ${si.qty.toLocaleString()}` : ''}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
+                {showServiceTimers && !rowTerminal ? (
+                  v.serviceStartedAt && !v.serviceEndedAt ? (
+                    <Pressable
+                      style={[styles.serviceTimerButton, styles.serviceTimerFinish, serviceTimeBusy && styles.markUsedButtonDisabled]}
+                      disabled={serviceTimeBusy}
+                      onPress={() => onServiceTime(v.id, 'finish')}
+                    >
+                      <Text style={styles.serviceTimerButtonText}>{t('Finish')}</Text>
+                    </Pressable>
+                  ) : v.serviceStartedAt && v.serviceEndedAt ? (
+                    <Pressable disabled={serviceTimeBusy} hitSlop={8} onPress={() => onServiceTime(v.id, 'start')}>
+                      <Text style={styles.linkText}>{t('Resume')}</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      style={[styles.serviceTimerButton, styles.serviceTimerStart, serviceTimeBusy && styles.markUsedButtonDisabled]}
+                      disabled={serviceTimeBusy}
+                      onPress={() => onServiceTime(v.id, 'start')}
+                    >
+                      <Text style={styles.serviceTimerButtonText}>{t('Start')}</Text>
+                    </Pressable>
+                  )
+                ) : null}
                 {activeSkipItem ? (
                   <Text style={styles.serviceStatus}>
                     {activeSkipItem.status === 'syncing' ? 'Skipping…' : t('Skip queued')}
@@ -2066,6 +2204,7 @@ function NotesToOfficeSection({
             placeholderTextColor="#94a3b8"
             value={noteText}
             onChangeText={onNoteTextChange}
+            maxLength={4000}
             multiline
           />
           <Pressable
@@ -2510,6 +2649,21 @@ const styles = StyleSheet.create({
   linkTextDisabled: {
     color: C.textFaint,
   },
+  // Sub-services / products under a service row, and the per-service timer buttons.
+  subitemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  subitemMark: { fontSize: 18, color: C.textMuted, width: 22 },
+  subitemMarkDone: { color: C.green },
+  subitemName: { flex: 1, fontSize: 13, color: C.textMuted },
+  subitemNameDone: { textDecorationLine: 'line-through', color: C.textFaint },
+  serviceTimerButton: { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, marginLeft: 8 },
+  serviceTimerStart: { backgroundColor: C.green },
+  serviceTimerFinish: { backgroundColor: '#f59e0b' },
+  serviceTimerButtonText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
   mutedRowText: {
     color: C.textFaint,
     fontSize: 14,

@@ -1,4 +1,4 @@
-import { AppState, type AppStateStatus } from 'react-native';
+import { Alert, AppState, type AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { File } from 'expo-file-system';
 
@@ -18,6 +18,7 @@ import {
   uploadVisitPhoto,
   useJobProductMaterials,
 } from '@/lib/api';
+import { t } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 
 import {
@@ -114,7 +115,17 @@ async function processItem(item: QueueItem): Promise<boolean> {
         break;
       }
       case 'resume': {
-        await resumeStop(item.visitId, item.id, item.createdAt);
+        const result = (await resumeStop(item.visitId, item.id, item.createdAt)) as
+          | { autoPausedVisitIds?: string[] }
+          | null;
+        // Going back to a paused job while another is running: the server paused the other
+        // one so nobody is on two jobs at once. Say so, or the crew finds it silently stopped.
+        if ((result?.autoPausedVisitIds ?? []).length > 0) {
+          Alert.alert(
+            t('Your other job was paused'),
+            t('Your other job was still running, so it was paused. Open it and tap Resume when you go back.')
+          );
+        }
         break;
       }
       case 'drive_start': {
