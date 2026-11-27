@@ -389,9 +389,9 @@ export function ContractsGuide() {
           </li>
           <li>
             <strong>Many jobs:</strong> open the contract, go to <strong>Jobs Under Contract</strong>{" "}
-            and click <strong>Link matching jobs</strong>. It lists the client&apos;s open recurring,
-            package and one-time jobs that aren&apos;t on a contract and run a service the contract
-            covers (a link lets you show all of the client&apos;s unlinked jobs instead). Nothing is
+            and click <strong>Link matching jobs</strong>. It lists all of the client&apos;s open recurring,
+            package and one-time jobs that aren&apos;t on a contract, with the ones running a service
+            the contract covers marked (a link narrows the list to only those). Nothing is
             ticked for you; tick the ones to link and apply them in one batch.
           </li>
         </ul>

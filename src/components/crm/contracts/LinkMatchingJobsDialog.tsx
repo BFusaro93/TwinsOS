@@ -27,15 +27,16 @@ export function LinkMatchingJobsDialog({ open, onOpenChange, contract }: Props) 
   const { data: jobs, isLoading, error } = useLinkableJobs(contract, open);
   const link = useLinkJobsToContract();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(true);
 
   useEffect(() => {
-    if (open) { setSelected(new Set()); setShowAll(false); }
+    if (open) { setSelected(new Set()); setShowAll(true); }
   }, [open]);
 
   const all = jobs ?? [];
   const matching = all.filter((j) => j.matches);
-  const shown = showAll ? all : matching;
+  // Matches first, so the covered-service ones lead the list.
+  const shown = showAll ? [...matching, ...all.filter((j) => !j.matches)] : matching;
   const chosen = all.filter((j) => selected.has(j.id));
   const uninvoiced = chosen.reduce((n, j) => n + j.completedUninvoiced, 0);
   const unsigned = contract.status === "draft" || contract.status === "sent";
@@ -64,7 +65,7 @@ export function LinkMatchingJobsDialog({ open, onOpenChange, contract }: Props) 
         <DialogHeader>
           <DialogTitle>Link matching jobs</DialogTitle>
           <DialogDescription>
-            This client&apos;s jobs that aren&apos;t on a contract and run a service this contract covers. Tick the ones to link.
+            This client&apos;s open jobs that aren&apos;t on a contract. Jobs running a service this contract covers are marked. Tick the ones to link.
           </DialogDescription>
         </DialogHeader>
 
@@ -97,6 +98,7 @@ export function LinkMatchingJobsDialog({ open, onOpenChange, contract }: Props) 
                     <Checkbox checked={selected.has(j.id)} onCheckedChange={() => toggle(j.id)} className="mt-0.5" />
                     <span className="min-w-0 flex-1 text-sm">
                       <span className="font-medium">Job #{j.jobNumber ?? "—"}</span>
+                      {j.matches && <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">Covered service</span>}
                       <span className="ml-2 text-xs text-muted-foreground">
                         {TYPE_LABEL[j.jobType] ?? j.jobType}{j.schedule ? ` · ${j.schedule}` : ""} · {j.status.replace(/_/g, " ")}
                       </span>
@@ -111,9 +113,9 @@ export function LinkMatchingJobsDialog({ open, onOpenChange, contract }: Props) 
                 ))}
               </div>
             )}
-            {all.length > matching.length && (
+            {matching.length > 0 && all.length > matching.length && (
               <button type="button" className="self-start text-xs text-brand-600 hover:underline dark:text-brand-400" onClick={() => setShowAll((v) => !v)}>
-                {showAll ? "Show only matching jobs" : `Show all ${all.length} unlinked jobs for this client`}
+                {showAll ? "Show only jobs running a covered service" : `Show all ${all.length} unlinked jobs for this client`}
               </button>
             )}
           </div>
