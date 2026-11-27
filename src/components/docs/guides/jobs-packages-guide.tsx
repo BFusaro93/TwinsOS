@@ -636,7 +636,9 @@ export function JobsPackagesGuide() {
           full quantity is billed. Chemical-program products work the same way. The job&apos;s contract
           picker shows each contract&apos;s status; picking a Draft or Sent one warns that completed
           visits are held &mdash; not invoiced &mdash; until the contract is signed (then it covers them)
-          or cancelled (then they bill per visit). Cancelled contracts aren&apos;t offered.
+          or cancelled (then they bill per visit). Cancelled contracts aren&apos;t offered. To put an existing job under a contract (or take it off one), use <strong>Edit Job</strong> &rarr;
+          Contract, or <strong>Link matching jobs</strong> on the contract. Linking bills the job&apos;s
+          services inside the contract price from then on; visits already completed are not changed.
         </p>
         <p>
           <strong>Raising prices.</strong> Rates are copied as they were unless you fill in{" "}

@@ -31,7 +31,7 @@ import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from
 import { useProducts } from "@/lib/hooks/use-products";
 import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
-import { useContracts } from "@/lib/hooks/use-contracts";
+import { ContractPicker } from "@/components/crm/contracts/ContractPicker";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { usePackages } from "@/lib/hooks/use-packages";
@@ -183,7 +183,6 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
   const [selectedClientId, setSelectedClientId] = useState(defaultClientId ?? "");
   const [jobType, setJobType] = useState<JobType>(initialJobType ?? "one_time");
-  const { data: contracts } = useContracts(defaultClientId ?? selectedClientId);
   const [contractId, setContractId] = useState<string | null>(null);
   const [salesRepId, setSalesRepId] = useState<string | null>(null);
   const [saleType, setSaleType] = useState<SaleTypeValue>(null);
@@ -892,34 +891,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               </div>
             )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <Label>Contract</Label>
-                <Select value={contractId ?? "none"} onValueChange={(v) => setContractId(v === "none" ? null : v)}>
-                  <SelectTrigger><SelectValue placeholder="No contract" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No contract</SelectItem>
-                    {/* A cancelled contract covers nothing, so it isn't offered. Each option shows
-                        its status: an unsigned one holds the job's visits until it's signed. */}
-                    {(contracts ?? [])
-                      .filter((c) => c.status !== "cancelled" || c.id === contractId)
-                      .map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.title} <span className="capitalize text-muted-foreground">· {c.status}{!c.isActive ? ", inactive" : ""}</span>
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                {(() => {
-                  const picked = (contracts ?? []).find((c) => c.id === contractId);
-                  if (!picked || (picked.status !== "draft" && picked.status !== "sent")) return null;
-                  return (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                      This contract isn&apos;t signed yet ({picked.status}). Completed visits are held — not invoiced — until it&apos;s
-                      signed (then the contract covers them) or cancelled (then they bill per visit).
-                    </p>
-                  );
-                })()}
-              </div>
+              <ContractPicker clientId={defaultClientId ?? selectedClientId} value={contractId} onChange={setContractId} />
               <div className="flex flex-col gap-1.5">
                 <Label>Sales Rep{rf.req("sales_rep")}</Label>
                 <Select value={salesRepId ?? "none"} onValueChange={(v) => setSalesRepId(v === "none" ? null : v)}>
