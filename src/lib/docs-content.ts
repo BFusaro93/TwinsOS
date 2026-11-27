@@ -832,7 +832,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Minimum charge",
             detail:
-              "On a service, set Minimum Charge ($) and an optional Minimum Message (for example '4-hour minimum'). On an estimate, a per-unit line (qty x rate) is billed at least the minimum for each visit, so 2 hours at $165 with a $660 minimum bills $660, while 5 hours bills $825. The line shows 'Minimum charge applied' whenever the minimum is what is billed. Fixed-price lines, package steps and bundle items are never changed by it, and a quantity of 0 bills nothing. The minimum is copied onto the line when the service is added, so changing it later does not reprice estimates already built. It applies to estimates (and jobs and invoices created from them); services added straight to a job are not raised to the minimum.",
+              "On a service, set Minimum Charge ($) and an optional Minimum Message (for example '4-hour minimum'). On an estimate, a per-unit line (qty x rate) is billed at least the minimum for each visit, so 2 hours at $165 with a $660 minimum bills $660, while 5 hours bills $825. The line shows 'Minimum charge applied' whenever the minimum is what is billed. Fixed-price ($) lines and package steps with their own locked price are not changed by it, and a quantity of 0 bills nothing. Package steps priced from the Rate Matrix do honor it (for example a $60 minimum on a Tick + Mosquito visit), and a bundle service line left at $0 is priced from its Rate Matrix, minimum included, when the bundle is applied. The minimum is copied onto the line when the service is added, so changing it later does not reprice estimates already built. It applies to estimates (and jobs and invoices created from them); services added straight to a job are not raised to the minimum.",
           },
           {
             step: "Bulk Prices (catalog)",
@@ -2611,7 +2611,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Where do I see the content of an email that was sent to a client?",
-        a: "Go to Communication > Email Activity (you need the Email Activity view permission). Click the email's subject to open a read-only view showing the recipients, subject and the message exactly as it was delivered. Very old entries may show only a one-line summary if the sent message wasn't kept. Invoice emails can also be resent from the list.",
+        a: "Go to Communication > Email Activity (you need the Email Activity view permission). Click the email's subject to open a read-only view showing the recipients, subject and the message exactly as it was delivered. The same view opens from the client's timeline: click an email entry there. Very old entries may show only a one-line summary if the sent message wasn't kept. Invoice emails can also be resent from the list.",
       },
       {
         q: "What do Delivered, Bounced, Failed and Pending mean on Email Activity?",
@@ -2640,6 +2640,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Can I filter the Invoices list by client tag?",
         a: "Yes. Once any of your clients has a tag, a Tags filter appears with the other filters above the Invoices list. Pick one or more tags to see only invoices whose client has at least one of them.",
+      },
+      {
+        q: "Why is my To Charge tab empty?",
+        a: "To Charge lists open invoices for clients who have a card saved on file with AutoPay on; ACH To Charge does the same for a saved bank account. Choosing a payment type on the client's billing screen does not count, and draft invoices appear only once they have been emailed or printed. When the tab is empty the page says why and shows how many clients have no saved method.",
+      },
+      {
+        q: "Why did my emailed invoice look different from the preview?",
+        a: "An invoice not pinned to a template uses the one flagged Default. If none is flagged, the first template by name is used everywhere (the send dialog, the email PDF, print and the client portal) so what you preview is what the customer gets. Flag one as Default to choose which.",
       },
       {
         q: "Does marking an invoice Sent or Printed lock it?",
@@ -2708,6 +2716,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Can a crew go back and forth between two jobs without double-counting time?",
         a: "Yes. Pause the first stop, start the second, and when you go back tap Resume on the first. Starting a new job stops any other running stop automatically, but a stop that was paused is left alone because the crew is coming back to it. Tapping Resume on it pauses whatever else is running at that moment and adds a comment on that visit. A paused stop's pause time already stays out of its hours.",
+      },
+      {
+        q: "Why does a stop say Out of sync?",
+        a: "On a shared stop with several crews, an amber Out of sync · Complete N badge appears when one crew has completed its visit but N other crew visits are still open. Click the badge to complete the remaining visits the same way Mark Completed does (they invoice as usual); a message confirms how many were completed. The Out of sync (N) filter in the toolbar shows only those stops and appears only when there are some.",
+      },
+      {
+        q: "What shows in the Notes to Crew column on the Dispatch Board?",
+        a: "One combined note: the visit's note to crew, the job's crew note and the property's note, with duplicates removed. It is the same text on the board icon, the print sheet and the export, and it matches what the crew sees in the Crew App. The labels are Visit Notes to Crew and Job notes to crew; on a job's Visits list use + visit note to crew for the visit note and + comment to add to the append-only comment log. Crew comments are saved as Crew - followed by the crew's name. A skipped or cancelled visit's reason shows as an orange bar under it on the board and as a Skip reason or Cancel reason row on the job's Visits tab.",
+      },
+      {
+        q: "How do I save a typed route order on the Dispatch Board?",
+        a: "Type the route numbers in the Route column and they apply right away; click Save Order to save them. There is no separate Apply step. Actions is the first button in the toolbar; it turns green as Actions (n) when rows are selected.",
       },
       {
         q: "Can I sort the Dispatch Board or the Waiting List by a column?",
@@ -3167,7 +3187,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which merge tags can an automation's email or text use?",
-        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags. In a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it; [servicename], [servicedate] and [chemicalnotice] (the compact Notice of Treatment) read that day's visits. Otherwise [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. For a day-before reminder, start the sequence with Visit is coming up (1 day before) and a text such as \"We'll be out on [visitdate] for [visitservices].\" A tag with no value is left blank.",
+        a: "The client tags (including [clientportallink], the link to the client portal login, and [cardupdatelink] / [cardupdatelinkurl] for a no-login card update), plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags. In a sequence started by a visit trigger, [visitdate] is that service day and [visitservices] every service the client has on it; [servicename], [servicedate] and [chemicalnotice] (the compact Notice of Treatment) read that day's visits. Otherwise [visitdate] and [visitservices] are blank and [servicename], [servicedate] and [chemicalnotice] read the client's last completed visit. [nextservicename] and [nextservicedate] are their next scheduled visit. For a day-before reminder, start the sequence with Visit is coming up (1 day before) and a text such as \"We'll be out on [visitdate] for [visitservices].\" A tag with no value is left blank.",
       },
       {
         q: "Why didn't a form submission create a ticket?",
@@ -3243,7 +3263,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Can I email a client a link to update their card without signing in to the portal?",
-        a: "Yes. Put [cardupdatelink] (a button) or [cardupdatelinkurl] (the plain link) in any client email, document, automation email or text — for example a Credit Card Update document or a Credit card about to expire / charge failed automation. Each send creates a fresh private link, good for 14 days and one use, that opens a page with your logo where the client enters a new card through Stripe — no login. The page includes an AutoPay checkbox (on by default, and hidden if Allow Autopay is off in Settings > Client Portal); ticking it turns AutoPay on for the new card, the same as in the portal. Saving replaces the card on file, adds a note to the client's timeline, and fires the Credit card updated automation trigger. A used or expired link shows a friendly message and the client can ask you for another.",
+        a: "Yes. Put [cardupdatelink] (a button) or [cardupdatelinkurl] (the plain link) in any client email (to send the client to the portal login instead, use [clientportallink]), document, automation email or text — for example a Credit Card Update document or a Credit card about to expire / charge failed automation. Each send creates a fresh private link, good for 14 days and one use, that opens a page with your logo where the client enters a new card through Stripe — no login. The page includes an AutoPay checkbox (on by default, and hidden if Allow Autopay is off in Settings > Client Portal); ticking it turns AutoPay on for the new card, the same as in the portal. Saving replaces the card on file, adds a note to the client's timeline, and fires the Credit card updated automation trigger. A used or expired link shows a friendly message and the client can ask you for another.",
       },
       {
         q: "Can I limit how much a client can pay online in one payment?",
@@ -3374,6 +3394,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. In an automation's triggers, choose Waiting list window is ending (set how many days before the window closes; 3 if left blank) or Waiting list window passed (fires after the window closed, for windows that closed in the last 7 days). They are checked once a day in the morning Eastern time and only for jobs that are still waiting: not cancelled and with no scheduled visit. Each runs once per job, and the run stops before its next step once the job is scheduled, cancelled or deleted. No default automation is created for either.",
       },
       {
+        q: "I typed a comment or a client reply and left the page. Is it lost?",
+        a: "No. Unsent text in a record's comment box and in a ticket's client-reply box is kept per record, on that browser, with a Draft saved hint. It comes back when you reopen the record and clears once you send it.",
+      },
+      {
         q: "Who shows up when I type @ in a ticket comment?",
         a: "Typing @ lists the people you can mention, best name matches first, in a scrollable list. Deactivated users and the shared crew logins are left out because they can't be notified.",
       },
@@ -3415,7 +3439,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I resize an image in a document or email?",
-        a: "In a text box, hover the image and drag a corner handle; the aspect ratio is kept. An Image block in the document editor has a Size slider (10 to 100 percent). The size carries into the preview, the sent email and the PDF, and the PDF shows JPG, PNG, WEBP, GIF and AVIF images.",
+        a: "In a text box, hover the image and drag a corner handle; the aspect ratio is kept. An Image block in the document editor has a Size slider (10 to 100 percent). The size carries into the preview, the sent email and the PDF, and the PDF shows JPG, PNG, WEBP, GIF and AVIF images. Select an image to Align left, center or right, and use the Image library to reuse a picture you uploaded before or Upload new. Images are sent at a fixed pixel width, so the size matches the editor on desktop and in the email on a phone; the document preview is white in dark mode.",
       },
       {
         q: "Why did my document PDF lose its blank lines or images?",
@@ -3443,7 +3467,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Can the Rate Matrix or chemical area use a custom number field I created?",
-        a: "Yes. Create a Number field under Settings > Custom Client Fields and it appears automatically in the Rate Matrix lookup list and in a service's Area measurement for chemical quantities. The value is read from the property first and then from the client, so enter it once on the client and override it on a property when it differs. Text, select and date fields can't be used.",
+        a: "Yes. Create a Number field under Settings > Custom Client Fields and it appears automatically in the Rate Matrix lookup list and in a service's Area measurement for chemical quantities. The value is read from the property first and then from the client, so enter it once on the client and override it on a property when it differs. Text, select and date fields can't be used. A matrix can also look up the Qty typed on the estimate line (choose Line quantity as the lookup field).",
       },
       {
         q: "How do I quote a spot treatment or part of a property so chemical quantities use that area?",
@@ -3568,6 +3592,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Can I link a service bundle to an estimate document?",
         a: "Yes. Open the bundle (Settings > Estimates > Service Bundles) and pick an Estimate document on the Details tab. Estimates created from, or given, that bundle remember the document, and Send pre-selects it instead of the default. The client-view toggles for the bundle are on the Display Settings tab.",
+      },
+      {
+        q: "Can a service bundle contain packages?",
+        a: "Yes. In the bundle editor (Settings > Estimates > Service Bundles) Add Item lists Packages above Services. Applying the bundle to an estimate adds each package exactly like Add Package does: a section header plus one priced line per step, using the Rate Matrix and the client's measurements. A package already on the estimate, or one that is inactive or has no services, is skipped and a message says so. Job bundles skip package lines, because a package is the job there.",
+      },
+      {
+        q: "How do I discount every visit of a package at once?",
+        a: "On the estimate, use Discount all visits on the package's header. Choose % Percent or $ Per visit and enter the amount, or pick a saved discount, then Apply. Clear all removes the discounts from every visit again. Visits that are already on a job are skipped and a message says how many.",
+      },
+      {
+        q: "Does a package step honor a service's minimum charge?",
+        a: "Yes, when the step is priced from the service's Rate Matrix. If the matrix price is below the service's Minimum Charge, the step bills the minimum (for example $60 on a Tick + Mosquito visit). A step with its own locked price ignores the minimum.",
+      },
+      {
+        q: "Can the Rate Matrix price off the Qty I type on the estimate line?",
+        a: "Yes. In the service's Rate Matrix, pick Line quantity (typed on the estimate) as the lookup field instead of a property number. The bands are then matched against the Qty on each estimate line, and editing the Qty re-prices the line from the band that holds it, including the every-X-over-Y overflow rate. A quantity equal to a band's To value belongs to that band. Matrices keyed on a property or client number are still looked up once when the service is added.",
       },
       {
         q: "What is the difference between × and $ in the Calc Type on an estimate line?",
@@ -3747,7 +3787,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Where do I enter a property's zone measurements, like turf or mulch bed square footage?",
-        a: "Use More → Aerial Measurement on the client: trace each turf, mulch bed, parking lot or hardscape area on the satellite map (Trace Area), cut out things like the house with Subtract Area, and measure fences or edging with Measure Distance. Totals are saved on the property, and for the client's own address they are also copied to the client's takeoff fields (Turf, Mulch Bed, Parking Lot, Gross). You can also type the client-level totals on the Edit Client dialog's Custom Fields tab. Either way they feed the estimating engine's production-rate calculations. For a client with several properties, type each property's measurements in the Add/Edit Property dialog (Measurements), or trace them with Aerial Measurement; an estimate for a property defaults production-rate quantities from that property, and a blank value stays blank instead of using another address's numbers.",
+        a: "Use More → Aerial Measurement on the client: trace each turf, mulch bed, parking lot or hardscape area on the satellite map (Trace Area), cut out things like the house with Subtract Area, and measure fences or edging with Measure Distance. Totals are saved on the property, and for the client's own address they are also copied to the client's takeoff fields (Turf, Mulch Bed, Parking Lot, Gross). Each shape has one Counts toward picker: choose a built-in takeoff (Turf, Mulch Bed, Parking Lot, Hardscape, Gross, Perimeter or Edging) or a custom number field, and whether it Adds or Subtracts; Parking Lot and Hardscape are separate. You can also type the client-level totals on the Edit Client dialog's Custom Fields tab. Either way they feed the estimating engine's production-rate calculations. For a client with several properties, type each property's measurements in the Add/Edit Property dialog (Measurements), or trace them with Aerial Measurement; an estimate for a property defaults production-rate quantities from that property, and a blank value stays blank instead of using another address's numbers.",
       },
       {
         q: "Does the 'PO Number' field on an invoice link to a purchase order in the PO module?",
@@ -4001,6 +4041,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "What happens to an admin's API keys when I change them to a different role?",
         a: "Landscapt asks. The confirmation lists the API keys they created and the apps they connected, with revoke checked by default. Anything you keep keeps working until you revoke it under Settings → Integrations.",
+      },
+      {
+        q: "How do I track expiring licenses, DOT physicals and hoisting licenses?",
+        a: "Edit the employee and fill in the License Expiration, DOT Physical Expiration and Hoisting License Expiration dates. The Employees page then shows an Expiring credentials panel listing anyone whose driver license, DOT physical or hoisting license has expired or expires within 60 days; click a row to open that employee. The Employee Credential Expirations report (Report Center, Schedule Lists) lists the same people, soonest first, with Expiring Within (days) (default 60) and Active Only filters. The dates only show to Admins and roles with View License Info, Edit Employee or Manage Employees; for anyone else the report is empty.",
+      },
+      {
+        q: "Can I store an employee's documents, like a license scan or I-9?",
+        a: "Yes. Open the employee and use the Files tab (it shows for Admins and roles with View Employee Information, Edit Employee or Manage Employees). Upload a file and tag it with a document type: Driver's License, DOT Medical Card, Hoisting License, I-9 or Other. Files can be deleted from the same tab.",
       },
       {
         q: "Why are phone numbers and addresses blank on the Employees page for some of my team?",
@@ -4283,8 +4331,12 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. In Report Center, the Visits Report has a Job Type filter (Recurring, One Time, Waiting List, Package, Snow, Project) and a Services filter where you can tick one or several services; a visit is kept if it includes any of them. Job Type also shows as a column.",
       },
       {
+        q: "Can I filter a report by several crews, reps or sources?",
+        a: "Yes. Most filters on the analysis reports (sales rep, crew, status, job type, services, payment method, client source, activity type) are multi-selects: tick several values and a row is kept if it matches any of them; leave it empty for all. Change Activity by User, Audit Log and Security Audit have an Employee (Changed By) filter, and New Clients, Terminations and the Client Phone List filter by client source (New Clients also by account type).",
+      },
+      {
         q: "Why doesn't Backlog Services show visits for a job I cancelled?",
-        a: "Backlog Services lists visits still in Scheduled or Dispatched status on or before the cutoff, but leaves out visits that belong to a job that is cancelled, completed, skipped or on hold. Cancelling a job only clears its future visits, so an older leftover visit would otherwise look like work you still owe.",
+        a: "Backlog Services (which now has a date picker plus crew, service, job type and sales rep filters) lists visits still in Scheduled or Dispatched status on or before the cutoff, but leaves out visits that belong to a job that is cancelled, completed, skipped or on hold. Cancelling a job only clears its future visits, so an older leftover visit would otherwise look like work you still owe.",
       },
       {
         q: "A scheduled report says 'creator deactivated'. How do I start it again?",
@@ -4341,7 +4393,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     items: [
       {
         q: "How do I create a crew (without a login) on the Team → Crews page?",
-        a: "Go to Landscapt > Team > Crews and click Add Team (needs the Teams scheduling permission). On the Team Details tab enter a Description (the crew's name), pick a Color, and optionally a Team Code, Linked Login and starting address, then click Create & Continue. The dialog stays open on the Team Assignments tab, where you click Add Assignment to put employees on the crew's default roster. A crew with no Linked Login still works on the Dispatch Board and Crew Board; it just has no Crew App schedule of its own until you link a login (or create a crew account under Settings > Users, which creates the crew and the login together).",
+        a: "Go to Landscapt > Team > Crews and click Add Team (needs the Teams scheduling permission). On the Team Details tab enter a Description (the crew's name), pick a Color, and optionally a Team Code, Linked Login and starting address, then click Create & Continue. The dialog stays open on the Team Assignments tab, where you click Add Assignment to put employees on the crew's default roster. A crew with no Linked Login still works on the Dispatch Board and Crew Board; it just has no Crew App schedule of its own until you link a login (or create a crew account under Settings > Users, which creates the crew and the login together). The Crews list has a Color column showing the swatch and hex, or Automatic when no color is set. On a crew's Team Assignments tab, tick Leader on a member to make them the crew leader; the leader is the applicator of record on chemical applications and is labeled Crew Leader on the Dispatch Board.",
       },
       {
         q: "How do I remove a crew from the Dispatch Board / make a crew inactive?",

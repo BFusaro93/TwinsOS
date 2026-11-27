@@ -289,6 +289,15 @@ export function JobsPackagesGuide() {
           of falling back to the job&apos;s crew. The date defaults to your organization&apos;s
           today.
         </p>
+        <p>
+          <strong>Comments and notes on a visit.</strong> Each visit in the Visits list has a{" "}
+          <strong>+ comment</strong> link, which adds to an append-only comment log, and a{" "}
+          <strong>+ visit note to crew</strong> link for the single editable note the crew sees. Comments
+          the crew writes in the app are saved as <strong>Crew - &lt;crew name&gt;</strong> (for example
+          &quot;Crew - Maintenance 1&quot;) and keep that name even if the visit is later reassigned. A
+          skipped or cancelled visit also shows a <strong>Skip reason</strong> or{" "}
+          <strong>Cancel reason</strong> row.
+        </p>
       </Section>
 
       <Section id="job-costing-tab" title="The Job Costing tab">

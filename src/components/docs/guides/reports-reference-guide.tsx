@@ -40,8 +40,8 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Backlog Services",
         description: "Shows scheduled visits that have not been completed as of a cutoff date.",
-        filters: "Scheduled On or Before",
-        notes: ["Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started.", "Leftover visits of a job that is cancelled, completed, skipped or on hold are left out, since nobody owes that work."],
+        filters: "Scheduled On or Before (date picker), Crew, Services, Job Type, Sales Rep",
+        notes: ["Crew, Services, Job Type and Sales Rep each take several values at once.", "Visits still in Scheduled or Dispatched status on or before the cutoff — work waiting to be started.", "Leftover visits of a job that is cancelled, completed, skipped or on hold are left out, since nobody owes that work."],
       },
       {
         name: "Client Count by Service",
@@ -181,7 +181,7 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Client Phone List",
         description: "Shows clients and their phone numbers, filterable by sales rep.",
-        filters: "Client Since, Sales Rep",
+        filters: "Client Since, Sales Rep, Source (Sales Rep and Source accept several values)",
       },
       {
         name: "Client Method of Payment",
@@ -196,12 +196,13 @@ const SECTIONS: ReportSection[] = [
       {
         name: "New Clients Report",
         description: "Shows new clients in any defined time frame.",
-        filters: "Client Since, Sales Rep",
+        filters: "Client Since, Sales Rep, Source, Account Type",
+        notes: ["Sales Rep, Source and Account Type are multi-select — pick several to keep clients that match any of them."],
       },
       {
         name: "Terminations Report",
         description: "Shows a list of clients who cancelled service, the date, and reason stated.",
-        filters: "Cancelled Between, Reason Contains",
+        filters: "Cancelled Between, Reason Contains, Sales Rep, Source (Sales Rep and Source accept several values)",
       },
       {
         name: "Cancellation Count Report",
@@ -362,6 +363,12 @@ const SECTIONS: ReportSection[] = [
         name: "Employee Directory",
         description: "Shows employee contact info, employment status, and emergency contacts.",
         filters: "Active Only",
+      },
+      {
+        name: "Employee Credential Expirations",
+        description: "Employees whose driver license, DOT physical or hoisting license has expired or expires soon, soonest first.",
+        filters: "Expiring Within (days) — default 60, Active Only",
+        notes: ["Expired credentials are included. The dates only show for people with View License Info (or Edit/Manage Employees); everyone else sees an empty report."],
       },
       {
         name: "Contractor Phone List",
@@ -572,7 +579,7 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Audit Log",
         description: "Every recorded change across Equipt and Landscapt — who changed what, when, and from what value to what.",
-        filters: "Date, Category, Record Type, Changed By, Action",
+        filters: "Date, Category, Record Type, Changed By (several employees), Action (several actions)",
         notes: [
           "Entries are written by database triggers, not the app, so they cover every path a change can arrive through — the UI, the API, an automation, or an import.",
           "The Record column names what was changed, for example an estimate or invoice number, a PO number, a client name or a service name. It is blank for record types that have no friendly name.",
@@ -582,7 +589,7 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Security & Access Audit",
         description: "Permission, user, credential, and approval-chain changes only — the review you want before an audit or after someone leaves.",
-        filters: "Date (defaults to last 90 days), Changed By",
+        filters: "Date (defaults to last 90 days), Changed By (several employees)",
         notes: [
           "Covers user profiles and roles, permission sets, API keys, third-party integrations, OAuth tokens, and approval flows.",
           "Secret values (API keys, hashes, tokens) are never recorded — an entry says the credential changed, never what it changed to.",
@@ -592,7 +599,7 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Change Activity by User",
         description: "How many changes each person made, broken down by record type — useful for spotting an unexpected burst of edits.",
-        filters: "Date, Category",
+        filters: "Date, Employee (several), Category, Action (several)",
       },
     ],
   },

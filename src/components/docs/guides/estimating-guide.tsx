@@ -337,9 +337,18 @@ export function EstimatingGuide() {
           going forward, since its hours came from the matrix rather than a formula (a per-unit band
           on an area line is the exception and stays on the production rate). No value anywhere, or no
           matrix rows configured on the service, and the line falls through to the ordinary
-          manual/production-rate behavior with nothing different. Like
-          everything else here, the match is looked up once at add-time, not re-resolved later if
-          the property&rsquo;s field value or the matrix rows change.
+          manual/production-rate behavior with nothing different. A matrix keyed off a
+          property or client field is looked up once at add-time, not re-resolved later if that
+          field&rsquo;s value or the matrix rows change.
+        </p>
+        <p>
+          <strong>Keyed off the line quantity.</strong> A service&rsquo;s Rate Matrix can instead use{" "}
+          <strong>Line quantity (typed on the estimate)</strong> as its lookup. The bands are then
+          matched against the Qty on the estimate line itself, and editing that Qty re-prices the line
+          from the band the new number falls in, including the overflow rule past the last band. A
+          value equal to a band&rsquo;s <strong>To</strong> belongs to that band (0&ndash;7,000 then
+          7,001&ndash;&hellip;). The service&rsquo;s <strong>Description on Estimate</strong> keeps its
+          formatting (bold, lists and so on) when the line is added.
         </p>
         <p>
           Past the last band, the service&rsquo;s <strong>overflow rule</strong> (&ldquo;every Y over X
@@ -450,6 +459,17 @@ export function EstimatingGuide() {
           doesn&rsquo;t change estimates already built from the bundle.
           When you apply the bundle to an estimate, its sub-items come with it, including when you
           pick it from <strong>Apply bundle&hellip;</strong> on an estimate that already exists.
+        </p>
+        <p>
+          <strong>Packages in a bundle.</strong> A bundle can hold whole packages. In the bundle
+          editor, <strong>Add Item</strong> lists your <strong>Packages above your Services</strong>.
+          A package row has no quantity or rate of its own; when the bundle is applied it is added
+          exactly like <strong>Add Package</strong> &mdash; a section header plus one priced line per
+          step, using the Rate Matrix and the client&rsquo;s measurements. A package that is already
+          on the estimate, inactive or empty is skipped and a message tells you which. Bundles used
+          to build a <em>job</em> skip their package rows. A service line left at <strong>$0</strong>{" "}
+          in a bundle is priced from its Rate Matrix and the client&rsquo;s measurements when the
+          bundle is applied.
         </p>
         <p>
           The bundle editor has two tabs. <strong>Details</strong> holds Show when creating, the{" "}
@@ -589,12 +609,22 @@ export function EstimatingGuide() {
           Turf Sq. Ft.) and the estimate&rsquo;s property has a value for it, the matching band prices
           that visit instead of the package&rsquo;s flat price; the visit&apos;s quantity is the
           client&apos;s measurement, and if there is none the package&apos;s own price is kept. A package
-          step&apos;s price is per visit and is never multiplied by the client&apos;s square footage. To copy the first visit&rsquo;s Qty,
+          step&apos;s price is per visit and is never multiplied by the client&apos;s square footage. A step
+          priced from the Rate Matrix also honors its service&rsquo;s <strong>Minimum Charge</strong>
+          (a $60 minimum on a Tick + Mosquito visit bills at least $60); a step with its own locked
+          price ignores the minimum. To copy the first visit&rsquo;s Qty,
           Rate, B.Hr, Cost or Adj Rate down to every other visit, use the <strong>copy</strong> buttons
           on the package header. Deleting the package header asks for confirmation, then deletes all of
           its visits, including any hidden by the status tab. A line you add after a package is its own
           line, priced and accepted separately, not part of the package. Adding the same package a second
           time is refused.
+        </p>
+        <p>
+          <strong>Discount all visits.</strong> The package header has a <strong>Discount all
+          visits</strong> button. Choose <strong>% Percent</strong> or <strong>$ Per visit</strong>,
+          enter the amount and apply it, or pick one of your saved discounts. A percent comes off each
+          visit&rsquo;s own total. <strong>Clear all</strong> removes the discounts again. Visits
+          already converted to a job are skipped, with a note saying how many.
         </p>
         <p>
           Each package ends with a <strong>Package subtotal</strong> row for its visits. To skip a

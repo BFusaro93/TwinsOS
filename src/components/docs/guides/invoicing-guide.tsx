@@ -610,6 +610,13 @@ export function InvoicingGuide() {
           credit (negative when they are in credit), and the payment stub&apos;s Amount Due never
           goes below $0.00.
         </p>
+        <p>
+          <strong>Which template is used when an invoice isn&apos;t pinned to one.</strong> The
+          template flagged <em>Default</em> is used. If none is flagged, the first template by name
+          is used instead &mdash; the same one the Send dialog pre-selects &mdash; for the emailed
+          PDF, the printed PDF and the customer portal alike, so what you see selected is what the
+          customer gets. The built-in layout is only used when you have no templates at all.
+        </p>
       </Section>
 
       <Section id="invoice-photos" title="Photos on an invoice">
@@ -717,6 +724,14 @@ export function InvoicingGuide() {
             <strong>Payment type</strong> shows Credit Card or ACH when the client has an autopay
             card or bank account saved (that&apos;s what puts the invoice in the To Charge queues),
             otherwise the invoice&apos;s own preferred method, then the client&apos;s default.
+          </li>
+          <li>
+            <strong>An empty To Charge tab.</strong> To Charge and ACH To Charge list open invoices for
+            clients who have a card (or bank account) saved on file with autopay on. Picking a payment
+            type on a client&apos;s billing screen doesn&apos;t count &mdash; the card or bank account has
+            to be saved, from the client&apos;s Details tab or by the client on their portal. When the
+            tab is empty it says so and shows how many open invoices belong to clients with nothing
+            saved. Draft invoices appear once they&apos;ve been emailed or printed.
           </li>
           <li>
             <strong>Filters.</strong> Click a filter label above the table. <strong>Date</strong>{" "}

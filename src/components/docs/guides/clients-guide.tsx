@@ -636,6 +636,12 @@ export function ClientsGuide() {
               </tr>
             ))}
           </tbody>
+        <p>
+          <strong>Reading a sent email.</strong> Click an email entry on the timeline (or its subject
+          on Communication &gt; Email Activity) to open it read-only &mdash; recipients, subject and the
+          message exactly as delivered. Emails logged before copies were kept show only a one-line
+          summary.
+        </p>
         </Table>
         <Callout>
           Before chasing down a client dispute or a &quot;did we ever quote this&quot; question in
