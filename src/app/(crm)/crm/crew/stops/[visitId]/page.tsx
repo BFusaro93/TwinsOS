@@ -8,8 +8,9 @@ import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
   Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles, FlaskConical,
-  ClipboardList, Package,
+  ClipboardList, Package, Users,
 } from "lucide-react";
+import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
 import {
   useStopDetail,
   useStopPartnerCrews,
@@ -30,6 +31,7 @@ import {
   useSkipVisit,
   useAddCrewPush,
   useHelperCrews,
+  useMyCrewInfo,
   useRequestHelp,
   useHandOffStop,
   useAcknowledgeNotes,
@@ -294,6 +296,10 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const requestHelp   = useRequestHelp();
   const handOff       = useHandOffStop();
   const [helpOpen, setHelpOpen] = useState(false);
+  // Who is working today — the same dialog as the schedule's Edit Crew, tied to this stop so
+  // its job punch stays in step with each person's shift.
+  const { data: crewInfo } = useMyCrewInfo();
+  const [editCrewOpen, setEditCrewOpen] = useState(false);
   const [helpMode, setHelpMode] = useState<"help" | "handoff">("help");
   const { data: helperCrews = [], isLoading: helperCrewsLoading } = useHelperCrews(helpOpen);
   const acknowledge   = useAcknowledgeNotes();
@@ -683,6 +689,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               <p className="mt-1 inline-flex items-center gap-2 rounded-md bg-slate-900 dark:bg-neutral-100 px-2.5 py-1 text-base font-bold text-white dark:text-neutral-900">
                 Gate code <span className="font-mono tracking-wider">{stop.gateCode}</span>
               </p>
+            )}
+            {crewInfo && (
+              <Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={() => setEditCrewOpen(true)}>
+                <Users className="h-3.5 w-3.5" />
+                {t("Edit Crew")}
+              </Button>
             )}
           </div>
           {stop.clientPhone && (
@@ -1682,6 +1694,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         </DialogContent>
       </Dialog>
       {confirmDialog}
+      {crewInfo && (
+        <EditCrewDialog
+          open={editCrewOpen}
+          onOpenChange={setEditCrewOpen}
+          crewInfo={crewInfo}
+          visitId={stop.anchorVisitId}
+        />
+      )}
     </div>
   );
 }
