@@ -2481,7 +2481,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               </div>
               <div className="flex flex-col gap-1">
                 <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Internal Job Notes</Label>
-                <p className="text-[11px] text-muted-foreground">Office only. Internal notes for an individual service are on the Services tab.</p>
+                <p className="text-[11px] text-muted-foreground">For this job. Office only, never shown to the crew. Notes for an individual service are on the Services tab.</p>
                 <RichTextEditor
                   value={(edits.notes as string | undefined) ?? job.notes ?? ""}
                   onChange={(html) => patch("notes", html)}
