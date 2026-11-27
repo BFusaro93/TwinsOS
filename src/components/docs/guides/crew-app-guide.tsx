@@ -178,6 +178,21 @@ export function CrewAppGuide() {
           the phone&apos;s maps app.
         </p>
         <p>
+          <strong>Comments on the card.</strong> The amber box on a card shows the newest{" "}
+          <strong>job comment</strong> left on that stop, with &quot;+2 more comments&quot; when there are
+          several. A card with no comments has no amber box. The job&apos;s own notes are often long, so they
+          aren&apos;t shown on the list; you read them inside the stop, in the <strong>Job Notes</strong> box,
+          and tap <strong>I&apos;ve read the notes</strong> before you can start.
+        </p>
+        <p>
+          <strong>Finished stops are hidden.</strong> Stops that are done or skipped drop off the list so
+          you can&apos;t tap one by mistake and the remaining work is what shows. A{" "}
+          <strong>Show completed (3)</strong> button at the bottom of the list brings them back (it turns
+          into <strong>Hide completed</strong>), and you need it to reach a finished stop to review crew
+          times or add a late note. The progress bar still counts them. When nothing is left the list
+          reads <em>All done for today</em>.
+        </p>
+        <p>
           <strong>Equipment today</strong>, above the stops, lists the trucks, trailers and equipment
           the office put on the crew for the day on the Crew Board (or the crew&apos;s default
           equipment when nothing was changed for that day), so the crew knows what to take from the
@@ -368,7 +383,9 @@ export function CrewAppGuide() {
         </ul>
         <p>
           <strong>Late, out, or leaving early: Edit Crew.</strong> Tap <strong>Edit Crew</strong> on My
-          Schedule for the roster with each person&apos;s in/out time. For each person:
+          Schedule, or on any stop (under the address), for the roster with each person&apos;s in/out
+          time. Opened from a stop, it keeps that stop&apos;s job clock in step with each person&apos;s
+          shift. For each person:
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
@@ -721,6 +738,15 @@ export function CrewAppGuide() {
           If your connection drops and the app resends the note, it is saved once, not twice. Each note
           shows who wrote it and when: &quot;You&quot; for the crew&apos;s own notes, &quot;Office&quot; and
           the person&apos;s name for remarks from the office.
+        </p>
+        <p>
+          <strong>A note after the job is done.</strong> The completion note you type at Stop Job is
+          locked in once the job is complete, because it goes on the invoice and into the client&apos;s
+          chemical application notice. If you think of something afterwards, open the finished stop
+          (tap <strong>Show completed</strong> on My Schedule) and tap{" "}
+          <strong>Add a note for the office</strong> in the green Job Complete box. It jumps to Notes
+          to Office, so the office sees it on the dispatch board. It doesn&apos;t change the completion
+          note or anything already sent.
         </p>
         <p>
           <strong>Notes from the office.</strong> The job&apos;s crew note appears under{" "}
