@@ -242,6 +242,12 @@ function imageWidthPct(settings: RenderableBlock["settings"]): number {
   return Number.isFinite(w) && w >= 10 && w <= 100 ? Math.round(w) : 100;
 }
 
+/** Image width in px: the stored % of the 600px email width, fixed so it renders the
+ *  same in the editor, desktop and mobile (max-width:100% still shrinks it on narrow screens). */
+function imageWidthPx(settings: RenderableBlock["settings"]): number {
+  return imageWidthPct(settings) * 6;
+}
+
 function imageMargin(settings: RenderableBlock["settings"]): string {
   const a = settings?.align;
   if (a === "left") return "0 auto 0 0";
@@ -442,7 +448,7 @@ function renderBlock(
       if (options?.sanitize && !(content && isSafeImageSrc(content.replace(/&amp;/g, "&").trim()))) return "";
       return block.content
         ? wrap(
-            `<img src="${escapeHtml(content)}" alt="" style="width:${imageWidthPct(block.settings)}%;max-width:100%;height:auto;display:block;margin:${imageMargin(block.settings)};" />`,
+            `<img src="${escapeHtml(content)}" alt="" width="${imageWidthPx(block.settings)}" style="width:${imageWidthPx(block.settings)}px;max-width:100%;height:auto;display:block;margin:${imageMargin(block.settings)};" />`,
             "margin-bottom:16px;"
           )
         : wrap(
