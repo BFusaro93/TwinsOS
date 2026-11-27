@@ -96,6 +96,11 @@ function StopCard({ stop, partners, onClick, today }: { stop: Stop; partners: st
               <span className="truncate">{stop.address}</span>
             </p>
           )}
+          {/* A job with no address can't be navigated to and won't group with the client's other
+              stops; say so rather than leaving the line blank. */}
+          {!stop.address && (
+            <p className="mt-0.5 text-sm font-medium text-amber-700 dark:text-amber-400">{t("No address on file")}</p>
+          )}
           {stop.gateCode && (
             <p className="mt-0.5 text-xs font-semibold text-slate-700 dark:text-neutral-300">Gate code: <span className="font-mono">{stop.gateCode}</span></p>
           )}

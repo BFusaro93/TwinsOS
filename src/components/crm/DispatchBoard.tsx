@@ -1511,7 +1511,7 @@ function JobDetailSheet({
                 {/* Status */}
                 <div>
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1">
-                    Status
+                    Visit Status
                   </label>
                   <Select value={status} onValueChange={(v) => setStatus(v as VisitStatus)}>
                     <SelectTrigger className="h-7 text-xs">
