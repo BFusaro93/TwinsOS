@@ -17,6 +17,11 @@ function ConfirmContent() {
   useEffect(() => {
     const tokenHash = searchParams.get("token_hash");
     const type = searchParams.get("type") as EmailOtpType | null;
+    // The crew app's Dashboards / Field cards sign in with this page and name where to land. Only
+    // those areas are followed — anything else (another site, "//host", a deeper path) is ignored,
+    // so a crafted link can't be used as an open redirect.
+    const nextParam = searchParams.get("next");
+    const safeNext = nextParam && /^\/(dashboards|photos)(\/[A-Za-z0-9_-]+)*$/.test(nextParam) ? nextParam : null;
 
     if (!tokenHash || !type) {
       setStatus("error");
@@ -51,7 +56,7 @@ function ConfirmContent() {
         }
 
         setStatus("success");
-        setTimeout(() => router.push("/home"), 2500);
+        setTimeout(() => router.push(safeNext ?? "/home"), safeNext ? 300 : 2500);
       });
   }, [searchParams, router]);
 

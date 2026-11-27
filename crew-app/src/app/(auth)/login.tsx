@@ -57,7 +57,7 @@ export default function LoginScreen() {
   // Already signed in (e.g. a warm session was restored from AsyncStorage) —
   // bounce straight to the app rather than showing the login form.
   if (!isSessionLoading && session) {
-    return <Redirect href="/home" />;
+    return <Redirect href="/hub" />;
   }
 
   const handleSignIn = async () => {
@@ -82,7 +82,7 @@ export default function LoginScreen() {
 
     // On success, the auth-state-change listener in AuthProvider updates
     // `session`, and the guard above (plus the (app) group guard) handles
-    // navigating to /home — no manual router.push needed here.
+    // navigating to /hub — no manual router.push needed here.
   };
 
   return (

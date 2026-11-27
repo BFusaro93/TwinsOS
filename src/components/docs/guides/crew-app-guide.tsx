@@ -86,6 +86,16 @@ export function CrewAppGuide() {
           right day&apos;s route.
         </p>
         <p>
+          <strong>The home screen.</strong> After signing in, the native app opens to the same three
+          cards as the browser home: <strong>My Schedule</strong>, <strong>Dashboards</strong> and{" "}
+          <strong>Field</strong> (job photos and field forms), with Reference, language and Sign out
+          below. My Schedule is the app&apos;s own schedule screen (its <strong>Back</strong> button
+          returns to the cards). Dashboards and Field open the same web pages the browser crew login
+          uses, in a browser sheet inside the app that is already signed in &mdash; no second
+          password &mdash; so they match the browser version and need a signal. Tap{" "}
+          <strong>Done</strong> at the top left of the sheet to come back to the cards.
+        </p>
+        <p>
           <strong>Office staff in the field.</strong> An owner or office employee doesn&apos;t need a
           separate crew login. When their own login is attached to a crew (Team → Crews → Linked
           Login, or automatically by ticking <strong>Schedule Jobs Directly</strong> on their
