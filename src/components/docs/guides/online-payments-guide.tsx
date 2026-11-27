@@ -337,6 +337,13 @@ export function OnlinePaymentsGuide() {
             Charging a saved card from the invoice itself is not affected.
           </li>
           <li>
+            <strong>Why the To Charge tab can be empty.</strong> It lists open invoices only for
+            clients with a card (or bank account, on ACH To Charge) saved on file and autopay on. A
+            payment type chosen on the client&apos;s billing screen is only a preference and never puts
+            an invoice here, and drafts appear once emailed or printed. The empty tab shows how many
+            open invoices belong to clients with nothing saved.
+          </li>
+          <li>
             <strong>A returned bank debit can be charged again.</strong> If an ACH payment bounces
             after it was recorded, the invoice reopens and can be charged again right away. The
             duplicate-charge guard only blocks debits that are still in flight or not yet recorded.

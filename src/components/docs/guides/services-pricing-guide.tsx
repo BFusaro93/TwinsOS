@@ -53,6 +53,7 @@ export function ServicesPricingGuide() {
           <TOCLink href="#where">Where it is</TOCLink>
           <TOCLink href="#layers">Where a price actually lives</TOCLink>
           <TOCLink href="#rate-matrix">Rate Matrix</TOCLink>
+          <TOCLink href="#minimum-charge">Minimum charge</TOCLink>
           <TOCLink href="#equipment-costs">Equipment costs</TOCLink>
           <TOCLink href="#bulk-prices">Bulk Prices — changing the catalog</TOCLink>
           <TOCLink href="#adjustments">Price Adjustments — re-pricing live work</TOCLink>
@@ -109,7 +110,15 @@ export function ServicesPricingGuide() {
           Open a service and use its <strong>Rate Matrix</strong> tab to price by a number on the
           property, such as Turf Sq. Ft. Pick the <strong>lookup field</strong>, then add rows. Each row
           has a From and To range, a calc type (Per Unit or Fixed), a rate, budgeted hours and cost.
-          Edits to a row save when you click out of the field.
+          A value equal to a row&rsquo;s To belongs to that row. Edits to a row save when you click
+          out of the field.
+        </p>
+        <p>
+          <strong>Line quantity as the lookup.</strong> Besides property fields, the lookup picker
+          offers <strong>Line quantity (typed on the estimate)</strong>. The rows are then matched
+          against the Qty typed on the estimate line, and changing that Qty re-prices the line from the
+          band holding it, including the overflow rule below. Matrices keyed off a property or client
+          field are looked up when the line is added and not re-resolved later.
         </p>
         <p>
           <strong>Which fields can be the lookup.</strong> The built-in measurements (Turf, Mulch Bed,
@@ -134,6 +143,18 @@ export function ServicesPricingGuide() {
           with over = 26,000 and every = 1,000, a 26,000 to 26,999 property is the last row plus one
           increment and a 27,000 to 27,999 property is plus two. The overflow rule takes priority over a
           Tail row. It is saved with Save Changes.
+        </p>
+      </Section>
+
+      <Section id="minimum-charge" title="Minimum charge">
+        <p>
+          In the service dialog, <strong>Minimum Charge ($)</strong> sets the least a visit can bill,
+          and <strong>Minimum Message</strong> (for example &ldquo;4-hour minimum&rdquo;) is the wording
+          shown with it. Per-unit lines (quantity &times; rate) and package steps priced from the Rate
+          Matrix bill at least the minimum per visit; fixed ($) lines and package steps with their own
+          locked price are unaffected. The minimum is copied onto the estimate line when the service is
+          added, and a <strong>Minimum charge applied</strong> row shows on the line when it is
+          what bills. It isn&rsquo;t raised on services added directly to a job.
         </p>
       </Section>
 

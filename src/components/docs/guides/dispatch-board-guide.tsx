@@ -33,7 +33,7 @@ const COLUMNS: [string, string][] = [
   ["Hr Variance", "Actual minus budgeted, colored red when over and green when under."],
   ["Men", "Crew headcount used in the actual-hours fallback calculation. A value you set here is kept — editing the visit's times only fills Men in when it was blank."],
   ["Qty, Rate, AMT", "Billing quantity, unit rate, and the visit's value — the sum of the job's included service lines, the same figure the visit sheet and the client's Jobs card show. When you set a Rate on the visit itself (visit popup), AMT is that Rate × Qty (blank Qty = 1), and that is exactly what the visit's invoice bills."],
-  ["Notes/Icons", "Call-ahead flags, comments, and other at-a-glance indicators. A small camera icon with a count beside the client's name means the crew took photos at that visit in the crew app; click it to open the visit. The photos are on the job's Attachments tab, and you can add them to an invoice from the invoice's Photos tab."],
+  ["Notes/Icons", "Call-ahead flags, comments, skip or cancel reasons, and other at-a-glance indicators. A small camera icon with a count beside the client's name means the crew took photos at that visit in the crew app; click it to open the visit. The photos are on the job's Attachments tab, and you can add them to an invoice from the invoice's Photos tab."],
 ];
 
 export function DispatchBoardGuide() {
@@ -176,7 +176,9 @@ export function DispatchBoardGuide() {
           reason is saved on the visit, where it can be edited later from the visit sheet, and is
           written to the client&apos;s Activity timeline as &quot;Visit skipped 9/9 — Weather&quot;
           (or &quot;Visit cancelled …&quot;), so the office can answer &quot;why didn&apos;t you
-          come Tuesday?&quot; from the client record without opening the board.
+          come Tuesday?&quot; from the client record without opening the board. The reason also shows
+          on the board as an orange bar under the visit, and on the job&apos;s Visits tab as a{" "}
+          <strong>Skip reason</strong> or <strong>Cancel reason</strong> row.
         </p>
         <p>
           <strong>Skipped and cancelled visits drop out of the day&apos;s numbers.</strong> The{" "}
@@ -336,6 +338,14 @@ export function DispatchBoardGuide() {
             chemical card, so amounts and inventory aren&apos;t counted twice.
           </li>
         </ul>
+        <p>
+          <strong>Out-of-sync shared stops.</strong> When one crew on a shared stop has completed and
+          another crew&apos;s visit is still open, the open visit shows an amber{" "}
+          <strong>Out of sync · Complete N</strong> badge. Clicking it completes the N remaining crew
+          visits the normal complete-and-invoice way (a toast says &quot;Completed N remaining crew
+          visits&quot;). An <strong>Out of sync (N)</strong> toolbar filter shows only these stops; it
+          appears only when there are some.
+        </p>
         <p>
           <strong>Setting crews on many stops at once.</strong> Check the visits, open{" "}
           <strong>Actions &gt; Re-assign Crew &gt; Multiple crews…</strong>, and tick the crews. The
@@ -590,7 +600,9 @@ export function DispatchBoardGuide() {
         <p>
           Beyond that fixed set, the column-visibility control also offers a second, SA-style block of
           optional columns pulled from the client&apos;s and property&apos;s own records rather than the
-          visit: <strong>Priority</strong>, <strong>Sales Rep</strong>, <strong>Notes to Crew</strong>,{" "}
+          visit: <strong>Priority</strong>, <strong>Sales Rep</strong>, <strong>Notes to Crew</strong> (the visit&apos;s own note, the job&apos;s note and the property&apos;s note
+          together, duplicates removed &mdash; the same text the crew sees, and what the print sheet and
+          export carry),{" "}
           <strong>Gate/Lock Code</strong>, <strong>Turf Sq. Ft.</strong>, <strong>Mulch Bed Sq. Ft.</strong>,{" "}
           <strong>Gross Sq. Ft.</strong>, <strong>Linear Ft. of Perimeter</strong>,{" "}
           <strong>Linear Ft. of Edging</strong>, <strong>Yards of Mulch</strong>, and{" "}
@@ -600,7 +612,7 @@ export function DispatchBoardGuide() {
           crews actually take off of. The same set is available on the Waiting List for consistency.
         </p>
         <Callout>
-          <strong>The Totals row adds up what it can.</strong> Turning on Men, Qty, or any of the numeric
+          <strong>The Totals row adds up what it can.</strong> Turning on Qty, or any of the numeric
           extra/custom-field columns above makes the board&apos;s Totals row sum that column across the
           counted visits (see &quot;Skipped and cancelled visits drop out of the day&apos;s numbers&quot;
           above) instead of leaving the cell blank — so a Turf Sq. Ft. column shows the day&apos;s total
@@ -752,8 +764,9 @@ export function DispatchBoardGuide() {
 
       <Section id="bulk-actions" title="Bulk actions on selected visits">
         <p>
-          Checking one or more visit rows reveals an <strong>Actions (n)</strong> button on the
-          toolbar with a Change Status submenu, a Re-assign Crew submenu (pick one crew, or{" "}
+          <strong>Actions</strong> is the first button on the toolbar and is always shown (it does
+          nothing until rows are checked). Checking one or more visit rows turns it green as{" "}
+          <strong>Actions (n)</strong>, with a Change Status submenu, a Re-assign Crew submenu (pick one crew, or{" "}
           <strong>Multiple crews…</strong> to put several crews on each stop), and — separately —{" "}
           <strong>Email Selected Clients</strong>.
         </p>
@@ -851,7 +864,8 @@ export function DispatchBoardGuide() {
         <p>
           <strong>Typing route numbers.</strong> You can also type a stop&apos;s number straight into the
           box in the <strong>#</strong> column. Nothing moves while you type &mdash; a banner counts the numbers
-          you&apos;ve entered, and <strong>Apply Route</strong> reorders every crew at once. Numbers are
+          you&apos;ve entered, and <strong>Save Order</strong> applies them and saves the new order for
+          every crew in one step (there is no separate Apply step). Numbers are
           crew-relative, gaps like 10/20/30 are fine, and you only need to number the stops you want to
           move (typing 1 on one job just puts it first; the rest keep their order). Two stops given the same
           number keep their current order relative to each other, and clearing a box counts as no number.
@@ -970,7 +984,10 @@ export function DispatchBoardGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Crew rows.</strong> Each row shows the crew name with its headcount, then its
-            default roster underneath (the crew leader is marked). An <strong>Unassigned</strong> row
+            default roster underneath (the crew leader is marked). Set the leader in{" "}
+            <strong>Team &gt; Crews</strong> &rarr; the crew &rarr; <strong>Team Assignments</strong> tab
+            by ticking <strong>Leader</strong> on a member; the leader is the applicator of record on
+            chemical applications and is labeled <strong>Crew Leader</strong> on the board. An <strong>Unassigned</strong> row
             appears whenever a visit that week has no crew.
           </li>
           <li>

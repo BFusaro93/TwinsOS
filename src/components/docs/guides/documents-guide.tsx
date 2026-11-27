@@ -252,6 +252,13 @@ export function DocumentsGuide() {
             &quot;JaneLandscapt Lawn &amp; Landscape&quot;), so type your own separator.
           </li>
           <li>
+            <strong>Client portal and card-update links.</strong> <code>[clientportallink]</code> is the
+            link to your client portal sign-in. <code>[cardupdatelink]</code> is a button, and{" "}
+            <code>[cardupdatelinkurl]</code> the plain link, to a one-time page where the client saves a
+            new card (with an AutoPay checkbox) without signing in; every send creates a fresh link, good
+            for 14 days and one use. Both are in the Client group.
+          </li>
+          <li>
             <strong>Notice of Treatment.</strong> <code>[chemicalnotice]</code> drops the compact
             Notice of Treatment for the last completed visit that logged chemicals into an email or
             automation, and is blank when that visit logged none. It is the way a contract client, who
@@ -317,6 +324,16 @@ export function DocumentsGuide() {
             email and the PDF. An <strong>Image</strong> block has a <strong>Size</strong> slider
             (10&ndash;100% of the width) instead. Images work in the PDF whatever the file type
             (JPG, PNG, WEBP, GIF or AVIF).
+          </li>
+          <li>
+            <strong>Image alignment, library and size.</strong> An Image block has{" "}
+            <strong>Align left</strong>, <strong>Align center</strong> and <strong>Align right</strong>{" "}
+            buttons. Instead of uploading the same picture again, click <strong>Library</strong> (or{" "}
+            <strong>Choose from library</strong>) to pick one you uploaded before, or{" "}
+            <strong>Upload new</strong>. The Size slider is a share of the 600px email width, applied as
+            a fixed pixel width, so the image is the same size in the editor, the desktop email and the
+            mobile email (it still shrinks on a screen narrower than that). The document preview shows
+            on a white page even in dark mode, the way the email will look.
           </li>
           <li>
             <strong>Blank lines.</strong> Pressing Enter twice leaves a visible blank line, and it stays in

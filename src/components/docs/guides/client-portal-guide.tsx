@@ -144,6 +144,13 @@ export function ClientPortalGuide() {
           the login page instead of clicking through email.
         </p>
         <p>
+          <strong>Sending clients the portal link.</strong> Use the <code>[clientportallink]</code> merge tag
+          in any client email, document or automation to link straight to the portal sign-in. To get a
+          client a new card without a portal login, use <code>[cardupdatelink]</code> (a button) or{" "}
+          <code>[cardupdatelinkurl]</code>: it opens a one-time page, good for 14 days, where they save a
+          card through Stripe with an AutoPay checkbox (hidden when Allow Autopay is off).
+        </p>
+        <p>
           A client who forgets their password uses <strong>Forgot password?</strong> on the portal
           login page &mdash; it works while signed out and sends a reset email. On the Account page the
           phone number must be a real number (at least 10 digits); a blank value clears it. Text

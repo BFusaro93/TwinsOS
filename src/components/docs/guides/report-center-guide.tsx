@@ -196,6 +196,12 @@ export function ReportCenterGuide() {
           <a href="#permissions" className="font-semibold underline">Permissions and gating</a>).
         </p>
         <p>
+          <strong>Multi-select filters.</strong> Most filters that pick from a list &mdash; sales
+          rep, crew, source, status, job type, services, payment method, account type, action, and
+          the employee in the audit reports &mdash; let you tick several values at once. A row is
+          kept if it matches <em>any</em> ticked value, and leaving the filter empty means all.
+        </p>
+        <p>
           The dataset-based reports read from <strong>26 datasets</strong>. Each one is a
           ready-joined table for one kind of record &mdash; its columns, their types, and, for
           status-type columns, a fixed list of choices. These are the same datasets you pick from
@@ -522,7 +528,7 @@ export function ReportCenterGuide() {
             <strong>Add a day nobody clocked.</strong> <strong>Add time entry</strong> (top right of
             the tab) is for a forgotten clock-in or clock-out, or a paper time sheet: pick the
             employee and date, then enter start and end times (plus any unpaid break minutes) or just
-            the total hours, add a note, and click <strong>Add entry</strong>. It can&apos;t be saved
+            the total hours (two employees with the same name are listed as &quot;Name &mdash; Crew&quot;), add a note, and click <strong>Add entry</strong>. It can&apos;t be saved
             on a day that is locked. If that person already has the day recorded, it corrects that day
             instead.
           </li>

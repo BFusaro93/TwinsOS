@@ -725,7 +725,9 @@ export function CrewAppGuide() {
         <p>
           <strong>Notes from the office.</strong> The job&apos;s crew note appears under{" "}
           <strong>Job Notes</strong> with its formatting (bold, bulleted and numbered lists), and you
-          read and acknowledge it before clocking in. A note typed on a single visit is plain text.
+          read and acknowledge it before clocking in. A note typed on a single visit and the
+          property&apos;s note show there too. The office sees the same combined text in its Notes to
+          Crew column. A note typed on a single visit is plain text.
           When the office adds or changes a visit note, your phone gets a &quot;Note from
           Dispatch&quot; notification only if that visit is dispatched, in progress, or scheduled
           within the next two days. A note on a visit further out is waiting on the stop when you get
