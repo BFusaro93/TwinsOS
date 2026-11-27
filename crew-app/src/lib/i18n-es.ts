@@ -2,6 +2,14 @@
 // Keyed by the exact English text used in t('…'); a key missing here simply
 // shows in English. Placeholders like {time} must be kept as written.
 export const ES: Record<string, string> = {
+  'What would you like to do?': '¿Qué quieres hacer?',
+  'My Schedule': 'Mi horario',
+  "Today's stops & job visits": 'Paradas y visitas de hoy',
+  Dashboards: 'Paneles',
+  'Reports & analytics': 'Reportes y análisis',
+  Field: 'Campo',
+  'Job photos & field forms': 'Fotos de trabajos y formularios de campo',
+  "Couldn't open that page": 'No se pudo abrir esa página',
   'No address on file': 'Sin dirección registrada',
   'No address on file — ask the office': 'Sin dirección registrada — pregunta a la oficina',
   'Show completed ({n})': 'Mostrar terminados ({n})',

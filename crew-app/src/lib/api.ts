@@ -441,6 +441,20 @@ export async function setSubitemCheck(visitId: string, subitemId: string, checke
   });
 }
 
+/**
+ * POST /api/crm/crew/web-link — a one-time link that opens the web Dashboards page, or the Field
+ * page (job photos / field forms), already signed in as this crew. The cards screen opens it in
+ * an in-app browser. Online-only.
+ */
+export async function fetchWebLink(target: 'dashboards' | 'field'): Promise<string> {
+  const json = (await authedFetch(`/api/crm/crew/web-link`, {
+    method: 'POST',
+    body: JSON.stringify({ target }),
+  })) as { url?: string };
+  if (!json.url) throw new ApiError(500, 'No link was returned');
+  return json.url;
+}
+
 /** GET /api/crm/crew/helper-crews — every other active crew in the org. */
 export async function fetchHelperCrews(): Promise<HelperCrew[]> {
   const json = (await authedFetch(`/api/crm/crew/helper-crews`)) as { crews?: HelperCrew[] };

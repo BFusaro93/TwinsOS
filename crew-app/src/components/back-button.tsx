@@ -17,7 +17,7 @@ export function BackButton() {
   const label = useLocale().locale === 'es' ? 'Atrás' : 'Back';
   return (
     <Pressable
-      onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+      onPress={() => (router.canGoBack() ? router.back() : router.replace('/hub'))}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 12 }}
       accessibilityRole="button"
       accessibilityLabel={label}

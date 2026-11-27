@@ -8,7 +8,8 @@ import { SyncStatusChip } from '@/components/sync-status-chip';
 import { useAuth } from '@/lib/auth-context';
 import { C } from '@/lib/colors';
 import { useCrewStops } from '@/lib/hooks/use-crew-stops';
-import { supabase } from '@/lib/supabase';
+import { BackButton } from '@/components/back-button';
+import { signOutCrew } from '@/lib/sign-out';
 import {
   elapsedSince,
   formatStopAddress,
@@ -20,7 +21,6 @@ import {
 } from '@/lib/format';
 import { applyDriveOverlay, applyStopQueueOverlay } from '@/lib/offline/overlay';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
-import { unregisterPushToken } from '@/lib/notifications';
 import { stopJobComments } from '@/lib/job-comments';
 import { t } from '@/lib/i18n';
 import { LanguageToggle } from '@/components/language-toggle';
@@ -94,19 +94,12 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const handleSignOut = () => {
-    // Must run before signOut() — DELETE /api/crm/crew/push-token needs the
-    // still-valid session to identify whose token row to remove. See
-    // unregisterPushToken()'s own comment for why this matters on a shared
-    // device.
-    void unregisterPushToken().finally(() => {
-      void supabase.auth.signOut();
-    });
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <View style={{ alignSelf: 'flex-start', marginBottom: 10 }}>
+          <BackButton />
+        </View>
         <View style={styles.headerTopRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.eyebrow}>{t('Today')}</Text>
@@ -117,7 +110,7 @@ export default function HomeScreen() {
               <Text style={styles.signOutLink}>{t('Reference')}</Text>
             </Pressable>
             <LanguageToggle />
-            <Pressable onPress={handleSignOut} hitSlop={12}>
+            <Pressable onPress={signOutCrew} hitSlop={12}>
               <Text style={styles.signOutLink}>{t('Sign out')}</Text>
             </Pressable>
           </View>
