@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { Redirect, router, Stack } from 'expo-router';
 
-import { BackButton } from '@/components/back-button';
+import { ScreenHeader } from '@/components/back-button';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/lib/auth-context';
 import { subscribeToVisitNotifications } from '@/lib/notifications';
@@ -42,11 +42,11 @@ export default function AppLayout() {
       <Stack.Screen name="home" />
       <Stack.Screen
         name="reference"
-        options={{ headerShown: true, title: 'Reference', headerBackVisible: false, headerLeft: () => <BackButton /> }}
+        options={{ headerShown: true, title: 'Reference', header: ({ options }) => <ScreenHeader title={options.title} /> }}
       />
       <Stack.Screen
         name="visit/[id]"
-        options={{ headerShown: true, title: 'Visit', headerBackVisible: false, headerLeft: () => <BackButton /> }}
+        options={{ headerShown: true, title: 'Visit', header: ({ options }) => <ScreenHeader title={options.title} /> }}
       />
       <Stack.Screen
         name="visit/request-materials"
