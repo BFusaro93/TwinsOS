@@ -286,7 +286,7 @@ function ImageBlockContent({
           <img
             src={url}
             alt=""
-            style={{ width: `${widthPct}%` }}
+            style={{ width: `${widthPct * 6}px`, maxWidth: "100%" }}
             className={cn(
               "h-auto rounded-md border border-border object-contain",
               align === "left" ? "mr-auto" : align === "right" ? "ml-auto" : "mx-auto"
