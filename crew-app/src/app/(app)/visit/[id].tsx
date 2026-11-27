@@ -681,7 +681,9 @@ export default function StopDetailScreen() {
               value={formatStopAddress(stop)!}
               onPress={() => void openInMaps(formatStopAddress(stop)!)}
             />
-          ) : null}
+          ) : (
+            <InfoRow label={t('Address')} value={t('No address on file — ask the office')} />
+          )}
           {stop.clientPhone ? (
             <InfoRow
               label={t('Phone')}

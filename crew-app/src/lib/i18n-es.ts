@@ -10,6 +10,8 @@ export const ES: Record<string, string> = {
   Field: 'Campo',
   'Job photos & field forms': 'Fotos de trabajos y formularios de campo',
   "Couldn't open that page": 'No se pudo abrir esa página',
+  'No address on file': 'Sin dirección registrada',
+  'No address on file — ask the office': 'Sin dirección registrada — pregunta a la oficina',
   'Show completed ({n})': 'Mostrar terminados ({n})',
   'Hide completed': 'Ocultar terminados',
   'All done for today': 'Todo listo por hoy',

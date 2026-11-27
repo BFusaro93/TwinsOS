@@ -298,7 +298,13 @@ function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOve
             <Text style={styles.cardMeta} numberOfLines={1}>
               {formatStopAddress(stop)}
             </Text>
-          ) : null}
+          ) : (
+            // A job with no address can't be navigated to, and it won't group with the client's other
+            // stops; say so on the card instead of leaving the line blank.
+            <Text style={[styles.cardMeta, styles.cardMissing]} numberOfLines={1}>
+              {t('No address on file')}
+            </Text>
+          )}
           {services ? (
             <Text style={styles.cardMeta} numberOfLines={1}>
               {services}
@@ -514,6 +520,7 @@ const styles = StyleSheet.create({
     color: C.textMuted,
     marginTop: 4,
   },
+  cardMissing: { color: C.amberTextStrong, fontWeight: '600' },
   serviceCountPill: {
     borderRadius: 999,
     paddingHorizontal: 8,

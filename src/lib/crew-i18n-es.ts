@@ -79,6 +79,7 @@ export const CREW_ES: Record<string, string> = {
   Finished: "Terminó",
   "For which job?": "¿Para qué trabajo?",
   "From yesterday": "De ayer",
+  "No address on file": "Sin dirección registrada",
   "Show completed ({n})": "Mostrar terminados ({n})",
   "Hide completed": "Ocultar terminados",
   "All done for today": "Todo listo por hoy",
