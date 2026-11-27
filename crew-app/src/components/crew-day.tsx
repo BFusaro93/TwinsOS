@@ -91,6 +91,16 @@ export function CrewDayBanner({
   const onClock = members.filter((m) => m.startedAt && !m.endedAt);
   const dayOpen = onClock.length > 0;
   const dayEnded = !!startedAt && !dayOpen;
+  // A shift that crossed midnight keeps yesterday's work date; say so rather than
+  // showing a bare clock time that looks like this morning.
+  const carriedOver = onClock.some((m) => m.shiftWorkDate && m.shiftWorkDate !== day.workDate);
+  // Lunch between jobs (a job's own break is "Take a Break" on the stop): running
+  // while any member on the clock has a lunch started.
+  const lunchStartedAt =
+    onClock
+      .map((m) => m.lunchStartedAt)
+      .filter((v): v is string => !!v)
+      .sort()[0] ?? null;
 
   const endDay = () => {
     const go = () => void act('end_day');
@@ -125,7 +135,11 @@ export function CrewDayBanner({
       ) : dayOpen ? (
         <View style={styles.dayBanner}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.dayBannerTitle}>{t('Day started {time}', { time: formatClock(startedAt) })}</Text>
+            <Text style={styles.dayBannerTitle}>
+              {carriedOver
+                ? t('Day started yesterday {time}', { time: formatClock(startedAt) })
+                : t('Day started {time}', { time: formatClock(startedAt) })}
+            </Text>
             <Text style={styles.dayBannerSubtitle}>{t('{n} on the clock', { n: onClock.length })}</Text>
           </View>
           <Pressable
@@ -138,6 +152,45 @@ export function CrewDayBanner({
         </View>
       ) : dayEnded ? (
         <Text style={styles.dayEnded}>{t('Day ended — everyone is clocked out.')}</Text>
+      ) : null}
+
+      {dayOpen ? (
+        lunchStartedAt ? (
+          <View style={styles.lunchBanner}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lunchTitle}>{t('On lunch since {time}', { time: formatClock(lunchStartedAt) })}</Text>
+              <Text style={styles.lunchSub}>{t('Tap End Lunch when the crew is back to work.')}</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.lunchButton, pressed && styles.pressed, busyKey === 'end_lunch:' && styles.disabled]}
+              disabled={busyKey === 'end_lunch:'}
+              onPress={() => void act('end_lunch')}
+            >
+              {busyKey === 'end_lunch:' ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.lunchButtonText}>{t('End Lunch')}</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : (
+          <View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.startLunch,
+                pressed && styles.pressed,
+                (anyJobActive || busyKey === 'start_lunch:') && styles.disabled,
+              ]}
+              disabled={anyJobActive || busyKey === 'start_lunch:'}
+              onPress={() => void act('start_lunch')}
+            >
+              <Text style={styles.startLunchText}>{t('Start Lunch')}</Text>
+            </Pressable>
+            {anyJobActive ? (
+              <Text style={styles.lunchHint}>{t('A job is in progress — use Take a Break on the job instead.')}</Text>
+            ) : null}
+          </View>
+        )
       ) : null}
 
       <Pressable onPress={onEditCrew} hitSlop={8} style={styles.editCrewLink}>
@@ -298,6 +351,30 @@ const styles = StyleSheet.create({
   },
   endDayText: { color: C.red, fontWeight: '700', fontSize: 13 },
   dayEnded: { textAlign: 'center', fontSize: 12, color: C.textFaint },
+  lunchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    backgroundColor: C.blueBg,
+    padding: 14,
+  },
+  lunchTitle: { fontSize: 14, fontWeight: '700', color: C.blueText },
+  lunchSub: { fontSize: 12, color: C.blueText, marginTop: 2 },
+  lunchButton: { borderRadius: 8, backgroundColor: C.blue, paddingVertical: 9, paddingHorizontal: 16 },
+  lunchButtonText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
+  startLunch: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.blueBorder,
+    backgroundColor: C.card,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  startLunchText: { color: C.blueText, fontWeight: '700', fontSize: 14 },
+  lunchHint: { textAlign: 'center', fontSize: 12, color: C.textFaint, marginTop: 4 },
   editCrewLink: { alignSelf: 'flex-start' },
   editCrewLinkText: { color: C.blueText, fontWeight: '600', fontSize: 13 },
 

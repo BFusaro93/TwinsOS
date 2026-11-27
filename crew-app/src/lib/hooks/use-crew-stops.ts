@@ -21,6 +21,10 @@ interface UseCrewStopsResult {
   drive: CrewDriveInfo;
   /** Org-wide required Before / After photos. */
   photoRules: PhotoRules;
+  /** Org setting "Track time per service" (off for older servers). */
+  crewServiceTiming: boolean;
+  /** Ticked sub-services as "visitId:subitemId". */
+  subitemChecks: ReadonlySet<string>;
   isLoading: boolean;
   isRefetching: boolean;
   error: string | null;
@@ -49,6 +53,8 @@ export function useCrewStops(date?: string): UseCrewStopsResult {
   const [crewName, setCrewName] = useState<string | null>(null);
   const [drive, setDrive] = useState<CrewDriveInfo>(EMPTY_DRIVE);
   const [photoRules, setPhotoRules] = useState<PhotoRules>(NO_RULES);
+  const [crewServiceTiming, setCrewServiceTiming] = useState(false);
+  const [subitemChecks, setSubitemChecks] = useState<ReadonlySet<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +71,8 @@ export function useCrewStops(date?: string): UseCrewStopsResult {
       setCrewName(data.crewName);
       setDrive(data.drive ?? EMPTY_DRIVE);
       setPhotoRules(data.photoRules ?? NO_RULES);
+      setCrewServiceTiming(data.crewServiceTiming === true);
+      setSubitemChecks(new Set(data.subitemChecks ?? []));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load schedule');
     } finally {
@@ -91,5 +99,8 @@ export function useCrewStops(date?: string): UseCrewStopsResult {
     return () => sub.remove();
   }, [load]);
 
-  return { date: answeredDate, timeZone, stops, crewName, drive, photoRules, isLoading, isRefetching, error, refetch };
+  return {
+    date: answeredDate, timeZone, stops, crewName, drive, photoRules, crewServiceTiming, subitemChecks,
+    isLoading, isRefetching, error, refetch,
+  };
 }

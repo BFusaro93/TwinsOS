@@ -11,6 +11,7 @@ import type {
   CrewDay,
   CrewDayAction,
   CrewVisitsResponse,
+  HelperCrew,
   JobProductMaterial,
   PickerProduct,
   UpsellService,
@@ -413,6 +414,82 @@ export async function setMemberAbsent(crewMemberId: string, absent: boolean, vis
     method: 'POST',
     body: JSON.stringify({ crewMemberId, absent, ...(visitId ? { visitId } : {}), occurredAt }),
   });
+}
+
+/**
+ * POST /api/crm/crew/stops/:anchorVisitId/service — start or finish ONE service
+ * inside a running stop (org setting "Track time per service"). One at a time:
+ * starting a service ends the one running. Online-only; sends the tap time.
+ */
+export async function setServiceTime(
+  anchorVisitId: string,
+  serviceVisitId: string,
+  action: 'start' | 'finish'
+): Promise<unknown> {
+  const occurredAt = new Date().toISOString();
+  return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/service`, {
+    method: 'POST',
+    body: JSON.stringify({ serviceVisitId, action, occurredAt }),
+  });
+}
+
+/** POST /api/crm/crew/visits/:id/subitems/:subitemId/check — tick (or untick) a sub-service. */
+export async function setSubitemCheck(visitId: string, subitemId: string, checked: boolean): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/subitems/${subitemId}/check`, {
+    method: 'POST',
+    body: JSON.stringify({ checked }),
+  });
+}
+
+/** GET /api/crm/crew/helper-crews — every other active crew in the org. */
+export async function fetchHelperCrews(): Promise<HelperCrew[]> {
+  const json = (await authedFetch(`/api/crm/crew/helper-crews`)) as { crews?: HelperCrew[] };
+  return json.crews ?? [];
+}
+
+/**
+ * POST /api/crm/crew/stops/:visitId/need-help for each open service of a snow stop —
+ * adds `crewId` as an extra crew straight onto its tablet. A service they are already
+ * on (another service of the same stop got them first) is not a failure.
+ */
+export async function requestCrewHelp(visitIds: string[], crewId: string): Promise<{ crewName: string; added: number }> {
+  let crewName = '';
+  let added = 0;
+  for (const visitId of visitIds) {
+    try {
+      const json = (await authedFetch(`/api/crm/crew/stops/${visitId}/need-help`, {
+        method: 'POST',
+        body: JSON.stringify({ crewId }),
+      })) as { crewName?: string };
+      crewName = json.crewName ?? crewName;
+      added++;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.message.includes('already on this stop')) continue;
+      throw err;
+    }
+  }
+  return { crewName, added };
+}
+
+/** POST /api/crm/crew/stops/:visitId/hand-off for each (not yet started) service — moves the stop to `crewId`. */
+export async function handOffStop(visitIds: string[], crewId: string): Promise<{ crewName: string }> {
+  let crewName = '';
+  for (const visitId of visitIds) {
+    const json = (await authedFetch(`/api/crm/crew/stops/${visitId}/hand-off`, {
+      method: 'POST',
+      body: JSON.stringify({ crewId }),
+    })) as { crewName?: string };
+    crewName = json.crewName ?? crewName;
+  }
+  return { crewName };
+}
+
+/** POST /api/crm/crew/visits/:id/add-push — back to a finished snow stop: creates the next push as its own visit. */
+export async function addCrewPush(visitId: string): Promise<{ id: string; pushNumber: number }> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/add-push`, { method: 'POST' }) as Promise<{
+    id: string;
+    pushNumber: number;
+  }>;
 }
 
 /**

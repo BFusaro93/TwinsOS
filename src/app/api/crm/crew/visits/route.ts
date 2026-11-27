@@ -118,7 +118,7 @@ export async function GET(request: Request) {
       start_time, end_time, status, sub_status, priority,
       notes_to_crew, notes_to_client, completion_notes, job_comments,
       men_count, actual_hours, budgeted_hours, clocked_in_at, clocked_out_at,
-      paused_at, break_minutes, skip_reason, crew_group_id,
+      paused_at, break_minutes, skip_reason, crew_group_id, service_started_at, service_ended_at,
       acknowledged_notes_at, notes_to_crew_updated_at, completed_at, created_at, updated_at,
       clients(display_name, primary_phone, service_address, service_city, service_state, service_zip,
         billing_address, billing_city, billing_state, billing_zip),
@@ -285,6 +285,8 @@ export async function GET(request: Request) {
       clockedOutAt: row.clocked_out_at as string | null,
       pausedAt: row.paused_at as string | null,
       breakMinutes: (row.break_minutes as number) ?? 0,
+      serviceStartedAt: (row.service_started_at as string | null) ?? null,
+      serviceEndedAt: (row.service_ended_at as string | null) ?? null,
       acknowledgedNotesAt: row.acknowledged_notes_at as string | null,
       notesToCrewUpdatedAt: (row.notes_to_crew_updated_at as string) ?? null,
       skipReason: row.skip_reason as string | null,
@@ -364,6 +366,16 @@ export async function GET(request: Request) {
         acknowledgedNotesAt: v.acknowledgedNotesAt,
         skipReason: v.skipReason,
         jobComments: v.jobComments,
+        // "Track time per service": each service's own timer window.
+        serviceStartedAt: v.serviceStartedAt ?? null,
+        serviceEndedAt: v.serviceEndedAt ?? null,
+        // The sub-services copied from the estimate, tickable one by one on the stop.
+        // Name and quantity only: the estimate's rates are not for crew eyes.
+        subitems: (svc?.subitems ?? []).map((si) => ({ id: si.id, type: si.type, name: si.name, qty: si.qty })),
+        // Snow stops (storm + push) get the help / hand-off / add-push controls.
+        stormEventId: v.stormEventId ?? null,
+        pushNumber: v.pushNumber ?? 1,
+        jobType: v.job?.jobType ?? null,
       };
     }),
   }));
@@ -390,6 +402,16 @@ export async function GET(request: Request) {
   // clock-in / clock-out routes enforce them regardless).
   const { data: orgRow } = await createServiceClient().from("organizations").select("customizations").eq("id", orgId).maybeSingle();
 
+  // Sub-services the crew has ticked off, as "visitId:subitemId" — read with the caller's own
+  // session (RLS), the same rows the web stop page reads.
+  const dayVisitIds = rows.map((r) => r.id as string);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: checkRows } = dayVisitIds.length > 0
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? await (supabase as any).from("crm_visit_subitem_checks").select("visit_id, subitem_id").in("visit_id", dayVisitIds)
+    : { data: [] };
+  const subitemChecks = ((checkRows ?? []) as { visit_id: string; subitem_id: string }[]).map((r) => `${r.visit_id}:${r.subitem_id}`);
+
   return NextResponse.json({
     date,
     // The org's zone, so the native app can compute "today" (and the wall-clock
@@ -401,5 +423,8 @@ export async function GET(request: Request) {
     stops,
     drive: { openSegment, totalMinutes },
     photoRules: photoRulesFromCustomizations(orgRow?.customizations),
+    // "Track time per service" org setting (customizations.crewServiceTiming; off unless true).
+    crewServiceTiming: (orgRow?.customizations as Record<string, unknown> | null | undefined)?.crewServiceTiming === true,
+    subitemChecks,
   });
 }

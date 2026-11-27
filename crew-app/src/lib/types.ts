@@ -72,6 +72,29 @@ export interface CrewStopVisit {
   acknowledgedNotesAt: string | null;
   skipReason: string | null;
   jobComments: unknown[];
+  /** "Track time per service": this service's own timer window (absent from older servers). */
+  serviceStartedAt?: string | null;
+  serviceEndedAt?: string | null;
+  /** Products to bring and sub-services to do under this service, from the estimate (no prices). */
+  subitems?: CrewSubitem[];
+  /** Snow stops: the storm and push this visit belongs to. */
+  stormEventId?: string | null;
+  pushNumber?: number;
+  jobType?: string | null;
+}
+
+export interface CrewSubitem {
+  id: string;
+  /** 'subservice' is tickable; 'product' is listed (recorded under Materials called for). */
+  type: 'product' | 'subservice';
+  name: string;
+  qty: number;
+}
+
+/** A crew the signed-in crew can call in or hand a snow stop to (GET /api/crm/crew/helper-crews). */
+export interface HelperCrew {
+  id: string;
+  name: string;
 }
 
 export interface CrewStop {
@@ -129,6 +152,10 @@ export interface CrewVisitsResponse {
   drive: CrewDriveInfo;
   /** Org-wide required Before / After photos; absent from older servers. */
   photoRules?: { requireBefore: boolean; requireAfter: boolean };
+  /** Org setting "Track time per service"; absent from older servers (treated as off). */
+  crewServiceTiming?: boolean;
+  /** Sub-services already ticked, as "visitId:subitemId"; absent from older servers. */
+  subitemChecks?: string[];
 }
 
 // Mirrors GET /api/crm/crew/visits/:id/photos — a confirmed (already-uploaded)
@@ -252,6 +279,10 @@ export interface CrewDayMember {
   absent: boolean;
   startedAt: string | null;
   endedAt: string | null;
+  /** Set while the crew is on lunch (Start Lunch tapped, End Lunch not yet). */
+  lunchStartedAt?: string | null;
+  /** The shift's own work date — yesterday's for a shift that crossed midnight. */
+  shiftWorkDate?: string | null;
 }
 
 export interface CrewDay {
@@ -260,7 +291,14 @@ export interface CrewDay {
   members: CrewDayMember[];
 }
 
-export type CrewDayAction = 'start_day' | 'end_day' | 'member_in' | 'member_out' | 'add_member';
+export type CrewDayAction =
+  | 'start_day'
+  | 'end_day'
+  | 'start_lunch'
+  | 'end_lunch'
+  | 'member_in'
+  | 'member_out'
+  | 'add_member';
 
 // Mirrors GET/POST .../job-products[/:id/use-materials] — materials office
 // staff already planned/called for on this job (crm_job_products), distinct
