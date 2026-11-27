@@ -1440,10 +1440,11 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Invoice Description</Label>
+              <p className="text-[11px] text-muted-foreground -mt-1">Optional. Replaces the service name on this job&apos;s invoices.</p>
               <Textarea
                 value={invoiceDescription}
                 onChange={(e) => setInvoiceDescription(e.target.value)}
-                placeholder={jobType === "package" && selectedPackage?.invoiceDescription ? selectedPackage.invoiceDescription : "Optional — overrides the service name on this job's invoices"}
+                placeholder={jobType === "package" && selectedPackage?.invoiceDescription ? selectedPackage.invoiceDescription : "Invoice description…"}
                 rows={2}
               />
             </div>
