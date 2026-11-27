@@ -1345,7 +1345,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     <summary className="cursor-pointer text-xs text-slate-500 dark:text-neutral-400">Service notes &amp; invoice description</summary>
                     <div className="mt-2 flex flex-col gap-3 pb-1">
                       <div className="flex flex-col gap-1">
-                        <Label className="text-xs">Job Note <span className="font-normal text-slate-400 dark:text-neutral-500">(crew sees this on this service&apos;s visits)</span></Label>
+                        <Label className="text-xs">Service Note to Crew <span className="font-normal text-slate-400 dark:text-neutral-500">(crew sees this on this service&apos;s visits)</span></Label>
                         <RichTextEditor value={svc.jobNote ?? ""} onChange={(v) => updateService(i, { jobNote: v })} minHeight={64} placeholder="Notes for crew…" />
                       </div>
                       <div className="flex flex-col gap-1">
@@ -1353,7 +1353,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         <Textarea value={svc.invoiceDesc ?? ""} onChange={(e) => updateService(i, { invoiceDesc: e.target.value })} rows={2} placeholder="Overrides the service's default invoice description" />
                       </div>
                       <div className="flex flex-col gap-1">
-                        <Label className="text-xs">Internal Note <span className="font-normal text-slate-400 dark:text-neutral-500">(office only)</span></Label>
+                        <Label className="text-xs">Internal Note <span className="font-normal text-slate-400 dark:text-neutral-500">(for this service, office only)</span></Label>
                         <RichTextEditor value={svc.internalNote ?? ""} onChange={(v) => updateService(i, { internalNote: v })} minHeight={64} placeholder="Visible only to office staff…" />
                       </div>
                     </div>
@@ -1435,14 +1435,16 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Internal Notes</Label>
+              <p className="text-[11px] text-muted-foreground -mt-1">For this job. Office only, never shown to the crew.</p>
               <RichTextEditor value={internalNotes} onChange={setInternalNotes} placeholder="Visible only to office staff…" minHeight={72} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Invoice Description</Label>
+              <p className="text-[11px] text-muted-foreground -mt-1">Optional. Replaces the service name on this job&apos;s invoices.</p>
               <Textarea
                 value={invoiceDescription}
                 onChange={(e) => setInvoiceDescription(e.target.value)}
-                placeholder={jobType === "package" && selectedPackage?.invoiceDescription ? selectedPackage.invoiceDescription : "Optional — overrides the service name on this job's invoices"}
+                placeholder={jobType === "package" && selectedPackage?.invoiceDescription ? selectedPackage.invoiceDescription : "Invoice description…"}
                 rows={2}
               />
             </div>
