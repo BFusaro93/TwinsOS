@@ -40,7 +40,6 @@ import {
  * max_visits usage, overbilling the client.
  */
 
-import { composeVisitNote } from "@/lib/utils/visit-note";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("visits/generate");
@@ -154,7 +153,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
   const menCount = Math.max(1, Number(job.man_count ?? 1) || 1);
   // A service-linked visit takes its own service's team size (as estimate
   // conversion does) so a 1-man service on a 3-man-max job isn't tripled.
-  const base = (date: string, occurrence: string, serviceId: string | null, teamSize?: number | null, serviceNote?: string | null): VisitInsert => ({
+  const base = (date: string, occurrence: string, serviceId: string | null, teamSize?: number | null): VisitInsert => ({
     ...(orgId ? { org_id: orgId } : {}),
     job_id: job.id,
     client_id: job.client_id,
@@ -164,7 +163,9 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
     job_service_id: serviceId,
     men_count: teamSize && teamSize > 0 ? Math.round(teamSize) : menCount,
     priority: job.priority ?? 1,
-    notes_to_crew: composeVisitNote(job.notes_to_crew, serviceNote),
+    // Only a note written on the visit itself lives here; the job and service notes
+    // are read live (see visitNoteSections), so generated visits carry none.
+    notes_to_crew: null,
   });
 
   const identity = new Set<string>();
@@ -218,7 +219,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
       if (claimedServices.has(s.id) || identity.has(keyOf(s.id, s.start_date))) continue;
       if (unlinkedHolds(s.start_date)) continue;
       if (!hasBudget(s.id)) continue;
-      out.push(base(s.start_date, s.start_date, s.id, s.team_size, s.job_note));
+      out.push(base(s.start_date, s.start_date, s.id, s.team_size));
       claimedServices.add(s.id);
       spend(s.id);
     }
@@ -257,7 +258,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
       if (identity.has(key) || liveKeys.has(key)) continue;
       if (!hasBudget(s.id)) continue;
       if (cap != null && liveCount + out.length >= cap) break outer;
-      out.push(base(date, date, s.id, s.team_size, s.job_note));
+      out.push(base(date, date, s.id, s.team_size));
       identity.add(key);
       spend(s.id);
       if (out.length >= maxVisits) break outer;

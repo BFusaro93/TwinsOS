@@ -135,7 +135,7 @@ async function getCallerCrew(): Promise<CallerCrew | null> {
 function crewVisitSelect(hidePricing: boolean): string {
   const serviceCols = [
     "id", "job_id", "service_id", "service_name", "qty",
-    "budgeted_hours", "team_size", "sort_order",
+    "budgeted_hours", "team_size", "sort_order", "job_note",
     ...(hidePricing ? [] : ["rate_cents"]),
   ].join(", ");
 
@@ -200,6 +200,7 @@ function mapJobRow(
         budgetedHours: (s.budgeted_hours as number) ?? 0,
         teamSize:      (s.team_size as number) ?? 1,
         sortOrder:     (s.sort_order as number) ?? 0,
+        jobNote:       (s.job_note as string) ?? null,
         subitems:      mapServiceSubitems(s.crm_job_service_subitems),
       }))
     : [];

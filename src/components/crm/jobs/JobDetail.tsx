@@ -101,9 +101,10 @@ import {
 import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import { RichNotes } from "@/components/shared/RichNotes";
 import { isBlankRich } from "@/lib/utils/visit-note";
-import { propagateVisitNotes, serviceNoteMap } from "@/lib/visits/visit-note-propagation";
+import { flagServiceNoteChanged } from "@/lib/visits/visit-note-propagation";
 import { findVisitsOverLimit, removeVisitsOverLimit } from "@/lib/visits/visit-limit";
-import { notesToPlainText } from "@/lib/utils/rich-notes";
+import { notesToEditorHtml, notesToPlainText } from "@/lib/utils/rich-notes";
+import { visitNoteSections, visitOwnNote, type VisitNoteSource } from "@/lib/utils/visit-note";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { SendClientEmailDialog } from "@/components/crm/SendClientEmailDialog";
 import { SendClientSmsDialog } from "@/components/crm/SendClientSmsDialog";
@@ -466,34 +467,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }
 
-      // Visits carry a COPY of the job's crew note (generate-visits copies it at
-      // creation) and the visit's own note wins over the job's everywhere the
-      // crew and the board read it — so a new gate code / "dog is loose" on the
-      // job never reached the already-generated visits, which kept showing the
-      // old text (while the crew was made to re-acknowledge a note they couldn't
-      // see changed). Carry the edit onto the upcoming, not-yet-started visits
-      // that still hold an unmodified copy of the previous job note — including the
-      // copies composed with a service's own crew note (job note + service note),
-      // which a plain equality on the old job note never matched. A note someone
-      // wrote on a single visit is left alone.
-      if ("notes_to_crew" in edits) {
-        const prevNote = job.notesToCrew ?? null;
-        const nextNote = typeof edits.notes_to_crew === "string" && edits.notes_to_crew.trim() ? edits.notes_to_crew : null;
-        if (prevNote !== nextNote) {
-          const serviceNotes = serviceNoteMap(job.services ?? []);
-          try {
-            await propagateVisitNotes(createClient(), {
-              jobId: job.id,
-              fromDate: orgToday(),
-              prev: { jobNote: prevNote, serviceNotes },
-              next: { jobNote: nextNote, serviceNotes },
-            });
-          } catch {
-            toast.error("Job saved, but the new crew note couldn't be applied to its upcoming visits — edit them from the Visits tab.");
-          }
-          await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
-        }
-      }
+      // Visits read the job note live, so there is nothing to copy onto them.
+      if ("notes_to_crew" in edits) await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
 
       // Propagate crew change to all future scheduled visits
       if ("crew_id" in edits) {
@@ -755,23 +730,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           internal_note: isBlankRich(svcInternalNote) ? null : svcInternalNote,
         },
       });
-      // Carry a changed service note onto the upcoming, not-yet-started visits that
-      // still hold the unmodified composed copy: this service's visits (job note +
-      // old service note) and whole-job visits (job note + every service's note).
-      // A note someone typed on a single visit is left alone.
+      // Visits read the service note live; only the crew's "new note" flag needs a nudge.
       if (job && (prevSvc?.jobNote ?? null) !== nextJobNote) {
-        const prevNotes = serviceNoteMap(services);
-        const nextNotes = new Map(prevNotes);
-        nextNotes.set(editingSvcId, nextJobNote);
         try {
-          await propagateVisitNotes(createClient(), {
-            jobId: job.id,
-            fromDate: orgToday(),
-            prev: { jobNote: job.notesToCrew ?? null, serviceNotes: prevNotes },
-            next: { jobNote: job.notesToCrew ?? null, serviceNotes: nextNotes },
-          });
+          await flagServiceNoteChanged(createClient(), { jobId: job.id, jobServiceId: editingSvcId, fromDate: orgToday() });
         } catch {
-          toast.error("Service saved, but the new note couldn't be applied to its upcoming visits — edit them from the Visits tab.");
+          // The note itself is saved and live; only the crew's re-read prompt was skipped.
         }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }
@@ -1754,12 +1718,6 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         </dd>
                       </div>
                     )}
-                    {job.notesToCrew && (
-                      <div className="flex flex-col gap-0.5">
-                        <dt className="text-xs text-muted-foreground">Notes to Crew / Job Notes</dt>
-                        <dd className="text-xs text-slate-700 dark:text-neutral-300 line-clamp-3 whitespace-pre-line">{notesToPlainText(job.notesToCrew)}</dd>
-                      </div>
-                    )}
                   </dl>
                 )}
               </div>
@@ -1785,7 +1743,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               {/* Internal Notes — same field as "Internal Notes" in the Notes tab */}
               {(job.notes || editing) && (
                 <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 p-4 shadow-sm col-span-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">Internal Note <span className="font-normal normal-case text-amber-600 dark:text-amber-400">(also in Notes tab)</span></p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">Internal Job Note <span className="font-normal normal-case text-amber-600 dark:text-amber-400">(office only · also in Notes tab)</span></p>
                   {editing ? (
                     <RichTextEditor
                       value={(edits.notes as string | undefined) ?? job.notes ?? ""}
@@ -1954,7 +1912,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           {editingSvcId === s.id ? (
                             <div className="mt-2 flex max-w-xl flex-col gap-3 font-normal">
                               <div className="flex flex-col gap-1">
-                                <Label className="text-xs">Job Note <span className="text-slate-400 dark:text-neutral-500">(crew, this service&apos;s visits)</span></Label>
+                                <Label className="text-xs">Service Note to Crew <span className="text-slate-400 dark:text-neutral-500">(this service&apos;s visits)</span></Label>
                                 <RichTextEditor value={svcJobNote} onChange={setSvcJobNote} minHeight={64} placeholder="Notes for crew…" />
                               </div>
                               <div className="flex flex-col gap-1">
@@ -1962,20 +1920,20 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 <Textarea value={svcInvoiceDesc} onChange={(e) => setSvcInvoiceDesc(e.target.value)} rows={2} className="text-sm" placeholder="Overrides the default invoice description" />
                               </div>
                               <div className="flex flex-col gap-1">
-                                <Label className="text-xs">Internal Note <span className="text-slate-400 dark:text-neutral-500">(office only)</span></Label>
+                                <Label className="text-xs">Internal Service Note <span className="text-slate-400 dark:text-neutral-500">(office only)</span></Label>
                                 <RichTextEditor value={svcInternalNote} onChange={setSvcInternalNote} minHeight={64} placeholder="Visible only to office staff…" />
                               </div>
                             </div>
                           ) : (
                             <div className="mt-1 space-y-1 font-normal">
                               {!isBlankRich(s.jobNote) && (
-                                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Job note</p><RichNotes value={s.jobNote ?? ""} /></div>
+                                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Service note to crew</p><RichNotes value={s.jobNote ?? ""} /></div>
                               )}
                               {s.invoiceDesc && (
                                 <p className="text-xs text-slate-500 dark:text-neutral-400"><span className="font-semibold">Invoice:</span> {s.invoiceDesc}</p>
                               )}
                               {!isBlankRich(s.internalNote) && (
-                                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Internal</p><RichNotes value={s.internalNote ?? ""} /></div>
+                                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Internal service note</p><RichNotes value={s.internalNote ?? ""} /></div>
                               )}
                             </div>
                           )}
@@ -2323,20 +2281,19 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               {addingBulkNote && (
                 <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 p-4 flex flex-col gap-2">
                   <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Add note to all {visits.filter(v => v.status === "scheduled").length} scheduled visits</p>
-                  <Textarea
-                    rows={2}
+                  <RichTextEditor
                     value={bulkNote}
-                    onChange={(e) => setBulkNote(e.target.value)}
+                    onChange={setBulkNote}
                     placeholder="Note to crew for all upcoming visits…"
-                    className="text-sm resize-none"
-                    autoFocus
+                    minHeight={72}
+                    allowImages={false}
                   />
                   <div className="flex gap-2">
-                    <Button size="sm" disabled={!bulkNote.trim() || updateVisit.isPending} onClick={async () => {
+                    <Button size="sm" disabled={isBlankRich(bulkNote) || updateVisit.isPending} onClick={async () => {
                       const scheduled = visits.filter(v => v.status === "scheduled");
                       try {
                         await mapWithConcurrency(scheduled, 6, (v) =>
-                          updateVisit.mutateAsync({ id: v.id, updates: { notes_to_crew: bulkNote.trim() } })
+                          updateVisit.mutateAsync({ id: v.id, updates: { notes_to_crew: bulkNote } })
                         );
                         setBulkNote("");
                         setAddingBulkNote(false);
@@ -2523,7 +2480,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Internal Notes</Label>
+                <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Internal Job Notes</Label>
+                <p className="text-[11px] text-muted-foreground">Office only. Internal notes for an individual service are on the Services tab.</p>
                 <RichTextEditor
                   value={(edits.notes as string | undefined) ?? job.notes ?? ""}
                   onChange={(html) => patch("notes", html)}
@@ -2757,7 +2715,16 @@ function VisitRow({
   const visitBudgetedHours =
     visit.budgetedHours ?? (linkedService ? linkedService.budgetedHours * (linkedService.teamSize || 1) : null);
   const [editingNote, setEditingNote] = useState(false);
-  const [noteVal, setNoteVal] = useState(notesToPlainText(visit.notesToCrew));
+  // What the crew reads for this visit is the job note, the service note and the
+  // note written on the visit — kept apart. Only the last is edited here.
+  const noteSource: VisitNoteSource = {
+    notesToCrew: visit.notesToCrew,
+    jobServiceId: visit.jobServiceId,
+    job: { notesToCrew: jobNotesToCrew, services },
+  };
+  const ownNote = visitOwnNote(noteSource);
+  const noteSections = visitNoteSections(noteSource).filter((n) => n.kind !== "property");
+  const [noteVal, setNoteVal] = useState(notesToEditorHtml(ownNote));
   // Comments are an append-only log (office remarks and crew submissions),
   // separate from the single editable crew note — this is the entry point.
   const qc = useQueryClient();
@@ -2880,15 +2847,18 @@ function VisitRow({
         </td>
         <td className="px-4 py-3 text-xs max-w-xs">
           <div className="flex flex-col items-start gap-0.5 text-left">
-            {jobNotesToCrew && (
-              <div className="truncate max-w-[200px] text-amber-700 dark:text-amber-400" title={notesToPlainText(jobNotesToCrew)}>
-                <span className="font-semibold">Job notes to crew:</span> {notesToPlainText(jobNotesToCrew)}
+            {noteSections.map((n) => (
+              <div
+                key={n.kind}
+                className={cn("truncate max-w-[200px]", n.kind === "visit" ? "text-slate-600 dark:text-neutral-400" : "text-amber-700 dark:text-amber-400")}
+                title={notesToPlainText(n.html)}
+              >
+                <span className="font-semibold">{n.label}:</span> {notesToPlainText(n.html)}
               </div>
-            )}
-            {/* generate-visits copies the job note onto each visit — don't show it twice */}
-            {visit.notesToCrew && visit.notesToCrew !== jobNotesToCrew ? (
-              <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="text-slate-600 dark:text-neutral-400 hover:text-brand-600 dark:hover:text-brand-400 text-left truncate max-w-[200px] block">
-                {notesToPlainText(visit.notesToCrew)}
+            ))}
+            {ownNote ? (
+              <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-brand-500 dark:hover:text-brand-400 italic">
+                edit visit note
               </button>
             ) : (
               <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-brand-500 dark:hover:text-brand-400 italic">
@@ -3067,22 +3037,23 @@ function VisitRow({
       {editingNote && (
         <tr className="border-b bg-slate-50 dark:bg-muted/40">
           <td colSpan={7} className="px-4 py-2">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Visit Note to Crew</p>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Visit Note to Crew <span className="font-normal normal-case">— in addition to the job and service notes shown above</span></p>
             <div className="flex items-end gap-2">
-              <Textarea
-                rows={2}
-                value={noteVal}
-                onChange={(e) => setNoteVal(e.target.value)}
-                className="text-sm resize-none flex-1"
-                placeholder="Note to crew for this visit…"
-                autoFocus
-              />
+              <div className="min-w-0 flex-1">
+                <RichTextEditor
+                  value={noteVal}
+                  onChange={setNoteVal}
+                  placeholder="Note to crew for this visit…"
+                  minHeight={72}
+                  allowImages={false}
+                />
+              </div>
               <div className="flex flex-col gap-1 shrink-0">
                 <Button size="sm" className="h-7 text-xs" onClick={async () => {
-                  await onSaveNote(noteVal);
+                  await onSaveNote(isBlankRich(noteVal) ? "" : noteVal);
                   setEditingNote(false);
                 }}>Save</Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setNoteVal(notesToPlainText(visit.notesToCrew)); setEditingNote(false); }}>Cancel</Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setNoteVal(notesToEditorHtml(ownNote)); setEditingNote(false); }}>Cancel</Button>
               </div>
             </div>
           </td>

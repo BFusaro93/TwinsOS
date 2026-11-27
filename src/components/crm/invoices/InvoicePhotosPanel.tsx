@@ -93,6 +93,13 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
     if (fileRef.current) fileRef.current.value = "";
   }
 
+  const includeButton = (
+    <Button type="button" size="sm" className="h-7 text-xs" disabled={selected.size === 0 || attach.isPending} onClick={attachSelected}>
+      {attach.isPending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+      Include {selected.size || ""} selected
+    </Button>
+  );
+
   // Group candidates by source then group label.
   const groups = new Map<string, InvoicePhotoCandidate[]>();
   for (const c of candidates) {
@@ -169,6 +176,14 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
 
       {picking && canEdit && (
         <div className="space-y-3 rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+          {/* Sticky so the button stays in view however far down the photos go —
+              ticking a photo does nothing until it is included. */}
+          <div className="sticky top-0 z-10 -mx-3 -mt-3 flex items-center justify-between gap-2 rounded-t-md border-b bg-slate-50 dark:bg-muted px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              {selected.size === 0 ? "Tick photos, then include them on the invoice." : `${selected.size} selected — not on the invoice until you include them.`}
+            </p>
+            {includeButton}
+          </div>
           <div className="flex items-center gap-2">
             <Input
               value={search}
@@ -213,12 +228,7 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
             </div>
           ))}
 
-          <div className="flex justify-end">
-            <Button type="button" size="sm" className="h-7 text-xs" disabled={selected.size === 0 || attach.isPending} onClick={attachSelected}>
-              {attach.isPending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-              Include {selected.size || ""} selected
-            </Button>
-          </div>
+          <div className="flex justify-end">{includeButton}</div>
         </div>
       )}
     </div>
