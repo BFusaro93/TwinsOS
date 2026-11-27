@@ -23,6 +23,9 @@ export function notesToPlainText(value: string | null | undefined): string {
   return value
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<li\b[^>]*>/gi, '• ')
+    // The editor saves a bullet as <li><p>text</p></li>; both closing tags break the line, which left
+    // a blank line between bullets. A </p> that ends a list item is part of that item.
+    .replace(/<\/p>\s*<\/li>/gi, '</li>')
     .replace(/<\/(p|li|h[1-6]|blockquote)>/gi, '\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m) => ENTITIES[m] ?? m)

@@ -1289,7 +1289,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       </Select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Label className="text-xs text-muted-foreground">Status</Label>
+                      <Label className="text-xs text-muted-foreground">Job Status</Label>
                       <Select
                         defaultValue={job.status}
                         onValueChange={(v) => patch("status", v)}
@@ -1303,6 +1303,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           ))}
                         </SelectContent>
                       </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        The job&apos;s overall state. Each visit has its own status on the dispatch board (Scheduled, Dispatched, In Progress…).
+                      </p>
                     </div>
                     {canLinkContract && job.jobType !== "project" && (
                       <div className="flex flex-col gap-1">
@@ -1623,7 +1626,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100" title={crewSummaryTitle}>{crewSummary}</dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-xs text-muted-foreground">Status</dt>
+                      <dt className="text-xs text-muted-foreground">Job Status</dt>
                       <dd><Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[job.status] ?? "bg-muted text-muted-foreground")}>{STATUS_LABEL[job.status] ?? job.status}</Badge></dd>
                     </div>
                     {job.contractId && (
