@@ -124,6 +124,10 @@ export interface CRMInvoice {
   notes: string | null;
   locked: boolean;
   lockedAt: string | null;
+  /** Held back for a second look: it can't be emailed until the flag is cleared. */
+  flaggedForReview: boolean;
+  flaggedAt: string | null;
+  flagNote: string | null;
   preferredPaymentMethod: string | null;
   pdfTemplateId: string | null;
   deletedAt: string | null;

@@ -229,6 +229,9 @@ export function mapInvoice(row: any): CRMInvoice {
     notes: row.notes,
     locked: row.locked ?? false,
     lockedAt: row.locked_at ?? null,
+    flaggedForReview: row.flagged_for_review ?? false,
+    flaggedAt: row.flagged_at ?? null,
+    flagNote: row.flag_note ?? null,
     preferredPaymentMethod: row.preferred_payment_method ?? null,
     pdfTemplateId: row.pdf_template_id ?? null,
     deletedAt: row.deleted_at,
@@ -2661,6 +2664,30 @@ export function useAutoInvoiceCompletedJob() {
       qc.invalidateQueries({ queryKey: ["crm-job-detail"] });
       qc.invalidateQueries({ queryKey: ["products"] });
       fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId, invoiceId: result.invoiceId });
+    },
+  });
+}
+
+// ── flag for review ───────────────────────────────────────────────────────────
+
+/** Holds an invoice back from emailing until the flag is cleared. A flag, not a
+ *  status: the invoice keeps its real status. The DB trigger enforces
+ *  acct_add_modify_invoices and stamps / clears who and when. */
+export function useSetInvoiceReviewFlag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, flagged, note }: { id: string; flagged: boolean; note?: string | null }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_invoices")
+        .update({ flagged_for_review: flagged, flag_note: flagged ? (note?.trim() || null) : null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
     },
   });
 }

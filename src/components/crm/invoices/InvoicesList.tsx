@@ -28,7 +28,7 @@ import { dollars, exportSelection, type BulkExportFormat } from "@/lib/bulk-expo
 // Shared with Settings → Import / Export so both import the same columns.
 import { INVOICE_REQUIRED_COLUMNS, INVOICE_TEMPLATE_COLUMNS, invoiceToCsvRow } from "@/lib/crm/import-export-columns";
 import { cn, formatCurrency } from "@/lib/utils";
-import { Plus, FileText, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Clock } from "lucide-react";
+import { Plus, FileText, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Clock, Flag } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
@@ -1174,6 +1174,7 @@ export function InvoicesList({ clientId }: Props) {
                   className={cn(
                     "group cursor-pointer border-b hover:bg-slate-50 dark:hover:bg-muted/40",
                     isOverdue(inv, todayYmd) && "bg-red-50/40 dark:bg-red-950/40",
+                    inv.flaggedForReview && !isOverdue(inv, todayYmd) && "bg-blue-50/60 dark:bg-blue-950/30",
                     selectedIds.has(inv.id) && "bg-brand-50 dark:bg-brand-900/30"
                   )}
                   onClick={() => setOpenInvoiceId(inv.id)}
@@ -1222,6 +1223,17 @@ export function InvoicesList({ clientId }: Props) {
                             <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", overdue ? STATUS_COLOR.overdue : STATUS_COLOR[inv.status])}>
                               {showOverdueLabel ? "overdue" : inv.status}
                             </span>
+                            {/* Held for review: can't be emailed until cleared. Blue,
+                                since red already means past due. */}
+                            {inv.flaggedForReview && (
+                              <span
+                                className="ml-1 inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400"
+                                title="Flagged for review. It can't be emailed until the flag is cleared."
+                              >
+                                <Flag className="h-2.5 w-2.5" />
+                                Review
+                              </span>
+                            )}
                             {/* A charge already on its way. Worth its own pill
                                 rather than folding into the status: the status
                                 is still legitimately "sent"/"overdue" — the
