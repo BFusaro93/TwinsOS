@@ -173,6 +173,9 @@ export default function CrewSchedulePage() {
   const dayAction = useCrewDayAction();
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
   const [editCrewOpen, setEditCrewOpen] = useState(false);
+  // Finished stops are hidden by default so they can't be tapped by accident and the day's
+  // remaining work is what shows; "Show completed" brings them back.
+  const [showCompleted, setShowCompleted] = useState(false);
 
   const completed = stops.filter(s => s.derivedStatus === "completed").length;
   // Skipped and cancelled stops are finished too: counting them as open meant a finished day
@@ -180,6 +183,9 @@ export default function CrewSchedulePage() {
   const resolved  = stops.filter(s => s.derivedStatus === "completed" || s.derivedStatus === "skipped" || s.derivedStatus === "cancelled").length;
   const total     = stops.length;
   const allDone   = total > 0 && resolved === total;
+  const visibleStops = showCompleted
+    ? stops
+    : stops.filter(s => s.derivedStatus !== "completed" && s.derivedStatus !== "skipped" && s.derivedStatus !== "cancelled");
   const anyJobActive = stops.some(s => s.derivedStatus === "in_progress");
   // The paid day, shop to shop: started once the leader taps Start Day, ended
   // when no one is still on the clock after End Day.
@@ -491,7 +497,7 @@ export default function CrewSchedulePage() {
           />
         )}
 
-        {stops.map((stop, idx) => (
+        {visibleStops.map((stop, visibleIdx) => (
           <div key={stop.key} className="flex gap-3">
             <div className="flex flex-col items-center pt-5">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -500,9 +506,10 @@ export default function CrewSchedulePage() {
                 stop.derivedStatus === "skipped" ? "bg-slate-300 dark:bg-neutral-600 text-slate-600 dark:text-neutral-400" :
                 "bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-400"
               }`}>
-                {idx + 1}
+                {/* The stop's place in the day's route, so the numbers stay put when finished stops are hidden. */}
+                {stops.indexOf(stop) + 1}
               </div>
-              {idx < stops.length - 1 && (
+              {visibleIdx < visibleStops.length - 1 && (
                 <div className="w-px flex-1 bg-slate-200 dark:bg-neutral-700 mt-1" />
               )}
             </div>
@@ -516,6 +523,17 @@ export default function CrewSchedulePage() {
             </div>
           </div>
         ))}
+
+        {total > 0 && visibleStops.length === 0 && (
+          <p className="py-6 text-center font-semibold text-slate-700 dark:text-neutral-200">{t("All done for today")}</p>
+        )}
+        {resolved > 0 && (
+          <div className="flex justify-center">
+            <Button variant="outline" className="min-h-11" onClick={() => setShowCompleted((v) => !v)}>
+              {showCompleted ? t("Hide completed") : t("Show completed ({n})", { n: resolved })}
+            </Button>
+          </div>
+        )}
 
         {/* Bottom summary */}
         {total > 0 && (

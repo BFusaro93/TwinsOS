@@ -74,6 +74,15 @@ export default function HomeScreen() {
   })?.anchorVisitId;
 
   const completedCount = stops.filter((s) => stopProgress(s) === 'completed').length;
+  // Finished stops (done or skipped) are hidden by default so they can't be tapped by
+  // accident and the day's remaining work is what shows; "Show completed" brings them back.
+  const [showCompleted, setShowCompleted] = useState(false);
+  const isFinished = (s: (typeof stops)[number]) => {
+    const p = stopProgress(s);
+    return p === 'completed' || p === 'skipped';
+  };
+  const finishedCount = stops.filter(isFinished).length;
+  const visibleStops = showCompleted ? stops : stops.filter((s) => !isFinished(s));
 
   // Refresh whenever the tab regains focus — e.g. coming back from a stop
   // detail screen after clocking in/out.
@@ -178,10 +187,27 @@ export default function HomeScreen() {
         </ScrollView>
       ) : (
         <FlatList
-          data={stops}
+          data={visibleStops}
           keyExtractor={(item) => item.key}
           contentContainerStyle={styles.list}
           ListHeaderComponent={<LoadChecklists date={scheduleDate} />}
+          ListEmptyComponent={
+            <View style={styles.allDone}>
+              <Text style={styles.emptyTitle}>{t('All done for today')}</Text>
+            </View>
+          }
+          ListFooterComponent={
+            finishedCount > 0 ? (
+              <Pressable
+                style={({ pressed }) => [styles.showCompleted, pressed && styles.cardPressed]}
+                onPress={() => setShowCompleted((v) => !v)}
+              >
+                <Text style={styles.showCompletedText}>
+                  {showCompleted ? t('Hide completed') : t('Show completed ({n})', { n: finishedCount })}
+                </Text>
+              </Pressable>
+            ) : null
+          }
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />
           }
@@ -445,6 +471,18 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 12,
   },
+  allDone: { alignItems: 'center', paddingVertical: 28 },
+  showCompleted: {
+    alignSelf: 'center',
+    marginTop: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.card,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+  },
+  showCompletedText: { color: C.textMuted, fontSize: 14, fontWeight: '600' },
   card: {
     backgroundColor: C.card,
     borderRadius: 12,

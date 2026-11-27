@@ -4091,6 +4091,22 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "When no job is running, the crew taps Start Lunch under the day card and End Lunch when they're back; it starts and ends lunch for everyone on the clock. While a stop is in progress the button is off, so use Take a Break on the job instead. The lunch minutes become each person's Lunch deduction in Report Center > Payroll, which the office can change on the day row. Lunch is taken off in addition to min off, so don't enter the same time in both. A lunch left running ends with End Day or when someone is clocked out early, and counts as at most 4 hours. The daily Excel and CSV export has a Lunch Deducted (min) column.",
       },
       {
+        q: "Where did a crew's finished jobs go on My Schedule?",
+        a: "Finished (done or skipped) stops are hidden so they can't be tapped by mistake and the remaining work is what shows. Tap Show completed (with the count) at the bottom of the list to bring them back; it becomes Hide completed. The progress bar still counts them, and when nothing is left the list says All done for today. You need Show completed to open a finished stop, for example to review crew times or add a late note.",
+      },
+      {
+        q: "A crew forgot something after finishing a job. How do they add a note?",
+        a: "Open the finished stop (tap Show completed on My Schedule) and tap Add a note for the office in the green Job Complete box. It jumps to Notes to Office, which shows on the dispatch board. The completion note itself can't be changed after Stop Job, because it goes on the invoice and into the client's chemical application notice, so a late note goes to the office instead and doesn't change anything already sent.",
+      },
+      {
+        q: "What does the amber box on a crew's schedule card show?",
+        a: "The newest job comment on that stop, with +N more comments when there are several. A card with no comments has no box. The job's own notes are often long, so they show inside the stop in the Job Notes box, and the crew taps I've read the notes before starting. Notes to Crew / Job Notes on a job show on every service under that job.",
+      },
+      {
+        q: "Where do crews find Edit Crew?",
+        a: "On My Schedule, and also on every stop, in a button under the address. It opens the roster so the crew can mark someone late, out or leaving early, or add someone from another crew. Opened from a stop, it keeps that stop's job clock in step with each person's shift.",
+      },
+      {
         q: "Who can create invoice pay links?",
         a: "Admins and anyone whose role has Email Invoices or Add/Modify Invoices. People who can only view invoices see existing links, and crew logins never see them.",
       },

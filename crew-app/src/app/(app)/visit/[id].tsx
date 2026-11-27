@@ -287,6 +287,7 @@ export default function StopDetailScreen() {
   // truth — e.g. server-computed actual_hours after a clock-out, or a newly
   // created requisition's real status.
   const prevActiveCountRef = useRef(0);
+  const scrollRef = useRef<ScrollView>(null);
   const chemCatalogLoadedRef = useRef(false);
   useEffect(() => {
     const activeCount = queueItems.filter((i) => i.status !== 'failed').length;
@@ -656,7 +657,7 @@ export default function StopDetailScreen() {
   const completionNotes = stop.visits.map((v) => v.completionNotes).find(Boolean) ?? null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView ref={scrollRef} style={styles.container} contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: stop.clientName ?? 'Job' }} />
 
       <SyncStatusChip />
@@ -828,6 +829,15 @@ export default function StopDetailScreen() {
               <Text style={styles.secondaryButtonText}>{t('Review crew times')}</Text>
             </Pressable>
           )}
+          {/* The completion note is locked in once the job is done (it feeds the invoice and the
+              client's notice), so a late note goes to the office instead. Notes to Office is the
+              last section on this screen. */}
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, { marginTop: 10 }, pressed && styles.secondaryButtonPressed]}
+            onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          >
+            <Text style={styles.secondaryButtonText}>{t('Add a note for the office')}</Text>
+          </Pressable>
           {/* Snow: the crew is going back to this stop — the next push is its own visit. */}
           {snowPushSource(stop) ? (
             <AddPushButton

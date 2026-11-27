@@ -237,7 +237,8 @@ export function JobsPackagesGuide() {
       <Section id="job-notes" title="Job notes">
         <p>
           A job has two notes, both on the job&apos;s <strong>Notes</strong> tab and on the Overview:{" "}
-          <strong>Notes to Crew / Job Notes</strong> (instructions the crew reads on the stop) and{" "}
+          <strong>Notes to Crew / Job Notes</strong> (instructions the crew reads on the stop, shown on
+          every service under the job) and{" "}
           <strong>Internal Notes</strong> (office only). Both are rich text, so you can use bold,
           italic, underline, bulleted and numbered lists, and left, center or right alignment. Use a list for equipment and a numbered
           list for steps and the crew sees the same layout on their phone.
