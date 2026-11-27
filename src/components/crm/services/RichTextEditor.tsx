@@ -211,7 +211,11 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120, allowIm
     const current = editor.getHTML();
     const incoming = value || "";
     if (current !== incoming && incoming !== (current === "<p></p>" ? "" : current)) {
-      editor.commands.setContent(incoming);
+      // emitUpdate defaults to true in tiptap 3, which fed this sync straight back
+      // through onChange: after a save cleared the form's pending edits, the stale
+      // saved value was written back as a new "edit" and then won over the fresh one,
+      // so a note vanished from its tab until a hard refresh.
+      editor.commands.setContent(incoming, { emitUpdate: false });
     }
   }, [value, editor]);
 
